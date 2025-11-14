@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:printing/printing.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import '../../models/flot_model.dart' as flot_model;
 import '../../models/shop_model.dart';
 import '../../services/flot_service.dart';
 import '../../services/shop_service.dart';
+import '../../services/reports_pdf_service.dart';
 
 /// Widget pour afficher les rapports FLOT pour les administrateurs
 class AdminFlotReport extends StatefulWidget {
@@ -140,6 +144,11 @@ class _AdminFlotReportState extends State<AdminFlotReport> {
             _buildError(_errorMessage!)
           else
             _buildFlotsList(filteredFlots, isMobile),
+          
+          const SizedBox(height: 24),
+          // Boutons PDF
+          if (!_isLoading && _errorMessage == null)
+            _buildPdfActions(),
         ],
       ),
     );
@@ -683,5 +692,218 @@ class _AdminFlotReportState extends State<AdminFlotReport> {
 
   String _formatDate(DateTime date) {
     return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  // Boutons actions PDF
+  Widget _buildPdfActions() {
+    final isMobile = MediaQuery.of(context).size.width <= 768;
+    
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: isMobile
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: _previsualiserPDF,
+                    icon: const Icon(Icons.visibility),
+                    label: const Text('Prévisualiser PDF'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF9C27B0),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: _imprimerPDF,
+                    icon: const Icon(Icons.print),
+                    label: const Text('Imprimer'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: _telechargerPDF,
+                    icon: const Icon(Icons.download),
+                    label: const Text('Télécharger'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ],
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: _previsualiserPDF,
+                    icon: const Icon(Icons.visibility),
+                    label: const Text('Prévisualiser PDF'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF9C27B0),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  OutlinedButton.icon(
+                    onPressed: _imprimerPDF,
+                    icon: const Icon(Icons.print),
+                    label: const Text('Imprimer'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  OutlinedButton.icon(
+                    onPressed: _telechargerPDF,
+                    icon: const Icon(Icons.download),
+                    label: const Text('Télécharger'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Future<void> _previsualiserPDF() async {
+    try {
+      final filteredFlots = _getFilteredFlots();
+      
+      final pdf = await generateFlotReportPdf(
+        flots: filteredFlots,
+        startDate: _startDate,
+        endDate: _endDate,
+      );
+
+      final pdfBytes = await pdf.save();
+
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => Dialog(
+            child: Container(
+              width: MediaQuery.of(context).size.width * 0.9,
+              height: MediaQuery.of(context).size.height * 0.9,
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    color: const Color(0xFF9C27B0),
+                    child: Row(
+                      children: [
+                        const Text(
+                          'Prévisualisation Rapport FLOT',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: PdfPreview(
+                      build: (format) => pdfBytes,
+                      canChangeOrientation: false,
+                      canChangePageFormat: false,
+                      canDebug: false,
+                      actions: [
+                        PdfPreviewAction(
+                          icon: const Icon(Icons.share),
+                          onPressed: (context, build, pageFormat) async {
+                            await Printing.sharePdf(
+                              bytes: pdfBytes,
+                              filename: 'rapport_flot_${DateTime.now().toString().split(' ')[0]}.pdf',
+                            );
+                          },
+                        ),
+                        PdfPreviewAction(
+                          icon: const Icon(Icons.print),
+                          onPressed: (context, build, pageFormat) async {
+                            await Printing.layoutPdf(
+                              onLayout: (format) => pdfBytes,
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('❌ Erreur: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _imprimerPDF() async {
+    try {
+      final filteredFlots = _getFilteredFlots();
+      
+      final pdf = await generateFlotReportPdf(
+        flots: filteredFlots,
+        startDate: _startDate,
+        endDate: _endDate,
+      );
+
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('❌ Erreur: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _telechargerPDF() async {
+    try {
+      final filteredFlots = _getFilteredFlots();
+      
+      final pdf = await generateFlotReportPdf(
+        flots: filteredFlots,
+        startDate: _startDate,
+        endDate: _endDate,
+      );
+
+      await Printing.sharePdf(
+        bytes: await pdf.save(),
+        filename: 'rapport_flot_${DateTime.now().toString().split(' ')[0]}.pdf',
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ PDF généré avec succès')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('❌ Erreur: $e')),
+        );
+      }
+    }
   }
 }

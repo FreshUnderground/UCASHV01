@@ -6,7 +6,7 @@ import '../models/operation_model.dart';
 import '../models/shop_model.dart';
 import '../services/auth_service.dart';
 import '../services/local_db.dart';
-import '../services/pdf_service.dart';
+import '../services/reports_pdf_service.dart';
 import '../services/shop_service.dart';
 import '../services/agent_service.dart';
 
@@ -1395,8 +1395,7 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
       );
       
       // Générer le PDF
-      final pdfService = PdfService();
-      final pdfDoc = await pdfService.generateJournalCaisseReportPdf(
+      final pdfDoc = await generateJournalCaisseReportPdf(
         entries: _journalEntries,
         shop: shop,
         startDate: _startDate ?? DateTime.now().subtract(const Duration(days: 30)),
