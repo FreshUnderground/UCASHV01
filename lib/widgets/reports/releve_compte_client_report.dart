@@ -1004,14 +1004,76 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
         endDate: widget.endDate,
       );
 
-      // Show PDF preview
-      await Printing.layoutPdf(
-        onLayout: (PdfPageFormat format) async => pdf.save(),
-      );
+      final pdfBytes = await pdf.save();
 
+      // Afficher le PDF dans une boîte de dialogue de prévisualisation
       if (mounted) {
-        scaffoldMessenger.showSnackBar(
-          const SnackBar(content: Text('Apercu PDF genere avec succes')),
+        scaffoldMessenger.clearSnackBars();
+        showDialog(
+          context: context,
+          builder: (context) => Dialog(
+            child: Container(
+              width: MediaQuery.of(context).size.width * 0.9,
+              height: MediaQuery.of(context).size.height * 0.9,
+              child: Column(
+                children: [
+                  // En-tête
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    color: const Color(0xFFDC2626),
+                    child: Row(
+                      children: [
+                        const Text(
+                          'Prévisualisation Relevé de Compte',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Viewer PDF
+                  Expanded(
+                    child: PdfPreview(
+                      build: (format) => pdfBytes,
+                      canChangeOrientation: false,
+                      canChangePageFormat: false,
+                      canDebug: false,
+                      actions: [
+                        PdfPreviewAction(
+                          icon: const Icon(Icons.share),
+                          onPressed: (context, build, pageFormat) async {
+                            // Partager le PDF
+                            final clientData = _reportData!['client'] as Map<String, dynamic>;
+                            await Printing.sharePdf(
+                              bytes: pdfBytes,
+                              filename: 'releve_compte_${clientData['nom']}_${DateTime.now().toString().split(' ')[0]}.pdf',
+                            );
+                          },
+                        ),
+                        PdfPreviewAction(
+                          icon: const Icon(Icons.print),
+                          onPressed: (context, build, pageFormat) async {
+                            // Imprimer directement
+                            await Printing.layoutPdf(
+                              onLayout: (format) => pdfBytes,
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         );
       }
     } catch (e) {

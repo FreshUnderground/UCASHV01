@@ -31,7 +31,29 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
     final authService = Provider.of<AuthService>(context, listen: false);
     final shopId = authService.currentUser?.shopId;
     final isAdmin = authService.currentUser?.role == 'ADMIN';
+    
+    debugPrint('🔄 Chargement des FLOTs - ShopID: $shopId, isAdmin: $isAdmin');
+    
     await FlotService.instance.loadFlots(shopId: shopId, isAdmin: isAdmin);
+    
+    final flotService = Provider.of<FlotService>(context, listen: false);
+    debugPrint('✅ FLOTs chargés: ${flotService.flots.length} total');
+    
+    if (shopId != null && !isAdmin) {
+      final mesFlots = flotService.flots.where((f) => 
+        f.shopSourceId == shopId || f.shopDestinationId == shopId
+      ).toList();
+      debugPrint('   → Mes FLOTs: ${mesFlots.length}');
+      
+      final flotsEnCours = mesFlots.where((f) => f.statut == flot_model.StatutFlot.enRoute).toList();
+      debugPrint('   → En cours: ${flotsEnCours.length}');
+      
+      final flotsServis = mesFlots.where((f) => f.statut == flot_model.StatutFlot.servi).toList();
+      debugPrint('   → Servis: ${flotsServis.length}');
+      
+      final flotsAnnules = mesFlots.where((f) => f.statut == flot_model.StatutFlot.annule).toList();
+      debugPrint('   → Annulés: ${flotsAnnules.length}');
+    }
   }
 
   @override

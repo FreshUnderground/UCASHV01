@@ -28,6 +28,7 @@ class ReportFiltersWidget extends StatefulWidget {
 
 class _ReportFiltersWidgetState extends State<ReportFiltersWidget> {
   String _selectedPeriod = 'custom';
+  bool _isExpanded = true; // État pour afficher/cacher les filtres
 
   final Map<String, String> _periodOptions = {
     'today': 'Aujourd\'hui',
@@ -52,39 +53,52 @@ class _ReportFiltersWidgetState extends State<ReportFiltersWidget> {
           children: [
             // Header adaptatif
             _buildFilterHeader(isMobile),
-            SizedBox(height: isMobile ? 12 : 16),
             
-            // Filtres adaptatifs
-            _buildResponsiveFilters(isMobile, isTablet),
-            
-            // Résumé de la période sélectionnée
-            if (widget.startDate != null || widget.endDate != null)
-              Container(
-                margin: EdgeInsets.only(top: isMobile ? 8 : 12),
-                padding: EdgeInsets.all(isMobile ? 6 : 8),
-                decoration: BoxDecoration(
-                  color: Colors.blue[50],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue[200]!),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.info_outline, color: Colors.blue[700], size: 16),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        _getPeriodSummary(),
-                        style: TextStyle(
-                          color: Colors.blue[700],
-                          fontSize: isMobile ? 11 : 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            // Filtres avec animation d'ouverture/fermeture
+            AnimatedSize(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              child: _isExpanded
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(height: isMobile ? 12 : 16),
+                        
+                        // Filtres adaptatifs
+                        _buildResponsiveFilters(isMobile, isTablet),
+                        
+                        // Résumé de la période sélectionnée
+                        if (widget.startDate != null || widget.endDate != null)
+                          Container(
+                            margin: EdgeInsets.only(top: isMobile ? 8 : 12),
+                            padding: EdgeInsets.all(isMobile ? 6 : 8),
+                            decoration: BoxDecoration(
+                              color: Colors.blue[50],
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.blue[200]!),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.info_outline, color: Colors.blue[700], size: 16),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    _getPeriodSummary(),
+                                    style: TextStyle(
+                                      color: Colors.blue[700],
+                                      fontSize: isMobile ? 11 : 12,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    )
+                  : const SizedBox.shrink(),
+            ),
           ],
         ),
       ),
@@ -183,9 +197,21 @@ class _ReportFiltersWidgetState extends State<ReportFiltersWidget> {
                   color: Color(0xFF1F2937),
                 ),
               ),
+              const Spacer(),
+              // Bouton toggle pour afficher/cacher les filtres
+              IconButton(
+                icon: Icon(
+                  _isExpanded ? Icons.expand_less : Icons.expand_more,
+                  color: Colors.grey[600],
+                ),
+                onPressed: () => setState(() => _isExpanded = !_isExpanded),
+                tooltip: _isExpanded ? 'Masquer les filtres' : 'Afficher les filtres',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
             ],
           ),
-          if (widget.onReset != null) ...[
+          if (widget.onReset != null && _isExpanded) ...[
             const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
@@ -222,7 +248,16 @@ class _ReportFiltersWidgetState extends State<ReportFiltersWidget> {
           ),
         ),
         const Spacer(),
-        if (widget.onReset != null)
+        // Bouton toggle pour afficher/cacher les filtres
+        IconButton(
+          icon: Icon(
+            _isExpanded ? Icons.expand_less : Icons.expand_more,
+            color: Colors.grey[600],
+          ),
+          onPressed: () => setState(() => _isExpanded = !_isExpanded),
+          tooltip: _isExpanded ? 'Masquer les filtres' : 'Afficher les filtres',
+        ),
+        if (widget.onReset != null && _isExpanded)
           TextButton.icon(
             onPressed: () {
               setState(() {

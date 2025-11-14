@@ -14,6 +14,8 @@ class FlotService extends ChangeNotifier {
   List<flot_model.FlotModel> _flots = [];
   bool _isLoading = false;
   String? _errorMessage;
+  int? _currentShopId;
+  bool _currentIsAdmin = false;
 
   List<flot_model.FlotModel> get flots => _flots;
   bool get isLoading => _isLoading;
@@ -22,23 +24,35 @@ class FlotService extends ChangeNotifier {
   /// Charger tous les flots avec filtrage par rôle
   Future<void> loadFlots({int? shopId, bool isAdmin = false}) async {
     _setLoading(true);
+    _currentShopId = shopId;
+    _currentIsAdmin = isAdmin;
+    
     try {
       if (isAdmin) {
         // Admin voit tous les flots
         _flots = await LocalDB.instance.getAllFlots();
+        debugPrint('📊 ADMIN - Tous les flots chargés: ${_flots.length}');
       } else if (shopId != null) {
         // Shop voit seulement les flots où il est source ou destination
         _flots = await LocalDB.instance.getFlotsByShop(shopId);
+        debugPrint('🏪 SHOP $shopId - Flots chargés: ${_flots.length}');
+        
+        // Debug: Afficher le détail
+        final enCours = _flots.where((f) => f.statut == flot_model.StatutFlot.enRoute).length;
+        final servis = _flots.where((f) => f.statut == flot_model.StatutFlot.servi).length;
+        final annules = _flots.where((f) => f.statut == flot_model.StatutFlot.annule).length;
+        debugPrint('   → En cours: $enCours | Servis: $servis | Annulés: $annules');
       } else {
         // Par défaut, charger tous les flots
         _flots = await LocalDB.instance.getAllFlots();
+        debugPrint('📊 Par défaut - Tous les flots chargés: ${_flots.length}');
       }
       
       _errorMessage = null;
       debugPrint('💸 Flots chargés: ${_flots.length}');
     } catch (e) {
       _errorMessage = 'Erreur lors du chargement des flots: $e';
-      debugPrint(_errorMessage);
+      debugPrint('❌ $_errorMessage');
     }
     _setLoading(false);
   }
@@ -128,7 +142,8 @@ class FlotService extends ChangeNotifier {
         debugPrint('⚠️ Erreur enregistrement journal: $e (non bloquant)');
       }
       
-      await loadFlots();
+      // Recharger avec les paramètres actuels
+      await loadFlots(shopId: _currentShopId, isAdmin: _currentIsAdmin);
       
       debugPrint('✅ Flot créé: $montant $devise de $shopSourceDesignation vers $shopDestinationDesignation');
       _errorMessage = null;
@@ -160,7 +175,8 @@ class FlotService extends ChangeNotifier {
       // Mettre à jour dans LocalDB
       await LocalDB.instance.updateFlot(flot);
       
-      await loadFlots();
+      // Recharger avec les paramètres actuels
+      await loadFlots(shopId: _currentShopId, isAdmin: _currentIsAdmin);
       
       debugPrint('✅ Flot mis à jour: ${flot.reference}');
       _errorMessage = null;
@@ -192,7 +208,8 @@ class FlotService extends ChangeNotifier {
       // Mettre à jour dans LocalDB
       await LocalDB.instance.updateFlot(updatedFlot);
       
-      await loadFlots();
+      // Recharger avec les paramètres actuels
+      await loadFlots(shopId: _currentShopId, isAdmin: _currentIsAdmin);
       
       debugPrint('✅ Flot marqué servi: ${updatedFlot.reference}');
       _errorMessage = null;
