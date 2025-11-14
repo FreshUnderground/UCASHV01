@@ -1,0 +1,424 @@
+enum OperationType {
+  transfertNational,
+  transfertInternationalSortant,
+  transfertInternationalEntrant,
+  depot,
+  retrait,
+  virement,
+}
+
+enum OperationStatus {
+  enAttente,
+  validee,
+  terminee,
+  annulee,
+}
+
+enum ModePaiement {
+  cash,
+  airtelMoney,
+  mPesa,
+  orangeMoney,
+}
+
+class OperationModel {
+  final int? id;
+  final OperationType type;
+  final double montantBrut;
+  final double commission;
+  final double montantNet;
+  final String devise;
+  
+  // Informations client
+  final int? clientId;
+  final String? clientNom;
+  
+  // Informations shops
+  final int? shopSourceId;
+  final String? shopSourceDesignation;
+  final int? shopDestinationId;
+  final String? shopDestinationDesignation;
+  
+  // Informations agent
+  final int agentId;
+  final String? agentUsername;
+  
+  // Détails opération
+  final String? destinataire;
+  final String? telephoneDestinataire;
+  final String? reference;
+  final ModePaiement modePaiement;
+  final OperationStatus statut;
+  final String? notes;
+  final String? observation; // New field for agent observations
+  final String? motifAnnulation; // Raison de l'annulation par l'admin
+  final int? annulePar; // ID de l'utilisateur qui a annulé
+  final DateTime? dateAnnulation; // Date d'annulation
+  
+  // Dates et tracking
+  final DateTime dateOp;
+  final DateTime? createdAt;
+  final DateTime? lastModifiedAt;
+  final String? lastModifiedBy;
+  final bool isSynced;
+  final DateTime? syncedAt;
+
+  OperationModel({
+    this.id,
+    required this.type,
+    required this.montantBrut,
+    required this.commission,
+    required this.montantNet,
+    this.devise = 'USD',
+    
+    // Client
+    this.clientId,
+    this.clientNom,
+    
+    // Shops
+    this.shopSourceId,
+    this.shopSourceDesignation,
+    this.shopDestinationId,
+    this.shopDestinationDesignation,
+    
+    // Agent
+    required this.agentId,
+    this.agentUsername,
+    
+    // Détails
+    this.destinataire,
+    this.telephoneDestinataire,
+    this.reference,
+    required this.modePaiement,
+    this.statut = OperationStatus.terminee,
+    this.notes,
+    this.observation,
+    this.motifAnnulation,
+    this.annulePar,
+    this.dateAnnulation,
+    
+    // Dates
+    required this.dateOp,
+    this.createdAt,
+    this.lastModifiedAt,
+    this.lastModifiedBy,
+    this.isSynced = false,
+    this.syncedAt,
+  });
+
+  factory OperationModel.fromJson(Map<String, dynamic> json) {
+    return OperationModel(
+      id: json['id'],
+      type: _parseOperationType(json['type']),
+      montantBrut: (json['montant_brut'] ?? 0).toDouble(),
+      commission: (json['commission'] ?? 0).toDouble(),
+      montantNet: (json['montant_net'] ?? 0).toDouble(),
+      devise: json['devise'] ?? 'USD',
+      
+      // Client
+      clientId: json['client_id'],
+      clientNom: json['client_nom'],
+      
+      // Shops
+      shopSourceId: json['shop_source_id'],
+      shopSourceDesignation: json['shop_source_designation'],
+      shopDestinationId: json['shop_destination_id'],
+      shopDestinationDesignation: json['shop_destination_designation'],
+      
+      // Agent
+      agentId: json['agent_id'],
+      agentUsername: json['agent_username'],
+      
+      // Détails
+      destinataire: json['destinataire'],
+      telephoneDestinataire: json['telephone_destinataire'],
+      reference: json['reference'],
+      modePaiement: _parseModePaiement(json['mode_paiement']),
+      statut: _parseOperationStatus(json['statut']),
+      notes: json['notes'],
+      observation: json['observation'],
+      motifAnnulation: json['motif_annulation'],
+      annulePar: json['annule_par'],
+      dateAnnulation: json['date_annulation'] != null ? DateTime.parse(json['date_annulation']) : null,
+      
+      // Dates
+      dateOp: json['date_op'] != null ? DateTime.parse(json['date_op']) : (json['created_at'] != null ? DateTime.parse(json['created_at']) : DateTime.now()),
+      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
+      lastModifiedAt: json['last_modified_at'] != null ? DateTime.parse(json['last_modified_at']) : null,
+      lastModifiedBy: json['last_modified_by'],
+      isSynced: json['is_synced'] == 1 || json['is_synced'] == true,
+      syncedAt: json['synced_at'] != null ? DateTime.parse(json['synced_at']) : null,
+    );
+  }
+  
+  /// Parse OperationType depuis String (MySQL) ou int (local)
+  static OperationType _parseOperationType(dynamic value) {
+    if (value == null) return OperationType.depot;
+    
+    // Si c'est déjà un index
+    if (value is int) {
+      if (value >= 0 && value < OperationType.values.length) {
+        return OperationType.values[value];
+      }
+      return OperationType.depot;
+    }
+    
+    // Si c'est une string (depuis MySQL)
+    if (value is String) {
+      switch (value.toLowerCase()) {
+        case 'transfertnational':
+          return OperationType.transfertNational;
+        case 'transfertinternationalsortant':
+          return OperationType.transfertInternationalSortant;
+        case 'transfertinternationalentrant':
+          return OperationType.transfertInternationalEntrant;
+        case 'depot':
+          return OperationType.depot;
+        case 'retrait':
+          return OperationType.retrait;
+        case 'virement':
+          return OperationType.virement;
+        default:
+          return OperationType.depot;
+      }
+    }
+    
+    return OperationType.depot;
+  }
+  
+  /// Parse ModePaiement depuis String (MySQL) ou int (local)
+  static ModePaiement _parseModePaiement(dynamic value) {
+    if (value == null) return ModePaiement.cash;
+    
+    // Si c'est déjà un index
+    if (value is int) {
+      if (value >= 0 && value < ModePaiement.values.length) {
+        return ModePaiement.values[value];
+      }
+      return ModePaiement.cash;
+    }
+    
+    // Si c'est une string (depuis MySQL)
+    if (value is String) {
+      switch (value.toLowerCase()) {
+        case 'cash':
+          return ModePaiement.cash;
+        case 'airtelmoney':
+          return ModePaiement.airtelMoney;
+        case 'mpesa':
+          return ModePaiement.mPesa;
+        case 'orangemoney':
+          return ModePaiement.orangeMoney;
+        default:
+          return ModePaiement.cash;
+      }
+    }
+    
+    return ModePaiement.cash;
+  }
+  
+  /// Parse OperationStatus depuis String (MySQL) ou int (local)
+  static OperationStatus _parseOperationStatus(dynamic value) {
+    if (value == null) return OperationStatus.terminee;
+    
+    // Si c'est déjà un index
+    if (value is int) {
+      if (value >= 0 && value < OperationStatus.values.length) {
+        return OperationStatus.values[value];
+      }
+      return OperationStatus.terminee;
+    }
+    
+    // Si c'est une string (depuis MySQL)
+    if (value is String) {
+      switch (value.toLowerCase()) {
+        case 'enattente':
+          return OperationStatus.enAttente;
+        case 'validee':
+          return OperationStatus.validee;
+        case 'terminee':
+          return OperationStatus.terminee;
+        case 'annulee':
+          return OperationStatus.annulee;
+        default:
+          return OperationStatus.terminee;
+      }
+    }
+    
+    return OperationStatus.terminee;
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'type': type.index,
+      'montant_brut': montantBrut,
+      'commission': commission,
+      'montant_net': montantNet,
+      'devise': devise,
+      
+      // Client
+      'client_id': clientId,
+      'client_nom': clientNom,
+      
+      // Shops
+      'shop_source_id': shopSourceId,
+      'shop_source_designation': shopSourceDesignation,
+      'shop_destination_id': shopDestinationId,
+      'shop_destination_designation': shopDestinationDesignation,
+      
+      // Agent
+      'agent_id': agentId,
+      'agent_username': agentUsername,
+      
+      // Détails
+      'destinataire': destinataire,
+      'telephone_destinataire': telephoneDestinataire,
+      'reference': reference,
+      'mode_paiement': modePaiement.index,
+      'statut': statut.index,
+      'notes': notes,
+      'observation': observation,
+      'motif_annulation': motifAnnulation,
+      'annule_par': annulePar,
+      'date_annulation': dateAnnulation?.toIso8601String(),
+      
+      // Dates
+      'date_op': dateOp.toIso8601String(),
+      'created_at': (createdAt ?? dateOp).toIso8601String(),
+      'last_modified_at': (lastModifiedAt ?? DateTime.now()).toIso8601String(),
+      'last_modified_by': lastModifiedBy,
+      'is_synced': isSynced ? 1 : 0,
+      'synced_at': syncedAt?.toIso8601String(),
+    };
+  }
+
+  String get typeLabel {
+    switch (type) {
+      case OperationType.transfertNational:
+        return 'Transfert National';
+      case OperationType.transfertInternationalSortant:
+        return 'Transfert International Sortant';
+      case OperationType.transfertInternationalEntrant:
+        return 'Transfert International Entrant';
+      case OperationType.depot:
+        return 'Dépôt';
+      case OperationType.retrait:
+        return 'Retrait';
+      case OperationType.virement:
+        return 'Virement';
+    }
+  }
+
+  String get statutLabel {
+    switch (statut) {
+      case OperationStatus.enAttente:
+        return 'En Attente';
+      case OperationStatus.validee:
+        return 'Validée';
+      case OperationStatus.terminee:
+        return 'Terminée';
+      case OperationStatus.annulee:
+        return 'Annulée';
+    }
+  }
+
+  String get modePaiementLabel {
+    switch (modePaiement) {
+      case ModePaiement.cash:
+        return 'Cash';
+      case ModePaiement.airtelMoney:
+        return 'Airtel Money';
+      case ModePaiement.mPesa:
+        return 'M-Pesa';
+      case ModePaiement.orangeMoney:
+        return 'Orange Money';
+    }
+  }
+
+  OperationModel copyWith({
+    int? id,
+    OperationType? type,
+    double? montantBrut,
+    double? commission,
+    double? montantNet,
+    String? devise,
+    
+    // Client
+    int? clientId,
+    String? clientNom,
+    
+    // Shops
+    int? shopSourceId,
+    String? shopSourceDesignation,
+    int? shopDestinationId,
+    String? shopDestinationDesignation,
+    
+    // Agent
+    int? agentId,
+    String? agentUsername,
+    
+    // Détails
+    String? destinataire,
+    String? telephoneDestinataire,
+    String? reference,
+    ModePaiement? modePaiement,
+    OperationStatus? statut,
+    String? notes,
+    String? observation,
+    String? motifAnnulation,
+    int? annulePar,
+    DateTime? dateAnnulation,
+    
+    // Dates
+    DateTime? dateOp,
+    DateTime? createdAt,
+    DateTime? lastModifiedAt,
+    String? lastModifiedBy,
+    bool? isSynced,
+    DateTime? syncedAt,
+  }) {
+    return OperationModel(
+      id: id ?? this.id,
+      type: type ?? this.type,
+      montantBrut: montantBrut ?? this.montantBrut,
+      commission: commission ?? this.commission,
+      montantNet: montantNet ?? this.montantNet,
+      devise: devise ?? this.devise,
+      
+      // Client
+      clientId: clientId ?? this.clientId,
+      clientNom: clientNom ?? this.clientNom,
+      
+      // Shops
+      shopSourceId: shopSourceId ?? this.shopSourceId,
+      shopSourceDesignation: shopSourceDesignation ?? this.shopSourceDesignation,
+      shopDestinationId: shopDestinationId ?? this.shopDestinationId,
+      shopDestinationDesignation: shopDestinationDesignation ?? this.shopDestinationDesignation,
+      
+      // Agent
+      agentId: agentId ?? this.agentId,
+      agentUsername: agentUsername ?? this.agentUsername,
+      
+      // Détails
+      destinataire: destinataire ?? this.destinataire,
+      telephoneDestinataire: telephoneDestinataire ?? this.telephoneDestinataire,
+      reference: reference ?? this.reference,
+      modePaiement: modePaiement ?? this.modePaiement,
+      statut: statut ?? this.statut,
+      notes: notes ?? this.notes,
+      observation: observation ?? this.observation,
+      motifAnnulation: motifAnnulation ?? this.motifAnnulation,
+      annulePar: annulePar ?? this.annulePar,
+      dateAnnulation: dateAnnulation ?? this.dateAnnulation,
+      
+      // Dates
+      dateOp: dateOp ?? this.dateOp,
+      createdAt: createdAt ?? this.createdAt,
+      lastModifiedAt: lastModifiedAt ?? this.lastModifiedAt,
+      lastModifiedBy: lastModifiedBy ?? this.lastModifiedBy,
+      isSynced: isSynced ?? this.isSynced,
+      syncedAt: syncedAt ?? this.syncedAt,
+    );
+  }
+}

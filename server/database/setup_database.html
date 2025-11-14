@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup Database - UCASH</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #DC2626;
+            margin-bottom: 20px;
+        }
+        .btn {
+            background: #DC2626;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .btn:hover {
+            background: #B91C1C;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+        }
+        .success {
+            background: #D1FAE5;
+            border: 1px solid #10B981;
+            color: #065F46;
+        }
+        .error {
+            background: #FEE2E2;
+            border: 1px solid #DC2626;
+            color: #991B1B;
+        }
+        .warning {
+            background: #FEF3C7;
+            border: 1px solid #F59E0B;
+            color: #92400E;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Configuration Base de Données UCASH</h1>
+        <p>Cliquez sur le bouton ci-dessous pour créer/mettre à jour les tables et ajouter le type 'virement' aux opérations.</p>
+        <button class="btn" onclick="setupDatabase()">▶️ Configurer la Base de Données</button>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        function setupDatabase() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<div class="result warning">⏳ Configuration en cours...</div>';
+            
+            fetch('setup_database.php')
+                .then(response => response.text())
+                .then(data => {
+                    const isSuccess = data.includes('✅') && !data.includes('❌ ERREUR');
+                    resultDiv.innerHTML = `<div class="result ${isSuccess ? 'success' : 'error'}">${data}</div>`;
+                })
+                .catch(error => {
+                    resultDiv.innerHTML = `<div class="result error">❌ Erreur: ${error.message}</div>`;
+                });
+        }
+    </script>
+</body>
+</html>

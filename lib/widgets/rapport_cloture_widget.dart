@@ -1,0 +1,752 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:intl/intl.dart';
+import '../models/rapport_cloture_model.dart';
+import '../services/rapport_cloture_service.dart';
+import '../services/auth_service.dart';
+import '../services/pdf_service.dart';
+import '../services/shop_service.dart';
+import 'pdf_viewer_dialog.dart';
+
+/// Widget pour afficher et générer le Rapport de Clôture Journalière
+class RapportClotureWidget extends StatefulWidget {
+  final int? shopId;
+  
+  const RapportClotureWidget({super.key, this.shopId});
+
+  @override
+  State<RapportClotureWidget> createState() => _RapportClotureWidgetState();
+}
+
+class _RapportClotureWidgetState extends State<RapportClotureWidget> {
+  DateTime _selectedDate = DateTime.now();
+  RapportClotureModel? _rapport;
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _genererRapport();
+    });
+  }
+
+  Future<void> _genererRapport() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final shopId = widget.shopId ?? authService.currentUser?.shopId ?? 1;
+      
+      final rapport = await RapportClotureService.instance.genererRapport(
+        shopId: shopId,
+        date: _selectedDate,
+        generePar: authService.currentUser?.username ?? 'Admin',
+      );
+
+      setState(() {
+        _rapport = rapport;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Erreur: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _telechargerPDF() async {
+    if (_rapport == null) return;
+
+    try {
+      // Obtenir le shop actuel
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final shopService = Provider.of<ShopService>(context, listen: false);
+      final shopId = widget.shopId ?? authService.currentUser?.shopId ?? 1;
+      final shop = shopService.getShopById(shopId);
+      
+      if (shop == null) {
+        throw Exception('Shop non trouvé');
+      }
+
+      // Générer le PDF
+      final pdf = await generateDailyClosureReportPdf(
+        rapport: _rapport!,
+        shop: shop,
+      );
+
+      // Sauvegarder ou partager le PDF
+      final pdfBytes = await pdf.save();
+      final fileName = 'rapport_cloture_${shop.designation}_${DateFormat('yyyy-MM-dd').format(_selectedDate)}.pdf';
+      
+      // Utiliser Printing pour sauvegarder ou partager
+      await Printing.sharePdf(bytes: pdfBytes, filename: fileName);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ PDF généré avec succès')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('❌ Erreur PDF: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _previsualiserPDF() async {
+    if (_rapport == null) return;
+
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final shopService = Provider.of<ShopService>(context, listen: false);
+      final shopId = widget.shopId ?? authService.currentUser?.shopId ?? 1;
+      final shop = shopService.getShopById(shopId);
+      
+      if (shop == null) {
+        throw Exception('Shop non trouvé');
+      }
+
+      final pdf = await generateDailyClosureReportPdf(
+        rapport: _rapport!,
+        shop: shop,
+      );
+
+      // Afficher l'aperçu du PDF avec possibilité d'imprimer
+      if (mounted) {
+        await showPdfViewer(
+          context: context,
+          pdfDocument: pdf,
+          title: 'Rapport de Clôture - ${shop.designation}',
+          fileName: 'rapport_cloture_${shop.designation}_${DateFormat('yyyy-MM-dd').format(_selectedDate)}',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('❌ Erreur: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _imprimerPDF() async {
+    if (_rapport == null) return;
+
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final shopService = Provider.of<ShopService>(context, listen: false);
+      final shopId = widget.shopId ?? authService.currentUser?.shopId ?? 1;
+      final shop = shopService.getShopById(shopId);
+      
+      if (shop == null) {
+        throw Exception('Shop non trouvé');
+      }
+
+      final pdf = await generateDailyClosureReportPdf(
+        rapport: _rapport!,
+        shop: shop,
+      );
+
+      // Imprimer directement
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+        name: 'Rapport_Cloture_${shop.designation}_${DateFormat('yyyy-MM-dd').format(_selectedDate)}.pdf',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('❌ Erreur: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width <= 768;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('📊 Rapport de Clôture Journalière'),
+        backgroundColor: const Color(0xFFDC2626),
+        actions: [
+          if (_rapport != null) ...[
+            IconButton(
+              icon: const Icon(Icons.visibility),
+              tooltip: 'Prévisualiser PDF',
+              onPressed: _previsualiserPDF,
+            ),
+            IconButton(
+              icon: const Icon(Icons.print),
+              tooltip: 'Imprimer',
+              onPressed: _imprimerPDF,
+            ),
+            IconButton(
+              icon: const Icon(Icons.download),
+              tooltip: 'Télécharger PDF',
+              onPressed: _telechargerPDF,
+            ),
+          ],
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: EdgeInsets.all(isMobile ? 16 : 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Sélection de date
+            _buildDateSelector(isMobile),
+            const SizedBox(height: 24),
+
+            // Contenu du rapport
+            if (_isLoading)
+              const Center(child: CircularProgressIndicator())
+            else if (_errorMessage != null)
+              _buildError(_errorMessage!)
+            else if (_rapport != null)
+              _buildRapport(_rapport!, isMobile)
+            else
+              const Center(child: Text('Aucun rapport disponible')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDateSelector(bool isMobile) {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            const Icon(Icons.calendar_today, color: Color(0xFFDC2626)),
+            const SizedBox(width: 12),
+            const Text(
+              'Date du rapport:',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                '${_selectedDate.day.toString().padLeft(2, '0')}/${_selectedDate.month.toString().padLeft(2, '0')}/${_selectedDate.year}',
+                style: const TextStyle(fontSize: 16),
+              ),
+            ),
+            ElevatedButton.icon(
+              onPressed: () async {
+                final date = await showDatePicker(
+                  context: context,
+                  initialDate: _selectedDate,
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime.now(),
+                );
+                if (date != null) {
+                  setState(() => _selectedDate = date);
+                  _genererRapport();
+                }
+              },
+              icon: const Icon(Icons.edit_calendar),
+              label: const Text('Changer'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildError(String message) {
+    return Card(
+      color: Colors.red.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            const Icon(Icons.error, color: Colors.red),
+            const SizedBox(width: 12),
+            Expanded(child: Text(message)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRapport(RapportClotureModel rapport, bool isMobile) {
+    return Column(
+      children: [
+        // En-tête
+        _buildSection(
+          'Shop: ${rapport.shopDesignation}',
+          [
+            Text(
+              'Rapport du ${rapport.dateRapport.day}/${rapport.dateRapport.month}/${rapport.dateRapport.year}',
+              style: const TextStyle(fontSize: 14, color: Colors.grey),
+            ),
+          ],
+          Colors.blue,
+        ),
+        const SizedBox(height: 16),
+
+        // Cash Disponible (TOTAL)
+        _buildCashDisponibleCard(rapport),
+        const SizedBox(height: 16),
+
+        // Détails par section
+        if (!isMobile)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: _buildLeftColumn(rapport)),
+              const SizedBox(width: 16),
+              Expanded(child: _buildRightColumn(rapport)),
+            ],
+          )
+        else
+          Column(
+            children: [
+              _buildLeftColumn(rapport),
+              const SizedBox(height: 16),
+              _buildRightColumn(rapport),
+            ],
+          ),
+        
+        const SizedBox(height: 24),
+        
+        // Capital Net Final
+        _buildCapitalNetCard(rapport),
+      ],
+    );
+  }
+
+  Widget _buildCashDisponibleCard(RapportClotureModel rapport) {
+    return Card(
+      elevation: 4,
+      color: Colors.green.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            const Text(
+              '💰 CASH DISPONIBLE TOTAL',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.green,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '${rapport.cashDisponibleTotal.toStringAsFixed(2)} USD',
+              style: const TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                color: Colors.green,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            _buildCashBreakdown('Cash', rapport.cashDisponibleCash),
+            _buildCashBreakdown('Airtel Money', rapport.cashDisponibleAirtelMoney),
+            _buildCashBreakdown('M-Pesa', rapport.cashDisponibleMPesa),
+            _buildCashBreakdown('Orange Money', rapport.cashDisponibleOrangeMoney),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildCapitalNetCard(RapportClotureModel rapport) {
+    return Card(
+      elevation: 4,
+      color: Colors.blue.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            const Text(
+              '📈 CAPITAL NET FINAL',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.blue,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Formule: Cash Disponible + Ceux qui nous doivent - Ceux que nous devons',
+              style: TextStyle(
+                fontSize: 12,
+                fontStyle: FontStyle.italic,
+                color: Colors.grey,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '${rapport.capitalNet.toStringAsFixed(2)} USD',
+              style: TextStyle(
+                fontSize: 36,
+                fontWeight: FontWeight.bold,
+                color: rapport.capitalNet >= 0 ? Colors.blue[700] : Colors.red[700],
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Divider(),
+            const SizedBox(height: 12),
+            _buildCapitalBreakdown('Cash Disponible', rapport.cashDisponibleTotal, Colors.green),
+            _buildCapitalBreakdown('+ Clients Nous Doivent', rapport.totalClientsNousDoivent, Colors.red),
+            _buildCapitalBreakdown('+ Shops Nous Doivent', rapport.totalShopsNousDoivent, Colors.orange),
+            _buildCapitalBreakdown('- Clients Nous Devons', -rapport.totalClientsNousDevons, Colors.green),
+            _buildCapitalBreakdown('- Shops Nous Devons', -rapport.totalShopsNousDevons, Colors.purple),
+            const SizedBox(height: 8),
+            const Divider(thickness: 2),
+            const SizedBox(height: 8),
+            _buildCapitalBreakdown('= CAPITAL NET', rapport.capitalNet, rapport.capitalNet >= 0 ? Colors.blue : Colors.red, bold: true),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCashBreakdown(String label, double montant) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 14)),
+          Text(
+            '${montant.toStringAsFixed(2)} USD',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildCapitalBreakdown(String label, double montant, Color color, {bool bold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label, 
+            style: TextStyle(
+              fontSize: bold ? 16 : 14,
+              fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+          Text(
+            '${montant.toStringAsFixed(2)} USD',
+            style: TextStyle(
+              fontWeight: bold ? FontWeight.bold : FontWeight.w500,
+              fontSize: bold ? 16 : 14,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLeftColumn(RapportClotureModel rapport) {
+    return Column(
+      children: [
+        _buildSection(
+          '1️⃣ Solde Antérieur',
+          [
+            _buildLine('Cash', rapport.soldeAnterieurCash),
+            _buildLine('Airtel Money', rapport.soldeAnterieurAirtelMoney),
+            _buildLine('M-Pesa', rapport.soldeAnterieurMPesa),
+            _buildLine('Orange Money', rapport.soldeAnterieurOrangeMoney),
+            const Divider(),
+            _buildLine('TOTAL', rapport.soldeAnterieurTotal, bold: true),
+          ],
+          Colors.grey,
+        ),
+        const SizedBox(height: 16),
+        _buildSection(
+          '🚢 Flots (Liquidités Inter-Shops)',
+          [
+            _buildLine('Reçus (Servis)', rapport.flotRecu, color: Colors.green),
+            _buildLine('🔶 En cours', rapport.flotEnCours, color: Colors.orange),
+            _buildLine('Envoyés (Servis)', rapport.flotServi, color: Colors.red, prefix: '-'),
+            if (rapport.flotEnCours > 0) const SizedBox(height: 8),
+            if (rapport.flotEnCours > 0) const Divider(color: Colors.orange),
+            if (rapport.flotEnCours > 0)
+              const Text(
+                '⚠️ FLOT EN COURS:',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.orange,
+                ),
+              ),
+            if (rapport.flotEnCours > 0) const SizedBox(height: 6),
+            ...rapport.flotsEnvoyes.where((f) => f.statut == 'enRoute').map((flot) => 
+              Container(
+                margin: const EdgeInsets.only(top: 4),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '→ ${flot.shopDestinationDesignation}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '${flot.montant.toStringAsFixed(2)} ${flot.devise}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.orange,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${flot.modePaiement} | Envoyé: ${flot.dateEnvoi.day}/${flot.dateEnvoi.month} ${flot.dateEnvoi.hour}:${flot.dateEnvoi.minute.toString().padLeft(2, '0')}',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          Colors.purple,
+        ),
+        const SizedBox(height: 16),
+        _buildSection(
+          '3️⃣ Transferts',
+          [
+            _buildLine('Reçus', rapport.transfertsRecus, color: Colors.green),
+            _buildLine('Servis', rapport.transfertsServis, color: Colors.red, prefix: '-'),
+          ],
+          Colors.blue,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRightColumn(RapportClotureModel rapport) {
+    return Column(
+      children: [
+        _buildSection(
+          '4️⃣ Opérations Clients',
+          [
+            _buildLine('Dépôts', rapport.depotsClients, color: Colors.green),
+            _buildLine('Retraits', rapport.retraitsClients, color: Colors.red, prefix: '-'),
+          ],
+          Colors.orange,
+        ),
+        const SizedBox(height: 16),
+        _buildSection(
+          '5️⃣ Clients Nous Doivent',
+          [
+            Text(
+              '${rapport.clientsNousDoivent.length} client(s)',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            ...rapport.clientsNousDoivent.take(5).map((client) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(child: Text(client.nom, style: const TextStyle(fontSize: 12))),
+                  Text(
+                    '${client.solde.toStringAsFixed(2)} USD',
+                    style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            )),
+            if (rapport.clientsNousDoivent.length > 5)
+              Text('... et ${rapport.clientsNousDoivent.length - 5} autre(s)'),
+            const Divider(),
+            _buildLine('TOTAL Dettes', rapport.totalClientsNousDoivent, color: Colors.red),
+          ],
+          Colors.red,
+        ),
+        const SizedBox(height: 16),
+        _buildSection(
+          '6️⃣ Clients Nous Devons',
+          [
+            Text(
+              '${rapport.clientsNousDevons.length} client(s)',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            ...rapport.clientsNousDevons.take(5).map((client) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(child: Text(client.nom, style: const TextStyle(fontSize: 12))),
+                  Text(
+                    '${client.solde.toStringAsFixed(2)} USD',
+                    style: const TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            )),
+            if (rapport.clientsNousDevons.length > 5)
+              Text('... et ${rapport.clientsNousDevons.length - 5} autre(s)'),
+            const Divider(),
+            _buildLine('TOTAL Créances', rapport.totalClientsNousDevons, color: Colors.green),
+          ],
+          Colors.green,
+        ),
+        const SizedBox(height: 16),
+        _buildSection(
+          '7️⃣ Shops Nous Doivent',
+          [
+            Text(
+              '${rapport.shopsNousDoivent.length} shop(s)',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            if (rapport.shopsNousDoivent.isEmpty)
+              const Text('Aucun shop débiteur', style: TextStyle(fontStyle: FontStyle.italic))
+            else
+              ...rapport.shopsNousDoivent.take(5).map((shop) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(child: Text('${shop.designation} (${shop.localisation})', style: const TextStyle(fontSize: 12))),
+                    Text(
+                      '${shop.montant.toStringAsFixed(2)} USD',
+                      style: const TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              )),
+            if (rapport.shopsNousDoivent.length > 5)
+              Text('... et ${rapport.shopsNousDoivent.length - 5} autre(s)'),
+            const Divider(),
+            _buildLine('TOTAL Dettes Inter-Shops', rapport.totalShopsNousDoivent, color: Colors.orange),
+          ],
+          Colors.orange,
+        ),
+        const SizedBox(height: 16),
+        _buildSection(
+          '8️⃣ Shops Nous Devons',
+          [
+            Text(
+              '${rapport.shopsNousDevons.length} shop(s)',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            if (rapport.shopsNousDevons.isEmpty)
+              const Text('Aucun shop créditeur', style: TextStyle(fontStyle: FontStyle.italic))
+            else
+              ...rapport.shopsNousDevons.take(5).map((shop) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(child: Text('${shop.designation} (${shop.localisation})', style: const TextStyle(fontSize: 12))),
+                    Text(
+                      '${shop.montant.toStringAsFixed(2)} USD',
+                      style: const TextStyle(color: Colors.purple, fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              )),
+            if (rapport.shopsNousDevons.length > 5)
+              Text('... et ${rapport.shopsNousDevons.length - 5} autre(s)'),
+            const Divider(),
+            _buildLine('TOTAL Créances Inter-Shops', rapport.totalShopsNousDevons, color: Colors.purple),
+          ],
+          Colors.purple,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSection(String title, List<Widget> children, Color color) {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLine(String label, double montant, {bool bold = false, Color? color, String prefix = ''}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+              fontSize: bold ? 16 : 14,
+            ),
+          ),
+          Text(
+            '$prefix${montant.toStringAsFixed(2)} USD',
+            style: TextStyle(
+              fontWeight: bold ? FontWeight.bold : FontWeight.w500,
+              fontSize: bold ? 16 : 14,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  
+  <!-- SEO et Description -->
+  <title>UCASH - Gestion Financière Moderne</title>
+  <meta name="description" content="Application de gestion financière complète - Transferts d'argent, dépôts, retraits et rapports en temps réel. Fonctionne online et offline.">
+  <meta name="keywords" content="ucash, gestion financière, transfert argent, mobile money, pwa, offline">
+  <meta name="author" content="UCASH Team">
+  
+  <!-- PWA Configuration -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="UCASH">
+  <meta name="application-name" content="UCASH">
+  <meta name="msapplication-TileColor" content="#DC2626">
+  <meta name="theme-color" content="#DC2626">
+  
+  <!-- Manifest et Icônes -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/Icon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="icons/Icon-16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/Icon-192.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="icons/Icon-152.png">
+  <link rel="apple-touch-icon" sizes="144x144" href="icons/Icon-144.png">
+  <link rel="apple-touch-icon" sizes="120x120" href="icons/Icon-128.png">
+  <link rel="apple-touch-icon" sizes="114x114" href="icons/Icon-128.png">
+  <link rel="apple-touch-icon" sizes="76x76" href="icons/Icon-72.png">
+  <link rel="apple-touch-icon" sizes="72x72" href="icons/Icon-72.png">
+  <link rel="apple-touch-icon" sizes="60x60" href="icons/Icon-72.png">
+  <link rel="apple-touch-icon" sizes="57x57" href="icons/Icon-72.png">
+  
+  <!-- Open Graph pour partage social -->
+  <meta property="og:title" content="UCASH - Gestion Financière Moderne">
+  <meta property="og:description" content="Application de gestion financière complète avec support offline">
+  <meta property="og:image" content="icons/Icon-512.png">
+  <meta property="og:url" content="https://addon.investee-group.com">
+  <meta property="og:type" content="website">
+  
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="UCASH - Gestion Financière">
+  <meta name="twitter:description" content="Application PWA pour transferts et gestion financière">
+  <meta name="twitter:image" content="icons/Icon-512.png">
+  
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(135deg, #DC2626 0%, #B91C1C 100%);
+      font-family: 'Roboto', sans-serif;
+    }
+    
+    .loading {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      flex-direction: column;
+    }
+    
+    .loading-logo {
+      font-size: 48px;
+      margin-bottom: 20px;
+    }
+    
+    .loading-text {
+      color: white;
+      font-size: 18px;
+      font-weight: 300;
+    }
+    
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: spin 1s ease-in-out infinite;
+      margin-top: 20px;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="loading" id="loading">
+    <div class="loading-logo">💸</div>
+    <div class="loading-text">UCASH</div>
+    <div class="loading-text">Chargement...</div>
+    <div class="spinner"></div>
+  </div>
+  
+  <script>
+    // Enregistrement du Service Worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('/sw.js')
+          .then(function(registration) {
+            console.log('Service Worker enregistré avec succès:', registration.scope);
+            
+            // Écouter les mises à jour du SW
+            registration.addEventListener('updatefound', function() {
+              const newWorker = registration.installing;
+              newWorker.addEventListener('statechange', function() {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  // Nouvelle version disponible
+                  showUpdateNotification();
+                }
+              });
+            });
+          })
+          .catch(function(error) {
+            console.log('Erreur d\'enregistrement du Service Worker:', error);
+          });
+      });
+    }
+    
+    // Notification de mise à jour
+    function showUpdateNotification() {
+      if (confirm('Une nouvelle version de UCASH est disponible. Voulez-vous la charger ?')) {
+        window.location.reload();
+      }
+    }
+    
+    // Gestion de l'installation PWA
+    let deferredPrompt;
+    window.addEventListener('beforeinstallprompt', function(e) {
+      e.preventDefault();
+      deferredPrompt = e;
+      
+      // Déclencher l'événement personnalisé pour Flutter
+      window.dispatchEvent(new CustomEvent('pwa-install-available'));
+    });
+    
+    // Fonction pour déclencher l'installation
+    window.installPWA = function() {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then(function(choiceResult) {
+          if (choiceResult.outcome === 'accepted') {
+            console.log('PWA installée avec succès');
+          }
+          deferredPrompt = null;
+        });
+      }
+    };
+    
+    // Chargement de Flutter
+    window.addEventListener('load', function(ev) {
+      _flutter.loader.loadEntrypoint({
+        onEntrypointLoaded: function(engineInitializer) {
+          engineInitializer.initializeEngine().then(function(appRunner) {
+            document.getElementById('loading').style.display = 'none';
+            appRunner.runApp();
+          });
+        }
+      });
+    });
+  </script>
+  <script src="flutter.js" defer></script>
+</body>
+</html>

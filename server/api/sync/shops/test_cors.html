@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CORS Test</title>
+</head>
+<body>
+    <h1>CORS Test for Shops Upload</h1>
+    <button onclick="testUpload()">Test Upload</button>
+    <div id="result"></div>
+
+    <script>
+        function testUpload() {
+            const url = 'http://localhost/UCASHV01/server/api/sync/shops/upload.php';
+            const data = {
+                entities: [],
+                user_id: 'admin',
+                timestamp: '2025-11-10T10:40:00Z'
+            };
+
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('result').innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+            })
+            .catch(error => {
+                document.getElementById('result').innerHTML = '<pre>Error: ' + error + '</pre>';
+            });
+        }
+    </script>
+</body>
+</html>

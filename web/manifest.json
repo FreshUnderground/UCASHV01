@@ -1,0 +1,134 @@
+{
+    "name": "UCASH - Gestion Financière",
+    "short_name": "UCASH",
+    "description": "Application de gestion financière moderne - Transferts, Dépôts, Retraits et Rapports",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "any",
+    "background_color": "#DC2626",
+    "theme_color": "#DC2626",
+    "prefer_related_applications": false,
+    "categories": ["finance", "business", "productivity"],
+    "lang": "fr",
+    "dir": "ltr",
+    "screenshots": [
+        {
+            "src": "icons/screenshot-desktop.png",
+            "sizes": "1280x720",
+            "type": "image/png",
+            "form_factor": "wide",
+            "label": "Interface Desktop UCASH"
+        },
+        {
+            "src": "icons/screenshot-mobile.png",
+            "sizes": "390x844",
+            "type": "image/png",
+            "form_factor": "narrow",
+            "label": "Interface Mobile UCASH"
+        }
+    ],
+    "icons": [
+        {
+            "src": "icons/Icon-72.png",
+            "sizes": "72x72",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "icons/Icon-96.png",
+            "sizes": "96x96",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "icons/Icon-128.png",
+            "sizes": "128x128",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "icons/Icon-144.png",
+            "sizes": "144x144",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "icons/Icon-152.png",
+            "sizes": "152x152",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "icons/Icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "icons/Icon-384.png",
+            "sizes": "384x384",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "icons/Icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "icons/Icon-maskable-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
+        {
+            "src": "icons/Icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ],
+    "shortcuts": [
+        {
+            "name": "Nouveau Transfert",
+            "short_name": "Transfert",
+            "description": "Créer un nouveau transfert rapidement",
+            "url": "/?action=transfer",
+            "icons": [
+                {
+                    "src": "icons/shortcut-transfer.png",
+                    "sizes": "96x96",
+                    "type": "image/png"
+                }
+            ]
+        },
+        {
+            "name": "Dépôt Client",
+            "short_name": "Dépôt",
+            "description": "Effectuer un dépôt client",
+            "url": "/?action=deposit",
+            "icons": [
+                {
+                    "src": "icons/shortcut-deposit.png",
+                    "sizes": "96x96",
+                    "type": "image/png"
+                }
+            ]
+        },
+        {
+            "name": "Rapports",
+            "short_name": "Rapports",
+            "description": "Consulter les rapports financiers",
+            "url": "/?action=reports",
+            "icons": [
+                {
+                    "src": "icons/shortcut-reports.png",
+                    "sizes": "96x96",
+                    "type": "image/png"
+                }
+            ]
+        }
+    ]
+}

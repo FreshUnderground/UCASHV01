@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Migration: Ajouter client_nom - UCASH</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #DC2626;
+            margin-bottom: 10px;
+        }
+        .description {
+            background: #FEF3C7;
+            border-left: 4px solid #F59E0B;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .btn {
+            background: #DC2626;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 20px;
+        }
+        .btn:hover {
+            background: #B91C1C;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        .success {
+            background: #D1FAE5;
+            border: 1px solid #10B981;
+            color: #065F46;
+        }
+        .error {
+            background: #FEE2E2;
+            border: 1px solid #DC2626;
+            color: #991B1B;
+        }
+        .warning {
+            background: #FEF3C7;
+            border: 1px solid #F59E0B;
+            color: #92400E;
+        }
+        ul {
+            line-height: 1.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Migration: Ajouter client_nom à operations</h1>
+        
+        <div class="description">
+            <strong>📋 Objectif:</strong> Ajouter la colonne <code>client_nom</code> dans la table <code>operations</code> pour permettre la résolution des clients par nom au lieu de l'ID timestamp.
+            
+            <h3>Modifications:</h3>
+            <ul>
+                <li>➕ Ajoute la colonne <code>client_nom VARCHAR(255)</code></li>
+                <li>📊 Ajoute un index <code>idx_client_nom</code> pour les performances</li>
+                <li>🔄 Remplit automatiquement les noms des clients existants</li>
+            </ul>
+            
+            <strong>⚠️ Important:</strong> Cette migration est <strong>sûre</strong> et ne supprime aucune donnée.
+        </div>
+        
+        <button class="btn" onclick="runMigration()">▶️ Exécuter la Migration</button>
+        
+        <div id="result"></div>
+    </div>
+
+    <script>
+        function runMigration() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<div class="result warning">⏳ Migration en cours...</div>';
+            
+            fetch('run_add_client_nom.php')
+                .then(response => response.text())
+                .then(data => {
+                    const isSuccess = data.includes('✅') && !data.includes('❌');
+                    resultDiv.innerHTML = `<div class="result ${isSuccess ? 'success' : 'error'}">${data}</div>`;
+                })
+                .catch(error => {
+                    resultDiv.innerHTML = `<div class="result error">❌ Erreur: ${error.message}</div>`;
+                });
+        }
+    </script>
+</body>
+</html>

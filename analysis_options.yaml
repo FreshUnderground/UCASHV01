@@ -1,0 +1,33 @@
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    # Règles de style recommandées
+    prefer_const_constructors: true
+    prefer_const_literals_to_create_immutables: true
+    prefer_const_declarations: true
+    prefer_final_fields: true
+    prefer_final_locals: true
+    
+    # Règles de sécurité
+    avoid_print: true
+    avoid_web_libraries_in_flutter: false
+    
+    # Règles de performance
+    avoid_function_literals_in_foreach_calls: true
+    prefer_for_elements_to_map_fromIterable: true
+    
+    # Règles de lisibilité
+    always_declare_return_types: true
+    always_specify_types: false
+    prefer_single_quotes: true
+    require_trailing_commas: false
+
+analyzer:
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+  
+  strong-mode:
+    implicit-casts: false
+    implicit-dynamic: false

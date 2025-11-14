@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test API - Validation Transferts</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #DC2626;
+            border-bottom: 3px solid #DC2626;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #2563EB;
+            margin-top: 30px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+        }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            background: #DC2626;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #B91C1C;
+        }
+        button.secondary {
+            background: #2563EB;
+        }
+        button.secondary:hover {
+            background: #1D4ED8;
+        }
+        .response {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            border-left: 4px solid #2563EB;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 13px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .response.success {
+            border-left-color: #10B981;
+            background: #F0FDF4;
+        }
+        .response.error {
+            border-left-color: #EF4444;
+            background: #FEF2F2;
+        }
+        .info {
+            background: #EFF6FF;
+            border-left: 4px solid #2563EB;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔄 Test API - Validation de Transferts</h1>
+        
+        <div class="info">
+            <strong>📍 URLs des Endpoints:</strong><br>
+            • Validation: <code>http://localhost/UCASHV01/server/api/sync/operations/validate_transfer.php</code><br>
+            • Récupération: <code>http://localhost/UCASHV01/server/api/sync/operations/validated_transfers.php</code>
+        </div>
+
+        <!-- Test 1: Valider un transfert -->
+        <h2>1️⃣ Valider un Transfert</h2>
+        <div class="info">
+            <strong>⚠️ Important:</strong> 3 stratégies d'identification (par priorité):<br>
+            1. <code>reference</code> (si disponible et non-null)<br>
+            2. <code>operation_id</code> (si connu, moins fiable)<br>
+            3. <code>Combinaison unique</code> (shop_source + date + montant + destinataire) - Le plus fiable!
+        </div>
+        <form id="validateForm">
+            <h3>Option 1: Reference (si disponible)</h3>
+            <div class="form-group">
+                <label>Reference:</label>
+                <input type="text" id="reference" placeholder="Ex: TRF-20241110-001 (souvent NULL)">
+            </div>
+            
+            <h3>Option 2: ID (moins fiable)</h3>
+            <div class="form-group">
+                <label>Operation ID:</label>
+                <input type="number" id="operationId" placeholder="ID MySQL si connu">
+            </div>
+            
+            <h3>Option 3: Combinaison Unique (RECOMMANDÉ)</h3>
+            <div class="form-group">
+                <label>Shop Source ID:</label>
+                <input type="number" id="shopSourceId" value="1">
+            </div>
+            <div class="form-group">
+                <label>Date Opération:</label>
+                <input type="datetime-local" id="dateOperation" step="1">
+            </div>
+            <div class="form-group">
+                <label>Montant Net:</label>
+                <input type="number" id="montantNet" value="492.50" step="0.01">
+            </div>
+            <div class="form-group">
+                <label>Destinataire:</label>
+                <input type="text" id="destinataire" value="SEMEYI">
+            </div>
+            <div class="form-group">
+                <label>Shop Destination ID:</label>
+                <input type="number" id="shopDestId" value="2" required>
+            </div>
+            <div class="form-group">
+                <label>Mode de Paiement:</label>
+                <select id="modePaiement">
+                    <option value="cash">Cash</option>
+                    <option value="airtelMoney">Airtel Money</option>
+                    <option value="mPesa">M-Pesa</option>
+                    <option value="orangeMoney">Orange Money</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Validé par (username agent):</label>
+                <input type="text" id="validatedBy" value="admin" required>
+            </div>
+            <button type="submit">✅ Valider le Transfert</button>
+        </form>
+        <div id="validateResponse" class="response" style="display:none;"></div>
+
+        <!-- Test 2: Récupérer les transferts validés -->
+        <h2>2️⃣ Récupérer les Transferts Validés</h2>
+        <form id="getTransfersForm">
+            <div class="form-group">
+                <label>Shop ID:</label>
+                <input type="number" id="shopId" value="1" required>
+            </div>
+            <div class="form-group">
+                <label>Rôle:</label>
+                <select id="role">
+                    <option value="source">Source (transferts envoyés)</option>
+                    <option value="destination">Destination (transferts servis)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Limite:</label>
+                <input type="number" id="limit" value="20" min="1" max="200">
+            </div>
+            <button type="submit" class="secondary">📥 Récupérer les Transferts</button>
+        </form>
+        <div id="getTransfersResponse" class="response" style="display:none;"></div>
+    </div>
+
+    <script>
+        const BASE_URL = 'http://localhost/UCASHV01/server/api/sync/operations';
+
+        // Test 1: Valider un transfert
+        document.getElementById('validateForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const responseDiv = document.getElementById('validateResponse');
+            responseDiv.style.display = 'block';
+            responseDiv.textContent = '⏳ Envoi de la requête...';
+            responseDiv.className = 'response';
+
+            const reference = document.getElementById('reference').value.trim();
+            const operationId = document.getElementById('operationId').value.trim();
+            const shopSourceId = document.getElementById('shopSourceId').value.trim();
+            const dateOperation = document.getElementById('dateOperation').value;
+            const montantNet = document.getElementById('montantNet').value.trim();
+            const destinataire = document.getElementById('destinataire').value.trim();
+            
+            // Vérifier qu'au moins une stratégie est fournie
+            const hasReference = reference !== '';
+            const hasId = operationId !== '';
+            const hasComposite = shopSourceId && dateOperation && montantNet && destinataire;
+            
+            if (!hasReference && !hasId && !hasComposite) {
+                responseDiv.className = 'response error';
+                responseDiv.textContent = '❌ Erreur: Fournissez au moins une méthode d\'identification:\n' +
+                    '1. Reference (si disponible)\n' +
+                    '2. Operation ID (si connu)\n' +
+                    '3. Combinaison unique (shop_source_id + date + montant + destinataire)';
+                return;
+            }
+
+            const data = {
+                shop_destination_id: parseInt(document.getElementById('shopDestId').value),
+                mode_paiement: document.getElementById('modePaiement').value,
+                validated_by: document.getElementById('validatedBy').value
+            };
+            
+            // Ajouter les identifiants fournis
+            if (hasReference) data.reference = reference;
+            if (hasId) data.operation_id = parseInt(operationId);
+            if (hasComposite) {
+                data.shop_source_id = parseInt(shopSourceId);
+                // Convertir datetime-local en format MySQL
+                const dt = new Date(dateOperation);
+                data.date_operation = dt.getFullYear() + '-' +
+                    String(dt.getMonth() + 1).padStart(2, '0') + '-' +
+                    String(dt.getDate()).padStart(2, '0') + ' ' +
+                    String(dt.getHours()).padStart(2, '0') + ':' +
+                    String(dt.getMinutes()).padStart(2, '0') + ':' +
+                    String(dt.getSeconds()).padStart(2, '0');
+                data.montant_net = parseFloat(montantNet);
+                data.destinataire = destinataire;
+            }
+
+            try {
+                const response = await fetch(`${BASE_URL}/validate_transfer.php`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    responseDiv.className = 'response success';
+                    responseDiv.textContent = '✅ SUCCÈS!\n\n' + JSON.stringify(result, null, 2);
+                } else {
+                    responseDiv.className = 'response error';
+                    responseDiv.textContent = '❌ ERREUR!\n\n' + JSON.stringify(result, null, 2);
+                }
+            } catch (error) {
+                responseDiv.className = 'response error';
+                responseDiv.textContent = '❌ ERREUR RÉSEAU!\n\n' + error.message;
+            }
+        });
+
+        // Test 2: Récupérer les transferts validés
+        document.getElementById('getTransfersForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const responseDiv = document.getElementById('getTransfersResponse');
+            responseDiv.style.display = 'block';
+            responseDiv.textContent = '⏳ Récupération...';
+            responseDiv.className = 'response';
+
+            const shopId = document.getElementById('shopId').value;
+            const role = document.getElementById('role').value;
+            const limit = document.getElementById('limit').value;
+
+            try {
+                const url = `${BASE_URL}/validated_transfers.php?shop_id=${shopId}&role=${role}&limit=${limit}`;
+                const response = await fetch(url);
+                const result = await response.json();
+                
+                if (result.success) {
+                    responseDiv.className = 'response success';
+                    let display = `✅ SUCCÈS! ${result.count} transfert(s) trouvé(s)\n\n`;
+                    display += JSON.stringify(result, null, 2);
+                    responseDiv.textContent = display;
+                } else {
+                    responseDiv.className = 'response error';
+                    responseDiv.textContent = '❌ ERREUR!\n\n' + JSON.stringify(result, null, 2);
+                }
+            } catch (error) {
+                responseDiv.className = 'response error';
+                responseDiv.textContent = '❌ ERREUR RÉSEAU!\n\n' + error.message;
+            }
+        });
+    </script>
+</body>
+</html>
