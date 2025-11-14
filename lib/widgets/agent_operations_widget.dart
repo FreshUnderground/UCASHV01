@@ -9,7 +9,8 @@ import '../services/agent_service.dart';
 import '../services/flot_service.dart';
 import '../models/operation_model.dart';
 import '../models/flot_model.dart' as flot_model;
-// import 'simple_transfer_dialog.dart'; // Unused
+import '../models/shop_model.dart';
+
 import 'transfer_destination_dialog.dart';
 import 'depot_dialog.dart';
 import 'retrait_dialog.dart';
@@ -28,12 +29,57 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
   String _searchQuery = '';
   OperationType? _typeFilter;
 
+  // Calculer les statistiques du shop (cash en caisse) DEPUIS DONNEES LOCALES MULTI-DEVISES
+  Map<String, dynamic> _getShopStats(ShopService shopService, int shopId) {
+    
+    // UTILISE LES DONNEES LOCALES (shops deja charges dans le service)
+    final currentShop = shopService.shops.firstWhere(
+      (shop) => shop.id == shopId,
+      orElse: () => ShopModel(designation: 'Inconnu', localisation: ''),
+    );
+
+    // CALCUL REEL: Capital total devise principale (USD)
+    final capitalTotalUSD = currentShop.capitalCash + currentShop.capitalAirtelMoney + 
+                           currentShop.capitalMPesa + currentShop.capitalOrangeMoney;
+    
+    // CALCUL REEL: Capital total devise secondaire (CDF ou UGX)
+    final capitalTotalDevise2 = (currentShop.capitalCashDevise2 ?? 0) + 
+                                (currentShop.capitalAirtelMoneyDevise2 ?? 0) + 
+                                (currentShop.capitalMPesaDevise2 ?? 0) + 
+                                (currentShop.capitalOrangeMoneyDevise2 ?? 0);
+
+    return {
+      // Devise principale (USD)
+      'cashDisponible': currentShop.capitalCash,
+      'airtelMoney': currentShop.capitalAirtelMoney,
+      'mPesa': currentShop.capitalMPesa,
+      'orangeMoney': currentShop.capitalOrangeMoney,
+      'capitalTotal': capitalTotalUSD,
+      // Devise secondaire (CDF ou UGX)
+      'devisePrincipale': currentShop.devisePrincipale,
+      'deviseSecondaire': currentShop.deviseSecondaire,
+      'cashDisponibleDevise2': currentShop.capitalCashDevise2 ?? 0,
+      'airtelMoneyDevise2': currentShop.capitalAirtelMoneyDevise2 ?? 0,
+      'mPesaDevise2': currentShop.capitalMPesaDevise2 ?? 0,
+      'orangeMoneyDevise2': currentShop.capitalOrangeMoneyDevise2 ?? 0,
+      'capitalTotalDevise2': capitalTotalDevise2,
+      'hasDeviseSecondaire': currentShop.hasDeviseSecondaire,
+    };
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadOperations();
     });
+  }
+  
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Listen for shop changes to auto-refresh cash disponible
+    Provider.of<ShopService>(context, listen: true);
   }
 
   void _loadOperations() {
@@ -406,13 +452,11 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 768;
     
-    return Consumer<OperationService>(
-      builder: (context, operationService, child) {
+    return Consumer3<OperationService, AuthService, ShopService>(
+      builder: (context, operationService, authService, shopService, child) {
         final operations = operationService.operations;
-        final totalOperations = operations.length;
         
         // Also get FLOTs for this shop
-        final authService = Provider.of<AuthService>(context, listen: false);
         final currentUser = authService.currentUser;
         final flotService = FlotService.instance;
         
@@ -427,26 +471,12 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
           shopFlots = flotService.flots;
         }
         
-        // Calcul par devise - RESPECT LOGIQUE METIER
-        // Transferts SORTANTS = montantBrut (total reçu client)
-        // Autres opérations = montantNet (montant effectif)
-        double montantUSD = 0.0;
-        double montantCDF = 0.0;
+        // Total operations should include both operations and FLOTs
+        final totalOperations = operations.length + shopFlots.length;
         
-        for (final op in operations) {
-          // Pour les transferts SOURCE, utiliser montantBrut
-          // Pour les autres, utiliser montantNet
-          final montant = (op.type == OperationType.transfertNational || 
-                           op.type == OperationType.transfertInternationalSortant)
-              ? op.montantBrut // Total reçu du client pour transferts sortants
-              : op.montantNet; // Net pour dépôts, retraits, transferts entrants
-          
-          if (op.devise == 'USD') {
-            montantUSD += montant;
-          } else if (op.devise == 'CDF') {
-            montantCDF += montant;
-          }
-        }
+        // Calcul par devise
+        final montantUSD = operations.where((op) => op.devise == 'USD').fold<double>(0, (sum, op) => sum + op.montantBrut);
+        final montantCDF = operations.where((op) => op.devise == 'CDF').fold<double>(0, (sum, op) => sum + op.montantBrut);
         
         final depots = operations.where((op) => op.type == OperationType.depot).length;
         final retraits = operations.where((op) => op.type == OperationType.retrait).length;
@@ -458,6 +488,15 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
         
         // Add FLOT count
         final flotsCount = shopFlots.length;
+
+        // Get cash disponible from shop stats
+        double cashDisponibleUSD = 0;
+        double cashDisponibleCDF = 0;
+        if (currentUser?.shopId != null) {
+          final shopStats = _getShopStats(shopService, currentUser!.shopId!);
+          cashDisponibleUSD = shopStats['capitalTotal'] as double;
+          cashDisponibleCDF = shopStats['capitalTotalDevise2'] as double;
+        }
 
         if (isMobile) {
           // Layout mobile : Grid 3 colonnes x 2 lignes
@@ -495,7 +534,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
                 ],
               ),
               const SizedBox(height: 8),
-              // Ligne 2 : Transferts, FLOTs, Volume Total (3 colonnes)
+              // Ligne 2 : Transferts, FLOTs, Cash Disponible (3 colonnes)
               Row(
                 children: [
                   Expanded(
@@ -518,10 +557,10 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: _buildMultiDeviseCard(
-                      'Volume Total',
-                      montantUSD,
-                      montantCDF,
-                      Icons.attach_money,
+                      'Cash Disponible',
+                      cashDisponibleUSD,
+                      cashDisponibleCDF,
+                      Icons.account_balance_wallet,
                       Colors.purple,
                     ),
                   ),
@@ -585,10 +624,10 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
                   const SizedBox(width: 16),
                   Expanded(
                     child: _buildMultiDeviseCard(
-                      'Volume Total',
-                      montantUSD,
-                      montantCDF,
-                      Icons.attach_money,
+                      'Cash Disponible',
+                      cashDisponibleUSD,
+                      cashDisponibleCDF,
+                      Icons.account_balance_wallet,
                       Colors.purple,
                     ),
                   ),
@@ -807,13 +846,13 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
         if (allItems.isEmpty) {
           return operationService.operations.isEmpty 
               ? const SingleChildScrollView(child: OperationsHelpWidget())
-              : const Center(
+              : Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.search_off, color: Colors.grey, size: 64),
-                      SizedBox(height: 16),
-                      Text(
+                      const Icon(Icons.search_off, color: Colors.grey, size: 64),
+                      const SizedBox(height: 16),
+                      const Text(
                         'Aucune opération trouvée avec ces critères',
                         style: TextStyle(
                           fontSize: 16,
@@ -821,8 +860,8 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
                           fontWeight: FontWeight.w500,
                         ),
                       ),
-                      SizedBox(height: 8),
-                      Text(
+                      const SizedBox(height: 8),
+                      const Text(
                         'Modifiez vos critères de recherche ou créez une nouvelle opération',
                         style: TextStyle(color: Colors.grey),
                       ),
@@ -1497,7 +1536,4 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
       ),
     );
   }
-
-  // Removed unused method _showOperationImage
-  // TODO: Add image viewing functionality when needed
 }

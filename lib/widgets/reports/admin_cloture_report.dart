@@ -10,6 +10,7 @@ import '../../services/rapport_cloture_service.dart';
 import '../../services/shop_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/pdf_service.dart';
+import '../../services/rapportcloture_pdf_service.dart';
 
 /// Widget pour afficher le Rapport de Clôture Journalière pour les administrateurs
 class AdminClotureReport extends StatefulWidget {
@@ -97,10 +98,41 @@ class _AdminClotureReportState extends State<AdminClotureReport> {
     }
   }
 
+  Future<void> _telechargerPDF(RapportClotureModel rapport) async {
+    try {
+      final shop = _shops.firstWhere((s) => s.id == rapport.shopId);
+      
+      // Générer le PDF avec le nouveau service
+      final pdf = await generateRapportCloturePdf(
+        rapport: rapport,
+        shop: shop,
+      );
+
+      final pdfBytes = await pdf.save();
+      final fileName = 'rapportcloture_${shop.designation}_${DateFormat('yyyy-MM-dd').format(_selectedDate)}.pdf';
+      
+      await Printing.sharePdf(bytes: pdfBytes, filename: fileName);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ PDF généré avec succès')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('❌ Erreur: $e')),
+        );
+      }
+    }
+  }
+
   Future<void> _previsualiserPDF(RapportClotureModel rapport) async {
     try {
       final shop = _shops.firstWhere((s) => s.id == rapport.shopId);
-      final pdf = await generateDailyClosureReportPdf(
+      
+      // Générer le PDF avec le nouveau service
+      final pdf = await generateRapportCloturePdf(
         rapport: rapport,
         shop: shop,
       );
@@ -120,42 +152,17 @@ class _AdminClotureReportState extends State<AdminClotureReport> {
   Future<void> _imprimerPDF(RapportClotureModel rapport) async {
     try {
       final shop = _shops.firstWhere((s) => s.id == rapport.shopId);
-      final pdf = await generateDailyClosureReportPdf(
+      
+      // Générer le PDF avec le nouveau service
+      final pdf = await generateRapportCloturePdf(
         rapport: rapport,
         shop: shop,
       );
 
       await Printing.layoutPdf(
         onLayout: (PdfPageFormat format) async => pdf.save(),
-        name: 'Rapport_Cloture_${shop.designation}_${DateFormat('yyyy-MM-dd').format(_selectedDate)}.pdf',
+        name: 'rapportcloture_${shop.designation}_${DateFormat('yyyy-MM-dd').format(_selectedDate)}.pdf',
       );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ Erreur: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _telechargerPDF(RapportClotureModel rapport) async {
-    try {
-      final shop = _shops.firstWhere((s) => s.id == rapport.shopId);
-      final pdf = await generateDailyClosureReportPdf(
-        rapport: rapport,
-        shop: shop,
-      );
-
-      final pdfBytes = await pdf.save();
-      final fileName = 'rapport_cloture_${shop.designation}_${DateFormat('yyyy-MM-dd').format(_selectedDate)}.pdf';
-      
-      await Printing.sharePdf(bytes: pdfBytes, filename: fileName);
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✅ PDF généré avec succès')),
-        );
-      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -402,7 +409,8 @@ class _AdminClotureReportState extends State<AdminClotureReport> {
           ),
         ),
         const SizedBox(height: 24),
-
+        
+        // Keep the existing report content
         // Solde antérieur
         _buildSection(
           'Solde Antérieur',
@@ -576,101 +584,6 @@ class _AdminClotureReportState extends State<AdminClotureReport> {
                         '${client.solde.toStringAsFixed(2)} USD',
                         style: TextStyle(
                           color: Colors.green[700],
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 24),
-
-        // Shops
-        _buildSection(
-          'Shops',
-          [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Shops qui nous doivent (Transferts - Floats)',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.orange[700],
-                    ),
-                  ),
-                ),
-                Text(
-                  '${rapport.shopsNousDoivent.length}',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.orange[700],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (rapport.shopsNousDoivent.isEmpty)
-              const Text('Aucun shop débiteur')
-            else
-              SizedBox(
-                height: 200,
-                child: ListView.builder(
-                  itemCount: rapport.shopsNousDoivent.length,
-                  itemBuilder: (context, index) {
-                    final shop = rapport.shopsNousDoivent[index];
-                    return ListTile(
-                      title: Text('${shop.designation} (${shop.localisation})'),
-                      trailing: Text(
-                        '${shop.montant.toStringAsFixed(2)} USD',
-                        style: TextStyle(
-                          color: Colors.orange[700],
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Shops que nous devons (Floats > Transferts)',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.purple[700],
-                    ),
-                  ),
-                ),
-                Text(
-                  '${rapport.shopsNousDevons.length}',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.purple[700],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (rapport.shopsNousDevons.isEmpty)
-              const Text('Aucun shop créditeur')
-            else
-              SizedBox(
-                height: 200,
-                child: ListView.builder(
-                  itemCount: rapport.shopsNousDevons.length,
-                  itemBuilder: (context, index) {
-                    final shop = rapport.shopsNousDevons[index];
-                    return ListTile(
-                      title: Text('${shop.designation} (${shop.localisation})'),
-                      trailing: Text(
-                        '${shop.montant.toStringAsFixed(2)} USD',
-                        style: TextStyle(
-                          color: Colors.purple[700],
                           fontWeight: FontWeight.bold,
                         ),
                       ),

@@ -599,15 +599,13 @@ class LocalDB {
     return allClients.where((client) => client.shopId == shopId).toList();
   }
   // === CRUD OPERATIONS ===
-  Future<OperationModel> saveOperation(OperationModel operation, {bool preserveTimestamp = false}) async {
+  Future<OperationModel> saveOperation(OperationModel operation) async {
     final prefs = await database;
     final operationId = operation.id ?? DateTime.now().millisecondsSinceEpoch;
-    final updatedOperation = preserveTimestamp 
-        ? operation.copyWith(id: operationId)
-        : operation.copyWith(
-            id: operationId,
-            lastModifiedAt: DateTime.now(),
-          );
+    final updatedOperation = operation.copyWith(
+      id: operationId,
+      lastModifiedAt: DateTime.now(),
+    );
     await prefs.setString('operation_$operationId', jsonEncode(updatedOperation.toJson()));
     return updatedOperation;
   }
@@ -1257,6 +1255,14 @@ class LocalDB {
   Future<List<flot_model.FlotModel>> getFlotsByStatut(flot_model.StatutFlot statut) async {
     final allFlots = await getAllFlots();
     return allFlots.where((f) => f.statut == statut).toList();
+  }
+
+  /// Récupérer les flots par agent (envoyeur ou récepteur)
+  Future<List<flot_model.FlotModel>> getFlotsByAgentId(int agentId) async {
+    final allFlots = await getAllFlots();
+    return allFlots.where((f) => 
+      f.agentEnvoyeurId == agentId || f.agentRecepteurId == agentId
+    ).toList();
   }
 
 }

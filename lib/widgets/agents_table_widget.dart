@@ -71,154 +71,67 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
 
   Widget _buildResponsiveHeader(bool isMobile) {
     return Container(
-      padding: EdgeInsets.all(isMobile ? 16 : 20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Colors.white,
-            const Color(0xFFDC2626).withOpacity(0.03),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
+      padding: EdgeInsets.all(isMobile ? 12 : 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Titre avec icône et description
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFDC2626).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.people,
-                  color: Color(0xFFDC2626),
-                  size: 28,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '👥 Gestion des Agents',
-                      style: TextStyle(
-                        fontSize: isMobile ? 18 : 22,
-                        fontWeight: FontWeight.bold,
-                        color: const Color(0xFFDC2626),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Créer, modifier, activer/désactiver, supprimer les agents',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: isMobile ? 16 : 20),
-          
-          // Boutons d'action CRUD bien visibles
-          if (isMobile)
+          // Titre et bouton nouveau responsive
+          if (isMobile) ...[
+            // Layout mobile vertical
             Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ElevatedButton.icon(
-                  onPressed: _showCreateAgentDialog,
-                  icon: const Icon(Icons.person_add, size: 20),
-                  label: const Text('➕ Créer un Agent'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFDC2626),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                const Text(
+                  'Liste des Agents',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFDC2626),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _showCreateAgentDialog,
+                    icon: const Icon(Icons.person_add, size: 16),
+                    label: const Text('Nouvel Agent'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFDC2626),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
-                    elevation: 2,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                // Info sur les actions disponibles (mobile)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.blue[200]!),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.info_outline, size: 18, color: Colors.blue[700]),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Actions disponibles : Modifier, Activer/Désactiver, Supprimer',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.blue[700],
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            )
-          else
-            Row(
-              children: [
-                ElevatedButton.icon(
-                  onPressed: _showCreateAgentDialog,
-                  icon: const Icon(Icons.person_add, size: 20),
-                  label: const Text('➕ Créer un Agent'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFDC2626),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    elevation: 2,
-                  ),
-                ),
-                const Spacer(),
-                // Info sur les actions disponibles
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.blue[50],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.blue[200]!),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.info_outline, size: 16, color: Colors.blue[700]),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Actions: ✏️ Modifier | ▶️/⏸️ Activer/Désactiver | 🗑️ Supprimer',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.blue[700],
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
                   ),
                 ),
               ],
             ),
+          ] else ...[
+            // Layout desktop horizontal
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Liste des Agents',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFDC2626),
+                    ),
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: _showCreateAgentDialog,
+                  icon: const Icon(Icons.person_add, size: 18),
+                  label: const Text('Nouvel Agent'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFDC2626),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                ),
+              ],
+            ),
+          ],
           SizedBox(height: isMobile ? 12 : 16),
           
           // Filtres responsive
@@ -539,59 +452,36 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         // Modifier
-                        Tooltip(
-                          message: 'Modifier l\'agent',
-                          child: ElevatedButton.icon(
-                            onPressed: () => _editAgent(agent),
-                            icon: const Icon(Icons.edit, size: 14),
-                            label: const Text('Modifier', style: TextStyle(fontSize: 11)),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                              minimumSize: const Size(0, 32),
-                            ),
-                          ),
+                        IconButton(
+                          onPressed: () => _editAgent(agent),
+                          icon: const Icon(Icons.edit, size: 14),
+                          tooltip: 'Modifier',
+                          color: Colors.blue,
+                          padding: const EdgeInsets.all(4),
+                          constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
                         ),
-                        const SizedBox(width: 6),
                         
                         // Activer/Désactiver
-                        Tooltip(
-                          message: agent.isActive ? 'Désactiver' : 'Activer',
-                          child: ElevatedButton.icon(
-                            onPressed: () => _toggleAgentStatus(agent),
-                            icon: Icon(
-                              agent.isActive ? Icons.pause : Icons.play_arrow,
-                              size: 14,
-                            ),
-                            label: Text(
-                              agent.isActive ? 'Désactiver' : 'Activer',
-                              style: const TextStyle(fontSize: 11),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: agent.isActive ? Colors.orange : Colors.green,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                              minimumSize: const Size(0, 32),
-                            ),
+                        IconButton(
+                          onPressed: () => _toggleAgentStatus(agent),
+                          icon: Icon(
+                            agent.isActive ? Icons.pause : Icons.play_arrow,
+                            size: 14,
                           ),
+                          tooltip: agent.isActive ? 'Désactiver' : 'Activer',
+                          color: agent.isActive ? Colors.orange : Colors.green,
+                          padding: const EdgeInsets.all(4),
+                          constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
                         ),
-                        const SizedBox(width: 6),
                         
                         // Supprimer
-                        Tooltip(
-                          message: 'Supprimer l\'agent',
-                          child: ElevatedButton.icon(
-                            onPressed: () => _deleteAgent(agent),
-                            icon: const Icon(Icons.delete, size: 14),
-                            label: const Text('Supprimer', style: TextStyle(fontSize: 11)),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                              minimumSize: const Size(0, 32),
-                            ),
-                          ),
+                        IconButton(
+                          onPressed: () => _deleteAgent(agent),
+                          icon: const Icon(Icons.delete, size: 14),
+                          tooltip: 'Supprimer',
+                          color: Colors.red,
+                          padding: const EdgeInsets.all(4),
+                          constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
                         ),
                       ],
                     ),

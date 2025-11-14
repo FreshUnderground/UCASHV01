@@ -25,7 +25,7 @@ Future<pw.Document> generateDailyClosureReportPdf({
       build: (context) => pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          // EN-TÊTE - Style UCASH avec identification du shop
+          // EN-TÊTE - Style UCASH
           pw.Container(
             padding: const pw.EdgeInsets.all(16),
             decoration: pw.BoxDecoration(
@@ -46,18 +46,9 @@ Future<pw.Document> generateDailyClosureReportPdf({
                         color: PdfColors.white,
                       ),
                     ),
-                    pw.SizedBox(height: 4),
                     pw.Text(
-                      '🏪 SHOP: ${shop.designation}',
-                      style: pw.TextStyle(
-                        fontSize: 16, 
-                        fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.yellow,
-                      ),
-                    ),
-                    pw.Text(
-                      '📍 ${shop.localisation ?? "Localisation non spécifiée"}',
-                      style: pw.TextStyle(fontSize: 11, color: PdfColors.white),
+                      shop.designation,
+                      style: pw.TextStyle(fontSize: 14, color: PdfColors.white),
                     ),
                   ],
                 ),
@@ -151,17 +142,107 @@ Future<pw.Document> generateDailyClosureReportPdf({
                     pw.SizedBox(height: 12),
                     // FLOT
                     _buildSection(
-                      '🚢 Flots (Liquidités Inter-Shops)',
+                      '2️⃣ Flots',
                       [
-                        _buildRow('Reçus (Servis)', rapport.flotRecu, color: PdfColors.green700),
-                        _buildRow('🔶 En cours', rapport.flotEnCours, color: PdfColors.orange700),
-                        _buildRow('Envoyés (Servis)', rapport.flotServi, color: PdfColors.red700, prefix: '-'),
-                        if (rapport.flotEnCours > 0) pw.Divider(color: PdfColors.orange700),
-                        if (rapport.flotEnCours > 0)
-                          pw.Text('⚠️ FLOT EN COURS:', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.orange700)),
-                        ...rapport.flotsEnvoyes.where((f) => f.statut == 'enRoute').map((flot) => 
-                          _buildFlotRow(flot, isEnCours: true)
-                        ),
+                        _buildRow('Reçus', rapport.flotRecu, color: PdfColors.green700),
+                        _buildRow('En cours', rapport.flotEnCours, color: PdfColors.orange700),
+                        _buildRow('Servis', rapport.flotServi, color: PdfColors.red700, prefix: '-'),
+                                        
+                        // Détails des FLOTs reçus
+                        if (rapport.flotsRecusDetails.isNotEmpty) ...[
+                          pw.SizedBox(height: 8),
+                          pw.Text('FLOTs Reçus Détails:', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                          pw.Divider(),
+                          ...rapport.flotsRecusDetails.map((flot) => pw.Padding(
+                            padding: const pw.EdgeInsets.symmetric(vertical: 1),
+                            child: pw.Row(
+                              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                              children: [
+                                pw.Expanded(
+                                  child: pw.Column(
+                                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                                    children: [
+                                      pw.Text('${flot.shopSourceDesignation}', style: pw.TextStyle(fontSize: 8)),
+                                      pw.Text('${DateFormat('dd/MM HH:mm').format(flot.dateEnvoi)} - ${flot.modePaiement}', style: pw.TextStyle(fontSize: 7, color: PdfColors.grey700)),
+                                    ],
+                                  ),
+                                ),
+                                pw.Text(
+                                  '${flot.montant.toStringAsFixed(2)} USD',
+                                  style: pw.TextStyle(
+                                    color: PdfColors.green700,
+                                    fontSize: 9,
+                                    fontWeight: pw.FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )).toList(),
+                        ],
+                                        
+                        // Détails des FLOTs envoyés
+                        if (rapport.flotsEnvoyes.isNotEmpty) ...[
+                          pw.SizedBox(height: 8),
+                          pw.Text('FLOTs Envoyés Détails:', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                          pw.Divider(),
+                          ...rapport.flotsEnvoyes.map((flot) => pw.Padding(
+                            padding: const pw.EdgeInsets.symmetric(vertical: 1),
+                            child: pw.Row(
+                              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                              children: [
+                                pw.Expanded(
+                                  child: pw.Column(
+                                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                                    children: [
+                                      pw.Text('${flot.shopDestinationDesignation}', style: pw.TextStyle(fontSize: 8)),
+                                      pw.Text('${DateFormat('dd/MM HH:mm').format(flot.dateEnvoi)} - ${flot.modePaiement} (${flot.statut})', style: pw.TextStyle(fontSize: 7, color: PdfColors.grey700)),
+                                    ],
+                                  ),
+                                ),
+                                pw.Text(
+                                  '${flot.montant.toStringAsFixed(2)} USD',
+                                  style: pw.TextStyle(
+                                    color: PdfColors.red700,
+                                    fontSize: 9,
+                                    fontWeight: pw.FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )).toList(),
+                        ],
+                                        
+                        // Détails des FLOTs en cours
+                        if (rapport.flotsEnCoursDetails.isNotEmpty) ...[
+                          pw.SizedBox(height: 8),
+                          pw.Text('FLOTs En Cours Détails:', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                          pw.Divider(),
+                          ...rapport.flotsEnCoursDetails.map((flot) => pw.Padding(
+                            padding: const pw.EdgeInsets.symmetric(vertical: 1),
+                            child: pw.Row(
+                              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                              children: [
+                                pw.Expanded(
+                                  child: pw.Column(
+                                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                                    children: [
+                                      pw.Text('${flot.shopDestinationDesignation}', style: pw.TextStyle(fontSize: 8)),
+                                      pw.Text('${DateFormat('dd/MM HH:mm').format(flot.dateEnvoi)} - ${flot.modePaiement}', style: pw.TextStyle(fontSize: 7, color: PdfColors.grey700)),
+                                    ],
+                                  ),
+                                ),
+                                pw.Text(
+                                  '${flot.montant.toStringAsFixed(2)} USD',
+                                  style: pw.TextStyle(
+                                    color: PdfColors.orange700,
+                                    fontSize: 9,
+                                    fontWeight: pw.FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )).toList(),
+                        ],
                       ],
                       PdfColors.purple700,
                     ),
@@ -195,74 +276,128 @@ Future<pw.Document> generateDailyClosureReportPdf({
                     pw.SizedBox(height: 12),
                     // Clients Nous Doivent
                     _buildSection(
-                      '⚠️ Clients Nous Doivent (Débiteurs)',
+                      '5️⃣ Clients Nous Doivent',
                       [
                         pw.Text('${rapport.clientsNousDoivent.length} client(s)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
                         pw.Divider(),
-                        ...rapport.clientsNousDoivent.take(5).map((client) => 
-                          _buildDetailRow(client.nom, client.solde.abs(), subtitle: client.numeroCompte)
-                        ),
-                        if (rapport.clientsNousDoivent.length > 5)
-                          pw.Text('... et ${rapport.clientsNousDoivent.length - 5} autre(s)', 
-                            style: pw.TextStyle(fontSize: 8, fontStyle: pw.FontStyle.italic, color: PdfColors.grey600)),
-                        if (rapport.clientsNousDoivent.isEmpty)
-                          pw.Text('Aucun client ne nous doit', style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic, color: PdfColors.grey600)),
+                        // Show detailed client list like UI
+                        ...rapport.clientsNousDoivent.map((client) => pw.Padding(
+                          padding: const pw.EdgeInsets.symmetric(vertical: 1),
+                          child: pw.Row(
+                            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                            children: [
+                              pw.Expanded(
+                                child: pw.Text(client.nom, style: const pw.TextStyle(fontSize: 9)),
+                              ),
+                              pw.Text(
+                                '${client.solde.toStringAsFixed(2)} USD',
+                                style: pw.TextStyle(
+                                  color: PdfColors.red700,
+                                  fontSize: 9,
+                                  fontWeight: pw.FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )).toList(),
                         pw.Divider(),
-                        _buildRow('TOTAL DETTES CLIENT', rapport.totalClientsNousDoivent, color: PdfColors.red700, bold: true),
+                        _buildRow('TOTAL Dettes', rapport.totalClientsNousDoivent, color: PdfColors.red700, bold: true),
                       ],
                       PdfColors.red700,
                     ),
                     pw.SizedBox(height: 12),
                     // Clients Nous Devons
                     _buildSection(
-                      '✅ Clients Nous Devons (Créditeurs)',
+                      '6️⃣ Clients Nous Devons',
                       [
                         pw.Text('${rapport.clientsNousDevons.length} client(s)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
                         pw.Divider(),
-                        ...rapport.clientsNousDevons.take(5).map((client) => 
-                          _buildDetailRow(client.nom, client.solde, subtitle: client.numeroCompte)
-                        ),
-                        if (rapport.clientsNousDevons.length > 5)
-                          pw.Text('... et ${rapport.clientsNousDevons.length - 5} autre(s)', 
-                            style: pw.TextStyle(fontSize: 8, fontStyle: pw.FontStyle.italic, color: PdfColors.grey600)),
-                        if (rapport.clientsNousDevons.isEmpty)
-                          pw.Text('Nous ne devons aucun client', style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic, color: PdfColors.grey600)),
+                        // Show detailed client list like UI
+                        ...rapport.clientsNousDevons.map((client) => pw.Padding(
+                          padding: const pw.EdgeInsets.symmetric(vertical: 1),
+                          child: pw.Row(
+                            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                            children: [
+                              pw.Expanded(
+                                child: pw.Text(client.nom, style: const pw.TextStyle(fontSize: 9)),
+                              ),
+                              pw.Text(
+                                '${client.solde.toStringAsFixed(2)} USD',
+                                style: pw.TextStyle(
+                                  color: PdfColors.green700,
+                                  fontSize: 9,
+                                  fontWeight: pw.FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )).toList(),
                         pw.Divider(),
-                        _buildRow('TOTAL CRÉANCES CLIENT', rapport.totalClientsNousDevons, color: PdfColors.green700, bold: true),
+                        _buildRow('TOTAL Créances', rapport.totalClientsNousDevons, color: PdfColors.green700, bold: true),
                       ],
                       PdfColors.green700,
                     ),
                     pw.SizedBox(height: 12),
                     // Shops Nous Doivent
                     _buildSection(
-                      '❗ Shops Nous Doivent (Créances)',
+                      '7️⃣ Shops Nous Doivent',
                       [
                         pw.Text('${rapport.shopsNousDoivent.length} shop(s)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
                         pw.Divider(),
-                        ...rapport.shopsNousDoivent.map((shop) => 
-                          _buildDetailRow(shop.designation, shop.montant, subtitle: shop.localisation)
-                        ),
-                        if (rapport.shopsNousDoivent.isEmpty)
-                          pw.Text('Aucun shop ne nous doit', style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic, color: PdfColors.grey600)),
+                        // Show detailed shop list like UI
+                        ...rapport.shopsNousDoivent.map((shop) => pw.Padding(
+                          padding: const pw.EdgeInsets.symmetric(vertical: 1),
+                          child: pw.Row(
+                            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                            children: [
+                              pw.Expanded(
+                                child: pw.Text('${shop.designation} (${shop.localisation})', style: const pw.TextStyle(fontSize: 9)),
+                              ),
+                              pw.Text(
+                                '${shop.montant.toStringAsFixed(2)} USD',
+                                style: pw.TextStyle(
+                                  color: PdfColors.orange700,
+                                  fontSize: 9,
+                                  fontWeight: pw.FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )).toList(),
                         pw.Divider(),
-                        _buildRow('TOTAL CRÉANCES', rapport.totalShopsNousDoivent, color: PdfColors.orange700, bold: true),
+                        _buildRow('TOTAL', rapport.totalShopsNousDoivent, color: PdfColors.orange700, bold: true),
                       ],
                       PdfColors.orange700,
                     ),
                     pw.SizedBox(height: 12),
                     // Shops Nous Devons
                     _buildSection(
-                      '❗ Shops Nous Devons (Dettes)',
+                      '8️⃣ Shops Nous Devons',
                       [
                         pw.Text('${rapport.shopsNousDevons.length} shop(s)', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
                         pw.Divider(),
-                        ...rapport.shopsNousDevons.map((shop) => 
-                          _buildDetailRow(shop.designation, shop.montant, subtitle: shop.localisation)
-                        ),
-                        if (rapport.shopsNousDevons.isEmpty)
-                          pw.Text('Nous ne devons aucun shop', style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic, color: PdfColors.grey600)),
+                        // Show detailed shop list like UI
+                        ...rapport.shopsNousDevons.map((shop) => pw.Padding(
+                          padding: const pw.EdgeInsets.symmetric(vertical: 1),
+                          child: pw.Row(
+                            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                            children: [
+                              pw.Expanded(
+                                child: pw.Text('${shop.designation} (${shop.localisation})', style: const pw.TextStyle(fontSize: 9)),
+                              ),
+                              pw.Text(
+                                '${shop.montant.toStringAsFixed(2)} USD',
+                                style: pw.TextStyle(
+                                  color: PdfColors.purple700,
+                                  fontSize: 9,
+                                  fontWeight: pw.FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )).toList(),
                         pw.Divider(),
-                        _buildRow('TOTAL DETTES', rapport.totalShopsNousDevons, color: PdfColors.purple700, bold: true),
+                        _buildRow('TOTAL', rapport.totalShopsNousDevons, color: PdfColors.purple700, bold: true),
                       ],
                       PdfColors.purple700,
                     ),
@@ -403,85 +538,484 @@ pw.Widget _buildRow(String label, double montant, {bool bold = false, PdfColor? 
   );
 }
 
-/// Ligne de détail avec sous-titre (pour clients et shops)
-pw.Widget _buildDetailRow(String nom, double montant, {String? subtitle}) {
-  return pw.Padding(
-    padding: const pw.EdgeInsets.symmetric(vertical: 3),
-    child: pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-          children: [
-            pw.Expanded(
-              child: pw.Text(
-                nom,
-                style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
-              ),
-            ),
-            pw.Text(
-              '${montant.toStringAsFixed(2)} USD',
-              style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
-            ),
-          ],
-        ),
-        if (subtitle != null)
-          pw.Padding(
-            padding: const pw.EdgeInsets.only(left: 4),
-            child: pw.Text(
-              subtitle,
-              style: pw.TextStyle(fontSize: 7, color: PdfColors.grey600),
-            ),
-          ),
-      ],
-    ),
-  );
-}
-
-/// Ligne FLOT avec détails
-pw.Widget _buildFlotRow(FlotResume flot, {bool isEnCours = false}) {
-  return pw.Container(
-    padding: const pw.EdgeInsets.symmetric(vertical: 3, horizontal: 4),
-    margin: const pw.EdgeInsets.only(top: 2),
-    decoration: pw.BoxDecoration(
-      color: isEnCours ? PdfColors.orange50 : PdfColors.grey50,
-      borderRadius: pw.BorderRadius.circular(4),
-    ),
-    child: pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-          children: [
-            pw.Text(
-              '→ ${flot.shopDestinationDesignation}',
-              style: pw.TextStyle(
-                fontSize: 8,
-                fontWeight: pw.FontWeight.bold,
-                color: isEnCours ? PdfColors.orange800 : PdfColors.grey800,
-              ),
-            ),
-            pw.Text(
-              '${flot.montant.toStringAsFixed(2)} ${flot.devise}',
-              style: pw.TextStyle(
-                fontSize: 8,
-                fontWeight: pw.FontWeight.bold,
-                color: isEnCours ? PdfColors.orange800 : PdfColors.grey800,
-              ),
-            ),
-          ],
-        ),
-        pw.Text(
-          '${flot.modePaiement} | Envoyé: ${DateFormat('dd/MM HH:mm').format(flot.dateEnvoi)}',
-          style: pw.TextStyle(fontSize: 7, color: PdfColors.grey600),
-        ),
-      ],
-    ),
-  );
-}
-
 /// Classe PdfService pour compatibilité avec le code existant
 class PdfService {
+  /// Génère un PDF de reçu pour une opération
+  Future<pw.Document> generateReceiptPdf({
+    required OperationModel operation,
+    required ShopModel shop,
+    required AgentModel agent,
+    String? clientName,
+  }) async {
+    final pdf = pw.Document();
+    
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.roll80,
+        margin: const pw.EdgeInsets.all(12),
+        build: (context) => pw.Column(
+          children: [
+            // En-tête UCASH
+            pw.Text(
+              'UCASH',
+              style: pw.TextStyle(
+                fontSize: 20,
+                fontWeight: pw.FontWeight.bold,
+              ),
+            ),
+            pw.Text(
+              shop.designation,
+              style: pw.TextStyle(fontSize: 12),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Text(
+              'Agent: ${agent.nom ?? agent.username}',
+              style: pw.TextStyle(fontSize: 10),
+            ),
+            pw.Divider(),
+            
+            // Informations de l'opération
+            pw.SizedBox(height: 8),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('Opération:', style: pw.TextStyle(fontSize: 10)),
+                pw.Text(operation.typeLabel, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+              ],
+            ),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('Date:', style: pw.TextStyle(fontSize: 10)),
+                pw.Text(DateFormat('dd/MM/yyyy HH:mm').format(operation.dateOp), style: pw.TextStyle(fontSize: 10)),
+              ],
+            ),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('ID:', style: pw.TextStyle(fontSize: 10)),
+                pw.Text(operation.id?.toString() ?? 'N/A', style: pw.TextStyle(fontSize: 10)),
+              ],
+            ),
+            
+            pw.SizedBox(height: 8),
+            pw.Divider(),
+            
+            // Montants
+            pw.SizedBox(height: 8),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('Montant:', style: pw.TextStyle(fontSize: 10)),
+                pw.Text('${operation.montantBrut.toStringAsFixed(2)} USD', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+              ],
+            ),
+            if (operation.commission > 0)
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Commission:', style: pw.TextStyle(fontSize: 10)),
+                  pw.Text('${operation.commission.toStringAsFixed(2)} USD', style: pw.TextStyle(fontSize: 10)),
+                ],
+              ),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text('Montant Net:', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                pw.Text('${operation.montantNet.toStringAsFixed(2)} USD', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+              ],
+            ),
+            
+            pw.SizedBox(height: 8),
+            pw.Divider(),
+            
+            // Informations client
+            if (clientName != null)
+              pw.Column(
+                children: [
+                  pw.SizedBox(height: 8),
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text('Client:', style: pw.TextStyle(fontSize: 10)),
+                      pw.Text(clientName, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                    ],
+                  ),
+                ],
+              ),
+              
+            if (operation.destinataire != null)
+              pw.Column(
+                children: [
+                  pw.SizedBox(height: 8),
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text('Destinataire:', style: pw.TextStyle(fontSize: 10)),
+                      pw.Text(operation.destinataire!, style: pw.TextStyle(fontSize: 10)),
+                    ],
+                  ),
+                ],
+              ),
+              
+            if (operation.observation != null)
+              pw.Column(
+                children: [
+                  pw.SizedBox(height: 8),
+                  pw.Text('Observation:', style: pw.TextStyle(fontSize: 10)),
+                  pw.Text(operation.observation!, style: pw.TextStyle(fontSize: 10)),
+                ],
+              ),
+              
+            if (operation.notes != null)
+              pw.Column(
+                children: [
+                  pw.SizedBox(height: 8),
+                  pw.Text('Notes:', style: pw.TextStyle(fontSize: 10)),
+                  pw.Text(operation.notes!, style: pw.TextStyle(fontSize: 10)),
+                ],
+              ),
+              
+            pw.SizedBox(height: 16),
+            pw.Divider(),
+            
+            // Message de remerciement
+            pw.SizedBox(height: 8),
+            pw.Text(
+              'Merci de votre confiance!',
+              style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
+              textAlign: pw.TextAlign.center,
+            ),
+            pw.Text(
+              'Service rendu le ${DateFormat('dd/MM/yyyy').format(operation.dateOp)}',
+              style: pw.TextStyle(fontSize: 10),
+              textAlign: pw.TextAlign.center,
+            ),
+            
+            pw.SizedBox(height: 8),
+            pw.Text(
+              '----------------',
+              style: pw.TextStyle(fontSize: 10),
+              textAlign: pw.TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+    
+    return pdf;
+  }
+  
+  /// Génère un PDF de relevé de compte client
+  Future<pw.Document> generateClientStatementPdf({
+    required ClientModel client,
+    required List<OperationModel> operations,
+    required ShopModel shop,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    final pdf = pw.Document();
+    
+    // Calculer les totaux
+    double totalDepots = 0;
+    double totalRetraits = 0;
+    double totalEnvoyes = 0;
+    double totalRecus = 0;
+    double soldeActuel = 0;
+    
+    for (var op in operations) {
+      switch (op.type) {
+        case OperationType.depot:
+          totalDepots += op.montantNet;
+          soldeActuel += op.montantNet;
+          break;
+        case OperationType.retrait:
+          totalRetraits += op.montantNet;
+          soldeActuel -= op.montantNet;
+          break;
+        case OperationType.transfertNational:
+        case OperationType.transfertInternationalSortant:
+          totalEnvoyes += op.montantNet;
+          soldeActuel -= op.montantNet;
+          break;
+        case OperationType.transfertInternationalEntrant:
+          totalRecus += op.montantNet;
+          soldeActuel += op.montantNet;
+          break;
+        default:
+          break;
+      }
+    }
+    
+    final formattedStartDate = startDate != null ? DateFormat('dd/MM/yyyy').format(startDate) : 'Début';
+    final formattedEndDate = endDate != null ? DateFormat('dd/MM/yyyy').format(endDate) : 'Aujourd\'hui';
+    
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(24),
+        build: (context) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            // En-tête
+            pw.Container(
+              padding: const pw.EdgeInsets.all(16),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.red700,
+                borderRadius: pw.BorderRadius.circular(8),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        'UCASH',
+                        style: pw.TextStyle(
+                          fontSize: 24,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.white,
+                        ),
+                      ),
+                      pw.Text(
+                        shop.designation,
+                        style: pw.TextStyle(fontSize: 14, color: PdfColors.white),
+                      ),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text(
+                        'RELEVÉ DE COMPTE',
+                        style: pw.TextStyle(
+                          fontSize: 12,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.white,
+                        ),
+                      ),
+                      pw.Text(
+                        '${formattedStartDate} - ${formattedEndDate}',
+                        style: pw.TextStyle(
+                          fontSize: 14,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.yellow,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            
+            pw.SizedBox(height: 16),
+            
+            // Informations client
+            pw.Container(
+              padding: const pw.EdgeInsets.all(12),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey300),
+                borderRadius: pw.BorderRadius.circular(6),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    client.nom,
+                    style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+                  ),
+                  pw.Text(
+                    'N° Compte: ${client.numeroCompte ?? client.id}',
+                    style: pw.TextStyle(fontSize: 12, color: PdfColors.grey600),
+                  ),
+                  if (client.telephone != null)
+                    pw.Text(
+                      'Téléphone: ${client.telephone}',
+                      style: pw.TextStyle(fontSize: 12, color: PdfColors.grey600),
+                    ),
+                  pw.SizedBox(height: 4),
+                  pw.Divider(),
+                  pw.SizedBox(height: 4),
+                  pw.Text(
+                    'Période: Du ${formattedStartDate} au ${formattedEndDate}',
+                    style: pw.TextStyle(fontSize: 12, color: PdfColors.grey600),
+                  ),
+                ],
+              ),
+            ),
+            
+            pw.SizedBox(height: 16),
+            
+            // Résumé des mouvements
+            pw.Row(
+              children: [
+                pw.Expanded(
+                  child: pw.Container(
+                    padding: const pw.EdgeInsets.all(12),
+                    decoration: pw.BoxDecoration(
+                      color: PdfColors.green50,
+                      border: pw.Border.all(color: PdfColors.green700),
+                      borderRadius: pw.BorderRadius.circular(6),
+                    ),
+                    child: pw.Column(
+                      children: [
+                        pw.Text('Dépôts USD', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                        pw.SizedBox(height: 8),
+                        pw.Text('${totalDepots.toStringAsFixed(2)} \$', style: pw.TextStyle(fontSize: 14, color: PdfColors.green700, fontWeight: pw.FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                ),
+                pw.SizedBox(width: 16),
+                pw.Expanded(
+                  child: pw.Container(
+                    padding: const pw.EdgeInsets.all(12),
+                    decoration: pw.BoxDecoration(
+                      color: PdfColors.orange50,
+                      border: pw.Border.all(color: PdfColors.orange700),
+                      borderRadius: pw.BorderRadius.circular(6),
+                    ),
+                    child: pw.Column(
+                      children: [
+                        pw.Text('Retraits USD', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                        pw.SizedBox(height: 8),
+                        pw.Text('${totalRetraits.toStringAsFixed(2)} \$', style: pw.TextStyle(fontSize: 14, color: PdfColors.orange700, fontWeight: pw.FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                ),
+                pw.SizedBox(width: 16),
+                pw.Expanded(
+                  child: pw.Container(
+                    padding: const pw.EdgeInsets.all(12),
+                    decoration: pw.BoxDecoration(
+                      color: PdfColors.blue50,
+                      border: pw.Border.all(color: PdfColors.blue700),
+                      borderRadius: pw.BorderRadius.circular(6),
+                    ),
+                    child: pw.Column(
+                      children: [
+                        pw.Text('Solde USD', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                        pw.SizedBox(height: 8),
+                        pw.Text('${soldeActuel.toStringAsFixed(2)} \$', style: pw.TextStyle(fontSize: 14, color: soldeActuel >= 0 ? PdfColors.green700 : PdfColors.red700, fontWeight: pw.FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            
+            pw.SizedBox(height: 16),
+            
+            // Historique des transactions
+            pw.SizedBox(height: 16),
+            pw.Text(
+              'HISTORIQUE DES TRANSACTIONS',
+              style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 8),
+            
+            // Calculate running balance
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey300),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(1.5),
+                1: const pw.FlexColumnWidth(2),
+                2: const pw.FlexColumnWidth(2),
+                3: const pw.FlexColumnWidth(1.5),
+                4: const pw.FlexColumnWidth(1.5),
+                5: const pw.FlexColumnWidth(1.5),
+              },
+              children: [
+                pw.TableRow(
+                  decoration: pw.BoxDecoration(color: PdfColors.grey200),
+                  children: [
+                    _buildTableCell('Date', bold: true),
+                    _buildTableCell('Type', bold: true),
+                    _buildTableCell('Observation', bold: true),
+                    _buildTableCell('Reçu (Dépôt)', bold: true),
+                    _buildTableCell('Payé (Retrait)', bold: true),
+                    _buildTableCell('Solde USD', bold: true),
+                  ],
+                ),
+                ...(() {
+                  double runningBalance = 0;
+                  List<pw.TableRow> rows = [];
+                  
+                  // Sort operations by date
+                  final sortedOperations = List<OperationModel>.from(operations)
+                    ..sort((a, b) => a.dateOp.compareTo(b.dateOp));
+                  
+                  for (var op in sortedOperations.take(40)) {
+                    bool isCredit = op.type == OperationType.depot || 
+                                   op.type == OperationType.transfertInternationalEntrant;
+                    
+                    if (isCredit) {
+                      runningBalance += op.montantNet;
+                    } else {
+                      runningBalance -= op.montantNet;
+                    }
+                    
+                    rows.add(pw.TableRow(
+                      children: [
+                        _buildTableCell(DateFormat('dd/MM/yyyy').format(op.dateOp)),
+                        _buildTableCell(_getTypeLabel(op.type)),
+                        _buildTableCell(op.destinataire ?? op.observation ?? '-'),
+                        _buildTableCell(isCredit ? '${op.montantNet.toStringAsFixed(2)} \$' : '--', 
+                                      color: isCredit ? PdfColors.green700 : null),
+                        _buildTableCell(!isCredit ? '${op.montantNet.toStringAsFixed(2)} \$' : '--', 
+                                      color: !isCredit ? PdfColors.red700 : null),
+                        _buildTableCell('${runningBalance.toStringAsFixed(2)} \$', 
+                                      color: runningBalance >= 0 ? PdfColors.green700 : PdfColors.red700),
+                      ],
+                    ));
+                  }
+                  return rows;
+                })(),
+              ],
+            ),
+            
+            if (operations.length > 40)
+              pw.Padding(
+                padding: const pw.EdgeInsets.all(8),
+                child: pw.Text(
+                  '... et ${operations.length - 40} autre(s) transaction(s)',
+                  style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic),
+                ),
+              ),
+              
+            pw.Spacer(),
+            
+            // Footer
+            pw.Container(
+              padding: const pw.EdgeInsets.all(8),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.grey100,
+                borderRadius: pw.BorderRadius.circular(4),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'Généré le ${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now())}',
+                    style: pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+                  ),
+                  pw.Text(
+                    'Page 1 sur 1',
+                    style: pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    
+    return pdf;
+  }
+  
   /// Génère un PDF de rapport d'opérations
   Future<pw.Document> generateOperationsReportPdf({
     required List<OperationModel> operations,
@@ -934,343 +1468,4 @@ String _getModeLabel(ModePaiement mode) {
     case ModePaiement.orangeMoney:
       return 'Orange';
   }
-}
-
-/// Générer un PDF de relevé de compte client
-Future<pw.Document> generateClientStatementPdf({
-  required ClientModel client,
-  required List<OperationModel> operations,
-  required ShopModel shop,
-  required DateTime startDate,
-  required DateTime endDate,
-}) async {
-  final pdf = pw.Document();
-  
-  final formattedStart = DateFormat('dd/MM/yyyy').format(startDate);
-  final formattedEnd = DateFormat('dd/MM/yyyy').format(endDate);
-  
-  // Calculer solde initial et final
-  double soldeInitial = 0.0;
-  double totalDebit = 0.0;
-  double totalCredit = 0.0;
-  
-  for (var op in operations) {
-    if (op.type == OperationType.depot) {
-      totalCredit += op.montantNet;
-    } else if (op.type == OperationType.retrait) {
-      totalDebit += op.montantNet;
-    }
-  }
-  
-  final soldeFinal = soldeInitial + totalCredit - totalDebit;
-  
-  pdf.addPage(
-    pw.MultiPage(
-      pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.all(24),
-      build: (context) => [
-        // EN-TÊTE
-        pw.Container(
-          padding: const pw.EdgeInsets.all(16),
-          decoration: pw.BoxDecoration(
-            color: PdfColors.red700,
-            borderRadius: pw.BorderRadius.circular(8),
-          ),
-          child: pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text(
-                    'UCASH',
-                    style: pw.TextStyle(
-                      fontSize: 24,
-                      fontWeight: pw.FontWeight.bold,
-                      color: PdfColors.white,
-                    ),
-                  ),
-                  pw.SizedBox(height: 4),
-                  pw.Text(
-                    '🏪 ${shop.designation}',
-                    style: pw.TextStyle(
-                      fontSize: 12,
-                      color: PdfColors.white,
-                    ),
-                  ),
-                  pw.Text(
-                    '📍 ${shop.localisation ?? ""}',
-                    style: pw.TextStyle(
-                      fontSize: 10,
-                      color: PdfColors.white,
-                    ),
-                  ),
-                ],
-              ),
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.end,
-                children: [
-                  pw.Text(
-                    'RELEVÉ DE COMPTE',
-                    style: pw.TextStyle(
-                      fontSize: 14,
-                      fontWeight: pw.FontWeight.bold,
-                      color: PdfColors.white,
-                    ),
-                  ),
-                  pw.Text(
-                    'Période: $formattedStart - $formattedEnd',
-                    style: pw.TextStyle(
-                      fontSize: 10,
-                      color: PdfColors.yellow,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        
-        pw.SizedBox(height: 16),
-        
-        // INFORMATIONS CLIENT
-        pw.Container(
-          padding: const pw.EdgeInsets.all(12),
-          decoration: pw.BoxDecoration(
-            color: PdfColors.blue50,
-            border: pw.Border.all(color: PdfColors.blue700),
-            borderRadius: pw.BorderRadius.circular(6),
-          ),
-          child: pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text(
-                    '👤 ${client.nom}',
-                    style: pw.TextStyle(
-                      fontSize: 14,
-                      fontWeight: pw.FontWeight.bold,
-                      color: PdfColors.blue900,
-                    ),
-                  ),
-                  pw.SizedBox(height: 4),
-                  pw.Text(
-                    '📞 ${client.telephone}',
-                    style: pw.TextStyle(fontSize: 10),
-                  ),
-                  if (client.numeroCompte != null)
-                    pw.Text(
-                      'N° Compte: ${client.numeroCompte}',
-                      style: pw.TextStyle(fontSize: 10),
-                    ),
-                ],
-              ),
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.end,
-                children: [
-                  pw.Text(
-                    'Solde Actuel',
-                    style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
-                  ),
-                  pw.Text(
-                    '${client.solde.toStringAsFixed(2)} USD',
-                    style: pw.TextStyle(
-                      fontSize: 16,
-                      fontWeight: pw.FontWeight.bold,
-                      color: client.solde >= 0 ? PdfColors.green700 : PdfColors.red700,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        
-        pw.SizedBox(height: 16),
-        
-        // RÉSUMÉ FINANCIER
-        pw.Container(
-          padding: const pw.EdgeInsets.all(12),
-          decoration: pw.BoxDecoration(
-            color: PdfColors.grey100,
-            borderRadius: pw.BorderRadius.circular(6),
-          ),
-          child: pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
-            children: [
-              _buildSummaryBox('Dépôts', totalCredit, PdfColors.green700),
-              _buildSummaryBox('Retraits', totalDebit, PdfColors.red700),
-              _buildSummaryBox('Transactions', operations.length.toDouble(), PdfColors.blue700),
-            ],
-          ),
-        ),
-        
-        pw.SizedBox(height: 20),
-        
-        // TITRE TABLEAU
-        pw.Text(
-          'HISTORIQUE DES TRANSACTIONS',
-          style: pw.TextStyle(
-            fontSize: 12,
-            fontWeight: pw.FontWeight.bold,
-            color: PdfColors.grey800,
-          ),
-        ),
-        
-        pw.SizedBox(height: 8),
-        
-        // TABLEAU DES TRANSACTIONS
-        pw.Table(
-          border: pw.TableBorder.all(color: PdfColors.grey400),
-          columnWidths: {
-            0: const pw.FlexColumnWidth(1.5),
-            1: const pw.FlexColumnWidth(2),
-            2: const pw.FlexColumnWidth(1.5),
-            3: const pw.FlexColumnWidth(1.5),
-            4: const pw.FlexColumnWidth(1),
-          },
-          children: [
-            // En-tête
-            pw.TableRow(
-              decoration: pw.BoxDecoration(color: PdfColors.grey300),
-              children: [
-                _buildTableHeader('Date'),
-                _buildTableHeader('Type'),
-                _buildTableHeader('Débit'),
-                _buildTableHeader('Crédit'),
-                _buildTableHeader('Solde'),
-              ],
-            ),
-            // Lignes de données
-            ...operations.map((op) {
-              final isCredit = op.type == OperationType.depot;
-              final montant = op.montantNet;
-              
-              return pw.TableRow(
-                children: [
-                  _buildTableCell(DateFormat('dd/MM/yy HH:mm').format(op.dateOp)),
-                  _buildTableCell(_getTypeLabel(op.type)),
-                  _buildTableCellPdf(isCredit ? '' : montant.toStringAsFixed(2), align: pw.TextAlign.right, color: PdfColors.red700),
-                  _buildTableCellPdf(isCredit ? montant.toStringAsFixed(2) : '', align: pw.TextAlign.right, color: PdfColors.green700),
-                  _buildTableCellPdf('', align: pw.TextAlign.right),
-                ],
-              );
-            }),
-          ],
-        ),
-        
-        pw.SizedBox(height: 16),
-        
-        // TOTAUX
-        pw.Container(
-          padding: const pw.EdgeInsets.all(12),
-          decoration: pw.BoxDecoration(
-            color: PdfColors.blue50,
-            border: pw.Border.all(color: PdfColors.blue700, width: 2),
-            borderRadius: pw.BorderRadius.circular(6),
-          ),
-          child: pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text('Total Débits:', style: pw.TextStyle(fontSize: 10)),
-                  pw.Text('Total Crédits:', style: pw.TextStyle(fontSize: 10)),
-                ],
-              ),
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.end,
-                children: [
-                  pw.Text('${totalDebit.toStringAsFixed(2)} USD', 
-                    style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.red700)),
-                  pw.Text('${totalCredit.toStringAsFixed(2)} USD', 
-                    style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.green700)),
-                ],
-              ),
-            ],
-          ),
-        ),
-        
-        pw.Spacer(),
-        
-        // FOOTER
-        pw.Container(
-          padding: const pw.EdgeInsets.all(8),
-          decoration: pw.BoxDecoration(
-            color: PdfColors.grey100,
-            borderRadius: pw.BorderRadius.circular(4),
-          ),
-          child: pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Text(
-                'Document généré le ${DateFormat('dd/MM/yyyy à HH:mm').format(DateTime.now())}',
-                style: pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
-              ),
-              pw.Text(
-                'UCASH - Relevé de compte',
-                style: pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
-  
-  return pdf;
-}
-
-/// Widget pour les cases de résumé
-pw.Widget _buildSummaryBox(String label, double value, PdfColor color) {
-  return pw.Column(
-    children: [
-      pw.Text(
-        label,
-        style: pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
-      ),
-      pw.SizedBox(height: 4),
-      pw.Text(
-        value.toStringAsFixed(2),
-        style: pw.TextStyle(
-          fontSize: 14,
-          fontWeight: pw.FontWeight.bold,
-          color: color,
-        ),
-      ),
-    ],
-  );
-}
-
-/// Widget pour l'en-tête du tableau
-pw.Widget _buildTableHeader(String text) {
-  return pw.Padding(
-    padding: const pw.EdgeInsets.all(6),
-    child: pw.Text(
-      text,
-      style: pw.TextStyle(
-        fontSize: 9,
-        fontWeight: pw.FontWeight.bold,
-      ),
-      textAlign: pw.TextAlign.center,
-    ),
-  );
-}
-
-/// Widget pour une cellule du tableau de relevé client
-pw.Widget _buildTableCellPdf(String text, {pw.TextAlign align = pw.TextAlign.left, PdfColor? color}) {
-  return pw.Padding(
-    padding: const pw.EdgeInsets.all(4),
-    child: pw.Text(
-      text,
-      style: pw.TextStyle(
-        fontSize: 8,
-        color: color,
-      ),
-      textAlign: align,
-    ),
-  );
 }

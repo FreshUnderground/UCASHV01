@@ -51,9 +51,6 @@ class OperationModel {
   final OperationStatus statut;
   final String? notes;
   final String? observation; // New field for agent observations
-  final String? motifAnnulation; // Raison de l'annulation par l'admin
-  final int? annulePar; // ID de l'utilisateur qui a annulé
-  final DateTime? dateAnnulation; // Date d'annulation
   
   // Dates et tracking
   final DateTime dateOp;
@@ -93,9 +90,6 @@ class OperationModel {
     this.statut = OperationStatus.terminee,
     this.notes,
     this.observation,
-    this.motifAnnulation,
-    this.annulePar,
-    this.dateAnnulation,
     
     // Dates
     required this.dateOp,
@@ -137,9 +131,6 @@ class OperationModel {
       statut: _parseOperationStatus(json['statut']),
       notes: json['notes'],
       observation: json['observation'],
-      motifAnnulation: json['motif_annulation'],
-      annulePar: json['annule_par'],
-      dateAnnulation: json['date_annulation'] != null ? DateTime.parse(json['date_annulation']) : null,
       
       // Dates
       dateOp: json['date_op'] != null ? DateTime.parse(json['date_op']) : (json['created_at'] != null ? DateTime.parse(json['created_at']) : DateTime.now()),
@@ -279,9 +270,6 @@ class OperationModel {
       'statut': statut.index,
       'notes': notes,
       'observation': observation,
-      'motif_annulation': motifAnnulation,
-      'annule_par': annulePar,
-      'date_annulation': dateAnnulation?.toIso8601String(),
       
       // Dates
       'date_op': dateOp.toIso8601String(),
@@ -366,9 +354,6 @@ class OperationModel {
     OperationStatus? statut,
     String? notes,
     String? observation,
-    String? motifAnnulation,
-    int? annulePar,
-    DateTime? dateAnnulation,
     
     // Dates
     DateTime? dateOp,
@@ -408,9 +393,6 @@ class OperationModel {
       statut: statut ?? this.statut,
       notes: notes ?? this.notes,
       observation: observation ?? this.observation,
-      motifAnnulation: motifAnnulation ?? this.motifAnnulation,
-      annulePar: annulePar ?? this.annulePar,
-      dateAnnulation: dateAnnulation ?? this.dateAnnulation,
       
       // Dates
       dateOp: dateOp ?? this.dateOp,

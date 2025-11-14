@@ -13,7 +13,6 @@ import '../widgets/agent_operations_widget.dart';
 import '../widgets/transfer_validation_widget.dart';
 import '../widgets/sync_status_widget.dart';
 import '../widgets/journal_caisse_widget.dart';
-import '../widgets/cancelled_operations_widget.dart';
 import '../widgets/sync_indicator.dart';
 import '../widgets/offline_banner.dart';
 import '../services/operation_service.dart';
@@ -35,9 +34,6 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
     'Clients',
     'Opérations',
     'Validations',
-    'Transferts',
-    'Journal de Caisse',
-    'Opérations Annulées',
     'Rapports',
     'Synchronisation',
   ];
@@ -47,9 +43,7 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
     Icons.people,
     Icons.account_balance_wallet,
     Icons.check_circle,
-    Icons.send,
     Icons.receipt_long,
-    Icons.cancel,
     Icons.analytics,
     Icons.sync,
   ];
@@ -365,11 +359,8 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
       1 => _buildClientsContent(),
       2 => _buildOperationsContent(),
       3 => _buildValidationsContent(),
-      4 => _buildTransfersContent(),
-      5 => _buildJournalCaisseContent(),
-      6 => _buildCancelledOperationsContent(),
-      7 => _buildReportsContent(),
-      8 => _buildSynchronisationContent(),
+      4 => _buildReportsContent(),
+      6 => _buildSynchronisationContent(),
       _ => _buildDashboardContent(),
     };
     
@@ -417,20 +408,6 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
 
   Widget _buildReportsContent() {
     return const reports.AgentReportsWidget();
-  }
-
-  Widget _buildJournalCaisseContent() {
-    final authService = Provider.of<AuthService>(context, listen: false);
-    final shopId = authService.currentUser?.shopId;
-    
-    return JournalCaisseWidget(
-      shopId: shopId,
-      agentId: authService.currentUser?.id,
-    );
-  }
-
-  Widget _buildCancelledOperationsContent() {
-    return const CancelledOperationsWidget();
   }
 
   Widget _buildSynchronisationContent() {

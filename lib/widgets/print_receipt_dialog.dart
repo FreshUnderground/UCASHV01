@@ -149,28 +149,20 @@ class _PrintReceiptDialogState extends State<PrintReceiptDialog> {
 
   Future<void> _viewPdf() async {
     try {
-      // TODO: Implement generateReceiptPdf method in PdfService
-      // final pdfDoc = await _pdfService.generateReceiptPdf(
-      //   operation: widget.operation,
-      //   shop: widget.shop,
-      //   agent: widget.agent,
-      //   clientName: widget.clientName,
-      // );
+      final pdfDoc = await _pdfService.generateReceiptPdf(
+        operation: widget.operation,
+        shop: widget.shop,
+        agent: widget.agent,
+        clientName: widget.clientName,
+      );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🚧 Fonctionnalité PDF en cours de développement'),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 2),
-          ),
+        await showPdfViewer(
+          context: context,
+          pdfDocument: pdfDoc,
+          title: 'Reçu - ${widget.operation.typeLabel}',
+          fileName: 'recu_${widget.operation.id ?? DateTime.now().millisecondsSinceEpoch}',
         );
-        // await showPdfViewer(
-        //   context: context,
-        //   pdfDocument: pdfDoc,
-        //   title: 'Reçu - ${widget.operation.typeLabel}',
-        //   fileName: 'recu_${widget.operation.id ?? DateTime.now().millisecondsSinceEpoch}',
-        // );
       }
     } catch (e) {
       if (mounted) {
@@ -190,10 +182,12 @@ class _PrintReceiptDialogState extends State<PrintReceiptDialog> {
     final isMobile = MediaQuery.of(context).size.width <= 480;
     
     return PopScope(
-      canPop: !_isPrinting,
-      onPopInvoked: (didPop) {
+      onPopInvoked: (didPop) async {
+        // Empêcher la fermeture si impression en cours
+        if (_isPrinting) return;
+        
         // Permettre de continuer sans impression
-        if (!didPop && !_isPrinterAvailable && !_isChecking) {
+        if (!_isPrinterAvailable && !_isChecking) {
           widget.onSkipPrint();
         }
       },

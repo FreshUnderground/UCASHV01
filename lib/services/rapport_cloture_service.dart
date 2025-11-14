@@ -148,13 +148,26 @@ class RapportClotureService {
     await flotService.loadFlots(shopId: shopId);
 
     final flotsRecus = flotService.getFlotsRecus(shopId, date: dateRapport);
-    final flotsEnCours = flotService.getFlotsEnCours(shopId)
+    
+    // FLOTs en cours - inclure à la fois ceux envoyés à ce shop et ceux envoyés par ce shop
+    final flotsEnCoursRecus = flotService.getFlotsEnCours(shopId)
         .where((f) => f.shopDestinationId == shopId);
+    final flotsEnCoursEnvoyes = flotService.getFlotsEnCours(shopId)
+        .where((f) => f.shopSourceId == shopId);
+    final flotsEnCours = [...flotsEnCoursRecus, ...flotsEnCoursEnvoyes];
+    
     final flotsServis = flotService.flots.where((f) =>
         f.shopSourceId == shopId &&
         f.statut == flot_model.StatutFlot.servi &&
         f.dateReception != null &&
         _isSameDay(f.dateReception!, dateRapport)
+    );
+    
+    // FLOTs envoyés par ce shop (enRoute + servis) - TOUS sont considérés comme opérations immédiates
+    final flotsEnvoyes = flotService.flots.where((f) =>
+        f.shopSourceId == shopId &&
+        (f.statut == flot_model.StatutFlot.enRoute || f.statut == flot_model.StatutFlot.servi) &&
+        _isSameDay(f.dateEnvoi, dateRapport)
     );
     
     // NOUVEAU: Créer les listes détaillées pour affichage dans le rapport
@@ -186,6 +199,19 @@ class RapportClotureService {
       dateReception: f.dateReception,
       modePaiement: f.modePaiement.name,
     )).toList();
+    
+    // NOUVEAU: FLOT en cours détaillés (à la fois reçus et envoyés)
+    final flotsEnCoursDetails = flotsEnCours.map((f) => FlotResume(
+      flotId: f.id!,
+      shopSourceDesignation: f.shopSourceDesignation,
+      shopDestinationDesignation: f.shopDestinationDesignation,
+      montant: f.montant,
+      devise: f.devise,
+      statut: f.statut.name,
+      dateEnvoi: f.dateEnvoi,
+      dateReception: f.dateReception,
+      modePaiement: f.modePaiement.name,
+    )).toList();
 
     return {
       'recu': flotsRecus.fold(0.0, (sum, f) => sum + f.montant),
@@ -193,6 +219,7 @@ class RapportClotureService {
       'servi': flotsServis.fold(0.0, (sum, f) => sum + f.montant),
       'flotsRecusDetails': flotsRecusDetails,      // NOUVEAU
       'flotsEnvoyesDetails': flotsEnvoyesDetails,  // NOUVEAU
+      'flotsEnCoursDetails': flotsEnCoursDetails,  // NOUVEAU
     };
   }
 
@@ -382,30 +409,16 @@ class RapportClotureService {
     required Map<String, double> transferts,
     required Map<String, double> operationsClients,
   }) {
-    // Formule CORRECTE:
-    // Cash Disponible = Solde Antérieur + Flot Reçu - Flot En cours
+    // Formule selon la spécification:
+    // Cash Disponible = Solde Antérieur + Flot Reçu + Flot En cours - Flot Servi
     //                   + Transferts Reçus - Transferts Servis
     //                   + Dépôts Clients - Retraits Clients
-    //
-    // IMPORTANT: 
-    // - Flot En cours est SOUSTRAIT car c'est une SORTIE immédiate de cash (shop source a envoyé)
-    // - Flot Servi n'affecte PAS le cash car déjà compté en "enCours" lors de l'envoi
-    //   (quand statut passe de enRoute -> servi, c'est juste une confirmation, le cash était déjà sorti)
 
-    // Calculer les impacts par mode de paiement
-    final cashImpact = soldeAnterieur['cash']! + 
-                      flots['recu']! - flots['enCours']! +
-                      transferts['recus']! - transferts['servis']! +
-                      operationsClients['depots']! - operationsClients['retraits']!;
-    
-    final airtelMoneyImpact = soldeAnterieur['airtelMoney']! +
-                             0.0; // Airtel Money impacts not calculated in current logic
-    
-    final mPesaImpact = soldeAnterieur['mPesa']! +
-                       0.0; // M-Pesa impacts not calculated in current logic
-    
-    final orangeMoneyImpact = soldeAnterieur['orangeMoney']! +
-                             0.0; // Orange Money impacts not calculated in current logic
+    // Utiliser les valeurs réelles du shop pour le cash disponible
+    final cashImpact = shop.capitalCash;
+    final airtelMoneyImpact = shop.capitalAirtelMoney;
+    final mPesaImpact = shop.capitalMPesa;
+    final orangeMoneyImpact = shop.capitalOrangeMoney;
     
     final totalImpact = cashImpact + airtelMoneyImpact + mPesaImpact + orangeMoneyImpact;
 

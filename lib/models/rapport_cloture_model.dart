@@ -34,6 +34,7 @@ class RapportClotureModel {
   // NOUVEAU: Listes détaillées des FLOT individuels pour affichage dans le rapport  
   final List<FlotResume> flotsRecusDetails;      // FLOT reçus (servis) avec détails
   final List<FlotResume> flotsEnvoyes;           // FLOT envoyés (enRoute + servis) avec détails
+  final List<FlotResume> flotsEnCoursDetails;    // FLOT en cours (enRoute) avec détails
   
   // Cash disponible par mode de paiement
   final double cashDisponibleCash;
@@ -72,6 +73,7 @@ class RapportClotureModel {
     required this.shopsNousDevons,
     this.flotsRecusDetails = const [],     // NOUVEAU: par défaut liste vide
     this.flotsEnvoyes = const [],          // NOUVEAU: par défaut liste vide
+    this.flotsEnCoursDetails = const [],    // NOUVEAU: par défaut liste vide
     required this.cashDisponibleCash,
     required this.cashDisponibleAirtelMoney,
     required this.cashDisponibleMPesa,
@@ -122,6 +124,7 @@ class RapportClotureModel {
       'shops_nous_devons': shopsNousDevons.map((s) => s.toJson()).toList(),
       'flots_recus_details': flotsRecusDetails.map((f) => f.toJson()).toList(),  // NOUVEAU
       'flots_envoyes': flotsEnvoyes.map((f) => f.toJson()).toList(),            // NOUVEAU
+      'flots_en_cours_details': flotsEnCoursDetails.map((f) => f.toJson()).toList(),  // NOUVEAU
       'cash_disponible_cash': cashDisponibleCash,
       'cash_disponible_airtel_money': cashDisponibleAirtelMoney,
       'cash_disponible_mpesa': cashDisponibleMPesa,

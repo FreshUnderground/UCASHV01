@@ -8,7 +8,6 @@ import '../widgets/taux_commissions_management.dart';
 import '../widgets/agents_management_complete.dart';
 import '../widgets/config_reports_widget.dart';
 import '../widgets/reports/admin_reports_widget.dart';
-import '../widgets/admin_operations_widget.dart';
 import '../widgets/connectivity_indicator.dart';
 import '../widgets/footer_widget.dart';
 import '../widgets/create_shop_dialog.dart';
@@ -33,7 +32,6 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
     'Dashboard',
     'Shops',
     'Agents',
-    'Opérations',
     'Taux & Commissions',
     'Rapports',
     'Synchronisation',
@@ -44,7 +42,6 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
     Icons.dashboard,
     Icons.store,
     Icons.people,
-    Icons.receipt_long,
     Icons.currency_exchange,
     Icons.analytics,
     Icons.sync,
@@ -385,14 +382,12 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
       case 2:
         return _buildAgentsContent();
       case 3:
-        return _buildOperationsContent();
-      case 4:
         return _buildTauxCommissionsContent();
-      case 5:
+      case 4:
         return _buildReportsContent();
-      case 6:
+      case 5:
         return _buildSynchronisationContent();
-      case 7:
+      case 6:
         return _buildConfigurationContent();
       default:
         return _buildDashboardContent();
@@ -567,10 +562,6 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
         ],
       ),
     );
-  }
-
-  Widget _buildOperationsContent() {
-    return const AdminOperationsWidget();
   }
 
   Widget _buildTauxCommissionsContent() {

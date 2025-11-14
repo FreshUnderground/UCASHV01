@@ -192,52 +192,6 @@ class FlotService extends ChangeNotifier {
       // Mettre à jour dans LocalDB
       await LocalDB.instance.updateFlot(updatedFlot);
       
-      // IMPORTANT: Augmenter le capital du shop DESTINATION quand le FLOT est reçu
-      final shopDestination = await LocalDB.instance.getShopById(flot.shopDestinationId);
-      if (shopDestination != null) {
-        final updatedShopDestination = shopDestination.copyWith(
-          capitalCash: flot.modePaiement == flot_model.ModePaiement.cash 
-              ? shopDestination.capitalCash + flot.montant 
-              : shopDestination.capitalCash,
-          capitalAirtelMoney: flot.modePaiement == flot_model.ModePaiement.airtelMoney 
-              ? shopDestination.capitalAirtelMoney + flot.montant 
-              : shopDestination.capitalAirtelMoney,
-          capitalMPesa: flot.modePaiement == flot_model.ModePaiement.mPesa 
-              ? shopDestination.capitalMPesa + flot.montant 
-              : shopDestination.capitalMPesa,
-          capitalOrangeMoney: flot.modePaiement == flot_model.ModePaiement.orangeMoney 
-              ? shopDestination.capitalOrangeMoney + flot.montant 
-              : shopDestination.capitalOrangeMoney,
-          lastModifiedAt: DateTime.now(),
-          lastModifiedBy: 'agent_$agentRecepteurUsername',
-        );
-        
-        await LocalDB.instance.updateShop(updatedShopDestination);
-        debugPrint('✅ Capital augmenté de ${flot.montant} ${flot.modePaiement.name} pour le shop ${flot.shopDestinationDesignation}');
-      }
-      
-      // Créer une entrée journal de caisse pour tracer l'entrée
-      try {
-        final journalEntry = JournalCaisseModel(
-          shopId: flot.shopDestinationId,
-          agentId: agentRecepteurId,
-          libelle: 'FLOT reçu de ${flot.shopSourceDesignation}',
-          montant: flot.montant,
-          type: TypeMouvement.entree,
-          mode: _convertModePaiementToOperation(flot.modePaiement),
-          dateAction: DateTime.now(),
-          notes: 'Réf: ${updatedFlot.reference}${flot.notes != null ? ' - ${flot.notes}' : ''}',
-          lastModifiedAt: DateTime.now(),
-          lastModifiedBy: 'agent_$agentRecepteurUsername',
-        );
-        
-        // Sauvegarder le journal
-        await LocalDB.instance.saveJournalEntry(journalEntry);
-        debugPrint('✅ Journal: FLOT reçu - ENTRÉE de ${flot.montant} ${flot.modePaiement.name}');
-      } catch (e) {
-        debugPrint('⚠️ Erreur enregistrement journal: $e (non bloquant)');
-      }
-      
       await loadFlots();
       
       debugPrint('✅ Flot marqué servi: ${updatedFlot.reference}');

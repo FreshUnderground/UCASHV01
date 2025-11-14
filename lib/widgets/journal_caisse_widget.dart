@@ -9,11 +9,12 @@ import '../services/local_db.dart';
 import '../services/pdf_service.dart';
 import '../services/shop_service.dart';
 import '../services/agent_service.dart';
-// import '../services/agent_auth_service.dart'; // Unused
+
 import '../utils/responsive_utils.dart';
 import '../theme/ucash_containers.dart';
 import '../widgets/pdf_viewer_dialog.dart';
 import '../widgets/capital_adjustment_dialog.dart';
+import '../widgets/reports/mouvements_caisse_report.dart';
 
 class JournalCaisseWidget extends StatefulWidget {
   final int? shopId;
@@ -36,6 +37,7 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
   DateTime? _endDate;
   ModePaiement? _selectedMode;
   TypeMouvement? _selectedType;
+  int _selectedTabIndex = 0; // 0 = Journal Entries, 1 = Cash Movement Report
 
   @override
   void initState() {
@@ -107,8 +109,18 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
         _journalEntries = entries;
         _isLoading = false;
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('❌ Erreur chargement journal: $e');
+      debugPrint('Stack trace: $stackTrace');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Erreur lors du chargement: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
       setState(() => _isLoading = false);
     }
   }
@@ -141,18 +153,84 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
     return Padding(
       padding: EdgeInsets.all(padding),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildHeader(),
           SizedBox(height: isMobile ? 16 : 24),
           _buildFilters(),
           SizedBox(height: isMobile ? 16 : 24),
-          _buildSummaryCards(),
+          _buildTabBar(), // Add tab bar
           SizedBox(height: isMobile ? 16 : 24),
-          SizedBox(
-            height: 400,
-            child: _buildJournalTable(),
+          if (_selectedTabIndex == 0) ...[
+            _buildSummaryCards(),
+            SizedBox(height: isMobile ? 16 : 24),
+            Expanded(
+              child: _buildJournalTable(),
+            ),
+          ] else ...[
+            Expanded(
+              child: MouvementsCaisseReport(
+                shopId: widget.shopId,
+                startDate: _startDate,
+                endDate: _endDate,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // Add tab bar method
+  Widget _buildTabBar() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey[200],
+        borderRadius: BorderRadius.circular(25),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => _selectedTabIndex = 0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: _selectedTabIndex == 0 ? const Color(0xFFDC2626) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(25),
+                ),
+                child: Center(
+                  child: Text(
+                    'Journal de Caisse',
+                    style: TextStyle(
+                      color: _selectedTabIndex == 0 ? Colors.white : Colors.grey[700],
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => _selectedTabIndex = 1),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: _selectedTabIndex == 1 ? const Color(0xFFDC2626) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(25),
+                ),
+                child: Center(
+                  child: Text(
+                    'Rapport Mouvements',
+                    style: TextStyle(
+                      color: _selectedTabIndex == 1 ? Colors.white : Colors.grey[700],
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -160,80 +238,179 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
   }
 
   Widget _buildHeader() {
-    return Row(
-      children: [
-        Icon(
-          Icons.account_balance_wallet,
-          color: const Color(0xFFDC2626),
-          size: context.fluidIcon(mobile: 28, tablet: 32, desktop: 36),
-        ),
-        context.horizontalSpace(mobile: 12, tablet: 16, desktop: 20),
-        Expanded(
-          child: Column(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isVeryNarrow = constraints.maxWidth < 500;
+        
+        if (isVeryNarrow) {
+          // Stack header elements vertically on narrow screens
+          return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Journal de Caisse',
-                style: TextStyle(
-                  fontSize:
-                      context.fluidFont(mobile: 22, tablet: 26, desktop: 30),
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFFDC2626),
-                ),
+              Row(
+                children: [
+                  Icon(
+                    Icons.account_balance_wallet,
+                    color: const Color(0xFFDC2626),
+                    size: context.fluidIcon(mobile: 28, tablet: 32, desktop: 36),
+                  ),
+                  context.horizontalSpace(mobile: 12, tablet: 16, desktop: 20),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Journal de Caisse',
+                          style: TextStyle(
+                            fontSize:
+                                context.fluidFont(mobile: 22, tablet: 26, desktop: 30),
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFFDC2626),
+                          ),
+                        ),
+                        context.verticalSpace(mobile: 4, tablet: 6, desktop: 8),
+                        Text(
+                          'Entrées et sorties Cash/Virtuel',
+                          style: TextStyle(
+                            fontSize:
+                                context.fluidFont(mobile: 13, tablet: 14, desktop: 16),
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              context.verticalSpace(mobile: 4, tablet: 6, desktop: 8),
-              Text(
-                'Entrées et sorties Cash/Virtuel',
-                style: TextStyle(
-                  fontSize:
-                      context.fluidFont(mobile: 13, tablet: 14, desktop: 16),
-                  color: Colors.grey[600],
-                ),
+              context.verticalSpace(mobile: 12, tablet: 16, desktop: 20),
+              // Boutons d'actions in a wrap for narrow screens
+              Wrap(
+                spacing: 8,
+                children: [
+                  if (widget.shopId != null)
+                    IconButton(
+                      onPressed: _showCapitalAdjustmentDialog,
+                      icon: Icon(
+                        Icons.account_balance,
+                        size: context.fluidIcon(mobile: 22, tablet: 24, desktop: 26),
+                      ),
+                      tooltip: 'Ajuster Capital',
+                    ),
+                  IconButton(
+                    onPressed: _exportToExcel,
+                    icon: Icon(
+                      Icons.download,
+                      size: context.fluidIcon(mobile: 22, tablet: 24, desktop: 26),
+                    ),
+                    tooltip: 'Exporter vers Excel',
+                  ),
+                  IconButton(
+                    onPressed: _printJournal,
+                    icon: Icon(
+                      Icons.print,
+                      size: context.fluidIcon(mobile: 22, tablet: 24, desktop: 26),
+                    ),
+                    tooltip: 'Imprimer',
+                  ),
+                  IconButton(
+                    onPressed: _onFilterChanged, // Updated to use the new method
+                    icon: Icon(
+                      Icons.refresh,
+                      size: context.fluidIcon(mobile: 22, tablet: 24, desktop: 26),
+                    ),
+                    tooltip: 'Actualiser',
+                  ),
+                ],
               ),
             ],
-          ),
-        ),
-        // Boutons d'actions
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (widget.shopId != null)
-              IconButton(
-                onPressed: _showCapitalAdjustmentDialog,
-                icon: Icon(
-                  Icons.account_balance,
-                  size: context.fluidIcon(mobile: 22, tablet: 24, desktop: 26),
+          );
+        } else {
+          // Original layout for wider screens
+          return Row(
+            children: [
+              Icon(
+                Icons.account_balance_wallet,
+                color: const Color(0xFFDC2626),
+                size: context.fluidIcon(mobile: 28, tablet: 32, desktop: 36),
+              ),
+              context.horizontalSpace(mobile: 12, tablet: 16, desktop: 20),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Journal de Caisse',
+                      style: TextStyle(
+                        fontSize:
+                            context.fluidFont(mobile: 22, tablet: 26, desktop: 30),
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFFDC2626),
+                      ),
+                    ),
+                    context.verticalSpace(mobile: 4, tablet: 6, desktop: 8),
+                    Text(
+                      'Entrées et sorties Cash/Virtuel',
+                      style: TextStyle(
+                        fontSize:
+                            context.fluidFont(mobile: 13, tablet: 14, desktop: 16),
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
                 ),
-                tooltip: 'Ajuster Capital',
               ),
-            IconButton(
-              onPressed: _exportToExcel,
-              icon: Icon(
-                Icons.download,
-                size: context.fluidIcon(mobile: 22, tablet: 24, desktop: 26),
+              // Boutons d'actions
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (widget.shopId != null)
+                    IconButton(
+                      onPressed: _showCapitalAdjustmentDialog,
+                      icon: Icon(
+                        Icons.account_balance,
+                        size: context.fluidIcon(mobile: 22, tablet: 24, desktop: 26),
+                      ),
+                      tooltip: 'Ajuster Capital',
+                    ),
+                  IconButton(
+                    onPressed: _exportToExcel,
+                    icon: Icon(
+                      Icons.download,
+                      size: context.fluidIcon(mobile: 22, tablet: 24, desktop: 26),
+                    ),
+                    tooltip: 'Exporter vers Excel',
+                  ),
+                  IconButton(
+                    onPressed: _printJournal,
+                    icon: Icon(
+                      Icons.print,
+                      size: context.fluidIcon(mobile: 22, tablet: 24, desktop: 26),
+                    ),
+                    tooltip: 'Imprimer',
+                  ),
+                  IconButton(
+                    onPressed: _onFilterChanged, // Updated to use the new method
+                    icon: Icon(
+                      Icons.refresh,
+                      size: context.fluidIcon(mobile: 22, tablet: 24, desktop: 26),
+                    ),
+                    tooltip: 'Actualiser',
+                  ),
+                ],
               ),
-              tooltip: 'Exporter vers Excel',
-            ),
-            IconButton(
-              onPressed: _printJournal,
-              icon: Icon(
-                Icons.print,
-                size: context.fluidIcon(mobile: 22, tablet: 24, desktop: 26),
-              ),
-              tooltip: 'Imprimer',
-            ),
-            IconButton(
-              onPressed: _loadJournalEntries,
-              icon: Icon(
-                Icons.refresh,
-                size: context.fluidIcon(mobile: 22, tablet: 24, desktop: 26),
-              ),
-              tooltip: 'Actualiser',
-            ),
-          ],
-        ),
-      ],
+            ],
+          );
+        }
+      },
     );
+  }
+
+  void _onFilterChanged() {
+    // For the journal entries, we reload them
+    _loadJournalEntries();
+    // For the cash movement report, it will automatically update when the widget rebuilds
+    // because it receives the updated dates as parameters
+    setState(() {}); // Trigger rebuild to update both tabs
   }
 
   Widget _buildFilters() {
@@ -262,101 +439,104 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
             ],
           ),
           context.verticalSpace(mobile: 12, tablet: 16, desktop: 20),
-          Wrap(
-            spacing: isMobile ? 8 : 12,
-            runSpacing: isMobile ? 8 : 12,
-            children: [
-              // Filtre par type
-              _buildFilterChip(
-                label: 'Type',
-                icon: Icons.swap_vert,
-                child: DropdownButton<TypeMouvement?>(
-                  value: _selectedType,
-                  hint: const Text('Tous'),
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('Tous')),
-                    ...TypeMouvement.values.map((type) => DropdownMenuItem(
-                          value: type,
-                          child: Text(type == TypeMouvement.entree
-                              ? 'Entrées'
-                              : 'Sorties'),
-                        )),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _selectedType = value);
-                    _loadJournalEntries();
-                  },
-                  underline: const SizedBox(),
-                ),
-              ),
-
-              // Filtre par mode de paiement
-              _buildFilterChip(
-                label: 'Mode',
-                icon: Icons.payment,
-                child: DropdownButton<ModePaiement?>(
-                  value: _selectedMode,
-                  hint: const Text('Tous'),
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('Tous')),
-                    ...ModePaiement.values.map((mode) => DropdownMenuItem(
-                          value: mode,
-                          child: Text(_getModeLabel(mode)),
-                        )),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _selectedMode = value);
-                    _loadJournalEntries();
-                  },
-                  underline: const SizedBox(),
-                ),
-              ),
-
-              // Filtre par date
-              ElevatedButton.icon(
-                onPressed: _selectDateRange,
-                icon: const Icon(Icons.date_range, size: 18),
-                label: Text(
-                  _startDate != null && _endDate != null
-                      ? '${_formatDate(_startDate!)} - ${_formatDate(_endDate!)}'
-                      : 'Période',
-                  style: TextStyle(
-                      fontSize: context.fluidFont(
-                          mobile: 12, tablet: 13, desktop: 14)),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFDC2626).withOpacity(0.1),
-                  foregroundColor: const Color(0xFFDC2626),
-                  elevation: 0,
-                  padding: EdgeInsets.symmetric(
-                    horizontal: context.fluidSpacing(mobile: 12, tablet: 14, desktop: 16),
-                    vertical: context.fluidSpacing(mobile: 10, tablet: 12, desktop: 14),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isVeryNarrow = constraints.maxWidth < 400;
+              return Wrap(
+                spacing: isMobile ? 8 : 12,
+                runSpacing: isMobile ? 8 : 12,
+                children: [
+                  // Filtre par type
+                  _buildFilterChip(
+                    label: 'Type',
+                    icon: Icons.swap_vert,
+                    child: DropdownButton<TypeMouvement?>(
+                      value: _selectedType,
+                      hint: const Text('Tous'),
+                      items: [
+                        const DropdownMenuItem(value: null, child: Text('Tous')),
+                        ...TypeMouvement.values.map((type) => DropdownMenuItem(
+                              value: type,
+                              child: Text(type == TypeMouvement.entree
+                                  ? 'Entrées'
+                                  : 'Sorties'),
+                            )),
+                      ],
+                      onChanged: (value) {
+                        setState(() => _selectedType = value);
+                        _onFilterChanged(); // Use the new method
+                      },
+                      underline: const SizedBox(),
+                      isExpanded: isVeryNarrow,
+                      itemHeight: isVeryNarrow ? null : kMinInteractiveDimension,
+                    ),
                   ),
-                ),
-              ),
 
-              // Bouton réinitialiser
-              if (_selectedType != null ||
-                  _selectedMode != null ||
-                  _startDate != null)
-                OutlinedButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _selectedType = null;
-                      _selectedMode = null;
-                      _startDate = null;
-                      _endDate = null;
-                    });
-                    _loadJournalEntries();
-                  },
-                  icon: const Icon(Icons.clear, size: 18),
-                  label: const Text('Réinitialiser'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.grey[700],
-                    side: BorderSide(color: Colors.grey[400]!),
+                  // Filtre par mode de paiement
+                  _buildFilterChip(
+                    label: 'Mode',
+                    icon: Icons.payment,
+                    child: DropdownButton<ModePaiement?>(
+                      value: _selectedMode,
+                      hint: const Text('Tous'),
+                      items: const [
+                        DropdownMenuItem(value: null, child: Text('Tous')),
+                        DropdownMenuItem(
+                            value: ModePaiement.cash, child: Text('Cash')),
+                        DropdownMenuItem(
+                            value: ModePaiement.airtelMoney,
+                            child: Text('Airtel Money')),
+                        DropdownMenuItem(
+                            value: ModePaiement.mPesa, child: Text('M-Pesa')),
+                        DropdownMenuItem(
+                            value: ModePaiement.orangeMoney,
+                            child: Text('Orange Money')),
+                      ],
+                      onChanged: (value) {
+                        setState(() => _selectedMode = value);
+                        _onFilterChanged(); // Use the new method
+                      },
+                      underline: const SizedBox(),
+                      isExpanded: isVeryNarrow,
+                      itemHeight: isVeryNarrow ? null : kMinInteractiveDimension,
+                    ),
                   ),
-                ),
-            ],
+
+                  // Filtre par date
+                  _buildFilterChip(
+                    label: 'Date',
+                    icon: Icons.calendar_today,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextButton(
+                          onPressed: _selectStartDate,
+                          child: Text(
+                            _startDate == null
+                                ? 'Début'
+                                : _formatDate(_startDate!),
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                        ),
+                        const Text(' → '),
+                        TextButton(
+                          onPressed: _selectEndDate,
+                          child: Text(
+                            _endDate == null ? 'Fin' : _formatDate(_endDate!),
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                        ),
+                        if (_startDate != null || _endDate != null)
+                          IconButton(
+                            icon: const Icon(Icons.clear, size: 18),
+                            onPressed: _clearDateFilters,
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -369,6 +549,7 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
     required Widget child,
   }) {
     return Container(
+      constraints: const BoxConstraints(minWidth: 120),
       padding: EdgeInsets.symmetric(
         horizontal: context.fluidSpacing(mobile: 12, tablet: 14, desktop: 16),
         vertical: context.fluidSpacing(mobile: 8, tablet: 10, desktop: 12),
@@ -406,7 +587,7 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
               color: Colors.grey[700],
             ),
           ),
-          child,
+          Flexible(child: child),
         ],
       ),
     );
@@ -428,6 +609,7 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
       final shop = shopService.shops.firstWhere(
         (s) => s.id == widget.shopId,
         orElse: () => ShopModel(
+          id: widget.shopId ?? 0,
           designation: '',
           localisation: '',
           capitalInitial: 0.0,
@@ -454,7 +636,7 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
       mobileColumns: 1,
       tabletColumns: 2,
       desktopColumns: 4,
-      aspectRatio: 2.0, // Augmenté de 1.5 à 2.0 pour éviter overflow
+      aspectRatio: 2.2, // Increased to avoid overflow
       children: [
         _buildStatCard(
           title: 'Capital Initial',
@@ -568,7 +750,16 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
 
   Widget _buildJournalTable() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Chargement du journal de caisse...'),
+          ],
+        ),
+      );
     }
 
     if (_journalEntries.isEmpty) {
@@ -576,18 +767,26 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inbox, size: 64, color: Colors.grey[400]),
+            const Icon(Icons.inbox, size: 64, color: Colors.grey),
             const SizedBox(height: 16),
             Text(
               'Aucune entrée de journal',
               style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Veuillez effectuer des opérations pour générer des entrées',
+              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
       );
     }
 
-    return context.adaptiveCard(
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Column(
         children: [
           // En-tête du tableau
@@ -613,8 +812,12 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
     final isMobile = context.isSmallScreen;
 
     if (isMobile) {
-      return Padding(
+      return Container(
         padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.grey[100],
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+        ),
         child: Text(
           'Mouvements de caisse',
           style: TextStyle(
@@ -666,6 +869,9 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
       decoration: BoxDecoration(
         color: index.isEven ? Colors.grey[50] : Colors.white,
         border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
+        borderRadius: index == 0 
+            ? const BorderRadius.vertical(top: Radius.circular(12))
+            : BorderRadius.zero,
       ),
       child: Row(
         children: [
@@ -809,71 +1015,148 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
             const Divider(height: 20),
             
             // Informations
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // Date et mode
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
-                        const SizedBox(width: 6),
-                        Text(
-                          _formatDate(entry.dateAction),
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey[700],
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Icon(
-                          _getModeIcon(entry.mode),
-                          size: 14,
-                          color: Colors.grey[600],
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          entry.modeLabel,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey[700],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isVeryNarrow = constraints.maxWidth < 300;
                 
-                // Montant et action
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '${isEntree ? '+' : '-'}${entry.montant.toStringAsFixed(2)}',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: color,
+                if (isVeryNarrow) {
+                  // Stack information vertically on very narrow screens
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Date et mode
+                      Row(
+                        children: [
+                          Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
+                          const SizedBox(width: 6),
+                          Text(
+                            _formatDate(entry.dateAction),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[700],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    Text(
-                      'USD',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: color.withOpacity(0.7),
-                        fontWeight: FontWeight.w600,
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            _getModeIcon(entry.mode),
+                            size: 14,
+                            color: Colors.grey[600],
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            entry.modeLabel,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                      const SizedBox(height: 8),
+                      // Montant
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${isEntree ? '+' : '-'}${entry.montant.toStringAsFixed(2)}',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: color,
+                                ),
+                              ),
+                              Text(
+                                'USD',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: color.withOpacity(0.7),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                } else {
+                  // Original layout for wider screens
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Date et mode
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
+                              const SizedBox(width: 6),
+                              Text(
+                                _formatDate(entry.dateAction),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey[700],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Icon(
+                                _getModeIcon(entry.mode),
+                                size: 14,
+                                color: Colors.grey[600],
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                entry.modeLabel,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey[700],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      
+                      // Montant et action
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            '${isEntree ? '+' : '-'}${entry.montant.toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: color,
+                            ),
+                          ),
+                          Text(
+                            'USD',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: color.withOpacity(0.7),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                }
+              }
             ),
             
             const SizedBox(height: 10),
@@ -989,6 +1272,42 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
       });
       _loadJournalEntries();
     }
+  }
+
+  Future<void> _selectStartDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      initialDate: _startDate ?? DateTime.now(),
+    );
+
+    if (picked != null) {
+      setState(() => _startDate = picked);
+      _onFilterChanged(); // Use the new method
+    }
+  }
+
+  Future<void> _selectEndDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      initialDate: _endDate ?? DateTime.now(),
+    );
+
+    if (picked != null) {
+      setState(() => _endDate = picked);
+      _onFilterChanged(); // Use the new method
+    }
+  }
+
+  void _clearDateFilters() {
+    setState(() {
+      _startDate = null;
+      _endDate = null;
+    });
+    _onFilterChanged(); // Use the new method
   }
 
   String _formatDate(DateTime date) {
@@ -1121,7 +1440,7 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
             const SnackBar(
               content: Text('📄 Export disponible sur version Web'),
               backgroundColor: Colors.blue,
-              duration: Duration(seconds: 3),
+              duration: const Duration(seconds: 3),
             ),
           );
         }

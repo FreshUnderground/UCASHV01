@@ -4,6 +4,7 @@ import '../services/auth_service.dart';
 import '../services/client_service.dart';
 import '../services/operation_service.dart';
 import '../services/shop_service.dart';
+import '../services/flot_service.dart';
 import '../models/operation_model.dart';
 import '../models/shop_model.dart';
 import '../widgets/dashboard_card.dart';
@@ -120,8 +121,8 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
   }
 
   Widget _buildMainStats() {
-    return Consumer3<ClientService, OperationService, ShopService>(
-      builder: (context, clientService, operationService, shopService, child) {
+    return Consumer4<ClientService, OperationService, ShopService, FlotService>(
+      builder: (context, clientService, operationService, shopService, flotService, child) {
         final authService = Provider.of<AuthService>(context, listen: false);
         final currentUser = authService.currentUser;
         
@@ -130,54 +131,69 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
         }
 
         final clientStats = _getClientStats(clientService, currentUser!.shopId!);
-        final operationStats = _getOperationStats(operationService, currentUser.id!);
         final shopStats = _getShopStats(shopService, currentUser.shopId!);
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Statistiques du jour',
-              style: context.h3.copyWith(
-                color: const Color(0xFF374151),
-              ),
-            ),
-            context.verticalSpace(mobile: 12, tablet: 16, desktop: 20),
+        
+        // Use FutureBuilder to handle async operation stats
+        return FutureBuilder<Map<String, dynamic>>(
+          future: _getOperationStats(operationService, flotService, currentUser.id!),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return _buildLoadingStats();
+            }
             
-            // Grille de statistiques responsive
-            context.gridContainer(
-              mobileColumns: 2,
-              tabletColumns: 2,
-              desktopColumns: 4,
-              aspectRatio: context.isSmallScreen ? 1.2 : 1.0,
+            if (snapshot.hasError) {
+              return Center(child: Text('Erreur: ${snapshot.error}'));
+            }
+            
+            final operationStats = snapshot.data!;
+            
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildStatCard(
-                  'Clients Actifs',
-                  '${clientStats['activeClients']}',
-                  Icons.people,
-                  Colors.blue,
+                Text(
+                  'Statistiques du jour',
+                  style: context.h3.copyWith(
+                    color: const Color(0xFF374151),
+                  ),
                 ),
-                _buildStatCard(
-                  'Opérations Aujourd\'hui',
-                  '${operationStats['operationsToday']}',
-                  Icons.swap_horiz,
-                  Colors.green,
-                ),
-                _buildStatCard(
-                  'Cash en Caisse',
-                  '${shopStats['cashDisponible'].toStringAsFixed(0)} USD',
-                  Icons.account_balance_wallet,
-                  Colors.orange,
-                ),
-                _buildStatCard(
-                  'Commissions Gagnées',
-                  '${operationStats['totalCommissions'].toStringAsFixed(0)} USD',
-                  Icons.trending_up,
-                  Colors.purple,
+                context.verticalSpace(mobile: 12, tablet: 16, desktop: 20),
+                
+                // Grille de statistiques responsive
+                context.gridContainer(
+                  mobileColumns: 2,
+                  tabletColumns: 2,
+                  desktopColumns: 4,
+                  aspectRatio: context.isSmallScreen ? 1.2 : 1.0,
+                  children: [
+                    _buildStatCard(
+                      'Clients Actifs',
+                      '${clientStats['activeClients']}',
+                      Icons.people,
+                      Colors.blue,
+                    ),
+                    _buildStatCard(
+                      'Opérations Aujourd\'hui',
+                      '${operationStats['operationsToday']}',
+                      Icons.swap_horiz,
+                      Colors.green,
+                    ),
+                    _buildStatCard(
+                      'Cash en Caisse',
+                      '${shopStats['cashDisponible'].toStringAsFixed(0)} USD',
+                      Icons.account_balance_wallet,
+                      Colors.orange,
+                    ),
+                    _buildStatCard(
+                      'Commissions Gagnées',
+                      '${operationStats['totalCommissions'].toStringAsFixed(0)} USD',
+                      Icons.trending_up,
+                      Colors.purple,
+                    ),
+                  ],
                 ),
               ],
-            ),
-          ],
+            );
+          },
         );
       },
     );
@@ -557,7 +573,7 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
   }
 
   // Calculer les statistiques des operations DEPUIS DONNEES LOCALES
-  Map<String, dynamic> _getOperationStats(OperationService operationService, int agentId) {
+  Future<Map<String, dynamic>> _getOperationStats(OperationService operationService, FlotService flotService, int agentId) async {
     final today = DateTime.now();
     // UTILISE LES DONNEES LOCALES (operations deja chargees dans le service)
     final todayOperations = operationService.operations.where((op) => 
@@ -565,6 +581,15 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
       op.dateOp.year == today.year &&
       op.dateOp.month == today.month &&
       op.dateOp.day == today.day
+    ).toList();
+
+    // Charger les FLOTs pour cet agent
+    await flotService.loadFlots();
+    final todayFlots = flotService.flots.where((flot) => 
+      (flot.agentEnvoyeurId == agentId || flot.agentRecepteurId == agentId) &&
+      flot.dateEnvoi.year == today.year &&
+      flot.dateEnvoi.month == today.month &&
+      flot.dateEnvoi.day == today.day
     ).toList();
 
     // CALCUL REEL: Montants par devise (utiliser le bon montant selon le type)
@@ -589,7 +614,18 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
       }
     }
     
-    // CALCUL REEL: Commissions par devise
+    // Ajouter les montants des FLOTs
+    for (final flot in todayFlots) {
+      if (flot.devise == 'USD') {
+        totalMontantUSD += flot.montant;
+      } else if (flot.devise == 'CDF') {
+        totalMontantCDF += flot.montant;
+      } else if (flot.devise == 'UGX') {
+        totalMontantUGX += flot.montant;
+      }
+    }
+    
+    // CALCUL REEL: Commissions par devise (seulement pour les opérations, pas les FLOTs)
     final totalCommissionsUSD = todayOperations
         .where((op) => op.devise == 'USD')
         .fold<double>(0.0, (sum, op) => sum + op.commission);
@@ -608,9 +644,12 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
       op.type == OperationType.transfertInternationalSortant ||
       op.type == OperationType.transfertInternationalEntrant
     ).length;
+    
+    // Compter les FLOTs
+    final flots = todayFlots.length;
 
     return {
-      'operationsToday': todayOperations.length,
+      'operationsToday': todayOperations.length + flots, // Inclure les FLOTs dans le total
       // Montants par devise
       'totalMontantUSD': totalMontantUSD,
       'totalMontantCDF': totalMontantCDF,
@@ -625,6 +664,7 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
       'depots': depots,
       'retraits': retraits,
       'transferts': transferts,
+      'flots': flots, // Ajout des FLOTs
     };
   }
 

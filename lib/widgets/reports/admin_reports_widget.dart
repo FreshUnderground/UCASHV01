@@ -6,7 +6,7 @@ import 'report_filters_widget.dart';
 import 'mouvements_caisse_report.dart';
 import 'credits_inter_shops_report.dart';
 import 'commissions_report.dart';
-import 'evolution_capital_report.dart';
+
 import 'admin_cloture_report.dart';
 import 'admin_flot_report.dart';
 
@@ -23,13 +23,11 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
   DateTime? _startDate;
   DateTime? _endDate;
   int? _selectedShopId;
-  bool _showFilters = true; // Toggle pour afficher/cacher les filtres
 
   final List<Tab> _tabs = [
     const Tab(icon: Icon(Icons.account_balance), text: 'Mouvements de Caisse'),
     const Tab(icon: Icon(Icons.swap_horiz), text: 'Crédits Inter-Shops'),
     const Tab(icon: Icon(Icons.monetization_on), text: 'Commissions'),
-    const Tab(icon: Icon(Icons.trending_up), text: 'Évolution Capital'),
     const Tab(icon: Icon(Icons.receipt_long), text: 'Clôture Journalière'),
     const Tab(icon: Icon(Icons.local_shipping), text: 'Mouvements FLOT'),
   ];
@@ -38,7 +36,6 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
     const Tab(icon: Icon(Icons.account_balance), text: 'Caisse'),
     const Tab(icon: Icon(Icons.swap_horiz), text: 'Crédits'),
     const Tab(icon: Icon(Icons.monetization_on), text: 'Commissions'),
-    const Tab(icon: Icon(Icons.trending_up), text: 'Capital'),
     const Tab(icon: Icon(Icons.receipt_long), text: 'Clôture'),
     const Tab(icon: Icon(Icons.local_shipping), text: 'FLOT'),
   ];
@@ -88,63 +85,38 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header avec bouton toggle filtres
-              Row(
-                children: [
-                  Expanded(child: _buildResponsiveHeader(isMobile, isTablet)),
-                  IconButton(
-                    onPressed: () {
-                      setState(() {
-                        _showFilters = !_showFilters;
-                      });
-                    },
-                    icon: Icon(
-                      _showFilters ? Icons.filter_list_off : Icons.filter_list,
-                      color: const Color(0xFFDC2626),
-                    ),
-                    tooltip: _showFilters ? 'Masquer les filtres' : 'Afficher les filtres',
-                    style: IconButton.styleFrom(
-                      backgroundColor: _showFilters ? Colors.red.shade50 : Colors.grey.shade100,
-                    ),
-                  ),
-                ],
-              ),
+              // Header adaptatif
+              _buildResponsiveHeader(isMobile, isTablet),
+              SizedBox(height: isMobile ? 12 : 16),
               
-              // Filtres (avec animation)
-              if (_showFilters) ...[
-                SizedBox(height: isMobile ? 12 : 16),
-                AnimatedSize(
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeInOut,
-                  child: ReportFiltersWidget(
-                    showShopFilter: true,
-                    selectedShopId: _selectedShopId,
-                    startDate: _startDate,
-                    endDate: _endDate,
-                    onShopChanged: (shopId) {
-                      setState(() {
-                        _selectedShopId = shopId;
-                      });
-                      _refreshCurrentReport();
-                    },
-                    onDateRangeChanged: (start, end) {
-                      setState(() {
-                        _startDate = start;
-                        _endDate = end;
-                      });
-                      _refreshCurrentReport();
-                    },
-                    onReset: () {
-                      setState(() {
-                        _selectedShopId = null;
-                        _startDate = null;
-                        _endDate = null;
-                      });
-                      _refreshCurrentReport();
-                    },
-                  ),
-                ),
-              ],
+              // Filtres
+              ReportFiltersWidget(
+                showShopFilter: true,
+                selectedShopId: _selectedShopId,
+                startDate: _startDate,
+                endDate: _endDate,
+                onShopChanged: (shopId) {
+                  setState(() {
+                    _selectedShopId = shopId;
+                  });
+                  _refreshCurrentReport();
+                },
+                onDateRangeChanged: (start, end) {
+                  setState(() {
+                    _startDate = start;
+                    _endDate = end;
+                  });
+                  _refreshCurrentReport();
+                },
+                onReset: () {
+                  setState(() {
+                    _selectedShopId = null;
+                    _startDate = null;
+                    _endDate = null;
+                  });
+                  _refreshCurrentReport();
+                },
+              ),
             ],
           ),
         ),
@@ -188,14 +160,6 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
               
               // Commissions
               CommissionsReport(
-                shopId: _selectedShopId,
-                startDate: _startDate,
-                endDate: _endDate,
-                showAllShops: _selectedShopId == null,
-              ),
-              
-              // Évolution capital
-              EvolutionCapitalReport(
                 shopId: _selectedShopId,
                 startDate: _startDate,
                 endDate: _endDate,

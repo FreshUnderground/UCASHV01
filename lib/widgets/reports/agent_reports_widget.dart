@@ -7,9 +7,11 @@ import '../../models/shop_model.dart';
 import 'report_filters_widget.dart';
 import 'mouvements_caisse_report.dart';
 import 'commissions_report.dart';
-import 'evolution_capital_report.dart';
+
 import '../../widgets/rapport_cloture_widget.dart';
+import '../../widgets/rapportcloture.dart';
 import '../../widgets/flot_management_widget.dart';
+import '../../services/rapportcloture_pdf_service.dart';
 import 'releve_compte_client_report.dart';
 
 class AgentReportsWidget extends StatefulWidget {
@@ -24,12 +26,10 @@ class _AgentReportsWidgetState extends State<AgentReportsWidget> with SingleTick
   
   DateTime? _startDate;
   DateTime? _endDate;
-  bool _showFilters = true; // Toggle pour afficher/cacher les filtres
 
   final List<Tab> _tabs = [
     const Tab(icon: Icon(Icons.account_balance), text: 'Mouvements de Caisse'),
     const Tab(icon: Icon(Icons.monetization_on), text: 'Commissions'),
-    const Tab(icon: Icon(Icons.trending_up), text: 'Capital du Shop'),
     const Tab(icon: Icon(Icons.receipt_long), text: 'Clôture Journalière'),
     const Tab(icon: Icon(Icons.local_shipping), text: 'Mouvements FLOT'),
     const Tab(icon: Icon(Icons.account_circle), text: 'Relevés Clients'),
@@ -76,7 +76,6 @@ class _AgentReportsWidgetState extends State<AgentReportsWidget> with SingleTick
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Header avec bouton toggle filtres
                   Row(
                     children: [
                       Icon(
@@ -85,16 +84,15 @@ class _AgentReportsWidgetState extends State<AgentReportsWidget> with SingleTick
                         size: 28,
                       ),
                       const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text(
-                          'Rapports Agent',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1F2937),
-                          ),
+                      const Text(
+                        'Rapports Agent',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1F2937),
                         ),
                       ),
+                      const Spacer(),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
@@ -111,7 +109,7 @@ class _AgentReportsWidgetState extends State<AgentReportsWidget> with SingleTick
                               builder: (context, shopService, child) {
                                 if (user.shopId == null) {
                                   return Text(
-                                    'Shop: ⚠️ Non assigné',
+                                    'Shop: ⚠️ Non assigné (ID: null)',
                                     style: TextStyle(
                                       color: Colors.red[700],
                                       fontSize: 12,
@@ -122,12 +120,12 @@ class _AgentReportsWidgetState extends State<AgentReportsWidget> with SingleTick
                                 
                                 final shop = shopService.shops.firstWhere(
                                   (s) => s.id == user.shopId,
-                                  orElse: () => ShopModel(designation: '⚠️ Introuvable', localisation: ''),
+                                  orElse: () => ShopModel(designation: '⚠️ Shop introuvable (ID: ${user.shopId})', localisation: ''),
                                 );
                                 
                                 final isShopFound = shopService.shops.any((s) => s.id == user.shopId);
                                 return Text(
-                                  shop.designation,
+                                  'Shop: ${shop.designation}',
                                   style: TextStyle(
                                     color: isShopFound ? Colors.blue[700] : Colors.red[700],
                                     fontSize: 12,
@@ -139,52 +137,30 @@ class _AgentReportsWidgetState extends State<AgentReportsWidget> with SingleTick
                           ],
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        onPressed: () {
-                          setState(() {
-                            _showFilters = !_showFilters;
-                          });
-                        },
-                        icon: Icon(
-                          _showFilters ? Icons.filter_list_off : Icons.filter_list,
-                          color: const Color(0xFFDC2626),
-                        ),
-                        tooltip: _showFilters ? 'Masquer les filtres' : 'Afficher les filtres',
-                        style: IconButton.styleFrom(
-                          backgroundColor: _showFilters ? Colors.red.shade50 : Colors.grey.shade100,
-                        ),
-                      ),
                     ],
                   ),
+                  const SizedBox(height: 16),
                   
-                  // Filtres (avec animation)
-                  if (_showFilters) ...[
-                    const SizedBox(height: 16),
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                      child: ReportFiltersWidget(
-                        showShopFilter: false,
-                        startDate: _startDate,
-                        endDate: _endDate,
-                        onDateRangeChanged: (start, end) {
-                          setState(() {
-                            _startDate = start;
-                            _endDate = end;
-                          });
-                          _refreshCurrentReport();
-                        },
-                        onReset: () {
-                          setState(() {
-                            _startDate = null;
-                            _endDate = null;
-                          });
-                          _refreshCurrentReport();
-                        },
-                      ),
-                    ),
-                  ],
+                  // Filtres (sans sélection de shop)
+                  ReportFiltersWidget(
+                    showShopFilter: false,
+                    startDate: _startDate,
+                    endDate: _endDate,
+                    onDateRangeChanged: (start, end) {
+                      setState(() {
+                        _startDate = start;
+                        _endDate = end;
+                      });
+                      _refreshCurrentReport();
+                    },
+                    onReset: () {
+                      setState(() {
+                        _startDate = null;
+                        _endDate = null;
+                      });
+                      _refreshCurrentReport();
+                    },
+                  ),
                 ],
               ),
             ),
@@ -221,16 +197,6 @@ class _AgentReportsWidgetState extends State<AgentReportsWidget> with SingleTick
                   // Commissions du shop de l'agent
                   user.shopId != null
                     ? CommissionsReport(
-                        shopId: user.shopId!,
-                        startDate: _startDate,
-                        endDate: _endDate,
-                        showAllShops: false,
-                      )
-                    : _buildNoShopAssignedError(),
-                  
-                  // Capital du shop de l'agent
-                  user.shopId != null
-                    ? EvolutionCapitalReport(
                         shopId: user.shopId!,
                         startDate: _startDate,
                         endDate: _endDate,
@@ -344,7 +310,7 @@ class _AgentReportsWidgetState extends State<AgentReportsWidget> with SingleTick
   }
 
   Widget _buildClotureReport(int shopId) {
-    return RapportClotureWidget(shopId: shopId);
+    return RapportCloture(shopId: shopId);
   }
 
   Widget _buildFlotReport(int shopId) {

@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/agent_auth_service.dart';
 import '../widgets/rapport_cloture_widget.dart';
-import '../widgets/journal_caisse_widget.dart';
+import '../widgets/rapportcloture.dart';
+import '../services/rapportcloture_pdf_service.dart';
 
 /// Widget pour le menu des rapports
 class ReportsMenuWidget extends StatelessWidget {
@@ -47,14 +48,6 @@ class ReportsMenuWidget extends StatelessWidget {
               children: [
                 _buildReportCard(
                   context: context,
-                  title: 'Journal de Caisse',
-                  subtitle: 'Tous les mouvements (entrées/sorties)',
-                  icon: Icons.account_balance_wallet,
-                  color: const Color(0xFF3B82F6),
-                  onTap: () => _navigateToReport(context, 'journal'),
-                ),
-                _buildReportCard(
-                  context: context,
                   title: 'Rapport de Clôture',
                   subtitle: 'Clôture journalière avec soldes',
                   icon: Icons.receipt_long,
@@ -68,14 +61,6 @@ class ReportsMenuWidget extends StatelessWidget {
                   icon: Icons.local_shipping,
                   color: const Color(0xFF9C27B0),
                   onTap: () => _navigateToReport(context, 'flot'),
-                ),
-                _buildReportCard(
-                  context: context,
-                  title: 'Évolution du Capital',
-                  subtitle: 'Historique des variations de capital',
-                  icon: Icons.show_chart,
-                  color: const Color(0xFFF59E0B),
-                  onTap: () => _navigateToReport(context, 'capital'),
                 ),
                 _buildReportCard(
                   context: context,
@@ -172,28 +157,19 @@ class ReportsMenuWidget extends StatelessWidget {
 
   void _navigateToReport(BuildContext context, String reportType) {
     switch (reportType) {
-      case 'journal':
-        // Naviguer vers le journal de caisse
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('📈 Affichage du Journal de Caisse')),
-        );
-        break;
       case 'cloture':
         // Naviguer vers le rapport de clôture
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('📊 Affichage du Rapport de Clôture')),
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const RapportCloture(),
+          ),
         );
         break;
       case 'flot':
         // Naviguer vers les mouvements FLOT
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('💸 Affichage des Mouvements FLOT')),
-        );
-        break;
-      case 'capital':
-        // Naviguer vers l'évolution du capital
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('💹 Affichage de l\'Évolution du Capital')),
         );
         break;
       case 'operations':

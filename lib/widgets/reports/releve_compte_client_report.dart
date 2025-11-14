@@ -2,17 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:intl/intl.dart';
 import '../../services/report_service.dart';
 import '../../services/pdf_service.dart';
-import '../../services/printer_service.dart';
 import '../../models/client_model.dart';
 import '../../models/operation_model.dart';
 import '../../models/shop_model.dart';
 import '../../services/shop_service.dart';
 import '../../services/auth_service.dart';
-import '../pdf_viewer_dialog.dart';
 
 class ReleveCompteClientReport extends StatefulWidget {
   final int clientId;
@@ -179,14 +175,6 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Relevé de Compte',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey[800],
-                        ),
-                      ),
-                      Text(
                         client['nom'],
                         style: const TextStyle(
                           fontSize: 24,
@@ -194,9 +182,16 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
                           color: Color(0xFFDC2626),
                         ),
                       ),
+                      Text(
+                        'N° Compte: ${client['numeroCompte'] ?? client['id']}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                        ),
+                      ),
                       if (client['telephone'] != null)
                         Text(
-                          client['telephone'],
+                          'Téléphone: ${client['telephone']}',
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.grey[600],
@@ -230,25 +225,11 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
             
             if (periode['debut'] != null && periode['fin'] != null) ...[
               const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue[50],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue[200]!),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.date_range, color: Colors.blue[700]),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Période: ${_formatDate(DateTime.parse(periode['debut']))} - ${_formatDate(DateTime.parse(periode['fin']))}',
-                      style: TextStyle(
-                        color: Colors.blue[700],
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
+              Text(
+                'Période: Du ${_formatDate(DateTime.parse(periode['debut']))} au ${_formatDate(DateTime.parse(periode['fin']))}',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
                 ),
               ),
             ],
@@ -265,7 +246,7 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: const BorderRadius.all(Radius.circular(12)),
           gradient: LinearGradient(
             colors: soldeActuel >= 0 
                 ? [Colors.green[400]!, Colors.green[600]!]
@@ -325,42 +306,103 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
 
   Widget _buildStatistiques() {
     final totaux = _reportData!['totaux'] as Map<String, dynamic>;
+    final soldeActuel = _reportData!['soldeActuel'] as double;
     
     return Row(
       children: [
         Expanded(
-          child: _buildStatCard(
-            'Dépôts',
-            '${totaux['depots'].toStringAsFixed(2)} USD',
-            Icons.add_circle,
-            Colors.green,
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.green[50],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.green[200]!),
+            ),
+            child: Column(
+              children: [
+                const Text(
+                  'Dépôts USD',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${totaux['depots'].toStringAsFixed(2)} \$',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 16),
         Expanded(
-          child: _buildStatCard(
-            'Retraits',
-            '${totaux['retraits'].toStringAsFixed(2)} USD',
-            Icons.remove_circle,
-            Colors.orange,
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.orange[50],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange[200]!),
+            ),
+            child: Column(
+              children: [
+                const Text(
+                  'Retraits USD',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${totaux['retraits'].toStringAsFixed(2)} \$',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 16),
         Expanded(
-          child: _buildStatCard(
-            'Envoyés',
-            '${totaux['envoyes'].toStringAsFixed(2)} USD',
-            Icons.send,
-            Colors.blue,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildStatCard(
-            'Reçus',
-            '${totaux['recus'].toStringAsFixed(2)} USD',
-            Icons.call_received,
-            Colors.purple,
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.blue[50],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue[200]!),
+            ),
+            child: Column(
+              children: [
+                const Text(
+                  'Solde USD',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${soldeActuel.toStringAsFixed(2)} \$',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: soldeActuel >= 0 ? Colors.green : Colors.red,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ],
@@ -444,9 +486,14 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
                 ),
                 const SizedBox(width: 16),
                 IconButton(
+                  onPressed: _previewPdf,
+                  icon: const Icon(Icons.visibility),
+                  tooltip: 'Prévisualiser',
+                ),
+                IconButton(
                   onPressed: _exportToPdf,
-                  icon: const Icon(Icons.picture_as_pdf),
-                  tooltip: 'Exporter en PDF',
+                  icon: const Icon(Icons.download),
+                  tooltip: 'Télécharger PDF',
                 ),
                 IconButton(
                   onPressed: _printReport,
@@ -457,17 +504,90 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
             ),
           ),
           
-          // Liste des transactions
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: transactions.length,
-            separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey[200]),
-            itemBuilder: (context, index) {
-              final transaction = transactions[index];
-              return _buildTransactionItem(transaction);
-            },
+          // Historique des transactions
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Text(
+              'HISTORIQUE DES TRANSACTIONS',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
           ),
+          
+          // Table header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    'Date',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    'Type',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    'Observation',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    'Reçu (Dépôt)',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[700],
+                    ),
+                    textAlign: TextAlign.right,
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    'Payé (Retrait)',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[700],
+                    ),
+                    textAlign: TextAlign.right,
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    'Solde USD',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[700],
+                    ),
+                    textAlign: TextAlign.right,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(thickness: 1, height: 1),
+          
+          // Liste des transactions avec solde cumulé
+          _buildTransactionsListWithBalance(transactions),
         ],
       ),
     );
@@ -477,7 +597,6 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
     final type = transaction['type'] as String;
     final montant = transaction['montant'] as double;
     final commission = transaction['commission'] as double;
-    final statut = transaction['statut'] as String;
     final date = transaction['date'] as DateTime;
     
     Color typeColor;
@@ -611,7 +730,6 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
       // Get required data
       final clientData = _reportData!['client'] as Map<String, dynamic>;
       final transactions = _reportData!['transactions'] as List<dynamic>;
-      final periode = _reportData!['periode'] as Map<String, dynamic>;
 
       // Create client model from data
       final client = ClientModel.fromJson(clientData);
@@ -647,30 +765,37 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
       
       final agent = authService.currentUser!;
       final shop = shopService.getShopById(agent.shopId ?? 0);
-      
-      if (shop == null) {
-        throw Exception('Shop non trouvé');
-      }
-
-      final effectiveStartDate = widget.startDate ?? DateTime.now().subtract(const Duration(days: 30));
-      final effectiveEndDate = widget.endDate ?? DateTime.now();
 
       // Generate PDF using existing PDF service
-      final pdf = await generateClientStatementPdf(
+      final pdfService = PdfService();
+      final pdf = await pdfService.generateClientStatementPdf(
         client: client,
         operations: operationModels,
-        shop: shop,
-        startDate: effectiveStartDate,
-        endDate: effectiveEndDate,
+        shop: shop ?? ShopModel(
+          id: agent.shopId ?? 0,
+          designation: 'Shop Inconnu',
+          localisation: 'Localisation Inconnue',
+          capitalInitial: 0.0,
+          capitalActuel: 0.0,
+          capitalCash: 0.0,
+          capitalAirtelMoney: 0.0,
+          capitalMPesa: 0.0,
+          capitalOrangeMoney: 0.0,
+          createdAt: DateTime.now(),
+        ),
+        startDate: widget.startDate,
+        endDate: widget.endDate,
       );
 
-      // Afficher l'aperçu du PDF
+      // Save or share the PDF
+      await Printing.sharePdf(
+        bytes: await pdf.save(),
+        filename: 'releve_compte_${client.nom}_${DateTime.now().millisecondsSinceEpoch}.pdf',
+      );
+
       if (mounted) {
-        await showPdfViewer(
-          context: context,
-          pdfDocument: pdf,
-          title: 'Relevé ${client.nom}',
-          fileName: 'releve_compte_${client.nom}_${DateFormat('yyyy-MM-dd').format(DateTime.now())}',
+        scaffoldMessenger.showSnackBar(
+          const SnackBar(content: Text('PDF généré avec succès')),
         );
       }
     } catch (e) {
@@ -697,7 +822,6 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
       // Get required data
       final clientData = _reportData!['client'] as Map<String, dynamic>;
       final transactions = _reportData!['transactions'] as List<dynamic>;
-      final periode = _reportData!['periode'] as Map<String, dynamic>;
 
       // Create client model from data
       final client = ClientModel.fromJson(clientData);
@@ -735,32 +859,30 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
       final shop = shopService.getShopById(agent.shopId ?? 0);
 
       // Generate PDF using existing PDF service
-      // TODO: Implement generateClientStatementPdf in PdfService
-      // final pdfService = PdfService();
-      // final pdf = await pdfService.generateClientStatementPdf(
-      //   client: client,
-      //   operations: operationModels,
-      //   shop: shop ?? ShopModel(...),
-      //   startDate: widget.startDate,
-      //   endDate: widget.endDate,
-      // );
-
-      // Temporary: Show a message instead
-      if (mounted) {
-        scaffoldMessenger.showSnackBar(
-          const SnackBar(
-            content: Text('🚧 Impression en cours de développement'),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-      return;
+      final pdfService = PdfService();
+      final pdf = await pdfService.generateClientStatementPdf(
+        client: client,
+        operations: operationModels,
+        shop: shop ?? ShopModel(
+          id: agent.shopId ?? 0,
+          designation: 'Shop Inconnu',
+          localisation: 'Localisation Inconnue',
+          capitalInitial: 0.0,
+          capitalActuel: 0.0,
+          capitalCash: 0.0,
+          capitalAirtelMoney: 0.0,
+          capitalMPesa: 0.0,
+          capitalOrangeMoney: 0.0,
+          createdAt: DateTime.now(),
+        ),
+        startDate: widget.startDate,
+        endDate: widget.endDate,
+      );
 
       // Print the PDF
-      // await Printing.layoutPdf(
-      //   onLayout: (PdfPageFormat format) async => pdf.save(),
-      // );
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+      );
 
       if (mounted) {
         scaffoldMessenger.showSnackBar(
@@ -808,5 +930,200 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
       default:
         return OperationStatus.terminee;
     }
+  }
+
+  // Preview the PDF before downloading
+  Future<void> _previewPdf() async {
+    if (_reportData == null) return;
+
+    try {
+      // Show loading indicator
+      if (!mounted) return;
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(content: Text('Generation de l\'apercu PDF en cours...')),
+      );
+
+      // Get required data
+      final clientData = _reportData!['client'] as Map<String, dynamic>;
+      final transactions = _reportData!['transactions'] as List<dynamic>;
+
+      // Create client model from data
+      final client = ClientModel.fromJson(clientData);
+
+      // Convert transaction data to OperationModel objects
+      final operationModels = <OperationModel>[];
+      for (var transaction in transactions) {
+        if (transaction is Map<String, dynamic>) {
+          // Create a minimal OperationModel for PDF generation
+          final operation = OperationModel(
+            id: transaction['id'] as int?,
+            type: _mapStringToOperationType(transaction['type'] as String),
+            montantBrut: transaction['montant'] as double? ?? 0.0,
+            montantNet: transaction['montant'] as double? ?? 0.0,
+            commission: transaction['commission'] as double? ?? 0.0,
+            devise: 'USD',
+            statut: _mapStringToOperationStatus(transaction['statut'] as String? ?? 'terminee'),
+            dateOp: transaction['date'] as DateTime,
+            modePaiement: ModePaiement.cash,
+            clientId: client.id,
+            agentId: 1, // Default agent ID
+            destinataire: transaction['destinataire'] as String?,
+            notes: transaction['notes'] as String?,
+            observation: transaction['observation'] as String?,
+          );
+          operationModels.add(operation);
+        }
+      }
+
+      // Get shop and agent data
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final shopService = Provider.of<ShopService>(context, listen: false);
+      
+      final agent = authService.currentUser!;
+      final shop = shopService.getShopById(agent.shopId ?? 0);
+
+      // Generate PDF using existing PDF service
+      final pdfService = PdfService();
+      final pdf = await pdfService.generateClientStatementPdf(
+        client: client,
+        operations: operationModels,
+        shop: shop ?? ShopModel(
+          id: agent.shopId ?? 0,
+          designation: 'Shop Inconnu',
+          localisation: 'Localisation Inconnue',
+          capitalInitial: 0.0,
+          capitalActuel: 0.0,
+          capitalCash: 0.0,
+          capitalAirtelMoney: 0.0,
+          capitalMPesa: 0.0,
+          capitalOrangeMoney: 0.0,
+          createdAt: DateTime.now(),
+        ),
+        startDate: widget.startDate,
+        endDate: widget.endDate,
+      );
+
+      // Show PDF preview
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+      );
+
+      if (mounted) {
+        scaffoldMessenger.showSnackBar(
+          const SnackBar(content: Text('Apercu PDF genere avec succes')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur lors de la generation de l\'apercu PDF: $e')),
+        );
+      }
+    }
+  }
+
+  Widget _buildTransactionsListWithBalance(List<Map<String, dynamic>> transactions) {
+    // Sort transactions by date
+    final sortedTransactions = List<Map<String, dynamic>>.from(transactions)
+      ..sort((a, b) => DateTime.parse(a['date'].toString()).compareTo(DateTime.parse(b['date'].toString())));
+    
+    double runningBalance = 0;
+    
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: sortedTransactions.length,
+      separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey[200]),
+      itemBuilder: (context, index) {
+        final transaction = sortedTransactions[index];
+        final type = transaction['type'] as String;
+        final montant = transaction['montant'] as double;
+        final date = transaction['date'] as DateTime;
+        
+        bool isCredit = (type == 'depot' || type == 'transfertInternationalEntrant');
+        
+        if (isCredit) {
+          runningBalance += montant;
+        } else {
+          runningBalance -= montant;
+        }
+        
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: Text(
+                  _formatDate(date),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[700],
+                  ),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Text(
+                  _getTypeLabel(type),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[700],
+                  ),
+                ),
+              ),
+              Expanded(
+                flex: 3,
+                child: Text(
+                  transaction['observation']?.toString() ?? transaction['destinataire']?.toString() ?? '-',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[700],
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Text(
+                  isCredit ? '${montant.toStringAsFixed(2)} \$' : '--',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isCredit ? Colors.green : Colors.grey[700],
+                    fontWeight: isCredit ? FontWeight.bold : FontWeight.normal,
+                  ),
+                  textAlign: TextAlign.right,
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Text(
+                  !isCredit ? '${montant.toStringAsFixed(2)} \$' : '--',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: !isCredit ? Colors.red : Colors.grey[700],
+                    fontWeight: !isCredit ? FontWeight.bold : FontWeight.normal,
+                  ),
+                  textAlign: TextAlign.right,
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Text(
+                  '${runningBalance.toStringAsFixed(2)} \$',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: runningBalance >= 0 ? Colors.green : Colors.red,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.right,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 }

@@ -54,151 +54,43 @@ class _ShopsManagementState extends State<ShopsManagement> {
   }
 
   Widget _buildHeader() {
-    final isMobile = MediaQuery.of(context).size.width <= 768;
-    
-    return Card(
-      elevation: 3,
-      child: Padding(
-        padding: EdgeInsets.all(isMobile ? 16 : 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFDC2626).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.store,
-                    color: Color(0xFFDC2626),
-                    size: 28,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '🏪 Gestion des Shops',
-                        style: TextStyle(
-                          fontSize: isMobile ? 18 : 22,
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFFDC2626),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Créer, modifier, supprimer les shops',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+    return context.adaptiveCard(
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Gestion des Shops',
+              style: context.titleAccent,
             ),
-            SizedBox(height: isMobile ? 16 : 20),
-            
-            // Boutons d'action CRUD bien visibles
-            if (isMobile)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: _showCreateDialog,
-                    icon: const Icon(Icons.add_circle, size: 20),
-                    label: const Text('➕ Créer un Shop'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFDC2626),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    onPressed: _loadData,
-                    icon: const Icon(Icons.refresh, size: 18),
-                    label: const Text('Actualiser'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF1976D2),
-                      side: const BorderSide(color: Color(0xFF1976D2)),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                  ),
-                ],
-              )
-            else
-              Row(
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: _showCreateDialog,
-                    icon: const Icon(Icons.add_circle, size: 20),
-                    label: const Text('➕ Créer un Shop'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFDC2626),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      elevation: 2,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  OutlinedButton.icon(
-                    onPressed: _loadData,
-                    icon: const Icon(Icons.refresh, size: 18),
-                    label: const Text('Actualiser la liste'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF1976D2),
-                      side: const BorderSide(color: Color(0xFF1976D2), width: 1.5),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                  ),
-                  const Spacer(),
-                  // Info sur les actions disponibles
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.blue[50],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.blue[200]!),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.info_outline, size: 16, color: Colors.blue[700]),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Actions: ✏️ Modifier | 💰 Ajuster Capital | 🗑️ Supprimer',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.blue[700],
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+          ),
+          if (!context.isSmallScreen) ...[
+            ElevatedButton.icon(
+              onPressed: _loadData,
+              icon: Icon(Icons.refresh, size: context.fluidIcon(mobile: 16, tablet: 18, desktop: 20)),
+              label: const Text('Actualiser'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1976D2),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(context.fluidBorderRadius()),
+                ),
               ),
+            ),
+            context.horizontalSpace(mobile: 8, tablet: 12, desktop: 16),
           ],
-        ),
+          ElevatedButton.icon(
+            onPressed: _showCreateDialog,
+            icon: Icon(Icons.add, size: context.fluidIcon(mobile: 16, tablet: 18, desktop: 20)),
+            label: Text(context.isSmallScreen ? 'Nouveau' : 'Nouveau Shop'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(context.fluidBorderRadius()),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -589,53 +481,33 @@ class _ShopsManagementState extends State<ShopsManagement> {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Modifier
-              Tooltip(
-                message: 'Modifier le shop',
-                child: ElevatedButton.icon(
-                  onPressed: () => _showEditDialog(shop),
-                  icon: const Icon(Icons.edit, size: 14),
-                  label: const Text('Modifier', style: TextStyle(fontSize: 11)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1976D2),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                    minimumSize: const Size(0, 32),
-                  ),
+              IconButton(
+                onPressed: () => _showEditDialog(shop),
+                icon: const Icon(Icons.edit, size: 18),
+                tooltip: 'Modifier',
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFF1976D2).withOpacity(0.1),
+                  foregroundColor: const Color(0xFF1976D2),
                 ),
               ),
-              const SizedBox(width: 6),
-              
-              // Ajuster Capital
-              Tooltip(
-                message: 'Ajuster le capital',
-                child: ElevatedButton.icon(
-                  onPressed: () => _showCapitalAdjustmentDialog(shop),
-                  icon: const Icon(Icons.account_balance, size: 14),
-                  label: const Text('Capital', style: TextStyle(fontSize: 11)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                    minimumSize: const Size(0, 32),
-                  ),
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: () => _showCapitalAdjustmentDialog(shop),
+                icon: const Icon(Icons.account_balance, size: 18),
+                tooltip: 'Ajuster Capital',
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.green.withOpacity(0.1),
+                  foregroundColor: Colors.green,
                 ),
               ),
-              const SizedBox(width: 6),
-              
-              // Supprimer
-              Tooltip(
-                message: 'Supprimer le shop',
-                child: ElevatedButton.icon(
-                  onPressed: () => _showDeleteDialog(shop),
-                  icon: const Icon(Icons.delete, size: 14),
-                  label: const Text('Supprimer', style: TextStyle(fontSize: 11)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                    minimumSize: const Size(0, 32),
-                  ),
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: () => _showDeleteDialog(shop),
+                icon: const Icon(Icons.delete, size: 18),
+                tooltip: 'Supprimer',
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.red.withOpacity(0.1),
+                  foregroundColor: Colors.red,
                 ),
               ),
             ],

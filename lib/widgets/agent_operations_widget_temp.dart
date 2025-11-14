@@ -726,7 +726,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.error, color: Colors.red, size: 48),
+                const Icon(Icons.error, color: Colors.red, size: 48),
                 const SizedBox(height: 16),
                 Text(
                   'Erreur: ${operationService.errorMessage}',
@@ -794,7 +794,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.search_off, color: Colors.grey, size: 64),
+                      const Icon(Icons.search_off, color: Colors.grey, size: 64),
                       const SizedBox(height: 16),
                       const Text(
                         'Aucune opération trouvée avec ces critères',

@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
-// import 'dart:io'; // Unused
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -1089,8 +1089,7 @@ class SyncService {
           // IMPORTANT: Utiliser saveOperation DIRECT pour éviter la logique métier
           // (calcul commission, mise à jour soldes, journal)
           // Car les opérations reçues du serveur sont déjà complètes
-          // preserveTimestamp=true pour conserver le timestamp du serveur
-          await LocalDB.instance.saveOperation(operation, preserveTimestamp: true);
+          await LocalDB.instance.saveOperation(operation);
           debugPrint('📥 Opération ${operation.id} insérée depuis serveur (statut: ${operation.statut.name})');
           
           // IMPORTANT: Créer l'entrée de journal pour l'opération synchronisée
