@@ -13,6 +13,10 @@ import '../widgets/flot_management_widget.dart';
 import '../widgets/rapport_cloture_widget.dart';
 import '../widgets/reports_menu_widget.dart';
 import 'agent_login_page.dart';
+import '../widgets/reports/agent_reports_widget.dart' as reports;
+import '../widgets/agent_dashboard_widget.dart';
+import '../widgets/agent_operations_widget.dart';
+import '../widgets/rapportcloture.dart';
 
 class AgentDashboardPage extends StatefulWidget {
   const AgentDashboardPage({super.key});
@@ -488,7 +492,11 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
     final authService = Provider.of<AgentAuthService>(context, listen: false);
     final shopId = authService.currentAgent?.shopId;
     
-    return RapportClotureWidget(shopId: shopId);
+    return _buildClotureReport(shopId!);
+  }
+
+  Widget _buildClotureReport(int shopId) {
+    return RapportCloture(shopId: shopId);
   }
 
   Future<void> _syncData() async {

@@ -7,7 +7,7 @@ import 'package:intl/intl.dart';
 import '../models/rapport_cloture_model.dart';
 import '../services/rapport_cloture_service.dart';
 import '../services/auth_service.dart';
-import '../services/pdf_service.dart';
+import '../services/rapportcloture_pdf_service.dart';
 import '../services/shop_service.dart';
 
 /// Widget pour afficher et générer le Rapport de Clôture Journalière
@@ -76,15 +76,15 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
         throw Exception('Shop non trouvé');
       }
 
-      // Générer le PDF
-      final pdf = await generateDailyClosureReportPdf(
+      // Générer le PDF avec le nouveau service
+      final pdf = await generateRapportCloturePdf(
         rapport: _rapport!,
         shop: shop,
       );
 
       // Sauvegarder ou partager le PDF
       final pdfBytes = await pdf.save();
-      final fileName = 'rapport_cloture_${shop.designation}_${DateFormat('yyyy-MM-dd').format(_selectedDate)}.pdf';
+      final fileName = 'rapportcloture_${shop.designation}_${DateFormat('yyyy-MM-dd').format(_selectedDate)}.pdf';
       
       // Utiliser Printing pour sauvegarder ou partager
       await Printing.sharePdf(bytes: pdfBytes, filename: fileName);
@@ -116,7 +116,8 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
         throw Exception('Shop non trouvé');
       }
 
-      final pdf = await generateDailyClosureReportPdf(
+      // Générer le PDF avec le nouveau service
+      final pdf = await generateRapportCloturePdf(
         rapport: _rapport!,
         shop: shop,
       );
@@ -147,7 +148,8 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
         throw Exception('Shop non trouvé');
       }
 
-      final pdf = await generateDailyClosureReportPdf(
+      // Générer le PDF avec le nouveau service
+      final pdf = await generateRapportCloturePdf(
         rapport: _rapport!,
         shop: shop,
       );
@@ -155,7 +157,7 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
       // Imprimer directement
       await Printing.layoutPdf(
         onLayout: (PdfPageFormat format) async => pdf.save(),
-        name: 'Rapport_Cloture_${shop.designation}_${DateFormat('yyyy-MM-dd').format(_selectedDate)}.pdf',
+        name: 'rapportcloture_${shop.designation}_${DateFormat('yyyy-MM-dd').format(_selectedDate)}.pdf',
       );
     } catch (e) {
       if (mounted) {

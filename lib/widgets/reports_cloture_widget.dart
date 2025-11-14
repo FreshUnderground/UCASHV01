@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../widgets/rapport_cloture_widget.dart';
+import '../widgets/rapportcloture.dart';  // Change this import
 import '../services/agent_auth_service.dart';
 
 /// Widget pour afficher le rapport de clôture depuis le menu des rapports
@@ -12,6 +12,6 @@ class ReportsClotureWidget extends StatelessWidget {
     final authService = Provider.of<AgentAuthService>(context);
     final shopId = authService.currentAgent?.shopId;
     
-    return RapportClotureWidget(shopId: shopId);
+    return RapportCloture(shopId: shopId);  // Use the new widget
   }
 }

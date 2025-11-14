@@ -7,9 +7,8 @@ import 'package:intl/intl.dart';
 import '../models/rapport_cloture_model.dart';
 import '../services/rapport_cloture_service.dart';
 import '../services/auth_service.dart';
-import '../services/pdf_service.dart';
-import '../services/shop_service.dart';
 import '../services/rapportcloture_pdf_service.dart';
+import '../services/shop_service.dart';
 
 /// Widget pour afficher et générer le Rapport de Clôture Journalière
 /// Nom du fichier: rapportcloture.dart
@@ -118,16 +117,77 @@ class _RapportClotureState extends State<RapportCloture> {
         throw Exception('Shop non trouvé');
       }
 
-      // Générer le PDF avec le nouveau service
+      // Générer le PDF
       final pdf = await generateRapportCloturePdf(
         rapport: _rapport!,
         shop: shop,
       );
 
-      // Prévisualiser le PDF
-      await Printing.layoutPdf(
-        onLayout: (PdfPageFormat format) async => pdf.save(),
-      );
+      final pdfBytes = await pdf.save();
+
+      // Afficher le PDF dans une boîte de dialogue de prévisualisation
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => Dialog(
+            child: Container(
+              width: MediaQuery.of(context).size.width * 0.9,
+              height: MediaQuery.of(context).size.height * 0.9,
+              child: Column(
+                children: [
+                  // En-tête
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    color: const Color(0xFFDC2626),
+                    child: Row(
+                      children: [
+                        const Text(
+                          'Prévisualisation PDF',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Viewer PDF
+                  Expanded(
+                    child: PdfPreview(
+                      build: (format) => pdfBytes,
+                      canChangeOrientation: false,
+                      canChangePageFormat: false,
+                      canDebug: false,
+                      actions: [
+                        PdfPreviewAction(
+                          icon: const Icon(Icons.download),
+                          onPressed: (context, build, pageFormat) async {
+                            Navigator.pop(context);
+                            await _telechargerPDF();
+                          },
+                        ),
+                        PdfPreviewAction(
+                          icon: const Icon(Icons.print),
+                          onPressed: (context, build, pageFormat) async {
+                            Navigator.pop(context);
+                            await _imprimerPDF();
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
