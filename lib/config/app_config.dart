@@ -36,7 +36,7 @@ class AppConfig {
   /// URL par défaut selon l'environnement (sans personnalisation)
   static String _getDefaultApiUrl() {
     // URL de production par défaut
-    const productionUrl = 'https://shops.investee-group.com/server/api21';
+    const productionUrl = 'https://shops.investee-group.com/server/api';
     
     // Pour développement local uniquement (peut être personnalisé via config)
     if (kIsWeb) {

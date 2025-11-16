@@ -48,7 +48,7 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
   }
   
   void _calculateCommission() async {
-    final montant = double.tryParse(_montantController.text) ?? 0.0;
+    final montantNet = double.tryParse(_montantController.text) ?? 0.0;  // Montant que le destinataire REÇOIT
     
     // Récupérer la VRAIE commission depuis RatesService
     final ratesService = RatesService.instance;
@@ -57,8 +57,8 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
     final commissionData = ratesService.getCommissionByType('SORTANT');
     if (commissionData != null) {
       _tauxCommission = commissionData.taux; // Stocker le taux réel
-      _commission = montant * (commissionData.taux / 100);
-      debugPrint('✅ Commission récupérée: ${commissionData.taux}% sur $montant = $_commission');
+      _commission = montantNet * (commissionData.taux / 100);
+      debugPrint('✅ Commission récupérée: ${commissionData.taux}% sur $montantNet = $_commission');
     } else {
       // PAS DE FALLBACK - Afficher erreur
       debugPrint('❌ ERREUR: Commission SORTANT non trouvée dans la base de données!');
@@ -66,7 +66,9 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
       _commission = 0.0;
     }
     
-    _montantNet = montant - _commission;
+    // LE CLIENT PAIE: Montant Net + Commission
+    _montantNet = montantNet;  // Ce que le destinataire reçoit
+    // montantBrut sera = montantNet + commission (calculé lors de la création)
     
     if (mounted) {
       setState(() {});
@@ -475,8 +477,8 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
         agentUsername: currentUser.username,
         shopSourceId: currentUser.shopId!,
         type: OperationType.transfertNational, // Par défaut national
-        montantBrut: montant,
-        montantNet: _montantNet,
+        montantNet: _montantNet,  // Ce que le destinataire REÇOIT
+        montantBrut: _montantNet + _commission,  // Ce que le client PAIE
         commission: _commission,
         devise: 'USD',
         modePaiement: ModePaiement.cash,

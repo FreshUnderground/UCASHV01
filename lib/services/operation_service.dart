@@ -119,8 +119,16 @@ class OperationService extends ChangeNotifier {
         }
       }
       
-      // Calculer la commission automatiquement
-      final operationWithCommission = await _calculateCommission(enrichedOperation);
+      // Calculer la commission automatiquement SI PAS DÉJÀ CALCULÉE
+      OperationModel operationWithCommission;
+      if (enrichedOperation.commission > 0 || enrichedOperation.montantBrut > 0) {
+        // Commission déjà calculée dans le formulaire, ne pas recalculer
+        operationWithCommission = enrichedOperation;
+        debugPrint('✅ Commission déjà calculée: ${enrichedOperation.commission} USD');
+      } else {
+        // Pas de commission, calculer automatiquement (dépôts, retraits, etc.)
+        operationWithCommission = await _calculateCommission(enrichedOperation);
+      }
       
       // Mettre à jour les soldes selon le type d'opération
       await _updateBalances(operationWithCommission);
@@ -196,7 +204,8 @@ class OperationService extends ChangeNotifier {
           },
         );
         
-        commission = operation.montantBrut * (commissionData.taux / 100);
+        // Commission calculée sur le montantNet (ce que le destinataire reçoit)
+        commission = operation.montantNet * (commissionData.taux / 100);
         break;
         
       case OperationType.transfertInternationalEntrant:
@@ -216,9 +225,11 @@ class OperationService extends ChangeNotifier {
         break;
     }
     
+    // montantNet = ce que le destinataire reçoit
+    // montantBrut = montantNet + commission (ce que le client paie)
     return operation.copyWith(
       commission: commission,
-      montantNet: operation.montantBrut - commission,
+      montantBrut: operation.montantNet + commission,  // Client paie Net + Commission
     );
   }
 

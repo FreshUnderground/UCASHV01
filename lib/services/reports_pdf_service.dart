@@ -555,11 +555,14 @@ pw.Widget _buildTableCell(String text, {PdfColor? color, bool bold = false, int 
 }
 
 pw.Widget _buildCommissionTypeRow(String label, double amount, PdfColor color) {
+  // Créer une couleur claire pour le fond (pas de withOpacity dans pdf package)
+  final backgroundColor = PdfColors.grey50;  // Couleur de fond neutre
+  
   return pw.Container(
     padding: const pw.EdgeInsets.all(8),
     margin: const pw.EdgeInsets.only(bottom: 4),
     decoration: pw.BoxDecoration(
-      color: color.withOpacity(0.1),
+      color: backgroundColor,
       border: pw.Border.all(color: color),
       borderRadius: pw.BorderRadius.circular(4),
     ),

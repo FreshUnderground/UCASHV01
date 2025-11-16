@@ -474,10 +474,6 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
         // Total operations should include both operations and FLOTs
         final totalOperations = operations.length + shopFlots.length;
         
-        // Calcul par devise
-        final montantUSD = operations.where((op) => op.devise == 'USD').fold<double>(0, (sum, op) => sum + op.montantBrut);
-        final montantCDF = operations.where((op) => op.devise == 'CDF').fold<double>(0, (sum, op) => sum + op.montantBrut);
-        
         final depots = operations.where((op) => op.type == OperationType.depot).length;
         final retraits = operations.where((op) => op.type == OperationType.retrait).length;
         final transferts = operations.where((op) => 

@@ -790,8 +790,8 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
         shopDestinationId: _selectedShop?.id,
         shopDestinationDesignation: _selectedShop?.designation,
         type: _transferType,
-        montantBrut: montant,
-        montantNet: _montantNet,
+        montantNet: _montantNet,  // Ce que le destinataire REÇOIT
+        montantBrut: _montantNet + _commission,  // Ce que le client PAIE
         commission: _commission,
         devise: 'USD',
         modePaiement: _modePaiement,
