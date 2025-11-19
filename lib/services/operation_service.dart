@@ -1,4 +1,8 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
+import 'dart:async';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../models/operation_model.dart';
 import '../models/journal_caisse_model.dart';
 import '../models/commission_model.dart';
@@ -9,6 +13,7 @@ import 'sync_service.dart';
 import 'taux_change_service.dart';
 import 'agent_service.dart';
 import 'auth_service.dart';
+import '../config/app_config.dart';
 
 class OperationService extends ChangeNotifier {
   static final OperationService _instance = OperationService._internal();
@@ -19,21 +24,50 @@ class OperationService extends ChangeNotifier {
   final List<JournalCaisseModel> _journalEntries = [];
   bool _isLoading = false;
   String? _errorMessage;
+  
+  // Sauvegarder les filtres actifs pour les réutiliser lors du reload
+  int? _activeShopFilter;
+  int? _activeAgentFilter;
+  
+  // Timer pour vérifier les opérations en attente toutes les 30 secondes
+  Timer? _pendingOpsTimer;
+  bool _isPendingOpsCheckEnabled = false;
+  int _pendingOpsCount = 0;
 
   List<OperationModel> get operations => _operations;
   List<JournalCaisseModel> get journalEntries => _journalEntries;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  int get pendingOpsCount => _pendingOpsCount;
+  bool get isPendingOpsCheckEnabled => _isPendingOpsCheckEnabled;
 
   void _setLoading(bool loading) {
     _isLoading = loading;
-    notifyListeners();
+    // Déférer notifyListeners pour éviter l'appel pendant build
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      notifyListeners();
+    });
+  }
+  
+  /// Réinitialiser les filtres (utile pour l'admin)
+  void clearFilters() {
+    _activeShopFilter = null;
+    _activeAgentFilter = null;
+    debugPrint('🗑️ Filtres réinitialisés');
   }
 
   // Charger les opérations
   Future<void> loadOperations({int? shopId, int? agentId}) async {
     _setLoading(true);
     try {
+      // Sauvegarder les filtres actifs pour réutilisation
+      if (shopId != null) _activeShopFilter = shopId;
+      if (agentId != null) _activeAgentFilter = agentId;
+      
+      // Si aucun filtre passé, réutiliser les filtres actifs sauvegardés
+      final effectiveShopFilter = shopId ?? _activeShopFilter;
+      final effectiveAgentFilter = agentId ?? _activeAgentFilter;
+      
       _operations = await LocalDB.instance.getAllOperations();
       
       debugPrint('📊 loadOperations: ${_operations.length} opérations totales chargées depuis LocalDB');
@@ -41,25 +75,36 @@ class OperationService extends ChangeNotifier {
       // Pas d'initialisation de données par défaut
       // Les opérations seront créées uniquement par les utilisateurs
       
-      if (shopId != null) {
+      if (effectiveShopFilter != null) {
         final beforeFilter = _operations.length;
         _operations = _operations.where((op) => 
-          op.shopSourceId == shopId || op.shopDestinationId == shopId).toList();
-        debugPrint('📊 Filtre shopId=$shopId: $beforeFilter → ${_operations.length} opérations');
+          op.shopSourceId == effectiveShopFilter || op.shopDestinationId == effectiveShopFilter).toList();
+        debugPrint('📊 Filtre shopId=$effectiveShopFilter: $beforeFilter → ${_operations.length} opérations');
+        debugPrint('   ✅ Inclut: capital initial du shop + toutes ops du shop + transferts entrants');
       }
       
-      if (agentId != null) {
+      if (effectiveAgentFilter != null) {
         final beforeFilter = _operations.length;
-        _operations = _operations.where((op) => op.agentId == agentId).toList();
-        debugPrint('📊 Filtre agentId=$agentId: $beforeFilter → ${_operations.length} opérations');
+        _operations = _operations.where((op) => op.agentId == effectiveAgentFilter).toList();
+        debugPrint('📊 Filtre agentId=$effectiveAgentFilter: $beforeFilter → ${_operations.length} opérations');
       }
       
       _operations.sort((a, b) => b.dateOp.compareTo(a.dateOp));
       _errorMessage = null;
       debugPrint('📊 ✅ Opérations finales: ${_operations.length}');
       if (_operations.isNotEmpty) {
+        int initialCapitalCount = 0;
         for (var op in _operations) {
-          debugPrint('   - Op #${op.id}: ${op.type.name}, shop_source=${op.shopSourceId}, shop_dest=${op.shopDestinationId}, agent=${op.agentId}');
+          // Compter les opérations de capital initial
+          if (op.destinataire == 'CAPITAL INITIAL') {
+            initialCapitalCount++;
+            debugPrint('💰 OP #${op.id}: CAPITAL INITIAL - ${op.type.name}, montant=${op.montantNet}, shop_source=${op.shopSourceId}');
+          } else {
+            debugPrint('   - Op #${op.id}: ${op.type.name}, shop_source=${op.shopSourceId}, shop_dest=${op.shopDestinationId}, agent=${op.agentId}');
+          }
+        }
+        if (initialCapitalCount > 0) {
+          debugPrint('💰 Total opérations de capital initial: $initialCapitalCount');
         }
       }
     } catch (e) {
@@ -119,15 +164,24 @@ class OperationService extends ChangeNotifier {
         }
       }
       
+      // Générer le code d'opération unique
+      final now = DateTime.now();
+      final codeOps = 'TRANSID-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}${enrichedOperation.agentId}${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
+      
+      // Ajouter le codeOps à l'opération
+      final operationWithCode = enrichedOperation.copyWith(
+        codeOps: codeOps,
+      );
+      
       // Calculer la commission automatiquement SI PAS DÉJÀ CALCULÉE
       OperationModel operationWithCommission;
-      if (enrichedOperation.commission > 0 || enrichedOperation.montantBrut > 0) {
+      if (operationWithCode.commission > 0 || operationWithCode.montantBrut > 0) {
         // Commission déjà calculée dans le formulaire, ne pas recalculer
-        operationWithCommission = enrichedOperation;
-        debugPrint('✅ Commission déjà calculée: ${enrichedOperation.commission} USD');
+        operationWithCommission = operationWithCode;
+        debugPrint('✅ Commission déjà calculée: ${operationWithCode.commission} USD');
       } else {
         // Pas de commission, calculer automatiquement (dépôts, retraits, etc.)
-        operationWithCommission = await _calculateCommission(enrichedOperation);
+        operationWithCommission = await _calculateCommission(operationWithCode);
       }
       
       // Mettre à jour les soldes selon le type d'opération
@@ -308,6 +362,18 @@ class OperationService extends ChangeNotifier {
             debugPrint('💰 Solde client ${client.nom}: ${client.solde} → ${nouveauSolde} USD (DÉCOUVERT - client nous doit ${nouveauSolde.abs()} USD)');
           } else {
             debugPrint('💰 Solde client ${client.nom}: ${client.solde} → ${nouveauSolde} USD');
+          }
+          
+          // 🔥 NOUVELLE LOGIQUE: Détection retrait cross-shop et création dette automatique
+          // Si le client a été créé par un shop différent de celui qui effectue le retrait
+          if (client.shopId != operation.shopSourceId) {
+            await _handleCrossShopDebt(
+              clientOriginalShopId: client.shopId,
+              withdrawalShopId: operation.shopSourceId!,
+              amount: operation.montantNet,
+              clientName: client.nom,
+              operationId: operation.id,
+            );
           }
         }
       }
@@ -502,13 +568,13 @@ class OperationService extends ChangeNotifier {
         break;
         
       case OperationType.depot:
-        libelle = 'Dépôt - ${operation.destinataire ?? "Client"}';
+        libelle = 'Dépôt - ${operation.destinataire ?? "Partenaire"}';
         montant = operation.montantNet;
         type = TypeMouvement.entree; // ENTRÉE en caisse
         break;
         
       case OperationType.retrait:
-        libelle = 'Retrait - ${operation.destinataire ?? "Client"}';
+        libelle = 'Retrait - ${operation.destinataire ?? "Partenaire"}';
         montant = operation.montantNet;
         type = TypeMouvement.sortie; // SORTIE de caisse
         break;
@@ -708,6 +774,14 @@ class OperationService extends ChangeNotifier {
     }
   }
   
+  OperationModel? getOperationByCodeOps(String codeOps) {
+    try {
+      return _operations.firstWhere((op) => op.codeOps == codeOps);
+    } catch (e) {
+      return null;
+    }
+  }
+  
   /// Valider un transfert depuis le serveur (Shop Destination UNIQUEMENT)
   /// Permet de marquer un transfert comme SERVIE et mettre à jour les soldes
   /// SÉCURITÉ: Vérifie que le shop connecté est bien le DESTINATAIRE
@@ -878,5 +952,252 @@ class OperationService extends ChangeNotifier {
     
     // ❗ SÉCURITÉ CRITIQUE: Vérifier que le shop est le DESTINATAIRE
     return operation.shopDestinationId == currentShopId;
+  }
+  
+  /// Gérer la dette automatique entre shops lors d'un retrait cross-shop
+  /// 
+  /// **Logique métier UCASH:**
+  /// - Client créé par Shop MOKU avec solde de 10000 USD
+  /// - Client fait un retrait de 5000 USD au Shop NGANGAZU
+  /// - 🔄 DETTE AUTOMATIQUE: NGANGAZU doit 5000 USD à MOKU
+  /// - 🔄 CRÉANCE AUTOMATIQUE: MOKU a une créance de 5000 USD sur NGANGAZU
+  /// 
+  /// Cette logique permet de suivre les mouvements d'argent entre shops
+  /// quand les clients font des opérations cross-shop
+  Future<void> _handleCrossShopDebt({
+    required int clientOriginalShopId,
+    required int withdrawalShopId,
+    required double amount,
+    required String clientName,
+    int? operationId,
+  }) async {
+    try {
+      // Charger les deux shops concernés
+      final originalShop = await LocalDB.instance.getShopById(clientOriginalShopId);
+      final withdrawalShop = await LocalDB.instance.getShopById(withdrawalShopId);
+      
+      if (originalShop == null || withdrawalShop == null) {
+        debugPrint('⚠️ Shops non trouvés pour calcul dette cross-shop');
+        return;
+      }
+      
+      debugPrint('🔥 === DETTE CROSS-SHOP DÉTECTÉE ===');
+      debugPrint('🏪 Shop client: ${originalShop.designation} (ID: ${originalShop.id})');
+      debugPrint('🏪 Shop retrait: ${withdrawalShop.designation} (ID: ${withdrawalShop.id})');
+      debugPrint('💵 Montant: $amount USD');
+      debugPrint('👤 Client: $clientName');
+      
+      // LOGIQUE: Shop qui effectue le retrait DOIT au shop d'origine du client
+      // Car le shop de retrait a donné de l'argent pour un client d'un autre shop
+      
+      // 1. Mettre à jour les dettes du shop qui effectue le retrait
+      final updatedWithdrawalShop = withdrawalShop.copyWith(
+        dettes: withdrawalShop.dettes + amount,
+        lastModifiedAt: DateTime.now(),
+        lastModifiedBy: 'system_cross_shop_debt',
+      );
+      await LocalDB.instance.saveShop(updatedWithdrawalShop);
+      debugPrint('❌ ${withdrawalShop.designation}: Dettes ${withdrawalShop.dettes} → ${updatedWithdrawalShop.dettes} USD');
+      
+      // 2. Mettre à jour les créances du shop d'origine du client
+      final updatedOriginalShop = originalShop.copyWith(
+        creances: originalShop.creances + amount,
+        lastModifiedAt: DateTime.now(),
+        lastModifiedBy: 'system_cross_shop_debt',
+      );
+      await LocalDB.instance.saveShop(updatedOriginalShop);
+      debugPrint('✅ ${originalShop.designation}: Créances ${originalShop.creances} → ${updatedOriginalShop.creances} USD');
+      
+      debugPrint('📊 RÉSUMÉ:');
+      debugPrint('   • ${withdrawalShop.designation} doit maintenant ${updatedWithdrawalShop.dettes} USD au total');
+      debugPrint('   • ${originalShop.designation} a maintenant ${updatedOriginalShop.creances} USD de créances au total');
+      debugPrint('🔥 === FIN DETTE CROSS-SHOP ===');
+      
+    } catch (e) {
+      debugPrint('❌ Erreur gestion dette cross-shop: $e');
+      // Ne pas bloquer l'opération de retrait si la dette ne peut pas être créée
+    }
+  }
+  
+  /// Démarrer la vérification automatique des opérations en attente toutes les 30 secondes
+  void startPendingOpsCheck({int? shopId}) {
+    if (_isPendingOpsCheckEnabled) {
+      debugPrint('⚠️ Vérification automatique déjà activée');
+      return;
+    }
+    
+    _isPendingOpsCheckEnabled = true;
+    _activeShopFilter = shopId; // Sauvegarder le filtre shop pour les vérifications
+    
+    debugPrint('⏰ Démarrage de la vérification automatique des opérations en attente (toutes les 30s)');
+    
+    // Vérification immédiate (avec protection)
+    _checkPendingOperations().catchError((error) {
+      debugPrint('❌ Erreur lors de la vérification initiale: $error');
+    });
+    
+    // Démarrer le timer pour vérifications régulières
+    _pendingOpsTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (_isPendingOpsCheckEnabled) {
+        // Exécuter avec protection contre les erreurs non capturées
+        _checkPendingOperations().catchError((error) {
+          debugPrint('❌ Erreur dans Timer.periodic: $error');
+        });
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+  
+  /// Arrêter la vérification automatique des opérations en attente
+  void stopPendingOpsCheck() {
+    if (!_isPendingOpsCheckEnabled) {
+      debugPrint('⚠️ Vérification automatique déjà arrêtée');
+      return;
+    }
+    
+    _isPendingOpsCheckEnabled = false;
+    _pendingOpsTimer?.cancel();
+    _pendingOpsTimer = null;
+    
+    debugPrint('⏹️ Arrêt de la vérification automatique des opérations en attente');
+  }
+  
+  /// Vérifier les opérations en attente et synchroniser si nécessaire
+  Future<void> _checkPendingOperations() async {
+    try {
+      debugPrint('🔍 Vérification des opérations en attente...');
+      
+      // Récupérer les transferts en attente depuis MySQL via API
+      if (_activeShopFilter != null) {
+        await _fetchPendingTransfersFromServer(_activeShopFilter!);
+      }
+      
+      // Récupérer toutes les opérations localement
+      final allOps = await LocalDB.instance.getAllOperations();
+      debugPrint('📊 Vérification transferts: ${allOps.length} opérations en mémoire');
+      
+      // Filtrer les opérations en attente
+      List<OperationModel> pendingOps = allOps.where((op) => 
+        op.statut == OperationStatus.enAttente &&
+        (op.type == OperationType.transfertNational ||
+         op.type == OperationType.transfertInternationalSortant ||
+         op.type == OperationType.transfertInternationalEntrant)
+      ).toList();
+      
+      // Filtrer par shop si nécessaire (seulement les transferts destinés à ce shop)
+      if (_activeShopFilter != null) {
+        pendingOps = pendingOps.where((op) => 
+          op.shopDestinationId == _activeShopFilter
+        ).toList();
+        debugPrint('🔍 ${pendingOps.length} transferts en attente pour shop $_activeShopFilter');
+      }
+      
+      final previousCount = _pendingOpsCount;
+      _pendingOpsCount = pendingOps.length;
+      
+      if (_pendingOpsCount > 0) {
+        debugPrint('📥 $_pendingOpsCount opération(s) en attente trouvée(s)');
+        
+        // Afficher les détails des opérations en attente
+        for (final op in pendingOps) {
+          debugPrint('   - ID ${op.id}: ${op.type.name}, de Shop ${op.shopSourceId} vers Shop ${op.shopDestinationId}, montant: ${op.montantNet} ${op.devise}');
+        }
+      } else {
+        if (previousCount > 0) {
+          debugPrint('✅ Aucune opération en attente');
+        }
+      }
+      
+      // Notifier les listeners du changement de compteur (avec protection)
+      if (previousCount != _pendingOpsCount) {
+        try {
+          notifyListeners();
+          debugPrint('✅ Listeners notifiés du changement de compteur');
+        } catch (e) {
+          debugPrint('⚠️ Erreur lors de notifyListeners: $e');
+        }
+      }
+      
+    } catch (e, stackTrace) {
+      debugPrint('❌ Erreur lors de la vérification des opérations en attente: $e');
+      debugPrint('📚 Stack trace: $stackTrace');
+      // Ne pas propager l'erreur pour éviter le crash de l'app
+    }
+  }
+  
+  /// Vérifier manuellement les opérations en attente (pour bouton refresh)
+  Future<void> checkPendingOperationsNow() async {
+    await _checkPendingOperations();
+  }
+  
+  /// Récupérer les transferts en attente depuis le serveur MySQL
+  Future<void> _fetchPendingTransfersFromServer(int shopId) async {
+    try {
+      debugPrint('🌐 Récupération des transferts en attente depuis le serveur pour Shop $shopId...');
+      
+      final baseUrl = await AppConfig.getSyncBaseUrl();
+      
+      final url = '$baseUrl/operations/pending_transfers.php?shop_id=$shopId';
+      debugPrint('🔗 URL: $url');
+      
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 10));
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        
+        if (data['success'] == true) {
+          final transfers = data['transfers'] as List;
+          debugPrint('📥 ${transfers.length} transfert(s) récupéré(s) depuis le serveur');
+          
+          // Sauvegarder les transferts localement
+          for (final transferJson in transfers) {
+            try {
+              // Vérifier si l'opération existe déjà localement
+              final existingOps = await LocalDB.instance.getAllOperations();
+              final existingOp = existingOps.where((op) => op.id == transferJson['id']).firstOrNull;
+              
+              if (existingOp == null) {
+                // Nouvelle opération, la sauvegarder
+                final operation = OperationModel.fromJson(transferJson);
+                await LocalDB.instance.saveOperation(operation);
+                debugPrint('   ✅ Transfert ID ${operation.id} sauvegardé localement');
+              } else if (existingOp.statut != OperationStatus.enAttente) {
+                // Opération existe mais statut différent, mettre à jour
+                final operation = OperationModel.fromJson(transferJson);
+                await LocalDB.instance.updateOperation(operation);
+                debugPrint('   🔄 Transfert ID ${operation.id} mis à jour localement');
+              }
+            } catch (e) {
+              debugPrint('   ⚠️ Erreur sauvegarde transfert: $e');
+            }
+          }
+          
+          // Recharger les opérations après ajout/mise à jour (avec protection)
+          try {
+            await loadOperations(shopId: shopId);
+            debugPrint('✅ Opérations rechargées après sync transferts');
+          } catch (e) {
+            debugPrint('⚠️ Erreur rechargement opérations: $e');
+          }
+          
+        } else {
+          debugPrint('⚠️ Réponse serveur: ${data['message']}');
+        }
+      } else {
+        debugPrint('⚠️ Erreur HTTP: ${response.statusCode}');
+      }
+      
+    } catch (e, stackTrace) {
+      debugPrint('❌ Erreur récupération transferts depuis serveur: $e');
+      debugPrint('📚 Stack trace: $stackTrace');
+      // Ne pas bloquer le processus en cas d'erreur
+    }
   }
 }

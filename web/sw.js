@@ -203,9 +203,14 @@ function isStaticResource(url) {
 }
 
 function isAPIRequest(url) {
-  return url.pathname.startsWith('/api/') || 
-         url.pathname.startsWith('/server/') ||
-         API_CACHE_URLS.some(apiUrl => url.pathname.startsWith(apiUrl));
+  // NE GÉRER QUE les requêtes vers le même domaine (localhost ou domaine de l'app)
+  // Ignorer les requêtes vers des API externes (shops.investee-group.com, etc.)
+  const isLocalAPI = url.origin === self.location.origin;
+  const isAPIPath = url.pathname.startsWith('/api/') || 
+                    url.pathname.startsWith('/server/') ||
+                    API_CACHE_URLS.some(apiUrl => url.pathname.startsWith(apiUrl));
+  
+  return isLocalAPI && isAPIPath;
 }
 
 function isNavigationRequest(request) {

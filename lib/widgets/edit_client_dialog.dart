@@ -74,7 +74,7 @@ class _EditClientDialogState extends State<EditClientDialog> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Modifier Client - ${widget.client.nom}',
+                      'Modifier Partenaire - ${widget.client.nom}',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 18,
@@ -118,14 +118,14 @@ class _EditClientDialogState extends State<EditClientDialog> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'Statut du client',
+                                      'Statut du partenaire',
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                         color: _isActive ? Colors.green : Colors.orange,
                                       ),
                                     ),
                                     Text(
-                                      _isActive ? 'Client actif' : 'Client inactif',
+                                      _isActive ? 'Partenaire actif' : 'Partenaire inactif',
                                       style: const TextStyle(fontSize: 12),
                                     ),
                                   ],
@@ -352,7 +352,7 @@ class _EditClientDialogState extends State<EditClientDialog> {
         Navigator.of(context).pop(true);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Client modifié avec succès !'),
+            content: Text('Partenaire modifié avec succès !'),
             backgroundColor: Colors.green,
           ),
         );

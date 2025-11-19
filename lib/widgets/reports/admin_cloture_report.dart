@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
 import '../../models/rapport_cloture_model.dart';
 import '../../models/shop_model.dart';
@@ -33,6 +32,7 @@ class _AdminClotureReportState extends State<AdminClotureReport> {
   bool _isLoading = false;
   String? _errorMessage;
   List<ShopModel> _shops = [];
+  bool _isFiltersExpanded = false; // Add this line to control filter visibility
 
   @override
   void initState() {
@@ -102,10 +102,7 @@ class _AdminClotureReportState extends State<AdminClotureReport> {
       final shop = _shops.firstWhere((s) => s.id == rapport.shopId);
       
       // Générer le PDF avec le nouveau service
-      final pdf = await generateRapportCloturePdf(
-        rapport: rapport,
-        shop: shop,
-      );
+      final pdf = await genererRapportCloturePDF(rapport, shop);
 
       final pdfBytes = await pdf.save();
       final fileName = 'rapportcloture_${shop.designation}_${DateFormat('yyyy-MM-dd').format(_selectedDate)}.pdf';
@@ -131,10 +128,7 @@ class _AdminClotureReportState extends State<AdminClotureReport> {
       final shop = _shops.firstWhere((s) => s.id == rapport.shopId);
       
       // Générer le PDF
-      final pdf = await generateRapportCloturePdf(
-        rapport: rapport,
-        shop: shop,
-      );
+      final pdf = await genererRapportCloturePDF(rapport, shop);
 
       final pdfBytes = await pdf.save();
 
@@ -215,10 +209,7 @@ class _AdminClotureReportState extends State<AdminClotureReport> {
       final shop = _shops.firstWhere((s) => s.id == rapport.shopId);
       
       // Générer le PDF avec le nouveau service
-      final pdf = await generateRapportCloturePdf(
-        rapport: rapport,
-        shop: shop,
-      );
+      final pdf = await genererRapportCloturePDF(rapport, shop);
 
       await Printing.layoutPdf(
         onLayout: (PdfPageFormat format) async => pdf.save(),
@@ -271,77 +262,105 @@ class _AdminClotureReportState extends State<AdminClotureReport> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Filtres du Rapport',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-            const SizedBox(height: 16),
+            // Header with toggle button
             Row(
               children: [
-                const Icon(Icons.calendar_today, color: Color(0xFFDC2626)),
+                const Icon(Icons.filter_list, color: Color(0xFFDC2626)),
                 const SizedBox(width: 12),
                 const Text(
-                  'Date:',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                  'Filtres du Rapport',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    '${_selectedDate.day.toString().padLeft(2, '0')}/${_selectedDate.month.toString().padLeft(2, '0')}/${_selectedDate.year}',
-                    style: const TextStyle(fontSize: 16),
+                const Spacer(),
+                IconButton(
+                  icon: Icon(
+                    _isFiltersExpanded ? Icons.expand_less : Icons.expand_more,
                   ),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    final date = await showDatePicker(
-                      context: context,
-                      initialDate: _selectedDate,
-                      firstDate: DateTime(2020),
-                      lastDate: DateTime.now(),
-                    );
-                    if (date != null) {
-                      setState(() => _selectedDate = date);
-                      _genererRapport();
-                    }
-                  },
-                  icon: const Icon(Icons.edit_calendar),
-                  label: const Text('Changer'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFDC2626),
-                  ),
+                  onPressed: () => setState(() => _isFiltersExpanded = !_isFiltersExpanded),
+                  tooltip: _isFiltersExpanded ? 'Masquer les filtres' : 'Afficher les filtres',
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                const Icon(Icons.store, color: Color(0xFFDC2626)),
-                const SizedBox(width: 12),
-                const Text(
-                  'Shop:',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: DropdownButton<int>(
-                    value: _selectedShopId,
-                    items: _shops.where((shop) => shop.id != null).map((shop) {
-                      return DropdownMenuItem(
-                        value: shop.id!,
-                        child: Text(shop.designation),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedShopId = value;
-                      });
-                      _genererRapport();
-                    },
-                    isExpanded: true,
-                    hint: const Text('Sélectionner un shop'),
-                  ),
-                ),
-              ],
+            
+            // Collapsible filters content
+            AnimatedSize(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              child: _isFiltersExpanded
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.calendar_today, color: Color(0xFFDC2626)),
+                            const SizedBox(width: 12),
+                            const Text(
+                              'Date:',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                '${_selectedDate.day.toString().padLeft(2, '0')}/${_selectedDate.month.toString().padLeft(2, '0')}/${_selectedDate.year}',
+                                style: const TextStyle(fontSize: 16),
+                              ),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: () async {
+                                final date = await showDatePicker(
+                                  context: context,
+                                  initialDate: _selectedDate,
+                                  firstDate: DateTime(2020),
+                                  lastDate: DateTime.now(),
+                                );
+                                if (date != null) {
+                                  setState(() => _selectedDate = date);
+                                  _genererRapport();
+                                }
+                              },
+                              icon: const Icon(Icons.edit_calendar),
+                              label: const Text('Changer'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFDC2626),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            const Icon(Icons.store, color: Color(0xFFDC2626)),
+                            const SizedBox(width: 12),
+                            const Text(
+                              'Shop:',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: DropdownButton<int>(
+                                value: _selectedShopId,
+                                items: _shops.where((shop) => shop.id != null).map((shop) {
+                                  return DropdownMenuItem(
+                                    value: shop.id!,
+                                    child: Text(shop.designation),
+                                  );
+                                }).toList(),
+                                onChanged: (value) {
+                                  setState(() {
+                                    _selectedShopId = value;
+                                  });
+                                  _genererRapport();
+                                },
+                                isExpanded: true,
+                                hint: const Text('Sélectionner un shop'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    )
+                  : const SizedBox.shrink(),
             ),
           ],
         ),
@@ -497,8 +516,7 @@ class _AdminClotureReportState extends State<AdminClotureReport> {
           'Mouvements de la Journée',
           [
             _buildMovementRow('Flots Reçus', rapport.flotRecu, true),
-            _buildMovementRow('Flots En Cours', rapport.flotEnCours, false),
-            _buildMovementRow('Flots Servis', rapport.flotServi, false),
+            _buildMovementRow('Flots Envoyés', rapport.flotEnvoye, false),
             _buildMovementRow('Transferts Reçus', rapport.transfertsRecus, true),
             _buildMovementRow('Transferts Servis', rapport.transfertsServis, false),
             _buildMovementRow('Dépôts Clients', rapport.depotsClients, true),
@@ -561,7 +579,7 @@ class _AdminClotureReportState extends State<AdminClotureReport> {
 
         // Clients
         _buildSection(
-          'Clients',
+          'Partenaires',
           [
             Row(
               children: [
@@ -585,7 +603,7 @@ class _AdminClotureReportState extends State<AdminClotureReport> {
             ),
             const SizedBox(height: 8),
             if (rapport.clientsNousDoivent.isEmpty)
-              const Text('Aucun client débiteur')
+              const Text('Aucun partenaire débiteur')
             else
               SizedBox(
                 height: 200,
@@ -630,7 +648,7 @@ class _AdminClotureReportState extends State<AdminClotureReport> {
             ),
             const SizedBox(height: 8),
             if (rapport.clientsNousDevons.isEmpty)
-              const Text('Aucun client créditeur')
+              const Text('Aucun partenaire créditeur')
             else
               SizedBox(
                 height: 200,

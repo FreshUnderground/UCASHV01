@@ -2,7 +2,8 @@ class AgentModel {
   final int? id;
   final String username;
   final String password;
-  final int shopId;
+  final int? shopId;
+  final String? shopDesignation;  // Nom du shop pour affichage
   final String? nom;
   final String? telephone;
   final bool isActive;
@@ -14,7 +15,8 @@ class AgentModel {
     this.id,
     required this.username,
     required this.password,
-    required this.shopId,
+    this.shopId,
+    this.shopDesignation,
     this.nom,
     this.telephone,
     this.isActive = true,
@@ -29,6 +31,7 @@ class AgentModel {
       username: json['username'],
       password: json['password'],
       shopId: json['shop_id'] ?? json['shopId'], // Support des deux formats
+      shopDesignation: json['shop_designation'] ?? json['shopDesignation'],
       nom: json['nom'],
       telephone: json['telephone'],
       isActive: json['is_active'] == 1 || json['isActive'] == true,
@@ -44,6 +47,7 @@ class AgentModel {
       'username': username,
       'password': password,
       'shop_id': shopId,
+      'shop_designation': shopDesignation,
       'nom': nom,
       'telephone': telephone,
       'is_active': isActive ? 1 : 0,
@@ -58,6 +62,7 @@ class AgentModel {
     String? username,
     String? password,
     int? shopId,
+    String? shopDesignation,
     String? nom,
     String? telephone,
     bool? isActive,
@@ -70,6 +75,7 @@ class AgentModel {
       username: username ?? this.username,
       password: password ?? this.password,
       shopId: shopId ?? this.shopId,
+      shopDesignation: shopDesignation ?? this.shopDesignation,
       nom: nom ?? this.nom,
       telephone: telephone ?? this.telephone,
       isActive: isActive ?? this.isActive,

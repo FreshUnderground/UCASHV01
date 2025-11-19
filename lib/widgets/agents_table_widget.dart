@@ -54,17 +54,18 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
     
     return Card(
       elevation: 2,
-      child: Column(
-        children: [
-          // Header avec filtres et actions responsive
-          _buildResponsiveHeader(isMobile),
-          const Divider(height: 1),
-          
-          // Tableau des agents
-          Expanded(
-            child: _buildAgentsTable(isMobile),
-          ),
-        ],
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header avec filtres et actions responsive
+            _buildResponsiveHeader(isMobile),
+            const Divider(height: 1),
+            
+            // Tableau des agents
+            _buildAgentsTable(isMobile),
+          ],
+        ),
       ),
     );
   }
@@ -319,178 +320,182 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
           return _buildMobileAgentsList(filteredAgents, shopService);
         }
 
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              minWidth: MediaQuery.of(context).size.width - 48,
-            ),
-            child: DataTable(
-              columnSpacing: 12,
-              dataRowMinHeight: 56,
-              dataRowMaxHeight: 56,
-              headingRowHeight: 48,
-              columns: const [
-                DataColumn(label: Text('Agent', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
-                DataColumn(label: Text('Shop', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
-                DataColumn(label: Text('Contact', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
-                DataColumn(label: Text('Statut', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
-                DataColumn(label: Text('Créé le', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
-                DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
-              ],
-              rows: filteredAgents.map((agent) {
-                final shop = shopService.shops.firstWhere(
-                  (s) => s.id == agent.shopId,
-                  orElse: () => ShopModel(
-                    id: 0,
-                    designation: 'Shop Inconnu',
-                    localisation: 'Localisation inconnue',
-                    capitalInitial: 0,
-                  ),
-                );
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minWidth: constraints.maxWidth,
+                ),
+                child: DataTable(
+                  columnSpacing: 12,
+                  dataRowMinHeight: 56,
+                  dataRowMaxHeight: 56,
+                  headingRowHeight: 48,
+                  columns: const [
+                    DataColumn(label: Text('Agent', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+                    DataColumn(label: Text('Shop', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+                    DataColumn(label: Text('Contact', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+                    DataColumn(label: Text('Statut', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+                    DataColumn(label: Text('Créé le', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+                    DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+                  ],
+                  rows: filteredAgents.map((agent) {
+                    final shop = shopService.shops.firstWhere(
+                      (s) => s.id == agent.shopId,
+                      orElse: () => ShopModel(
+                        id: 0,
+                        designation: 'Shop Inconnu',
+                        localisation: 'Localisation inconnue',
+                        capitalInitial: 0,
+                      ),
+                    );
 
-              return DataRow(
-                cells: [
-                  // Agent
-                  DataCell(
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          agent.username,
-                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
-                          overflow: TextOverflow.ellipsis,
+                    return DataRow(
+                      cells: [
+                        // Agent
+                        DataCell(
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                agent.username,
+                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (agent.nom != null)
+                                Text(
+                                  agent.nom!,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.grey[600],
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                            ],
+                          ),
                         ),
-                        if (agent.nom != null)
+                        
+                        // Shop
+                        DataCell(
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                shop.designation,
+                                style: const TextStyle(fontSize: 12),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                shop.localisation ?? 'Localisation inconnue',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey[600],
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        
+                        // Contact
+                        DataCell(
                           Text(
-                            agent.nom!,
+                            agent.telephone ?? 'Non renseigné',
+                            style: const TextStyle(fontSize: 12),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        
+                        // Statut
+                        DataCell(
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: agent.isActive ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: agent.isActive ? Colors.green : Colors.red,
+                                width: 1,
+                              ),
+                            ),
+                            child: Text(
+                              agent.isActive ? 'Actif' : 'Inactif',
+                              style: TextStyle(
+                                color: agent.isActive ? Colors.green : Colors.red,
+                                fontWeight: FontWeight.w500,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ),
+                        ),
+                        
+                        // Date de création
+                        DataCell(
+                          Text(
+                            agent.createdAt != null
+                                ? '${agent.createdAt!.day}/${agent.createdAt!.month}/${agent.createdAt!.year}'
+                                : 'Non renseigné',
                             style: TextStyle(
                               fontSize: 10,
                               color: Colors.grey[600],
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
-                      ],
-                    ),
-                  ),
-                  
-                  // Shop
-                  DataCell(
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          shop.designation,
-                          style: const TextStyle(fontSize: 12),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Text(
-                          shop.localisation,
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.grey[600],
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  
-                  // Contact
-                  DataCell(
-                    Text(
-                      agent.telephone ?? 'Non renseigné',
-                      style: const TextStyle(fontSize: 12),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  
-                  // Statut
-                  DataCell(
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: agent.isActive ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: agent.isActive ? Colors.green : Colors.red,
-                          width: 1,
-                        ),
-                      ),
-                      child: Text(
-                        agent.isActive ? 'Actif' : 'Inactif',
-                        style: TextStyle(
-                          color: agent.isActive ? Colors.green : Colors.red,
-                          fontWeight: FontWeight.w500,
-                          fontSize: 10,
-                        ),
-                      ),
-                    ),
-                  ),
-                  
-                  // Date de création
-                  DataCell(
-                    Text(
-                      agent.createdAt != null
-                          ? '${agent.createdAt!.day}/${agent.createdAt!.month}/${agent.createdAt!.year}'
-                          : 'Non renseigné',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.grey[600],
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  
-                  // Actions
-                  DataCell(
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Modifier
-                        IconButton(
-                          onPressed: () => _editAgent(agent),
-                          icon: const Icon(Icons.edit, size: 14),
-                          tooltip: 'Modifier',
-                          color: Colors.blue,
-                          padding: const EdgeInsets.all(4),
-                          constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
                         ),
                         
-                        // Activer/Désactiver
-                        IconButton(
-                          onPressed: () => _toggleAgentStatus(agent),
-                          icon: Icon(
-                            agent.isActive ? Icons.pause : Icons.play_arrow,
-                            size: 14,
+                        // Actions
+                        DataCell(
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Modifier
+                              IconButton(
+                                onPressed: () => _editAgent(agent),
+                                icon: const Icon(Icons.edit, size: 14),
+                                tooltip: 'Modifier',
+                                color: Colors.blue,
+                                padding: const EdgeInsets.all(4),
+                                constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                              ),
+                              
+                              // Activer/Désactiver
+                              IconButton(
+                                onPressed: () => _toggleAgentStatus(agent),
+                                icon: Icon(
+                                  agent.isActive ? Icons.pause : Icons.play_arrow,
+                                  size: 14,
+                                ),
+                                tooltip: agent.isActive ? 'Désactiver' : 'Activer',
+                                color: agent.isActive ? Colors.orange : Colors.green,
+                                padding: const EdgeInsets.all(4),
+                                constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                              ),
+                              
+                              // Supprimer
+                              IconButton(
+                                onPressed: () => _deleteAgent(agent),
+                                icon: const Icon(Icons.delete, size: 14),
+                                tooltip: 'Supprimer',
+                                color: Colors.red,
+                                padding: const EdgeInsets.all(4),
+                                constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                              ),
+                            ],
                           ),
-                          tooltip: agent.isActive ? 'Désactiver' : 'Activer',
-                          color: agent.isActive ? Colors.orange : Colors.green,
-                          padding: const EdgeInsets.all(4),
-                          constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                        ),
-                        
-                        // Supprimer
-                        IconButton(
-                          onPressed: () => _deleteAgent(agent),
-                          icon: const Icon(Icons.delete, size: 14),
-                          tooltip: 'Supprimer',
-                          color: Colors.red,
-                          padding: const EdgeInsets.all(4),
-                          constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
                         ),
                       ],
-                    ),
-                  ),
-                ],
-              );
-            }).toList(),
-            ),
-          ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            );
+          }
         );
       },
     );
@@ -587,10 +592,8 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
   }
 
   Widget _buildMobileAgentsList(List<AgentModel> agents, ShopService shopService) {
-    return ListView.builder(
-      padding: const EdgeInsets.all(8),
-      itemCount: agents.length,
-      itemBuilder: (context, index) {
+    return Column(
+      children: List.generate(agents.length, (index) {
         final agent = agents[index];
         final shop = shopService.shops.firstWhere(
           (s) => s.id == agent.shopId,
@@ -660,7 +663,7 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
-                        shop.designation,
+                        '${shop.designation} (${shop.localisation ?? 'Localisation inconnue'})',
                         style: const TextStyle(fontSize: 14),
                       ),
                     ),
@@ -716,7 +719,7 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
             ),
           ),
         );
-      },
+      }),
     );
   }
 

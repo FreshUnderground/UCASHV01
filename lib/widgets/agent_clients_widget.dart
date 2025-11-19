@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/client_service.dart';
 import '../services/auth_service.dart';
+import '../services/operation_service.dart';
 import '../models/client_model.dart';
+import '../models/operation_model.dart';
 import '../widgets/simple_transfer_dialog.dart';
 import 'edit_client_dialog.dart';
 
@@ -45,6 +47,41 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
       return matchesSearch && matchesStatus;
     }).toList();
   }
+  
+  /// Calculer le solde réel d'un client à partir de ses opérations
+  Map<String, double> _calculateClientRealBalance(int clientId, OperationService operationService) {
+    // Filtrer les opérations du client
+    final clientOperations = operationService.operations.where((op) => op.clientId == clientId).toList();
+    
+    double soldeUSD = 0.0;
+    double soldeCDF = 0.0;
+    double soldeUGX = 0.0;
+    
+    for (final op in clientOperations) {
+      // Dépôts: augmentent le solde
+      // Retraits: diminuent le solde
+      final montant = op.montantNet;
+      final devise = op.devise;
+      
+      if (op.type == OperationType.depot) {
+        // Dépôt augmente le solde
+        if (devise == 'USD') soldeUSD += montant;
+        else if (devise == 'CDF') soldeCDF += montant;
+        else if (devise == 'UGX') soldeUGX += montant;
+      } else if (op.type == OperationType.retrait) {
+        // Retrait diminue le solde
+        if (devise == 'USD') soldeUSD -= montant;
+        else if (devise == 'CDF') soldeCDF -= montant;
+        else if (devise == 'UGX') soldeUGX -= montant;
+      }
+    }
+    
+    return {
+      'USD': soldeUSD,
+      'CDF': soldeCDF,
+      'UGX': soldeUGX,
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +92,6 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
     return Padding(
       padding: EdgeInsets.all(padding),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header avec recherche et filtres
@@ -66,9 +102,8 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
           _buildStats(),
           const SizedBox(height: 16),
           
-          // Liste des clients - hauteur fixe pour éviter Expanded dans ScrollView
-          SizedBox(
-            height: 400,
+          // Liste des clients - Expanded pour remplir tout l'espace disponible et permettre le scroll
+          Expanded(
             child: _buildClientsList(),
           ),
         ],
@@ -102,7 +137,7 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
                   ElevatedButton.icon(
                     onPressed: _showCreateClientDialog,
                     icon: const Icon(Icons.person_add, size: 18),
-                    label: const Text('Nouveau Client'),
+                    label: const Text('Nouveau Partenaire'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFDC2626),
                       foregroundColor: Colors.white,
@@ -125,7 +160,7 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
                   ElevatedButton.icon(
                     onPressed: _showCreateClientDialog,
                     icon: const Icon(Icons.person_add, size: 18),
-                    label: const Text('Nouveau Client'),
+                    label: const Text('Nouveau Partenaire'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFDC2626),
                       foregroundColor: Colors.white,
@@ -326,7 +361,7 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
                 ElevatedButton.icon(
                   onPressed: _showCreateClientDialog,
                   icon: const Icon(Icons.person_add),
-                  label: const Text('Nouveau Client'),
+                  label: const Text('Nouveau Partenaire'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFDC2626),
                     foregroundColor: Colors.white,
@@ -353,6 +388,10 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
   }
 
   Widget _buildClientItem(ClientModel client) {
+    // Calculer le solde réel à partir des opérations
+    final operationService = Provider.of<OperationService>(context, listen: false);
+    final realBalance = _calculateClientRealBalance(client.id!, operationService);
+    
     return ListTile(
       leading: CircleAvatar(
         backgroundColor: client.isActive 
@@ -411,22 +450,22 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
               const Icon(Icons.account_balance_wallet, size: 14, color: Colors.green),
               const SizedBox(width: 6),
               Text(
-                'Solde: ${client.solde.toStringAsFixed(2)} \$',
+                'Solde: ${realBalance['USD']!.toStringAsFixed(2)} \$',
                 style: TextStyle(
-                  color: client.solde >= 0 ? Colors.green : Colors.red,
+                  color: realBalance['USD']! >= 0 ? Colors.green : Colors.red,
                   fontWeight: FontWeight.w600,
                   fontSize: 14,
                 ),
               ),
               // Solde CDF si disponible
-              if (client.soldeDevise2 != null && client.soldeDevise2! > 0) ...[
+              if (realBalance['CDF']! > 0) ...[
                 const SizedBox(width: 8),
                 const Text('•', style: TextStyle(color: Colors.grey)),
                 const SizedBox(width: 8),
                 Text(
-                  '${client.soldeDevise2!.toStringAsFixed(0)} FC',
+                  '${realBalance['CDF']!.toStringAsFixed(0)} FC',
                   style: TextStyle(
-                    color: client.soldeDevise2! >= 0 ? Colors.green.withOpacity(0.8) : Colors.red.withOpacity(0.8),
+                    color: realBalance['CDF']! >= 0 ? Colors.green.withOpacity(0.8) : Colors.red.withOpacity(0.8),
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
                   ),
@@ -478,6 +517,16 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
             ),
           ),
           const PopupMenuItem(
+            value: 'statement',
+            child: Row(
+              children: [
+                Icon(Icons.receipt_long, size: 16, color: Colors.purple),
+                SizedBox(width: 8),
+                Text('Voir le relevé'),
+              ],
+            ),
+          ),
+          const PopupMenuItem(
             value: 'transfer',
             child: Row(
               children: [
@@ -514,6 +563,8 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
         ],
         onSelected: (value) => _handleClientAction(value, client),
       ),
+    
+    
     );
   }
 
@@ -521,6 +572,9 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
     switch (action) {
       case 'edit':
         _editClient(client);
+        break;
+      case 'statement':
+        _showClientStatement(client);
         break;
       case 'transfer':
         _createTransferForClient(client);
@@ -588,6 +642,32 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
     });
   }
 
+  void _showClientStatement(ClientModel client) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          appBar: AppBar(
+            title: Row(
+              children: [
+                const Icon(Icons.receipt_long, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Relevé de ${client.nom}',
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.purple,
+            iconTheme: const IconThemeData(color: Colors.white),
+          ),
+          body: _ClientStatementView(client: client),
+        ),
+      ),
+    );
+  }
+
   Future<void> _toggleClientStatus(ClientModel client) async {
     final clientService = Provider.of<ClientService>(context, listen: false);
     final updatedClient = client.copyWith(isActive: !client.isActive);
@@ -635,7 +715,7 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
       if (success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Client supprimé avec succès'),
+            content: Text('Partenaire supprimé avec succès'),
             backgroundColor: Colors.green,
           ),
         );
@@ -779,7 +859,7 @@ class _CreateClientDialogState extends State<_CreateClientDialog> {
                       // Créer un compte
                       CheckboxListTile(
                         title: const Text('Créer un compte utilisateur'),
-                        subtitle: const Text('Permettre au client de se connecter'),
+                        subtitle: const Text('Permettre au partenaire de se connecter'),
                         value: _createAccount,
                         onChanged: (value) {
                           setState(() {
@@ -902,7 +982,7 @@ class _CreateClientDialogState extends State<_CreateClientDialog> {
         Navigator.of(context).pop(true);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Client créé avec succès !'),
+            content: Text('Partenaire créé avec succès !'),
             backgroundColor: Colors.green,
           ),
         );
@@ -929,6 +1009,247 @@ class _CreateClientDialogState extends State<_CreateClientDialog> {
           _isLoading = false;
         });
       }
+    }
+  }
+}
+
+// Widget pour afficher le relevé d'un client spécifique
+class _ClientStatementView extends StatelessWidget {
+  final ClientModel client;
+
+  const _ClientStatementView({required this.client});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<OperationService>(
+      builder: (context, operationService, child) {
+        // Filtrer les opérations du client
+        final clientOperations = operationService.operations
+            .where((op) => op.clientId == client.id)
+            .toList()
+          ..sort((a, b) => b.dateOp.compareTo(a.dateOp));
+
+        if (operationService.isLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (clientOperations.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.receipt_long_outlined,
+                  size: 64,
+                  color: Colors.grey[400],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Aucune transaction pour ${client.nom}',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return Column(
+          children: [
+            // Informations client
+            Container(
+              padding: const EdgeInsets.all(16),
+              color: Colors.purple[50],
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: Colors.purple,
+                    child: Text(
+                      client.nom.substring(0, 1).toUpperCase(),
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          client.nom,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          client.telephone,
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      const Text(
+                        'Total transactions',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      Text(
+                        '${clientOperations.length}',
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.purple,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            // Liste des transactions
+            Expanded(
+              child: ListView.builder(
+                itemCount: clientOperations.length,
+                itemBuilder: (context, index) {
+                  final operation = clientOperations[index];
+                  return _buildOperationTile(operation);
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildOperationTile(OperationModel operation) {
+    IconData icon;
+    Color iconColor;
+    String typeLabel;
+
+    switch (operation.type) {
+      case OperationType.depot:
+        icon = Icons.arrow_downward;
+        iconColor = Colors.green;
+        typeLabel = 'Dépôt';
+        break;
+      case OperationType.retrait:
+        icon = Icons.arrow_upward;
+        iconColor = Colors.orange;
+        typeLabel = 'Retrait';
+        break;
+      case OperationType.transfertNational:
+        icon = Icons.send;
+        iconColor = Colors.blue;
+        typeLabel = 'Transfert National';
+        break;
+      case OperationType.transfertInternationalSortant:
+        icon = Icons.flight_takeoff;
+        iconColor = Colors.purple;
+        typeLabel = 'Transfert International';
+        break;
+      case OperationType.transfertInternationalEntrant:
+        icon = Icons.flight_land;
+        iconColor = Colors.teal;
+        typeLabel = 'Réception International';
+        break;
+      default:
+        icon = Icons.swap_horiz;
+        iconColor = Colors.grey;
+        typeLabel = operation.type.name;
+    }
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: iconColor.withOpacity(0.1),
+          child: Icon(icon, color: iconColor, size: 20),
+        ),
+        title: Text(
+          typeLabel,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _formatDate(operation.dateOp),
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+            if (operation.destinataire != null)
+              Text(
+                operation.destinataire!,
+                style: const TextStyle(fontSize: 12),
+              ),
+          ],
+        ),
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              '${operation.montantNet.toStringAsFixed(2)} ${operation.devise}',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: operation.type == OperationType.depot
+                    ? Colors.green
+                    : Colors.orange,
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: _getStatusColor(operation.statut).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                _getStatusLabel(operation.statut),
+                style: TextStyle(
+                  fontSize: 10,
+                  color: _getStatusColor(operation.statut),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  Color _getStatusColor(OperationStatus statut) {
+    switch (statut) {
+      case OperationStatus.enAttente:
+        return Colors.orange;
+      case OperationStatus.validee:
+        return Colors.blue;
+      case OperationStatus.terminee:
+        return Colors.green;
+      case OperationStatus.annulee:
+        return Colors.red;
+    }
+  }
+
+  String _getStatusLabel(OperationStatus statut) {
+    switch (statut) {
+      case OperationStatus.enAttente:
+        return 'En attente';
+      case OperationStatus.validee:
+        return 'Validée';
+      case OperationStatus.terminee:
+        return 'Terminée';
+      case OperationStatus.annulee:
+        return 'Annulée';
     }
   }
 }

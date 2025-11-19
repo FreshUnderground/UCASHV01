@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import '../models/operation_model.dart';
 import '../models/shop_model.dart';
 import '../models/client_model.dart';
@@ -810,12 +811,18 @@ class ReportService extends ChangeNotifier {
 
   void _setLoading(bool loading) {
     _isLoading = loading;
-    notifyListeners();
+    // Defer notifyListeners to avoid calling during build phase
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      notifyListeners();
+    });
   }
 
   void _clearError() {
     _errorMessage = null;
-    notifyListeners();
+    // Defer notifyListeners to avoid calling during build phase
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      notifyListeners();
+    });
   }
 
   // Méthode de diagnostic pour vérifier l'impact des dépôts/retraits

@@ -33,22 +33,25 @@ class _ShopsManagementState extends State<ShopsManagement> {
   @override
   Widget build(BuildContext context) {
     return context.pageContainer(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header responsive
-          _buildHeader(),
-          context.verticalSpace(mobile: 16, tablet: 20, desktop: 24),
-          
-          // Statistiques rapides
-          _buildStats(),
-          context.verticalSpace(mobile: 16, tablet: 20, desktop: 24),
-          
-          // Tableau des shops
-          Expanded(
-            child: _buildShopsTable(),
-          ),
-        ],
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header responsive
+            _buildHeader(),
+            context.verticalSpace(mobile: 16, tablet: 20, desktop: 24),
+            
+            // Statistiques rapides
+            _buildStats(),
+            context.verticalSpace(mobile: 16, tablet: 20, desktop: 24),
+            
+            // Tableau des shops
+            SizedBox(
+              height: MediaQuery.of(context).size.height * 0.6,
+              child: _buildShopsTable(),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -59,7 +62,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
         children: [
           Expanded(
             child: Text(
-              'Gestion des Shops',
+              'Gestion des Clients (Partenaires)',
               style: context.titleAccent,
             ),
           ),
@@ -81,7 +84,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
           ElevatedButton.icon(
             onPressed: _showCreateDialog,
             icon: Icon(Icons.add, size: context.fluidIcon(mobile: 16, tablet: 18, desktop: 20)),
-            label: Text(context.isSmallScreen ? 'Nouveau' : 'Nouveau Shop'),
+            label: Text(context.isSmallScreen ? 'Nouveau' : 'Nouveau Partenaire'),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFDC2626),
               foregroundColor: Colors.white,
@@ -106,9 +109,9 @@ class _ShopsManagementState extends State<ShopsManagement> {
           aspectRatio: context.isSmallScreen ? 1.3 : 1.1,
           children: [
             _buildStatCard(
-              'Total Shops',
+              'Total Partenaires',
               '${stats['totalShops']}',
-              Icons.store,
+              Icons.people,
               const Color(0xFF1976D2),
             ),
             _buildStatCard(
@@ -124,7 +127,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
               const Color(0xFFFF9800),
             ),
             _buildStatCard(
-              'Shops Actifs',
+              'Partenaires Actifs',
               '${stats['activeShops']}',
               Icons.check_circle,
               const Color(0xFF4CAF50),
@@ -193,18 +196,18 @@ class _ShopsManagementState extends State<ShopsManagement> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            Icons.store_outlined,
+            Icons.people_outline,
             size: context.fluidIcon(mobile: 48, tablet: 56, desktop: 64),
             color: Colors.grey[400],
           ),
           context.verticalSpace(mobile: 12, tablet: 16, desktop: 20),
           Text(
-            'Aucun shop créé',
+            'Aucun partenaire créé',
             style: context.h3.copyWith(color: Colors.grey[600]),
           ),
           context.verticalSpace(mobile: 6, tablet: 8, desktop: 10),
           Text(
-            'Cliquez sur "Nouveau Shop" pour créer votre premier shop',
+            'Cliquez sur "Nouveau Partenaire" pour créer votre premier partenaire',
             style: context.bodySecondary,
             textAlign: TextAlign.center,
           ),
@@ -214,18 +217,13 @@ class _ShopsManagementState extends State<ShopsManagement> {
   }
 
   Widget _buildMobileShopsList(List<ShopModel> shops) {
-    return ListView.separated(
-      padding: context.fluidPadding(
-        mobile: const EdgeInsets.all(12),
-        tablet: const EdgeInsets.all(16),
-        desktop: const EdgeInsets.all(20),
-      ),
-      itemCount: shops.length,
-      separatorBuilder: (context, index) => const Divider(),
-      itemBuilder: (context, index) {
-        final shop = shops[index];
-        return _buildMobileShopCard(shop);
-      },
+    return Column(
+      children: [
+        for (int i = 0; i < shops.length; i++) ...[
+          _buildMobileShopCard(shops[i]),
+          if (i < shops.length - 1) const Divider(),
+        ],
+      ],
     );
   }
 
@@ -368,7 +366,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
             columns: const [
               DataColumn(
                 label: Text(
-                  'Shop',
+                  'Partenaire',
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
@@ -536,7 +534,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Confirmer la suppression'),
-        content: Text('Êtes-vous sûr de vouloir supprimer le shop "${shop.designation}" ?'),
+        content: Text('Êtes-vous sûr de vouloir supprimer le partenaire "${shop.designation}" ?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -551,7 +549,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('Shop supprimé avec succès'),
+                      content: Text('Partenaire supprimé avec succès'),
                       backgroundColor: Colors.green,
                     ),
                   );

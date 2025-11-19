@@ -7,6 +7,9 @@ import '../models/agent_model.dart';
 import '../models/shop_model.dart';
 import 'create_agent_dialog.dart';
 import 'edit_agent_dialog.dart';
+import '../utils/responsive_utils.dart';
+import '../theme/ucash_typography.dart';
+import '../theme/ucash_containers.dart';
 
 class AgentsManagementWidget extends StatefulWidget {
   const AgentsManagementWidget({super.key});
@@ -32,56 +35,141 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
   @override
   Widget build(BuildContext context) {
     return Card(
-      elevation: 2,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header avec boutons d'action
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: const BoxDecoration(
-              color: Color(0xFFF8F9FA),
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(8),
-                topRight: Radius.circular(8),
+      elevation: ResponsiveUtils.getFluidSpacing(context, mobile: 1, tablet: 1.5, desktop: 2),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header avec boutons d'action
+            Container(
+              padding: ResponsiveUtils.getFluidPadding(
+                context,
+                mobile: const EdgeInsets.all(16),
+                tablet: const EdgeInsets.all(18),
+                desktop: const EdgeInsets.all(20),
+              ),
+              decoration: const BoxDecoration(
+                color: Color(0xFFF8F9FA),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(8),
+                  topRight: Radius.circular(8),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Gestion des Agents',
+                    style: TextStyle(
+                      fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 16, tablet: 17, desktop: 18),
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFFDC2626),
+                    ),
+                  ),
+                  _buildActionButtons(),
+                ],
               ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Gestion des Agents',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFFDC2626),
-                  ),
-                ),
-                _buildActionButtons(),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          
-          // Statistiques des agents
-          _buildAgentStats(),
-          
-          const Divider(height: 1),
-          
-          // Liste des agents
-          _buildAgentsList(),
-        ],
+            const Divider(height: 1),
+            
+            // Statistiques des agents
+            _buildAgentStats(),
+            
+            const Divider(height: 1),
+            
+            // Liste des agents
+            _buildAgentsList(),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildActionButtons() {
+    if (context.isSmallScreen) {
+      return Wrap(
+        spacing: ResponsiveUtils.getFluidSpacing(context, mobile: 6, tablet: 7, desktop: 8),
+        runSpacing: ResponsiveUtils.getFluidSpacing(context, mobile: 6, tablet: 7, desktop: 8),
+        children: [
+          // Bouton Actualiser
+          IconButton(
+            onPressed: _loadData,
+            icon: Icon(Icons.refresh,
+              size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
+            ),
+            tooltip: 'Actualiser',
+            color: const Color(0xFFDC2626),
+          ),
+          
+          // Bouton Vérifier Admin
+          IconButton(
+            onPressed: _verifyAdminExists,
+            icon: Icon(Icons.admin_panel_settings,
+              size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
+            ),
+            tooltip: 'Vérifier Admin',
+            color: Colors.green,
+          ),
+          
+          // Bouton Debug
+          IconButton(
+            onPressed: _showDebugInfo,
+            icon: Icon(Icons.bug_report,
+              size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
+            ),
+            tooltip: 'Debug Info',
+            color: Colors.purple,
+          ),
+          
+          // Bouton Agents de Test
+          IconButton(
+            onPressed: _createTestAgents,
+            icon: Icon(Icons.science,
+              size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
+            ),
+            tooltip: 'Créer Agents de Test',
+            color: Colors.cyan,
+          ),
+          
+          // Bouton Nouveau Agent
+          ElevatedButton.icon(
+            onPressed: _showCreateAgentDialog,
+            icon: Icon(Icons.person_add,
+              size: ResponsiveUtils.getFluidIconSize(context, mobile: 14, tablet: 15, desktop: 16),
+            ),
+            label: Text('Nouveau',
+              style: TextStyle(
+                fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 12, tablet: 13, desktop: 14),
+              ),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+              padding: ResponsiveUtils.getFluidPadding(
+                context,
+                mobile: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                tablet: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                desktop: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(
+                  ResponsiveUtils.getFluidBorderRadius(context, mobile: 6, tablet: 7, desktop: 8),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    
     return Row(
       children: [
         // Bouton Actualiser
         IconButton(
           onPressed: _loadData,
-          icon: const Icon(Icons.refresh),
+          icon: Icon(Icons.refresh,
+            size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
+          ),
           tooltip: 'Actualiser',
           color: const Color(0xFFDC2626),
         ),
@@ -89,7 +177,9 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
         // Bouton Vérifier Admin
         IconButton(
           onPressed: _verifyAdminExists,
-          icon: const Icon(Icons.admin_panel_settings),
+          icon: Icon(Icons.admin_panel_settings,
+            size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
+          ),
           tooltip: 'Vérifier Admin',
           color: Colors.green,
         ),
@@ -97,7 +187,9 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
         // Bouton Debug
         IconButton(
           onPressed: _showDebugInfo,
-          icon: const Icon(Icons.bug_report),
+          icon: Icon(Icons.bug_report,
+            size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
+          ),
           tooltip: 'Debug Info',
           color: Colors.purple,
         ),
@@ -105,24 +197,39 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
         // Bouton Agents de Test
         IconButton(
           onPressed: _createTestAgents,
-          icon: const Icon(Icons.science),
+          icon: Icon(Icons.science,
+            size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
+          ),
           tooltip: 'Créer Agents de Test',
           color: Colors.cyan,
         ),
         
-        const SizedBox(width: 8),
+        SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 6, tablet: 7, desktop: 8)),
         
         // Bouton Nouveau Agent
         ElevatedButton.icon(
           onPressed: _showCreateAgentDialog,
-          icon: const Icon(Icons.person_add, size: 16),
-          label: const Text('Nouveau Agent'),
+          icon: Icon(Icons.person_add,
+            size: ResponsiveUtils.getFluidIconSize(context, mobile: 14, tablet: 15, desktop: 16),
+          ),
+          label: Text('Nouveau Agent',
+            style: TextStyle(
+              fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 12, tablet: 13, desktop: 14),
+            ),
+          ),
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFFDC2626),
             foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: ResponsiveUtils.getFluidPadding(
+              context,
+              mobile: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              tablet: const EdgeInsets.symmetric(horizontal: 15, vertical: 7.5),
+              desktop: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            ),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(
+                ResponsiveUtils.getFluidBorderRadius(context, mobile: 6, tablet: 7, desktop: 8),
+              ),
             ),
           ),
         ),
@@ -136,8 +243,56 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
         final agents = agentService.agents;
         final activeAgents = agents.where((a) => a.isActive).length;
         
+        if (context.isSmallScreen) {
+          return Container(
+            padding: ResponsiveUtils.getFluidPadding(
+              context,
+              mobile: const EdgeInsets.all(16),
+              tablet: const EdgeInsets.all(18),
+              desktop: const EdgeInsets.all(20),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildStatCard(
+                        'Total Agents',
+                        '${agents.length}',
+                        Icons.people,
+                        Colors.blue,
+                      ),
+                    ),
+                    SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
+                    Expanded(
+                      child: _buildStatCard(
+                        'Agents Actifs',
+                        '$activeAgents',
+                        Icons.check_circle,
+                        Colors.green,
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
+                _buildStatCard(
+                  'Agents Inactifs',
+                  '${agents.length - activeAgents}',
+                  Icons.person_off,
+                  Colors.orange,
+                ),
+              ],
+            ),
+          );
+        }
+        
         return Container(
-          padding: const EdgeInsets.all(20),
+          padding: ResponsiveUtils.getFluidPadding(
+            context,
+            mobile: const EdgeInsets.all(16),
+            tablet: const EdgeInsets.all(18),
+            desktop: const EdgeInsets.all(20),
+          ),
           child: Row(
             children: [
               _buildStatCard(
@@ -146,14 +301,14 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
                 Icons.people,
                 Colors.blue,
               ),
-              const SizedBox(width: 16),
+              SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
               _buildStatCard(
                 'Agents Actifs',
                 '$activeAgents',
                 Icons.check_circle,
                 Colors.green,
               ),
-              const SizedBox(width: 16),
+              SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
               _buildStatCard(
                 'Agents Inactifs',
                 '${agents.length - activeAgents}',
@@ -168,37 +323,45 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
   }
 
   Widget _buildStatCard(String title, String value, IconData icon, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withOpacity(0.3)),
+    return Container(
+      padding: ResponsiveUtils.getFluidPadding(
+        context,
+        mobile: const EdgeInsets.all(12),
+        tablet: const EdgeInsets.all(14),
+        desktop: const EdgeInsets.all(16),
+      ),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(
+          ResponsiveUtils.getFluidBorderRadius(context, mobile: 6, tablet: 7, desktop: 8),
         ),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 24),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, 
+            color: color, 
+            size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
+          ),
+          SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 6, tablet: 7, desktop: 8)),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 18, tablet: 19, desktop: 20),
+              fontWeight: FontWeight.bold,
+              color: color,
             ),
-            const SizedBox(height: 4),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-              ),
-              textAlign: TextAlign.center,
+          ),
+          SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 3, tablet: 3.5, desktop: 4)),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 10, tablet: 11, desktop: 12),
+              color: Colors.grey[600],
             ),
-          ],
-        ),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }
@@ -217,6 +380,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
           return Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.error, color: Colors.red, size: 48),
                 const SizedBox(height: 16),
@@ -240,6 +404,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
           return Padding(
             padding: const EdgeInsets.all(40),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.people_outline, color: Colors.grey, size: 64),
                 const SizedBox(height: 16),
@@ -272,27 +437,25 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
           );
         }
 
-        return Container(
-          constraints: const BoxConstraints(maxHeight: 400),
-          child: ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: agents.length,
-            separatorBuilder: (context, index) => const Divider(),
-            itemBuilder: (context, index) {
-              final agent = agents[index];
-              final shop = shopService.shops.firstWhere(
-                (s) => s.id == agent.shopId,
-                orElse: () => ShopModel(
-                  id: 0,
-                  designation: 'Shop Inconnu',
-                  localisation: 'Localisation inconnue',
-                  capitalInitial: 0,
+        // Liste des agents dans une colonne (déjà dans un SingleChildScrollView)
+        return Column(
+          children: [
+            for (int i = 0; i < agents.length; i++) ...[
+              _buildAgentItem(
+                agents[i],
+                shopService.shops.firstWhere(
+                  (s) => s.id == agents[i].shopId,
+                  orElse: () => ShopModel(
+                    id: 0,
+                    designation: 'Shop Inconnu',
+                    localisation: 'Localisation inconnue',
+                    capitalInitial: 0,
+                  ),
                 ),
-              );
-              
-              return _buildAgentItem(agent, shop);
-            },
-          ),
+              ),
+              if (i < agents.length - 1) const Divider(height: 1),
+            ],
+          ],
         );
       },
     );
@@ -300,43 +463,68 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
 
   Widget _buildAgentItem(AgentModel agent, ShopModel shop) {
     return ListTile(
+      contentPadding: ResponsiveUtils.getFluidPadding(
+        context,
+        mobile: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        tablet: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        desktop: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      ),
       leading: CircleAvatar(
+        radius: ResponsiveUtils.getFluidSpacing(context, mobile: 20, tablet: 22, desktop: 24),
         backgroundColor: agent.isActive 
             ? Colors.green.withOpacity(0.2)
             : Colors.grey.withOpacity(0.2),
         child: Icon(
           Icons.person,
           color: agent.isActive ? Colors.green : Colors.grey,
+          size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
         ),
       ),
       title: Text(
         agent.username,
-        style: const TextStyle(fontWeight: FontWeight.w600),
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
+        ),
       ),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (agent.nom != null) Text('Nom: ${agent.nom}'),
-          Text('Shop: ${shop.designation}'),
-          if (agent.telephone != null) Text('Tél: ${agent.telephone}'),
+          Text('Shop ID: ${agent.shopId} - ${shop.designation}',
+            style: TextStyle(
+              fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 12, tablet: 13, desktop: 14),
+            ),
+          ),
+          const SizedBox(height: 4),
           Text(
-            'Statut: ${agent.isActive ? "Actif" : "Inactif"}',
+            agent.isActive ? "✓ Actif" : "✗ Inactif",
             style: TextStyle(
               color: agent.isActive ? Colors.green : Colors.orange,
               fontWeight: FontWeight.w500,
+              fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 12, tablet: 13, desktop: 14),
             ),
           ),
         ],
       ),
       trailing: PopupMenuButton<String>(
+        icon: Icon(Icons.more_vert,
+          size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
+        ),
         itemBuilder: (context) => [
-          const PopupMenuItem(
+          PopupMenuItem(
             value: 'edit',
             child: Row(
               children: [
-                Icon(Icons.edit, size: 16, color: Colors.blue),
-                SizedBox(width: 8),
-                Text('Modifier'),
+                Icon(Icons.edit, 
+                  size: ResponsiveUtils.getFluidIconSize(context, mobile: 14, tablet: 15, desktop: 16),
+                  color: Colors.blue,
+                ),
+                SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 6, tablet: 7, desktop: 8)),
+                Text('Modifier',
+                  style: TextStyle(
+                    fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 12, tablet: 13, desktop: 14),
+                  ),
+                ),
               ],
             ),
           ),
@@ -346,21 +534,33 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
               children: [
                 Icon(
                   agent.isActive ? Icons.pause : Icons.play_arrow,
-                  size: 16,
+                  size: ResponsiveUtils.getFluidIconSize(context, mobile: 14, tablet: 15, desktop: 16),
                   color: agent.isActive ? Colors.orange : Colors.green,
                 ),
-                const SizedBox(width: 8),
-                Text(agent.isActive ? 'Désactiver' : 'Activer'),
+                SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 6, tablet: 7, desktop: 8)),
+                Text(agent.isActive ? 'Désactiver' : 'Activer',
+                  style: TextStyle(
+                    fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 12, tablet: 13, desktop: 14),
+                  ),
+                ),
               ],
             ),
           ),
-          const PopupMenuItem(
+          PopupMenuItem(
             value: 'delete',
             child: Row(
               children: [
-                Icon(Icons.delete, size: 16, color: Colors.red),
-                SizedBox(width: 8),
-                Text('Supprimer', style: TextStyle(color: Colors.red)),
+                Icon(Icons.delete, 
+                  size: ResponsiveUtils.getFluidIconSize(context, mobile: 8, tablet: 15, desktop: 16),
+                  color: Colors.red,
+                ),
+                SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 5, tablet: 7, desktop: 8)),
+                Text('Suppr.', 
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 8, tablet: 13, desktop: 14),
+                  ),
+                ),
               ],
             ),
           ),
@@ -430,7 +630,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Supprimer'),
+            child: const Text('Suppr.'),
           ),
         ],
       ),

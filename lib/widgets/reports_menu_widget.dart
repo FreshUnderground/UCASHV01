@@ -1,9 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../services/agent_auth_service.dart';
-import '../widgets/rapport_cloture_widget.dart';
 import '../widgets/rapportcloture.dart';
-import '../services/rapportcloture_pdf_service.dart';
 
 /// Widget pour le menu des rapports
 class ReportsMenuWidget extends StatelessWidget {
@@ -11,7 +7,6 @@ class ReportsMenuWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final authService = Provider.of<AgentAuthService>(context);
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 768;
     
@@ -21,15 +16,15 @@ class ReportsMenuWidget extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // En-tête
-          Text(
+          const Text(
             '📊 Rapports et Analyses',
             style: TextStyle(
-              fontSize: isMobile ? 24 : 32,
+              fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: const Color(0xFFDC2626),
+              color: Color(0xFFDC2626),
             ),
           ),
-          SizedBox(height: isMobile ? 8 : 12),
+          const SizedBox(height: 8),
           Text(
             'Accédez à tous vos rapports financiers',
             style: TextStyle(
@@ -37,48 +32,53 @@ class ReportsMenuWidget extends StatelessWidget {
               color: Colors.grey[600],
             ),
           ),
-          SizedBox(height: isMobile ? 24 : 32),
+          const SizedBox(height: 24),
           
           // Grille des rapports
           Expanded(
-            child: GridView.count(
-              crossAxisCount: isMobile ? 1 : (size.width > 1200 ? 3 : 2),
-              crossAxisSpacing: isMobile ? 16 : 24,
-              mainAxisSpacing: isMobile ? 16 : 24,
-              children: [
-                _buildReportCard(
-                  context: context,
-                  title: 'Rapport de Clôture',
-                  subtitle: 'Clôture journalière avec soldes',
-                  icon: Icons.receipt_long,
-                  color: const Color(0xFF10B981),
-                  onTap: () => _navigateToReport(context, 'cloture'),
-                ),
-                _buildReportCard(
-                  context: context,
-                  title: 'Mouvements FLOT',
-                  subtitle: 'Suivi des approvisionnements entre shops',
-                  icon: Icons.local_shipping,
-                  color: const Color(0xFF9C27B0),
-                  onTap: () => _navigateToReport(context, 'flot'),
-                ),
-                _buildReportCard(
-                  context: context,
-                  title: 'Opérations Clients',
-                  subtitle: 'Dépôts, retraits et transferts',
-                  icon: Icons.people,
-                  color: const Color(0xFF8B5CF6),
-                  onTap: () => _navigateToReport(context, 'operations'),
-                ),
-                _buildReportCard(
-                  context: context,
-                  title: 'Rapport PDF',
-                  subtitle: 'Générer et télécharger en PDF',
-                  icon: Icons.picture_as_pdf,
-                  color: const Color(0xFFEF4444),
-                  onTap: () => _navigateToReport(context, 'pdf'),
-                ),
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return GridView.count(
+                  crossAxisCount: isMobile ? 1 : (constraints.maxWidth > 1200 ? 3 : 2),
+                  crossAxisSpacing: isMobile ? 16 : 24,
+                  mainAxisSpacing: isMobile ? 16 : 24,
+                  childAspectRatio: isMobile ? 1.5 : 1.3,
+                  children: [
+                    _buildReportCard(
+                      context: context,
+                      title: 'Rapport de Clôture',
+                      subtitle: 'Clôture journalière avec soldes',
+                      icon: Icons.receipt_long,
+                      color: const Color(0xFF10B981),
+                      onTap: () => _navigateToReport(context, 'cloture'),
+                    ),
+                    _buildReportCard(
+                      context: context,
+                      title: 'Mouvements FLOT',
+                      subtitle: 'Suivi des approvisionnements entre shops',
+                      icon: Icons.local_shipping,
+                      color: const Color(0xFF9C27B0),
+                      onTap: () => _navigateToReport(context, 'flot'),
+                    ),
+                    _buildReportCard(
+                      context: context,
+                      title: 'Opérations Clients',
+                      subtitle: 'Dépôts, retraits et transferts',
+                      icon: Icons.people,
+                      color: const Color(0xFF8B5CF6),
+                      onTap: () => _navigateToReport(context, 'operations'),
+                    ),
+                    _buildReportCard(
+                      context: context,
+                      title: 'Rapport PDF',
+                      subtitle: 'Générer et télécharger en PDF',
+                      icon: Icons.picture_as_pdf,
+                      color: const Color(0xFFEF4444),
+                      onTap: () => _navigateToReport(context, 'pdf'),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ],
@@ -125,13 +125,13 @@ class ReportsMenuWidget extends StatelessWidget {
               SizedBox(height: isMobile ? 16 : 20),
               Text(
                 title,
-                style: TextStyle(
-                  fontSize: isMobile ? 18 : 20,
+                style: const TextStyle(
+                  fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
+                  color: Color(0xFF333333),
                 ),
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               Text(
                 subtitle,
                 style: TextStyle(
@@ -139,7 +139,7 @@ class ReportsMenuWidget extends StatelessWidget {
                   color: Colors.grey[600],
                 ),
               ),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               Align(
                 alignment: Alignment.centerRight,
                 child: Icon(
@@ -175,7 +175,7 @@ class ReportsMenuWidget extends StatelessWidget {
       case 'operations':
         // Naviguer vers les opérations clients
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('👥 Affichage des Opérations Clients')),
+          const SnackBar(content: Text('👥 Affichage des Opérations Partenaires')),
         );
         break;
       case 'pdf':

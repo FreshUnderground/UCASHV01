@@ -45,7 +45,7 @@ android {
         applicationId "com.example.ucashv01"
         // You can update the following values to match your application needs.
         // For more information, see: https://docs.flutter.dev/deployment/android#reviewing-the-gradle-build-configuration.
-        minSdkVersion 21  // Minimum pour Bluetooth
+        minSdkVersion 24  // Requis pour flutter_printer_qpos (Q2I SDK)
         targetSdkVersion 33
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName

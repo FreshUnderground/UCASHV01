@@ -1,30 +1,32 @@
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
+import 'package:flutter/foundation.dart';
 import '../models/rapport_cloture_model.dart';
 import '../models/shop_model.dart';
 
-/// Génère un PDF IDENTIQUE au UI - NI PLUS NI MOINS
-Future<pw.Document> generateRapportCloturePdf({
-  required RapportClotureModel rapport,
-  required ShopModel shop,
-}) async {
+/// Service pour générer le PDF du rapport de clôture
+Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopModel shop) async {
   final pdf = pw.Document();
+  
+  // Configuration de l'entreprise (à personnaliser)
+  const companyName = 'UCASH';
+  const companyAddress = 'Avenue de la Liberté, Kinshasa, RDC';
+  const companyPhone = '+243 XX XXX XXXX';
   
   final formattedDate = DateFormat('dd/MM/yyyy').format(rapport.dateRapport);
   
-  print('=== GÉNÉRATION PDF RAPPORT CLOTURE ===');
-  print('Date: $formattedDate');
-  print('Shop: ${shop.designation}');
-  print('Cash Disponible Total: ${rapport.cashDisponibleTotal}');
-  print('FLOTs Reçus: ${rapport.flotsRecusDetails.length}');
-  print('FLOTs Envoyés: ${rapport.flotsEnvoyes.length}');
-  print('FLOTs En Cours: ${rapport.flotsEnCoursDetails.length}');
-  print('Clients Nous Doivent: ${rapport.clientsNousDoivent.length}');
-  print('Clients Nous Devons: ${rapport.clientsNousDevons.length}');
-  print('Shops Nous Doivent: ${rapport.shopsNousDoivent.length}');
-  print('Shops Nous Devons: ${rapport.shopsNousDevons.length}');
-  print('=====================================');
+  debugPrint('=== GÉNÉRATION PDF RAPPORT CLOTURE ===');
+  debugPrint('Date: $formattedDate');
+  debugPrint('Shop: ${shop.designation}');
+  debugPrint('Cash Disponible Total: ${rapport.cashDisponibleTotal}');
+  debugPrint('FLOTs Reçus: ${rapport.flotsRecusDetails.length}');
+  debugPrint('FLOTs Envoyés: ${rapport.flotsEnvoyes.length}');
+  debugPrint('Partenaires Servis: ${rapport.clientsNousDoivent.length}');
+  debugPrint('Dépôts Partenaires: ${rapport.clientsNousDevons.length}');
+  debugPrint('Shops Nous Doivent: ${rapport.shopsNousDoivent.length}');
+  debugPrint('Shops Nous Devons: ${rapport.shopsNousDevons.length}');
+  debugPrint('=====================================');
   
   // Utiliser MultiPage pour permettre le contenu de s'étendre sur plusieurs pages
   pdf.addPage(
@@ -39,21 +41,29 @@ Future<pw.Document> generateRapportCloturePdf({
               color: PdfColors.red700,
               borderRadius: pw.BorderRadius.circular(6),
             ),
-            child: pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            child: pw.Column(
               children: [
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('UCASH', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
-                    pw.Text(shop.designation, style: pw.TextStyle(fontSize: 10, color: PdfColors.white)),
-                  ],
-                ),
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.end,
-                  children: [
-                    pw.Text('RAPPORT DE CLOTURE', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
-                    pw.Text(formattedDate, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.yellow)),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(companyName, style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                        if (companyAddress.isNotEmpty)
+                          pw.Text(companyAddress, style: pw.TextStyle(fontSize: 10, color: PdfColors.white)),
+                        if (companyPhone.isNotEmpty)
+                          pw.Text(companyPhone, style: pw.TextStyle(fontSize: 10, color: PdfColors.white)),
+                        pw.Text(shop.designation, style: pw.TextStyle(fontSize: 10, color: PdfColors.white)),
+                      ],
+                    ),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        pw.Text('RAPPORT DE CLOTURE', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                        pw.Text(formattedDate, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.yellow)),
+                      ],
+                    ),
                   ],
                 ),
               ],
@@ -106,8 +116,7 @@ Future<pw.Document> generateRapportCloturePdf({
                     
                     _buildSection('2. Flots', [
                       _buildRow('Recus', rapport.flotRecu, color: PdfColors.green700),
-                      _buildRow('En cours', rapport.flotEnCours, color: PdfColors.orange700),
-                      _buildRow('Servis', rapport.flotServi, color: PdfColors.red700, prefix: '-'),
+                      _buildRow('Envoyes', rapport.flotEnvoye, color: PdfColors.red700, prefix: '-'),
                       if (rapport.flotsRecusDetails.isNotEmpty) ...[
                         pw.SizedBox(height: 4),
                         pw.Text('FLOTs Recus Details:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
@@ -116,15 +125,9 @@ Future<pw.Document> generateRapportCloturePdf({
                       ],
                       if (rapport.flotsEnvoyes.isNotEmpty) ...[
                         pw.SizedBox(height: 4),
-                        pw.Text('FLOTs Envoyes Details:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                        pw.Text('FLOTs Envoyés Details:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
                         pw.Divider(),
                         ...rapport.flotsEnvoyes.map((flot) => _buildDetailRow(flot.shopDestinationDesignation, '${DateFormat('dd/MM').format(flot.dateEnvoi)}', flot.montant, PdfColors.red700)),
-                      ],
-                      if (rapport.flotsEnCoursDetails.isNotEmpty) ...[
-                        pw.SizedBox(height: 4),
-                        pw.Text('FLOTs En Cours Details:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
-                        pw.Divider(),
-                        ...rapport.flotsEnCoursDetails.map((flot) => _buildDetailRow(flot.shopDestinationDesignation, '${DateFormat('dd/MM').format(flot.dateEnvoi)}', flot.montant, PdfColors.orange700)),
                       ],
                     ], PdfColors.purple700),
                     pw.SizedBox(height: 8),
@@ -145,10 +148,36 @@ Future<pw.Document> generateRapportCloturePdf({
                     _buildSection('4. Operations Clients', [
                       _buildRow('Depots', rapport.depotsClients, color: PdfColors.green700),
                       _buildRow('Retraits', rapport.retraitsClients, color: PdfColors.red700, prefix: '-'),
+                      
+                      // Détails des dépôts avec observations
+                      if (rapport.depotsClientsDetails.isNotEmpty) ...[
+                        pw.SizedBox(height: 4),
+                        pw.Text('Dépôts Détails:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                        pw.Divider(),
+                        ...rapport.depotsClientsDetails.map((op) => _buildOperationDetailRow(
+                          op.observation ?? op.destinataire ?? 'N/A',
+                          '${DateFormat('dd/MM HH:mm').format(op.date)} - ${op.modePaiement}',
+                          op.montant,
+                          PdfColors.green700,
+                        )),
+                      ],
+                      
+                      // Détails des retraits avec observations
+                      if (rapport.retraitsClientsDetails.isNotEmpty) ...[
+                        pw.SizedBox(height: 4),
+                        pw.Text('Retraits Détails:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                        pw.Divider(),
+                        ...rapport.retraitsClientsDetails.map((op) => _buildOperationDetailRow(
+                          op.observation ?? op.destinataire ?? 'N/A',
+                          '${DateFormat('dd/MM HH:mm').format(op.date)} - ${op.modePaiement}',
+                          op.montant,
+                          PdfColors.red700,
+                        )),
+                      ],
                     ], PdfColors.orange700),
                     pw.SizedBox(height: 8),
                     
-                    _buildSection('5. Clients Nous Doivent', [
+                    _buildSection('5. Partenaires Servis', [
                       pw.Text('${rapport.clientsNousDoivent.length} client(s)', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
                       pw.Divider(),
                       ...rapport.clientsNousDoivent.map((c) => _buildDetailRow(c.nom, '', c.solde, PdfColors.red700)),
@@ -157,7 +186,7 @@ Future<pw.Document> generateRapportCloturePdf({
                     ], PdfColors.red700),
                     pw.SizedBox(height: 8),
                     
-                    _buildSection('6. Clients Nous Devons', [
+                    _buildSection('6. Dépôts Partenaires', [
                       pw.Text('${rapport.clientsNousDevons.length} client(s)', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
                       pw.Divider(),
                       ...rapport.clientsNousDevons.map((c) => _buildDetailRow(c.nom, '', c.solde, PdfColors.green700)),
@@ -207,11 +236,11 @@ Future<pw.Document> generateRapportCloturePdf({
                 pw.Text('${rapport.capitalNet.toStringAsFixed(2)} USD', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: rapport.capitalNet >= 0 ? PdfColors.blue900 : PdfColors.red900)),
                 pw.Divider(),
                 _buildRow('Cash Disponible', rapport.cashDisponibleTotal, color: PdfColors.green700),
-                _buildRow('+ Clients Nous Doivent', rapport.totalClientsNousDoivent, color: PdfColors.red700),
+                _buildRow('+ Partenaires Servis', rapport.totalClientsNousDoivent, color: PdfColors.red700),
                 _buildRow('+ Shops Nous Doivent', rapport.totalShopsNousDoivent, color: PdfColors.orange700),
-                _buildRow('- Clients Nous Devons', -rapport.totalClientsNousDevons, color: PdfColors.green700),
+                _buildRow('- Dépôts Partenaires', -rapport.totalClientsNousDevons, color: PdfColors.green700),
                 _buildRow('- Shops Nous Devons', -rapport.totalShopsNousDevons, color: PdfColors.purple700),
-                pw.Divider(thickness: 2),
+                pw.Divider(thickness: 2, color: PdfColors.blue700),
                 _buildRow('= CAPITAL NET', rapport.capitalNet, color: rapport.capitalNet >= 0 ? PdfColors.blue700 : PdfColors.red700, bold: true),
               ],
             ),
@@ -279,12 +308,34 @@ pw.Widget _buildDetailRow(String name, String detail, double montant, PdfColor c
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Text(name, style: pw.TextStyle(fontSize: 6)),
-              if (detail.isNotEmpty) pw.Text(detail, style: pw.TextStyle(fontSize: 5, color: PdfColors.grey600)),
+              pw.Text(name, style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.normal)),
+              if (detail.isNotEmpty)
+                pw.Text(detail, style: pw.TextStyle(fontSize: 6, color: PdfColors.grey600)),
             ],
           ),
         ),
-        pw.Text('${montant.toStringAsFixed(2)} USD', style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold, color: color)),
+        pw.Text('${montant.toStringAsFixed(2)} USD', style: pw.TextStyle(fontSize: 7, color: color, fontWeight: pw.FontWeight.normal)),
+      ],
+    ),
+  );
+}
+
+pw.Widget _buildOperationDetailRow(String observation, String details, double montant, PdfColor color) {
+  return pw.Padding(
+    padding: const pw.EdgeInsets.symmetric(vertical: 1),
+    child: pw.Row(
+      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      children: [
+        pw.Expanded(
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(observation, style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.normal)),
+              pw.Text(details, style: pw.TextStyle(fontSize: 5, color: PdfColors.grey600)),
+            ],
+          ),
+        ),
+        pw.Text('${montant.toStringAsFixed(2)} USD', style: pw.TextStyle(fontSize: 6, color: color, fontWeight: pw.FontWeight.bold)),
       ],
     ),
   );

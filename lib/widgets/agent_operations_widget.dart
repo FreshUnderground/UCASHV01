@@ -7,9 +7,13 @@ import '../services/shop_service.dart';
 import '../services/agent_auth_service.dart';
 import '../services/agent_service.dart';
 import '../services/flot_service.dart';
+import '../services/transfer_sync_service.dart';
 import '../models/operation_model.dart';
 import '../models/flot_model.dart' as flot_model;
 import '../models/shop_model.dart';
+import '../models/agent_model.dart';
+import '../services/printer_service.dart';
+import '../utils/auto_print_helper.dart';
 
 import 'transfer_destination_dialog.dart';
 import 'depot_dialog.dart';
@@ -28,6 +32,7 @@ class AgentOperationsWidget extends StatefulWidget {
 class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
   String _searchQuery = '';
   OperationType? _typeFilter;
+  bool _showFiltersAndStats = false; // Contrôle l'affichage des stats et filtres (masqué par défaut)
 
   // Calculer les statistiques du shop (cash en caisse) DEPUIS DONNEES LOCALES MULTI-DEVISES
   Map<String, dynamic> _getShopStats(ShopService shopService, int shopId) {
@@ -82,14 +87,19 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
     Provider.of<ShopService>(context, listen: true);
   }
 
-  void _loadOperations() {
+  void _loadOperations() async {
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentUser = authService.currentUser;
     if (currentUser?.id != null) {
-      // Charger les opérations filtrées par shop
-      // Cela affichera les opérations où le shop est source OU destination
+      // 1️⃣ D'ABORD: Synchroniser depuis l'API pour obtenir toutes les opérations fraîches
+      final transferSync = Provider.of<TransferSyncService>(context, listen: false);
+      debugPrint('🔄 [MES OPS] Synchronisation des opérations depuis l\'API...');
+      await transferSync.forceRefreshFromAPI();
+      debugPrint('✅ [MES OPS] Synchronisation terminée');
+      
+      // 2️⃣ ENSUITE: Charger les opérations filtrées par shop depuis LocalDB
       Provider.of<OperationService>(context, listen: false).loadOperations(shopId: currentUser!.shopId!);
-      debugPrint('📊 Widget: Chargement des opérations pour shop ${currentUser.shopId}');
+      debugPrint('📋 [MES OPS] Chargement des opérations pour shop ${currentUser.shopId}');
     }
   }
 
@@ -148,7 +158,8 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
     return operations.where((operation) {
       final matchesSearch = _searchQuery.isEmpty ||
           (operation.destinataire?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false) ||
-          operation.id.toString().contains(_searchQuery);
+          operation.id.toString().contains(_searchQuery) ||
+          (operation.codeOps?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false);
       
       final matchesType = _typeFilter == null || operation.type == _typeFilter;
       
@@ -160,25 +171,28 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 768;
-    final padding = isMobile ? 16.0 : (size.width <= 1024 ? 20.0 : 24.0);
+    // ✨ Padding réduit pour maximiser l'espace
+    final padding = isMobile ? 4.0 : 8.0;
     
     return Padding(
       padding: EdgeInsets.all(padding),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // Header avec boutons d'actions
+          // Header avec boutons d'actions - Compact sur mobile
           _buildHeader(),
-          SizedBox(height: isMobile ? 16 : 24),
+          SizedBox(height: isMobile ? 6 : 12),
           
-          // Statistiques
-          _buildStats(),
-          SizedBox(height: isMobile ? 16 : 24),
+          // Statistiques - Affichées uniquement si _showFiltersAndStats est true (Désactivé pour plus d'espace)
+          // if (_showFiltersAndStats) ...[
+          //   _buildStats(),
+          //   SizedBox(height: isMobile ? 8 : 24),
+          // ],
           
-          // Liste des opérations - hauteur fixe pour éviter Expanded dans ScrollView
-          SizedBox(
-            height: 400,
+          // Liste des opérations - Prend l'espace nécessaire
+          Flexible(
+            fit: FlexFit.loose,
             child: _buildOperationsList(),
           ),
         ],
@@ -192,11 +206,12 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
     final isTablet = size.width > 768 && size.width <= 1024;
     
     return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 2,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(isMobile ? 10 : 12)),
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(isMobile ? 10 : 12),
           gradient: LinearGradient(
             colors: [Colors.white, Colors.grey.shade50],
             begin: Alignment.topLeft,
@@ -204,62 +219,69 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
           ),
         ),
         child: Padding(
-          padding: EdgeInsets.all(isMobile ? 12 : 16),
+          padding: EdgeInsets.all(isMobile ? 8 : 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // Titre avec icône
+              // Titre avec icône - Plus compact sur mobile
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: EdgeInsets.all(isMobile ? 6 : 8),
                     decoration: BoxDecoration(
                       color: const Color(0xFFDC2626).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.account_balance_wallet,
-                      color: Color(0xFFDC2626),
-                      size: 24,
+                      color: const Color(0xFFDC2626),
+                      size: isMobile ? 20 : 24,
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  SizedBox(width: isMobile ? 8 : 12),
                   Text(
                     'Mes Opérations',
                     style: TextStyle(
-                      fontSize: isMobile ? 20 : 22,
+                      fontSize: isMobile ? 16 : 20,
                       fontWeight: FontWeight.bold,
                       color: const Color(0xFFDC2626),
                     ),
                   ),
                 ],
               ),
-              SizedBox(height: isMobile ? 12 : 16),
+              SizedBox(height: isMobile ? 6 : 12),
               
               // Boutons d'actions - Responsive
               if (isMobile)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                // Sur mobile: Boutons sur une seule ligne
+                Row(
                   children: [
-                    _buildActionButton(
-                      onPressed: () => _showDepotDialog(),
-                      icon: Icons.add_circle,
-                      label: 'Dépôt',
-                      color: Colors.green,
+                    Expanded(
+                      child: _buildActionButton(
+                        onPressed: () => _showDepotDialog(),
+                        icon: Icons.add_circle,
+                        label: 'Dépôt',
+                        color: Colors.green,
+                      ),
                     ),
-                    const SizedBox(height: 8),
-                    _buildActionButton(
-                      onPressed: () => _showRetraitDialog(),
-                      icon: Icons.remove_circle,
-                      label: 'Retrait',
-                      color: Colors.orange,
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildActionButton(
+                        onPressed: () => _showRetraitDialog(),
+                        icon: Icons.remove_circle,
+                        label: 'Retrait',
+                        color: Colors.orange,
+                      ),
                     ),
-                    const SizedBox(height: 8),
-                    _buildActionButton(
-                      onPressed: () => _showTransfertDestinationDialog(),
-                      icon: Icons.send,
-                      label: 'Transfert',
-                      color: Colors.purple,
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildActionButton(
+                        onPressed: () => _showTransfertDestinationDialog(),
+                        icon: Icons.send,
+                        label: 'Transf.',
+                        color: Colors.purple,
+                      ),
                     ),
                   ],
                 )
@@ -294,9 +316,43 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
                     ),
                   ],
                 ),
-              SizedBox(height: isMobile ? 12 : 16),
+              SizedBox(height: isMobile ? 6 : 10),
               
-              // Barre de recherche et filtres - Responsive
+              // Bouton pour afficher/masquer les filtres et stats - Plus compact
+              Center(
+                child: TextButton.icon(
+                  onPressed: () {
+                    if (mounted) {
+                      setState(() {
+                        _showFiltersAndStats = !_showFiltersAndStats;
+                      });
+                    }
+                  },
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isMobile ? 8 : 16,
+                      vertical: isMobile ? 4 : 8,
+                    ),
+                  ),
+                  icon: Icon(
+                    _showFiltersAndStats ? Icons.expand_less : Icons.expand_more,
+                    color: const Color(0xFFDC2626),
+                    size: isMobile ? 18 : 24,
+                  ),
+                  label: Text(
+                    _showFiltersAndStats ? 'Masquer' : 'Filtres',
+                    style: TextStyle(
+                      color: const Color(0xFFDC2626),
+                      fontWeight: FontWeight.w600,
+                      fontSize: isMobile ? 12 : 14,
+                    ),
+                  ),
+                ),
+              ),
+              
+              // Barre de recherche et filtres - Affichés uniquement si _showFiltersAndStats est true
+              if (_showFiltersAndStats) ...[
+                SizedBox(height: isMobile ? 12 : 16),
               if (isMobile)
                 Column(
                   children: [
@@ -406,6 +462,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
                     ),
                   ],
                 ),
+              ], // Fin du if _showFiltersAndStats
             ],
           ),
         ),
@@ -425,11 +482,11 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
     
     return ElevatedButton.icon(
       onPressed: onPressed,
-      icon: Icon(icon, size: isMobile ? 20 : 18),
+      icon: Icon(icon, size: isMobile ? 16 : 18),
       label: Text(
         label,
         style: TextStyle(
-          fontSize: isMobile ? 16 : 14,
+          fontSize: isMobile ? 12 : 14,
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -437,8 +494,8 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
         backgroundColor: color,
         foregroundColor: Colors.white,
         padding: EdgeInsets.symmetric(
-          horizontal: isMobile ? 16 : 12,
-          vertical: isMobile ? 14 : 10,
+          horizontal: isMobile ? 8 : 12,
+          vertical: isMobile ? 10 : 10,
         ),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
@@ -448,213 +505,232 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
     );
   }
 
-  Widget _buildStats() {
-    final size = MediaQuery.of(context).size;
-    final isMobile = size.width <= 768;
+  // Widget _buildStats() {
+  //   final size = MediaQuery.of(context).size;
+  //   final isMobile = size.width <= 768;
     
-    return Consumer3<OperationService, AuthService, ShopService>(
-      builder: (context, operationService, authService, shopService, child) {
-        final operations = operationService.operations;
+  //   return Consumer3<OperationService, AuthService, ShopService>(
+  //     builder: (context, operationService, authService, shopService, child) {
+  //       final operations = operationService.operations;
         
-        // Also get FLOTs for this shop
-        final currentUser = authService.currentUser;
-        final flotService = FlotService.instance;
+  //       // Also get FLOTs for this shop
+  //       final currentUser = authService.currentUser;
+  //       final flotService = FlotService.instance;
         
-        // Filter FLOTs by current shop (source or destination)
-        List<flot_model.FlotModel> shopFlots = [];
-        if (currentUser?.shopId != null) {
-          shopFlots = flotService.flots.where((f) => 
-            f.shopSourceId == currentUser!.shopId || 
-            f.shopDestinationId == currentUser.shopId
-          ).toList();
-        } else {
-          shopFlots = flotService.flots;
-        }
+  //       // Filter FLOTs by current shop (source or destination)
+  //       List<flot_model.FlotModel> shopFlots = [];
+  //       if (currentUser?.shopId != null) {
+  //         shopFlots = flotService.flots.where((f) => 
+  //           f.shopSourceId == currentUser!.shopId || 
+  //           f.shopDestinationId == currentUser.shopId
+  //         ).toList();
+  //       } else {
+  //         shopFlots = flotService.flots;
+  //       }
         
-        // Total operations should include both operations and FLOTs
-        final totalOperations = operations.length + shopFlots.length;
+  //       // Total operations should include both operations and FLOTs
+  //       final totalOperations = operations.length + shopFlots.length;
         
-        final depots = operations.where((op) => op.type == OperationType.depot).length;
-        final retraits = operations.where((op) => op.type == OperationType.retrait).length;
-        final transferts = operations.where((op) => 
-          op.type == OperationType.transfertNational ||
-          op.type == OperationType.transfertInternationalSortant ||
-          op.type == OperationType.transfertInternationalEntrant
-        ).length;
+  //       final depots = operations.where((op) => op.type == OperationType.depot).length;
+  //       final retraits = operations.where((op) => op.type == OperationType.retrait).length;
+  //       final transferts = operations.where((op) => 
+  //         op.type == OperationType.transfertNational ||
+  //         op.type == OperationType.transfertInternationalSortant ||
+  //         op.type == OperationType.transfertInternationalEntrant
+  //       ).length;
         
-        // Add FLOT count
-        final flotsCount = shopFlots.length;
+  //       // Add FLOT count
+  //       final flotsCount = shopFlots.length;
 
-        // Get cash disponible from shop stats
-        double cashDisponibleUSD = 0;
-        double cashDisponibleCDF = 0;
-        if (currentUser?.shopId != null) {
-          final shopStats = _getShopStats(shopService, currentUser!.shopId!);
-          cashDisponibleUSD = shopStats['capitalTotal'] as double;
-          cashDisponibleCDF = shopStats['capitalTotalDevise2'] as double;
-        }
+  //       // Get cash disponible from shop stats
+  //       double cashDisponibleUSD = 0;
+  //       double cashDisponibleCDF = 0;
+  //       if (currentUser?.shopId != null) {
+  //         final shopStats = _getShopStats(shopService, currentUser!.shopId!);
+  //         cashDisponibleUSD = shopStats['capitalTotal'] as double;
+  //         cashDisponibleCDF = shopStats['capitalTotalDevise2'] as double;
+  //       }
 
-        if (isMobile) {
-          // Layout mobile : Grid 3 colonnes x 2 lignes
-          return Column(
-            children: [
-              // Ligne 1 : Total, Dépôts, Retraits
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildStatCard(
-                      'Total',
-                      '$totalOperations',
-                      Icons.analytics,
-                      Colors.blue,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _buildStatCard(
-                      'Dépôts',
-                      '$depots',
-                      Icons.add_circle,
-                      Colors.green,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _buildStatCard(
-                      'Retraits',
-                      '$retraits',
-                      Icons.remove_circle,
-                      Colors.orange,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              // Ligne 2 : Transferts, FLOTs, Cash Disponible (3 colonnes)
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildStatCard(
-                      'Transferts',
-                      '$transferts',
-                      Icons.send,
-                      const Color(0xFFDC2626),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _buildStatCard(
-                      'FLOTs',
-                      '$flotsCount',
-                      Icons.local_shipping,
-                      const Color(0xFF9C27B0),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _buildMultiDeviseCard(
-                      'Cash Disponible',
-                      cashDisponibleUSD,
-                      cashDisponibleCDF,
-                      Icons.account_balance_wallet,
-                      Colors.purple,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          );
-        } else {
-          // Layout desktop : Row
-          return Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _buildStatCard(
-                      'Total Opérations',
-                      '$totalOperations',
-                      Icons.analytics,
-                      Colors.blue,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildStatCard(
-                      'Dépôts',
-                      '$depots',
-                      Icons.add_circle,
-                      Colors.green,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildStatCard(
-                      'Retraits',
-                      '$retraits',
-                      Icons.remove_circle,
-                      Colors.orange,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildStatCard(
-                      'Transferts',
-                      '$transferts',
-                      Icons.send,
-                      const Color(0xFFDC2626),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildStatCard(
-                      'FLOTs',
-                      '$flotsCount',
-                      Icons.local_shipping,
-                      const Color(0xFF9C27B0),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildMultiDeviseCard(
-                      'Cash Disponible',
-                      cashDisponibleUSD,
-                      cashDisponibleCDF,
-                      Icons.account_balance_wallet,
-                      Colors.purple,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-      },
-    );
-  }
+  //       if (isMobile) {
+  //         // Layout mobile : Grid 3 colonnes x 2 lignes - Scrollable
+  //         return SingleChildScrollView(
+  //           scrollDirection: Axis.horizontal,
+  //           child: Column(
+  //             children: [
+  //               // Ligne 1 : Total, Dépôts, Retraits
+  //               Row(
+  //                 children: [
+  //                   SizedBox(
+  //                     width: 80,
+  //                     child: _buildStatCard(
+  //                       'Total',
+  //                       '$totalOperations',
+  //                       Icons.analytics,
+  //                       Colors.blue,
+  //                     ),
+  //                   ),
+  //                   const SizedBox(width: 6),
+  //                   SizedBox(
+  //                     width: 100,
+  //                     child: _buildStatCard(
+  //                       'Dépôts',
+  //                       '$depots',
+  //                       Icons.add_circle,
+  //                       Colors.green,
+  //                     ),
+  //                   ),
+  //                   const SizedBox(width: 6),
+  //                   SizedBox(
+  //                     width: 100,
+  //                     child: _buildStatCard(
+  //                       'Retraits',
+  //                       '$retraits',
+  //                       Icons.remove_circle,
+  //                       Colors.orange,
+  //                     ),
+  //                   ),
+  //                 ],
+  //               ),
+  //               const SizedBox(height: 6),
+  //               // Ligne 2 : Transferts, FLOTs, Cash Disponible (3 colonnes)
+  //               Row(
+  //                 children: [
+  //                   SizedBox(
+  //                     width: 100,
+  //                     child: _buildStatCard(
+  //                       'Transferts',
+  //                       '$transferts',
+  //                       Icons.send,
+  //                       const Color(0xFFDC2626),
+  //                     ),
+  //                   ),
+  //                   const SizedBox(width: 6),
+  //                   SizedBox(
+  //                     width: 100,
+  //                     child: _buildStatCard(
+  //                       'FLOTs',
+  //                       '$flotsCount',
+  //                       Icons.local_shipping,
+  //                       const Color(0xFF9C27B0),
+  //                     ),
+  //                   ),
+  //                   const SizedBox(width: 6),
+  //                   SizedBox(
+  //                     width: 100,
+  //                     child: _buildMultiDeviseCard(
+  //                       'Cash Disponible',
+  //                       cashDisponibleUSD,
+  //                       cashDisponibleCDF,
+  //                       Icons.account_balance_wallet,
+  //                       Colors.purple,
+  //                     ),
+  //                   ),
+  //                 ],
+  //               ),
+  //             ],
+  //           ),
+  //         );
+  //       } else {
+  //         // Layout desktop : Row - Scrollable
+  //         return SingleChildScrollView(
+  //           scrollDirection: Axis.horizontal,
+  //           child: Card(
+  //             elevation: 2,
+  //             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+  //             child: Padding(
+  //               padding: const EdgeInsets.all(16),
+  //               child: Row(
+  //                 children: [
+  //                   SizedBox(
+  //                     width: 150,
+  //                     child: _buildStatCard(
+  //                       'Total Opérations',
+  //                       '$totalOperations',
+  //                       Icons.analytics,
+  //                       Colors.blue,
+  //                     ),
+  //                   ),
+  //                   const SizedBox(width: 16),
+  //                   SizedBox(
+  //                     width: 150,
+  //                     child: _buildStatCard(
+  //                       'Dépôts',
+  //                       '$depots',
+  //                       Icons.add_circle,
+  //                       Colors.green,
+  //                     ),
+  //                   ),
+  //                   const SizedBox(width: 16),
+  //                   SizedBox(
+  //                     width: 150,
+  //                     child: _buildStatCard(
+  //                       'Retraits',
+  //                       '$retraits',
+  //                       Icons.remove_circle,
+  //                       Colors.orange,
+  //                     ),
+  //                   ),
+  //                   const SizedBox(width: 16),
+  //                   SizedBox(
+  //                     width: 150,
+  //                     child: _buildStatCard(
+  //                       'Transferts',
+  //                       '$transferts',
+  //                       Icons.send,
+  //                       const Color(0xFFDC2626),
+  //                     ),
+  //                   ),
+  //                   const SizedBox(width: 16),
+  //                   SizedBox(
+  //                     width: 150,
+  //                     child: _buildStatCard(
+  //                       'FLOTs',
+  //                       '$flotsCount',
+  //                       Icons.local_shipping,
+  //                       const Color(0xFF9C27B0),
+  //                     ),
+  //                   ),
+  //                   const SizedBox(width: 16),
+  //                   SizedBox(
+  //                     width: 150,
+  //                     child: _buildMultiDeviseCard(
+  //                       'Cash Disponible',
+  //                       cashDisponibleUSD,
+  //                       cashDisponibleCDF,
+  //                       Icons.account_balance_wallet,
+  //                       Colors.purple,
+  //                     ),
+  //                   ),
+  //                 ],
+  //               ),
+  //             ),
+  //           ),
+  //         );
+  //       }
+  //     },
+  //   );
+  // }
 
   Widget _buildStatCard(String title, String value, IconData icon, Color color) {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 768;
+    final isSmallMobile = size.width < 600;
     
     return Container(
-      padding: EdgeInsets.all(isMobile ? 12 : 16),
+      padding: EdgeInsets.all(isMobile ? 6 : 12),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [color.withOpacity(0.1), color.withOpacity(0.05)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(isMobile ? 10 : 12),
         border: Border.all(color: color.withOpacity(0.3), width: 1.5),
         boxShadow: [
           BoxShadow(
             color: color.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            blurRadius: isMobile ? 4 : 8,
+            offset: Offset(0, isMobile ? 1 : 2),
           ),
         ],
       ),
@@ -662,25 +738,25 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: color, size: isMobile ? 28 : 32),
-          SizedBox(height: isMobile ? 6 : 8),
+          Icon(icon, color: color, size: isMobile ? 20 : 28),
+          SizedBox(height: isMobile ? 3 : 6),
           FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
               value,
               style: TextStyle(
-                fontSize: isMobile ? 18 : 20,
+                fontSize: isSmallMobile ? 13 : (isMobile ? 14 : 18),
                 fontWeight: FontWeight.bold,
                 color: color,
               ),
               maxLines: 1,
             ),
           ),
-          SizedBox(height: isMobile ? 2 : 4),
+          SizedBox(height: isMobile ? 2 : 3),
           Text(
             title,
             style: TextStyle(
-              fontSize: isMobile ? 11 : 12,
+              fontSize: isSmallMobile ? 9 : (isMobile ? 10 : 11),
               color: Colors.grey[700],
               fontWeight: FontWeight.w500,
             ),
@@ -697,22 +773,23 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
   Widget _buildMultiDeviseCard(String title, double montantUSD, double montantCDF, IconData icon, Color color) {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 768;
+    final isSmallMobile = size.width < 600;
     
     return Container(
-      padding: EdgeInsets.all(isMobile ? 12 : 16),
+      padding: EdgeInsets.all(isMobile ? 6 : 12),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [color.withOpacity(0.1), color.withOpacity(0.05)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(isMobile ? 10 : 12),
         border: Border.all(color: color.withOpacity(0.3), width: 1.5),
         boxShadow: [
           BoxShadow(
             color: color.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            blurRadius: isMobile ? 4 : 8,
+            offset: Offset(0, isMobile ? 1 : 2),
           ),
         ],
       ),
@@ -720,15 +797,15 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: color, size: isMobile ? 28 : 32),
-          SizedBox(height: isMobile ? 4 : 6),
+          Icon(icon, color: color, size: isMobile ? 20 : 28),
+          SizedBox(height: isMobile ? 2 : 4),
           // USD
           FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
               '${montantUSD.toStringAsFixed(0)} \$',
               style: TextStyle(
-                fontSize: isMobile ? 16 : 18,
+                fontSize: isSmallMobile ? 12 : (isMobile ? 13 : 16),
                 fontWeight: FontWeight.bold,
                 color: color,
               ),
@@ -742,18 +819,18 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
               child: Text(
                 '${montantCDF.toStringAsFixed(0)} FC',
                 style: TextStyle(
-                  fontSize: isMobile ? 14 : 16,
+                  fontSize: isSmallMobile ? 10 : (isMobile ? 11 : 14),
                   fontWeight: FontWeight.w600,
                   color: color.withOpacity(0.8),
                 ),
                 maxLines: 1,
               ),
             ),
-          SizedBox(height: isMobile ? 2 : 4),
+          SizedBox(height: isMobile ? 2 : 3),
           Text(
             title,
             style: TextStyle(
-              fontSize: isMobile ? 11 : 12,
+              fontSize: isSmallMobile ? 9 : (isMobile ? 10 : 11),
               color: Colors.grey[700],
               fontWeight: FontWeight.w500,
             ),
@@ -767,6 +844,9 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
   }
 
   Widget _buildOperationsList() {
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width <= 768;
+    
     return Consumer<OperationService>(
       builder: (context, operationService, child) {
         if (operationService.isLoading) {
@@ -867,10 +947,12 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
         }
 
         return Card(
+          elevation: 2,
+          margin: EdgeInsets.zero,
           child: ListView.separated(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(isMobile ? 8 : 12),
             itemCount: allItems.length,
-            separatorBuilder: (context, index) => const Divider(),
+            separatorBuilder: (context, index) => Divider(height: isMobile ? 12 : 16),
             itemBuilder: (context, index) {
               final item = allItems[index];
               if (item is OperationModel) {
@@ -889,6 +971,18 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
   Widget _buildOperationItem(OperationModel operation) {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 768;
+    final isTablet = size.width > 768 && size.width <= 1024;
+    final isSmallMobile = size.width < 600;
+    
+    // Tailles responsive
+    final iconSize = isSmallMobile ? 18.0 : (isMobile ? 20.0 : (isTablet ? 24.0 : 28.0));
+    final titleFontSize = isSmallMobile ? 12.0 : (isMobile ? 13.0 : (isTablet ? 14.0 : 16.0));
+    final amountFontSize = isSmallMobile ? 13.0 : (isMobile ? 14.0 : (isTablet ? 15.0 : 16.0));
+    final detailFontSize = isSmallMobile ? 10.0 : (isMobile ? 11.0 : (isTablet ? 12.0 : 13.0));
+    final tagFontSize = isSmallMobile ? 8.0 : (isMobile ? 9.0 : 10.0);
+    final iconPadding = isSmallMobile ? 6.0 : (isMobile ? 8.0 : 10.0);
+    final cardPadding = isSmallMobile ? 6.0 : (isMobile ? 8.0 : (isTablet ? 12.0 : 16.0));
+    final cardVerticalPadding = isSmallMobile ? 4.0 : (isMobile ? 6.0 : (isTablet ? 8.0 : 4.0));
     
     Color typeColor;
     IconData typeIcon;
@@ -955,35 +1049,35 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
     }
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: EdgeInsets.only(bottom: isSmallMobile ? 4 : (isMobile ? 6 : 8)),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(isSmallMobile ? 6 : (isMobile ? 8 : 12)),
         border: Border.all(color: Colors.grey.shade200),
         boxShadow: [
           BoxShadow(
             color: Colors.grey.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+            blurRadius: isSmallMobile ? 1 : (isMobile ? 2 : 4),
+            offset: Offset(0, isSmallMobile ? 0.5 : (isMobile ? 1 : 2)),
           ),
         ],
       ),
       child: ListTile(
         contentPadding: EdgeInsets.symmetric(
-          horizontal: isMobile ? 12 : 16,
-          vertical: isMobile ? 8 : 4,
+          horizontal: cardPadding,
+          vertical: cardVerticalPadding,
         ),
         leading: Container(
-          padding: const EdgeInsets.all(10),
+          padding: EdgeInsets.all(iconPadding),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [typeColor.withOpacity(0.2), typeColor.withOpacity(0.1)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(isMobile ? 8 : 12),
           ),
-          child: Icon(typeIcon, color: typeColor, size: isMobile ? 24 : 28),
+          child: Icon(typeIcon, color: typeColor, size: iconSize),
         ),
         title: Row(
           children: [
@@ -994,7 +1088,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
                     : typeText,
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
-                  fontSize: isMobile ? 15 : 16,
+                  fontSize: titleFontSize,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -1002,17 +1096,20 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
             ),
             const SizedBox(width: 8),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: EdgeInsets.symmetric(
+                horizontal: isMobile ? 5 : 8, 
+                vertical: isMobile ? 2 : 4,
+              ),
               decoration: BoxDecoration(
                 color: typeColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(isMobile ? 8 : 12),
                 border: Border.all(color: typeColor.withOpacity(0.3)),
               ),
               child: Text(
                 typeText,
                 style: TextStyle(
                   color: typeColor,
-                  fontSize: 10,
+                  fontSize: tagFontSize,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -1020,20 +1117,20 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
           ],
         ),
         subtitle: Padding(
-          padding: const EdgeInsets.only(top: 8),
+          padding: EdgeInsets.only(top: isMobile ? 6 : 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Montant principal avec icône
               Row(
                 children: [
-                  Icon(Icons.attach_money, size: 14, color: Colors.grey[600]),
+                  Icon(Icons.attach_money, size: isMobile ? 12 : 14, color: Colors.grey[600]),
                   const SizedBox(width: 4),
                   Text(
                     '${operation.montantBrut.toStringAsFixed(2)} ${operation.devise}',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      fontSize: isMobile ? 15 : 16,
+                      fontSize: amountFontSize,
                       color: typeColor,
                     ),
                   ),
@@ -1041,64 +1138,82 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
                     Text(
                       '  -${operation.commission.toStringAsFixed(2)}',
                       style: TextStyle(
-                        fontSize: isMobile ? 12 : 13,
+                        fontSize: detailFontSize,
                         color: Colors.grey[600],
                       ),
                     ),
                 ],
               ),
-              const SizedBox(height: 6),
+              SizedBox(height: isMobile ? 4 : 6),
               // Mode de paiement + Statut
               Row(
                 children: [
                   // Mode
                   Icon(
                     _getPaymentIcon(operation.modePaiement),
-                    size: 14,
+                    size: isMobile ? 12 : 14,
                     color: Colors.grey[600],
                   ),
                   const SizedBox(width: 4),
                   Text(
                     operation.modePaiementLabel,
                     style: TextStyle(
-                      fontSize: isMobile ? 12 : 13,
+                      fontSize: detailFontSize,
                       color: Colors.grey[700],
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  SizedBox(width: isMobile ? 8 : 12),
                   // Statut
-                  Icon(statusIcon, size: 14, color: statusColor),
+                  Icon(statusIcon, size: isMobile ? 12 : 14, color: statusColor),
                   const SizedBox(width: 4),
                   Text(
                     statusText,
                     style: TextStyle(
-                      fontSize: isMobile ? 12 : 13,
+                      fontSize: detailFontSize,
                       color: statusColor,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
+              SizedBox(height: isMobile ? 4 : 6),
               // Date
               Row(
                 children: [
-                  Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
+                  Icon(Icons.access_time, size: isMobile ? 12 : 14, color: Colors.grey[500]),
                   const SizedBox(width: 4),
                   Text(
                     _formatDate(operation.dateOp),
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: isMobile ? 10 : 11,
                       color: Colors.grey[600],
                     ),
                   ),
                 ],
               ),
+              SizedBox(height: isMobile ? 3 : 4),
+              // CodeOps - Taille réduite
+              if (operation.codeOps != null)
+                Row(
+                  children: [
+                    Icon(Icons.code, size: isMobile ? 10 : 12, color: Colors.grey[500]),
+                    const SizedBox(width: 4),
+                    Text(
+                      operation.codeOps!,
+                      style: TextStyle(
+                        fontSize: isMobile ? 9 : 10,
+                        color: Colors.grey[700],
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                  ],
+                ),
             ],
           ),
         ),
         trailing: PopupMenuButton<String>(
-          icon: Icon(Icons.more_vert, color: Colors.grey[600]),
+          icon: Icon(Icons.more_vert, color: Colors.grey[600], size: isMobile ? 18 : 24),
           itemBuilder: (context) => [
             const PopupMenuItem(
               value: 'details',
@@ -1110,8 +1225,24 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
                 ],
               ),
             ),
+            const PopupMenuItem(
+              value: 'reprint',
+              child: Row(
+                children: [
+                  Icon(Icons.print, size: 16, color: Colors.green),
+                  SizedBox(width: 8),
+                  Text('Reimprimer'),
+                ],
+              ),
+            ),
           ],
-          onSelected: (value) => _handleOperationAction(value, operation),
+          onSelected: (value) {
+            if (value == 'reprint') {
+              _reprintOperationReceipt(operation);
+            } else {
+              _handleOperationAction(value, operation);
+            }
+          },
         ),
       ),
     );
@@ -1141,6 +1272,124 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
       case 'details':
         _showOperationDetails(operation);
         break;
+    }
+  }
+
+  void _reprintOperationReceipt(OperationModel operation) async {
+    try {
+      // Récupérer les services nécessaires
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final shopService = Provider.of<ShopService>(context, listen: false);
+      
+      // Obtenir le shop de l'agent
+      final shopId = authService.currentUser?.shopId;
+      if (shopId == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('❌ Shop non trouvé')),
+          );
+        }
+        return;
+      }
+      
+      final shop = shopService.getShopById(shopId);
+      if (shop == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('❌ Shop non trouvé')),
+          );
+        }
+        return;
+      }
+      
+      // Obtenir l'agent
+      final user = authService.currentUser;
+      if (user == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('❌ Agent non trouvé')),
+          );
+        }
+        return;
+      }
+      
+      // Convertir UserModel en AgentModel
+      final agent = AgentModel(
+        id: user.id,
+        username: user.username,
+        password: user.password,
+        shopId: user.shopId ?? 0,
+        nom: user.nom,
+        telephone: user.telephone,
+      );
+      
+      // Enrichir l'opération avec les noms de shops si manquants (pour les transferts)
+      OperationModel enrichedOperation = operation;
+      if (operation.type == OperationType.transfertNational ||
+          operation.type == OperationType.transfertInternationalSortant ||
+          operation.type == OperationType.transfertInternationalEntrant) {
+        
+        String? sourceDesignation = operation.shopSourceDesignation;
+        String? destDesignation = operation.shopDestinationDesignation;
+        
+        // Enrichir shop source si manquant
+        if ((sourceDesignation == null || sourceDesignation.isEmpty) && operation.shopSourceId != null) {
+          final sourceShop = shopService.getShopById(operation.shopSourceId!);
+          if (sourceShop != null) {
+            sourceDesignation = sourceShop.designation;
+          }
+        }
+        
+        // Enrichir shop destination si manquant
+        if ((destDesignation == null || destDesignation.isEmpty) && operation.shopDestinationId != null) {
+          final destShop = shopService.getShopById(operation.shopDestinationId!);
+          if (destShop != null) {
+            destDesignation = destShop.designation;
+          }
+        }
+        
+        // Créer une copie enrichie si nécessaire
+        if (sourceDesignation != operation.shopSourceDesignation || 
+            destDesignation != operation.shopDestinationDesignation) {
+          enrichedOperation = operation.copyWith(
+            shopSourceDesignation: sourceDesignation,
+            shopDestinationDesignation: destDesignation,
+          );
+        }
+      }
+      
+      // Utiliser AutoPrintHelper au lieu de la méthode native qui ne marche pas
+      if (mounted) {
+        final success = await AutoPrintHelper.autoPrintWithDialog(
+          context: context,
+          operation: enrichedOperation,
+          shop: shop,
+          agent: agent,
+          clientName: operation.destinataire,
+        );
+        
+      }
+    } catch (e) {
+
+    }
+  }
+  
+  String _getOperationTypeText(OperationType type) {
+    switch (type) {
+      case OperationType.depot:
+        return '📥 Dépôt';
+      case OperationType.retrait:
+        return '📤 Retrait';
+      case OperationType.transfertNational:
+        return '🔄 Transfert National';
+      case OperationType.transfertInternationalSortant:
+        return '🌍 Transfert International Sortant';
+      case OperationType.transfertInternationalEntrant:
+        return '🌍 Transfert International Entrant';
+      case OperationType.virement:
+        return '💸 Virement';
+      default:
+        return 'Opération';
     }
   }
 
@@ -1501,27 +1750,31 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Détails - ID ${operation.id}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Type: ${operation.typeLabel}'),
-            if (operation.destinataire != null)
-              Text('Destinataire: ${operation.destinataire}'),
-            Text('Montant brut: ${operation.montantBrut} ${operation.devise}'),
-            if (operation.commission > 0)
-              Text('Commission: ${operation.commission} ${operation.devise}'),
-            Text('Montant net: ${operation.montantNet} ${operation.devise}'),
-            Text('Mode de paiement: ${operation.modePaiementLabel}'),
-            Text('Statut: ${operation.statutLabel}'),
-            Text('Agent: $agentName'),
-            Text('Date: ${_formatDate(operation.dateOp)}'),
-            if (operation.notes != null)
-              Text('Notes: ${operation.notes}'),
-            if (operation.observation != null && operation.observation!.isNotEmpty)
-              Text('Observation: ${operation.observation}'),
-          ],
+        title: Text('Détails - ${operation.codeOps ?? "ID ${operation.id}"}'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (operation.codeOps != null)
+                Text('Code: ${operation.codeOps}'),
+              Text('Type: ${operation.typeLabel}'),
+              if (operation.destinataire != null)
+                Text('Destinataire: ${operation.destinataire}'),
+              Text('Montant brut: ${operation.montantBrut} ${operation.devise}'),
+              if (operation.commission > 0)
+                Text('Commission: ${operation.commission} ${operation.devise}'),
+              Text('Montant net: ${operation.montantNet} ${operation.devise}'),
+              Text('Mode de paiement: ${operation.modePaiementLabel}'),
+              Text('Statut: ${operation.statutLabel}'),
+              Text('Agent: $agentName'),
+              Text('Date: ${_formatDate(operation.dateOp)}'),
+              if (operation.notes != null)
+                Text('Notes: ${operation.notes}'),
+              if (operation.observation != null && operation.observation!.isNotEmpty)
+                Text('Observation: ${operation.observation}'),
+            ],
+          ),
         ),
         actions: [
           TextButton(

@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 import '../models/operation_model.dart';
 import '../services/auth_service.dart';
 import '../services/sync_service.dart';
+import '../services/operation_service.dart';
+import '../services/transfer_notification_service.dart';
+import '../services/transfer_sync_service.dart';
 import '../widgets/connectivity_indicator.dart';
 import '../widgets/footer_widget.dart';
 import '../widgets/agent_clients_widget.dart';
@@ -15,7 +18,7 @@ import '../widgets/sync_status_widget.dart';
 import '../widgets/journal_caisse_widget.dart';
 import '../widgets/sync_indicator.dart';
 import '../widgets/offline_banner.dart';
-import '../services/operation_service.dart';
+import '../widgets/flot_management_widget.dart';
 import '../utils/responsive_utils.dart';
 import '../theme/ucash_containers.dart';
 
@@ -30,29 +33,127 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
   int _selectedIndex = 0;
 
   final List<String> _menuItems = [
-    'Tableau de bord',
-    'Clients',
+    'Accueil',
     'Opérations',
     'Validations',
     'Rapports',
-    'Synchronisation',
+    'Gestion FLOT',
   ];
 
   final List<IconData> _menuIcons = [
     Icons.dashboard,
-    Icons.people,
     Icons.account_balance_wallet,
     Icons.check_circle,
     Icons.receipt_long,
-    Icons.analytics,
-    Icons.sync,
+    Icons.local_shipping,
   ];
 
   @override
   void initState() {
     super.initState();
     // SyncService is now initialized in main.dart, so we don't need to initialize it here
+    
+    // Démarrer la surveillance des transferts entrants
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final operationService = Provider.of<OperationService>(context, listen: false);
+      final transferNotificationService = TransferNotificationService();
+      
+      transferNotificationService.startMonitoring(
+        authService: authService,
+        getOperations: () => operationService.operations,
+      );
+      
+      // Définir le callback pour les nouvelles notifications
+      transferNotificationService.onNewTransferDetected = (title, message, transferId) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.notification_important, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(message),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: const Color(0xFFDC2626),
+              duration: const Duration(seconds: 8),
+              action: SnackBarAction(
+                label: 'VOIR',
+                textColor: Colors.white,
+                onPressed: () {
+                  // Naviguer vers l'onglet Validations
+                  setState(() {
+                    _selectedIndex = 2; // Index 2 = Validations (Accueil=0, Opérations=1, Validations=2, Rapports=3)
+                  });
+                },
+              ),
+            ),
+          );
+        }
+      };
+      
+      // Trigger synchronization of operation data when dashboard opens
+      _triggerOperationSync();
+    });
   }
+  
+  // Function to trigger synchronization of operation data
+  void _triggerOperationSync() async {
+    try {
+      final transferSyncService = TransferSyncService();
+      debugPrint('🔄 Déclenchement de la synchronisation des opérations...');
+      
+      // Force a refresh from API to get latest operation data
+      await transferSyncService.forceRefreshFromAPI();
+      
+      debugPrint('✅ Synchronisation des opérations terminée');
+      
+      // Show a snackbar to inform user
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Données des opérations synchronisées'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('❌ Erreur lors de la synchronisation des opérations: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Erreur lors de la synchronisation des opérations'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+  
+  @override
+  void dispose() {
+    // Arrêter la surveillance des transferts
+    TransferNotificationService().stopMonitoring();
+    super.dispose();
+  }
+  
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
@@ -101,30 +202,6 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
     return AppBar(
       title: Row(
         children: [
-          // Logo/Icône UCASH
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(
-              Icons.account_balance_wallet,
-              color: Colors.white,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 12),
-          // Titre
-          Text(
-            isMobile ? 'UCASH' : 'UCASH - Espace Agent',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-              fontSize: isMobile ? 18 : 20,
-              letterSpacing: 0.5,
-            ),
-          ),
         ],
       ),
       flexibleSpace: Container(
@@ -139,11 +216,8 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
       elevation: 4,
       shadowColor: Colors.black.withOpacity(0.3),
       actions: [
-        const ConnectivityIndicator(),
-        SizedBox(width: isMobile ? 4 : 8),
-        // Indicateur de synchronisation automatique
-        SyncIndicator(syncService: SyncService()),
-        SizedBox(width: isMobile ? 4 : 8),
+        if (!isMobile) const ConnectivityIndicator(),
+        if (!isMobile) const SizedBox(width: 4),
         // Bouton de synchronisation manuelle
         ManualSyncButton(
           syncService: SyncService(),
@@ -152,7 +226,7 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
             setState(() {});
           },
         ),
-        SizedBox(width: isMobile ? 8 : 16),
+        SizedBox(width: isMobile ? 4 : 8),
         Consumer<AuthService>(
           builder: (context, authService, child) {
             return PopupMenuButton<String>(
@@ -176,6 +250,7 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
               itemBuilder: (context) => [
                 PopupMenuItem(
                   child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.person, size: isMobile ? 16 : 18, color: const Color(0xFFDC2626)),
                       SizedBox(width: isMobile ? 6 : 8),
@@ -193,6 +268,7 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
                 PopupMenuItem(
                   value: 'logout',
                   child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.logout, size: isMobile ? 16 : 18, color: Colors.red),
                       SizedBox(width: isMobile ? 6 : 8),
@@ -207,7 +283,7 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
             );
           },
         ),
-        SizedBox(width: isMobile ? 8 : 16),
+        SizedBox(width: isMobile ? 4 : 8),
       ],
     );
   }
@@ -252,9 +328,18 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
               itemBuilder: (context, index) {
                 return ListTile(
                   leading: Icon(_menuIcons[index], size: isMobile ? 20 : 24),
-                  title: Text(
-                    _menuItems[index],
-                    style: TextStyle(fontSize: isMobile ? 13 : 14),
+                  title: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          _menuItems[index],
+                          style: TextStyle(fontSize: isMobile ? 13 : 14),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (index == 2) // Index 2 = Validations
+                        _buildValidationBadge(),
+                    ],
                   ),
                   selected: _selectedIndex == index,
                   selectedTileColor: Colors.green[50],
@@ -327,7 +412,7 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (index == 3) // Index de "Validations"
+                      if (index == 2) // Index 2 = Validations
                         _buildValidationBadge(),
                     ],
                   ),
@@ -347,35 +432,41 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
     );
   }
 
-  Widget _buildMainContent() {
-    final size = MediaQuery.of(context).size;
-    final isMobile = size.width <= 768;
-    
-    // Widgets qui ont déjà leur propre scroll
-    final widgetsWithOwnScroll = [0]; // Dashboard uniquement
-    
-    Widget content = switch (_selectedIndex) {
-      0 => _buildDashboardContent(),
-      1 => _buildClientsContent(),
-      2 => _buildOperationsContent(),
-      3 => _buildValidationsContent(),
-      4 => _buildReportsContent(),
-      6 => _buildSynchronisationContent(),
-      _ => _buildDashboardContent(),
-    };
-    
-    // Ajouter scroll si le widget n'en a pas déjà
-    if (!widgetsWithOwnScroll.contains(_selectedIndex)) {
-      return SingleChildScrollView(
-        child: Padding(
-          padding: EdgeInsets.all(isMobile ? 16 : 24),
-          child: content,
-        ),
-      );
-    }
-    
-    return content;
+Widget _buildMainContent() {
+  final size = MediaQuery.of(context).size;
+  final isMobile = size.width <= 768;
+
+  // Widgets qui gèrent leur propre layout (ne pas les mettre dans SingleChildScrollView)
+  final widgetsWithOwnLayout = [1, 2, 3, 4]; // Opérations, Validations, Rapports, FLOT
+
+  Widget content = switch (_selectedIndex) {
+    0 => _buildDashboardContent(),    // Accueil
+    1 => _buildOperationsContent(),   // Opérations
+    2 => _buildValidationsContent(),  // Validations
+    3 => _buildReportsContent(),      // Rapports
+    4 => _buildFlotContent(),         // Gestion FLOT
+    _ => _buildDashboardContent(),
+  };
+
+  // Ne pas mettre de SingleChildScrollView pour les widgets qui gèrent leur propre scroll
+  if (widgetsWithOwnLayout.contains(_selectedIndex)) {
+    return Padding(
+      padding: EdgeInsets.all(isMobile ? 16 : 24),
+      child: content,
+    );
   }
+  
+  // Pour le Dashboard, garder le SingleChildScrollView
+  return Padding(
+    padding: EdgeInsets.all(isMobile ? 16 : 24),
+    child: SingleChildScrollView(
+      child: content,
+    ),
+  );
+}
+
+
+
 
   Widget _buildDashboardContent() {
     return AgentDashboardWidget(
@@ -410,13 +501,16 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
     return const reports.AgentReportsWidget();
   }
 
+  Widget _buildFlotContent() {
+    return const FlotManagementWidget();
+  }
+
   Widget _buildSynchronisationContent() {
     return Consumer<AuthService>(
       builder: (context, authService, child) {
         return Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header avec statut de synchronisation
@@ -458,20 +552,14 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
   }
 
   Widget _buildValidationBadge() {
-    return Consumer<OperationService>(
-      builder: (context, operationService, child) {
+    return Consumer<TransferSyncService>(
+      builder: (context, transferSync, child) {
         final authService = Provider.of<AuthService>(context, listen: false);
         final currentShopId = authService.currentUser?.shopId;
         
         if (currentShopId == null) return const SizedBox.shrink();
         
-        final pendingCount = operationService.operations.where((operation) {
-          return operation.statut == OperationStatus.enAttente &&
-                 (operation.type == OperationType.transfertNational ||
-                  operation.type == OperationType.transfertInternationalSortant ||
-                  operation.type == OperationType.transfertInternationalEntrant) &&
-                 operation.shopDestinationId == currentShopId;
-        }).length;
+        final pendingCount = transferSync.getPendingTransfersForShop(currentShopId).length;
         
         if (pendingCount == 0) return const SizedBox.shrink();
         
@@ -546,30 +634,20 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
           ),
           BottomNavigationBarItem(
             icon: Icon(_menuIcons[1]),
-            label: 'Clients',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(_menuIcons[2]),
             label: 'Opérations',
           ),
           BottomNavigationBarItem(
             icon: Stack(
               children: [
-                Icon(_menuIcons[3]),
-                Consumer<OperationService>(
-                  builder: (context, operationService, child) {
+                Icon(_menuIcons[2]),
+                Consumer<TransferSyncService>(
+                  builder: (context, transferSync, child) {
                     final authService = Provider.of<AuthService>(context, listen: false);
                     final currentShopId = authService.currentUser?.shopId;
                     
                     if (currentShopId == null) return const SizedBox.shrink();
                     
-                    final pendingCount = operationService.operations.where((operation) {
-                      return operation.statut == OperationStatus.enAttente &&
-                             (operation.type == OperationType.transfertNational ||
-                              operation.type == OperationType.transfertInternationalSortant ||
-                              operation.type == OperationType.transfertInternationalEntrant) &&
-                             operation.shopDestinationId == currentShopId;
-                    }).length;
+                    final pendingCount = transferSync.getPendingTransfersForShop(currentShopId).length;
                     
                     if (pendingCount == 0) return const SizedBox.shrink();
                     
@@ -604,39 +682,28 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
             label: 'Validations',
           ),
           BottomNavigationBarItem(
-            icon: Icon(_menuIcons[6]), // Index 6 = Reports
+            icon: Icon(_menuIcons[3]), // Index 3 = Rapports
             label: 'Rapports',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(_menuIcons[4]), // Index 4 = FLOT
+            label: 'FLOT',
           ),
         ],
       ),
     );
   }
 
-  // Mapper l'index desktop (0-7) vers mobile (0-4)
+  // Mapper l'index (0-4)
   int _getMobileNavIndex(int desktopIndex) {
-    // Desktop: 0=Dashboard, 1=Clients, 2=Operations, 3=Validations, 4=Transfers, 5=Journal, 6=Reports, 7=Sync
-    // Mobile:  0=Dashboard, 1=Clients, 2=Operations, 3=Validations, 4=Reports
-    switch (desktopIndex) {
-      case 0: return 0; // Dashboard
-      case 1: return 1; // Clients
-      case 2: return 2; // Operations
-      case 3: return 3; // Validations
-      case 6: return 4; // Reports
-      default: return 0; // Autres (Transfers, Journal, Sync) -> Dashboard
-    }
+    // Index: 0=Accueil, 1=Opérations, 2=Validations, 3=Rapports, 4=FLOT
+    return desktopIndex;
   }
 
-  // Mapper l'index mobile (0-4) vers desktop (0-7)
+  // Mapper l'index mobile vers desktop
   int _getDesktopIndexFromMobile(int mobileIndex) {
-    // Mobile -> Desktop mapping
-    switch (mobileIndex) {
-      case 0: return 0; // Dashboard
-      case 1: return 1; // Clients
-      case 2: return 2; // Operations
-      case 3: return 3; // Validations
-      case 4: return 6; // Reports
-      default: return 0;
-    }
+    // Mobile -> Desktop mapping (identique)
+    return mobileIndex;
   }
 
   Future<void> _handleLogout() async {

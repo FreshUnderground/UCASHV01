@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import '../models/agent_model.dart';
 import 'local_db.dart';
+import 'sync_service.dart';
+import 'shop_service.dart';
 
 class AgentService extends ChangeNotifier {
   static final AgentService _instance = AgentService._internal();
@@ -47,7 +49,7 @@ class AgentService extends ChangeNotifier {
   Future<bool> createAgent({
     required String username,
     required String password,
-    required int shopId,
+    int? shopId,
     String role = 'AGENT',
   }) async {
     _setLoading(true);
@@ -59,10 +61,19 @@ class AgentService extends ChangeNotifier {
         return false;
       }
 
+      // Récupérer le nom du shop pour le shop_designation (seulement si shopId est fourni)
+      String? shopDesignation;
+      if (shopId != null) {
+        final shops = ShopService.instance.shops;
+        final shop = shops.where((s) => s.id == shopId).firstOrNull;
+        shopDesignation = shop?.designation;
+      }
+
       final newAgent = AgentModel(
         username: username,
         password: password, // En production, hasher le mot de passe
         shopId: shopId,
+        shopDesignation: shopDesignation,
         createdAt: DateTime.now(),
         lastModifiedAt: DateTime.now(),
         lastModifiedBy: 'admin',
@@ -70,14 +81,17 @@ class AgentService extends ChangeNotifier {
 
       // Sauvegarder localement (l'ID sera généré automatiquement)
       final savedAgent = await LocalDB.instance.saveAgent(newAgent);
-      debugPrint('✅ Agent sauvegardé avec ID: ${savedAgent.id}');
+      debugPrint('✅ Agent sauvegardé avec ID: ${savedAgent.id}, Shop: $shopDesignation');
       
       // Recharger la liste
       await loadAgents();
       
+      // Synchronisation en arrière-plan
+      _syncInBackground();
       
       _errorMessage = null;
       _setLoading(false);
+      debugPrint('✅ Agent créé localement: $username');
       return true;
     } catch (e) {
       _errorMessage = 'Erreur lors de la création de l\'agent: $e';
@@ -103,8 +117,13 @@ class AgentService extends ChangeNotifier {
       
       // Recharger la liste
       await loadAgents();      
+      
+      // Synchronisation en arrière-plan
+      _syncInBackground();
+      
       _errorMessage = null;
       _setLoading(false);
+      debugPrint('✅ Agent mis à jour localement: ${agent.username}');
       return true;
     } catch (e) {
       _errorMessage = 'Erreur lors de la mise à jour de l\'agent: $e';
@@ -159,7 +178,7 @@ class AgentService extends ChangeNotifier {
     final agentsByShop = <int, int>{};
     for (var agent in _agents) {
       if (agent.shopId != null) {
-        agentsByShop[agent.shopId] = (agentsByShop[agent.shopId] ?? 0) + 1;
+        agentsByShop[agent.shopId!] = (agentsByShop[agent.shopId!] ?? 0) + 1;
       }
     }
 
@@ -225,5 +244,19 @@ class AgentService extends ChangeNotifier {
     } catch (e) {
       debugPrint('❌ Erreur lors de la création des agents de test: $e');
     }
+  }
+
+  // Synchronisation en arrière-plan (non bloquante)
+  void _syncInBackground() {
+    Future.delayed(Duration.zero, () async {
+      try {
+        debugPrint('🔄 [AgentService] Synchronisation en arrière-plan...');
+        final syncService = SyncService();
+        await syncService.syncAll();
+        debugPrint('✅ [AgentService] Synchronisation terminée');
+      } catch (e) {
+        debugPrint('⚠️ [AgentService] Erreur sync (non bloquante): $e');
+      }
+    });
   }
 }

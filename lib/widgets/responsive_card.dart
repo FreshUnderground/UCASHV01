@@ -33,18 +33,19 @@ class ResponsiveCard extends StatelessWidget {
     final isDesktop = size.width > 1024;
     final isTablet = size.width > 768 && size.width <= 1024;
     final isMobile = size.width <= 768;
+    final isSmallMobile = size.width < 600; // Nouveau seuil pour très petits écrans
 
     // Padding adaptatif selon la taille d'écran
     EdgeInsetsGeometry effectivePadding = padding ?? 
       (adaptivePadding 
-        ? EdgeInsets.all(isDesktop ? 24 : isTablet ? 20 : 16)
+        ? EdgeInsets.all(isDesktop ? 24 : isTablet ? 20 : isSmallMobile ? 12 : 16)
         : const EdgeInsets.all(16));
 
     // Margin adaptatif
     EdgeInsetsGeometry effectiveMargin = margin ?? 
       EdgeInsets.symmetric(
-        horizontal: isDesktop ? 8 : isTablet ? 6 : 4,
-        vertical: isDesktop ? 8 : isTablet ? 6 : 4,
+        horizontal: isDesktop ? 8 : isTablet ? 6 : isSmallMobile ? 2 : 4,
+        vertical: isDesktop ? 8 : isTablet ? 6 : isSmallMobile ? 3 : 4,
       );
 
     return Container(
@@ -55,13 +56,13 @@ class ResponsiveCard extends StatelessWidget {
       margin: effectiveMargin,
       decoration: BoxDecoration(
         color: backgroundColor ?? Colors.white,
-        borderRadius: borderRadius ?? BorderRadius.circular(isDesktop ? 16 : isTablet ? 14 : 12),
+        borderRadius: borderRadius ?? BorderRadius.circular(isDesktop ? 16 : isTablet ? 14 : isSmallMobile ? 10 : 12),
         boxShadow: boxShadow ?? [
           BoxShadow(
             color: Colors.grey.withOpacity(0.1),
             spreadRadius: 1,
-            blurRadius: isDesktop ? 8 : isTablet ? 6 : 4,
-            offset: Offset(0, isDesktop ? 4 : isTablet ? 3 : 2),
+            blurRadius: isDesktop ? 8 : isTablet ? 6 : isSmallMobile ? 3 : 4,
+            offset: Offset(0, isDesktop ? 4 : isTablet ? 3 : isSmallMobile ? 1 : 2),
           ),
         ],
       ),

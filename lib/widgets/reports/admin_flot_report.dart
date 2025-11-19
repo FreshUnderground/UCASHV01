@@ -35,6 +35,7 @@ class _AdminFlotReportState extends State<AdminFlotReport> {
   List<ShopModel> _shops = [];
   bool _isLoading = false;
   String? _errorMessage;
+  bool _isFiltersExpanded = false; // Add this line to control filter visibility
 
   @override
   void initState() {
@@ -162,182 +163,209 @@ class _AdminFlotReportState extends State<AdminFlotReport> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Filtres',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            // Header with toggle button
+            Row(
+              children: [
+                const Icon(Icons.filter_list, color: Color(0xFF9C27B0)),
+                const SizedBox(width: 12),
+                const Text(
+                  'Filtres',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: Icon(
+                    _isFiltersExpanded ? Icons.expand_less : Icons.expand_more,
+                  ),
+                  onPressed: () => setState(() => _isFiltersExpanded = !_isFiltersExpanded),
+                  tooltip: _isFiltersExpanded ? 'Masquer les filtres' : 'Afficher les filtres',
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             
-            // Filtres de date
-            Row(
-              children: [
-                const Icon(Icons.date_range, color: Color(0xFF9C27B0)),
-                const SizedBox(width: 12),
-                const Text('Période:', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () async {
-                            final date = await showDatePicker(
-                              context: context,
-                              initialDate: _startDate ?? DateTime.now(),
-                              firstDate: DateTime(2020),
-                              lastDate: DateTime.now(),
-                            );
-                            if (date != null) {
-                              setState(() => _startDate = date);
-                            }
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey),
-                              borderRadius: BorderRadius.circular(8),
+            // Collapsible filters content
+            AnimatedSize(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              child: _isFiltersExpanded
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Filtres de date
+                        Row(
+                          children: [
+                            const Icon(Icons.date_range, color: Color(0xFF9C27B0)),
+                            const SizedBox(width: 12),
+                            const Text('Période:', style: TextStyle(fontWeight: FontWeight.bold)),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: () async {
+                                        final date = await showDatePicker(
+                                          context: context,
+                                          initialDate: _startDate ?? DateTime.now(),
+                                          firstDate: DateTime(2020),
+                                          lastDate: DateTime.now(),
+                                        );
+                                        if (date != null) {
+                                          setState(() => _startDate = date);
+                                        }
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          border: Border.all(color: Colors.grey),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          _startDate != null 
+                                            ? '${_startDate!.day.toString().padLeft(2, '0')}/${_startDate!.month.toString().padLeft(2, '0')}/${_startDate!.year}'
+                                            : 'Date début',
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Text('à'),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: () async {
+                                        final date = await showDatePicker(
+                                          context: context,
+                                          initialDate: _endDate ?? DateTime.now(),
+                                          firstDate: DateTime(2020),
+                                          lastDate: DateTime.now(),
+                                        );
+                                        if (date != null) {
+                                          setState(() => _endDate = date);
+                                        }
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          border: Border.all(color: Colors.grey),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          _endDate != null 
+                                            ? '${_endDate!.day.toString().padLeft(2, '0')}/${_endDate!.month.toString().padLeft(2, '0')}/${_endDate!.year}'
+                                            : 'Date fin',
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                            child: Text(
-                              _startDate != null 
-                                ? '${_startDate!.day.toString().padLeft(2, '0')}/${_startDate!.month.toString().padLeft(2, '0')}/${_startDate!.year}'
-                                : 'Date début',
-                            ),
-                          ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      const Text('à'),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () async {
-                            final date = await showDatePicker(
-                              context: context,
-                              initialDate: _endDate ?? DateTime.now(),
-                              firstDate: DateTime(2020),
-                              lastDate: DateTime.now(),
-                            );
-                            if (date != null) {
-                              setState(() => _endDate = date);
-                            }
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey),
-                              borderRadius: BorderRadius.circular(8),
+                        const SizedBox(height: 16),
+                        
+                        // Filtre par shop
+                        Row(
+                          children: [
+                            const Icon(Icons.store, color: Color(0xFF9C27B0)),
+                            const SizedBox(width: 12),
+                            const Text('Shop:', style: TextStyle(fontWeight: FontWeight.bold)),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: DropdownButton<int>(
+                                value: _selectedShopId,
+                                items: [
+                                  const DropdownMenuItem(
+                                    value: null,
+                                    child: Text('Tous les shops'),
+                                  ),
+                                  ..._shops.where((shop) => shop.id != null).map((shop) {
+                                    return DropdownMenuItem(
+                                      value: shop.id!,
+                                      child: Text(shop.designation ?? 'Shop sans nom'),
+                                    );
+                                  }).toList(),
+                                ],
+                                onChanged: (value) {
+                                  setState(() => _selectedShopId = value);
+                                },
+                                isExpanded: true,
+                              ),
                             ),
-                            child: Text(
-                              _endDate != null 
-                                ? '${_endDate!.day.toString().padLeft(2, '0')}/${_endDate!.month.toString().padLeft(2, '0')}/${_endDate!.year}'
-                                : 'Date fin',
-                            ),
-                          ),
+                          ],
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            
-            // Filtre par shop
-            Row(
-              children: [
-                const Icon(Icons.store, color: Color(0xFF9C27B0)),
-                const SizedBox(width: 12),
-                const Text('Shop:', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: DropdownButton<int>(
-                    value: _selectedShopId,
-                    items: [
-                      const DropdownMenuItem(
-                        value: null,
-                        child: Text('Tous les shops'),
-                      ),
-                      ..._shops.where((shop) => shop.id != null).map((shop) {
-                        return DropdownMenuItem(
-                          value: shop.id!,
-                          child: Text(shop.designation ?? 'Shop sans nom'),
-                        );
-                      }).toList(),
-                    ],
-                    onChanged: (value) {
-                      setState(() => _selectedShopId = value);
-                    },
-                    isExpanded: true,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            
-            // Filtre par statut
-            const Text('Statut:', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children: [
-                FilterChip(
-                  label: const Text('Tous'),
-                  selected: _filtreStatut == null,
-                  onSelected: (selected) {
-                    setState(() => _filtreStatut = null);
-                  },
-                ),
-                FilterChip(
-                  label: const Text('En Route'),
-                  selected: _filtreStatut == flot_model.StatutFlot.enRoute,
-                  selectedColor: Colors.orange.shade200,
-                  onSelected: (selected) {
-                    setState(() => _filtreStatut = flot_model.StatutFlot.enRoute);
-                  },
-                ),
-                FilterChip(
-                  label: const Text('Servi'),
-                  selected: _filtreStatut == flot_model.StatutFlot.servi,
-                  selectedColor: Colors.green.shade200,
-                  onSelected: (selected) {
-                    setState(() => _filtreStatut = flot_model.StatutFlot.servi);
-                  },
-                ),
-                FilterChip(
-                  label: const Text('Annulé'),
-                  selected: _filtreStatut == flot_model.StatutFlot.annule,
-                  selectedColor: Colors.red.shade200,
-                  onSelected: (selected) {
-                    setState(() => _filtreStatut = flot_model.StatutFlot.annule);
-                  },
-                ),
-              ],
-            ),
-            
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                OutlinedButton(
-                  onPressed: () {
-                    setState(() {
-                      _startDate = null;
-                      _endDate = null;
-                      _selectedShopId = null;
-                      _filtreStatut = null;
-                    });
-                  },
-                  child: const Text('Réinitialiser'),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: _loadFlots,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF9C27B0),
-                  ),
-                  child: const Text('Appliquer'),
-                ),
-              ],
+                        const SizedBox(height: 16),
+                        
+                        // Filtre par statut
+                        const Text('Statut:', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            FilterChip(
+                              label: const Text('Tous'),
+                              selected: _filtreStatut == null,
+                              onSelected: (selected) {
+                                setState(() => _filtreStatut = null);
+                              },
+                            ),
+                            FilterChip(
+                              label: const Text('En Route'),
+                              selected: _filtreStatut == flot_model.StatutFlot.enRoute,
+                              selectedColor: Colors.orange.shade200,
+                              onSelected: (selected) {
+                                setState(() => _filtreStatut = flot_model.StatutFlot.enRoute);
+                              },
+                            ),
+                            FilterChip(
+                              label: const Text('Servi'),
+                              selected: _filtreStatut == flot_model.StatutFlot.servi,
+                              selectedColor: Colors.green.shade200,
+                              onSelected: (selected) {
+                                setState(() => _filtreStatut = flot_model.StatutFlot.servi);
+                              },
+                            ),
+                            FilterChip(
+                              label: const Text('Annulé'),
+                              selected: _filtreStatut == flot_model.StatutFlot.annule,
+                              selectedColor: Colors.red.shade200,
+                              onSelected: (selected) {
+                                setState(() => _filtreStatut = flot_model.StatutFlot.annule);
+                              },
+                            ),
+                          ],
+                        ),
+                        
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            OutlinedButton(
+                              onPressed: () {
+                                setState(() {
+                                  _startDate = null;
+                                  _endDate = null;
+                                  _selectedShopId = null;
+                                  _filtreStatut = null;
+                                });
+                              },
+                              child: const Text('Réinitialiser'),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              onPressed: _loadFlots,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF9C27B0),
+                              ),
+                              child: const Text('Appliquer'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    )
+                  : const SizedBox.shrink(),
             ),
           ],
         ),

@@ -12,6 +12,7 @@ import '../models/commission_model.dart';
 import '../models/operation_model.dart';
 import '../models/journal_caisse_model.dart';
 import '../models/flot_model.dart' as flot_model;
+import '../models/cloture_caisse_model.dart';
 
 class LocalDB {
   static final LocalDB _instance = LocalDB._internal();
@@ -31,7 +32,21 @@ class LocalDB {
     final prefs = await database;
     final shopId = shop.id ?? DateTime.now().millisecondsSinceEpoch;
     final updatedShop = shop.copyWith(id: shopId);
-    await prefs.setString('shop_$shopId', jsonEncode(updatedShop.toJson()));
+    final key = 'shop_$shopId';
+    final jsonData = updatedShop.toJson();
+    
+    debugPrint('💾 Sauvegarde shop: $key');
+    debugPrint('📄 Données: ${jsonEncode(jsonData)}');
+    
+    await prefs.setString(key, jsonEncode(jsonData));
+    
+    // Vérifier que la sauvegarde a fonctionné
+    final saved = prefs.getString(key);
+    if (saved != null) {
+      debugPrint('✅ Shop sauvegardé avec succès: ${updatedShop.designation} (ID: $shopId)');
+    } else {
+      debugPrint('❌ Échec de la sauvegarde du shop dans SharedPreferences');
+    }
   }
 
   Future<void> updateShop(ShopModel shop) async {
@@ -195,6 +210,11 @@ class LocalDB {
       capitalAirtelMoney: capitalAirtelMoney,
       capitalMPesa: capitalMPesa,
       capitalOrangeMoney: capitalOrangeMoney,
+      createdAt: DateTime.now(),
+      // Marquer comme non synchronisé pour forcer l'upload
+      isSynced: false,
+      lastModifiedAt: DateTime.now(),
+      lastModifiedBy: 'local_user',
     );
     await saveShop(shop);
   }
@@ -423,14 +443,24 @@ class LocalDB {
     final shops = <ShopModel>[];
     
     final keys = prefs.getKeys();
-    for (String key in keys) {
-      if (key.startsWith('shop_')) {
-        final shopData = prefs.getString(key);
-        if (shopData != null) {
-          shops.add(ShopModel.fromJson(jsonDecode(shopData)));
+    final shopKeys = keys.where((key) => key.startsWith('shop_')).toList();
+    
+    debugPrint('🔍 getAllShops: ${shopKeys.length} clés shop_ trouvées dans SharedPreferences');
+    
+    for (String key in shopKeys) {
+      final shopData = prefs.getString(key);
+      if (shopData != null) {
+        try {
+          final shop = ShopModel.fromJson(jsonDecode(shopData));
+          shops.add(shop);
+          debugPrint('   ✅ Shop chargé: ${shop.designation} (ID: ${shop.id})');
+        } catch (e) {
+          debugPrint('   ❌ Erreur parsing shop $key: $e');
         }
       }
     }
+    
+    debugPrint('🏪 getAllShops: ${shops.length} shops chargés au total');
     return shops;
   }
 
@@ -486,8 +516,7 @@ class LocalDB {
             
             // Vérifier que les champs obligatoires sont présents
             if (agentJson['id'] != null && 
-                agentJson['username'] != null && 
-                (agentJson['shop_id'] != null || agentJson['shopId'] != null)) {
+                agentJson['username'] != null) {
               agents.add(AgentModel.fromJson(agentJson));
             } else {
               // Supprimer les données corrompues
@@ -606,7 +635,22 @@ class LocalDB {
       id: operationId,
       lastModifiedAt: DateTime.now(),
     );
+    
+    // Log pour les opérations de capital initial
+    if (operation.destinataire == 'CAPITAL INITIAL') {
+      debugPrint('💰 saveOperation: Enregistrement opération de capital initial ID $operationId');
+      debugPrint('   Montant: ${operation.montantNet} USD');
+      debugPrint('   Shop source: ${operation.shopSourceId}');
+      debugPrint('   Statut: ${operation.statut.name}');
+    }
+    
     await prefs.setString('operation_$operationId', jsonEncode(updatedOperation.toJson()));
+    
+    // Confirmation de sauvegarde pour les opérations de capital initial
+    if (operation.destinataire == 'CAPITAL INITIAL') {
+      debugPrint('✅ saveOperation: Opération de capital initial ID $operationId sauvegardée avec succès');
+    }
+    
     return updatedOperation;
   }
 
@@ -625,14 +669,28 @@ class LocalDB {
     final operations = <OperationModel>[];
     
     final keys = prefs.getKeys();
+    int initialCapitalCount = 0;
+    
     for (String key in keys) {
       if (key.startsWith('operation_')) {
         final operationData = prefs.getString(key);
         if (operationData != null) {
-          operations.add(OperationModel.fromJson(jsonDecode(operationData)));
+          final operation = OperationModel.fromJson(jsonDecode(operationData));
+          operations.add(operation);
+          
+          // Compter et logger les opérations de capital initial
+          if (operation.destinataire == 'CAPITAL INITIAL') {
+            initialCapitalCount++;
+            debugPrint('💰 getAllOperations: Opération de capital initial trouvée - ID ${operation.id}, Montant: ${operation.montantNet} USD');
+          }
         }
       }
     }
+    
+    if (initialCapitalCount > 0) {
+      debugPrint('💰 getAllOperations: $initialCapitalCount opérations de capital initial chargées');
+    }
+    
     return operations;
   }
 
@@ -647,6 +705,15 @@ class LocalDB {
       op.shopSourceId == shopId || op.shopDestinationId == shopId).toList();
   }
 
+  Future<OperationModel?> getOperationByCodeOps(String codeOps) async {
+    final allOperations = await getAllOperations();
+    try {
+      return allOperations.firstWhere((op) => op.codeOps == codeOps);
+    } catch (e) {
+      return null; // Not found
+    }
+  }
+  
   Future<OperationModel?> getOperationById(int operationId) async {
     final prefs = await database;
     final operationJson = prefs.getString('operation_$operationId');
@@ -1263,6 +1330,98 @@ class LocalDB {
     return allFlots.where((f) => 
       f.agentEnvoyeurId == agentId || f.agentRecepteurId == agentId
     ).toList();
+  }
+
+  // === CRUD CLOTURE CAISSE ===
+  
+  /// Sauvegarder une clôture de caisse
+  Future<void> saveClotureCaisse(ClotureCaisseModel cloture) async {
+    final prefs = await database;
+    final clotureId = cloture.id ?? DateTime.now().millisecondsSinceEpoch;
+    final updatedCloture = cloture.copyWith(id: clotureId);
+    final key = 'cloture_caisse_$clotureId';
+    
+    debugPrint('💾 Sauvegarde clôture caisse: $key');
+    debugPrint('   Shop ID: ${updatedCloture.shopId}');
+    debugPrint('   Date: ${updatedCloture.dateCloture}');
+    debugPrint('   Solde Saisi: ${updatedCloture.soldeSaisiTotal} USD');
+    debugPrint('   Solde Calculé: ${updatedCloture.soldeCalculeTotal} USD');
+    debugPrint('   Écart: ${updatedCloture.ecartTotal} USD');
+    
+    await prefs.setString(key, jsonEncode(updatedCloture.toJson()));
+    
+    debugPrint('✅ Clôture caisse sauvegardée avec succès');
+  }
+
+  /// Récupérer toutes les clôtures de caisse
+  Future<List<ClotureCaisseModel>> getAllCloturesCaisse() async {
+    final prefs = await database;
+    final clotures = <ClotureCaisseModel>[];
+    
+    final keys = prefs.getKeys();
+    for (String key in keys) {
+      if (key.startsWith('cloture_caisse_')) {
+        final clotureData = prefs.getString(key);
+        if (clotureData != null) {
+          clotures.add(ClotureCaisseModel.fromJson(jsonDecode(clotureData)));
+        }
+      }
+    }
+    
+    // Trier par date de clôture (plus récent en premier)
+    clotures.sort((a, b) => b.dateCloture.compareTo(a.dateCloture));
+    return clotures;
+  }
+
+  /// Récupérer les clôtures de caisse d'un shop spécifique
+  Future<List<ClotureCaisseModel>> getCloturesCaisseByShop(int shopId) async {
+    final allClotures = await getAllCloturesCaisse();
+    return allClotures.where((c) => c.shopId == shopId).toList();
+  }
+
+  /// Récupérer la clôture de caisse d'une date spécifique pour un shop
+  Future<ClotureCaisseModel?> getClotureCaisseByDate(int shopId, DateTime date) async {
+    final clotures = await getCloturesCaisseByShop(shopId);
+    
+    // Chercher la clôture qui correspond à cette date exacte
+    for (var cloture in clotures) {
+      if (_isSameDay(cloture.dateCloture, date)) {
+        debugPrint('📊 Clôture trouvée pour le ${date.toIso8601String().split('T')[0]}');
+        debugPrint('   Solde Saisi: ${cloture.soldeSaisiTotal} USD');
+        debugPrint('   Solde Calculé: ${cloture.soldeCalculeTotal} USD');
+        debugPrint('   Écart: ${cloture.ecartTotal} USD');
+        return cloture;
+      }
+    }
+    
+    debugPrint('⚠️ Aucune clôture trouvée pour le ${date.toIso8601String().split('T')[0]}');
+    return null;
+  }
+
+  /// Récupérer la dernière clôture de caisse pour un shop
+  Future<ClotureCaisseModel?> getLastClotureCaisse(int shopId) async {
+    final clotures = await getCloturesCaisseByShop(shopId);
+    return clotures.isEmpty ? null : clotures.first; // Déjà trié par date décroissante
+  }
+
+  /// Vérifier si une clôture existe pour une date donnée
+  Future<bool> clotureExistsPourDate(int shopId, DateTime date) async {
+    final cloture = await getClotureCaisseByDate(shopId, date);
+    return cloture != null;
+  }
+
+  /// Supprimer une clôture de caisse
+  Future<void> deleteClotureCaisse(int clotureId) async {
+    final prefs = await database;
+    await prefs.remove('cloture_caisse_$clotureId');
+    debugPrint('🗑️ Clôture caisse supprimée: $clotureId');
+  }
+
+  /// Utilitaire: vérifier si deux dates sont le même jour
+  bool _isSameDay(DateTime date1, DateTime date2) {
+    return date1.year == date2.year &&
+           date1.month == date2.month &&
+           date1.day == date2.day;
   }
 
 }

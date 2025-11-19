@@ -28,7 +28,7 @@ class _ClientTransactionHistoryState extends State<ClientTransactionHistory> {
           return const Card(
             child: Padding(
               padding: EdgeInsets.all(16),
-              child: Text('Aucune information client disponible'),
+              child: Text('Aucune information partenaire disponible'),
             ),
           );
         }

@@ -24,7 +24,12 @@ try {
     // Récupérer les paramètres de requête
     $since = $_GET['since'] ?? null;
     $userId = $_GET['user_id'] ?? 'unknown';
+    $shopId = $_GET['shop_id'] ?? null;  // ID du shop pour filtrer les agents
+    $userRole = $_GET['user_role'] ?? null;  // Role de l'utilisateur (admin, agent)
     $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 1000;
+    
+    // Debug
+    error_log("🔄 Changements agents demandés depuis: $since, userId: $userId, shopId: $shopId, role: $userRole");
     
     // Construire la requête avec JOIN pour récupérer shop_designation
     $sql = "
@@ -40,14 +45,26 @@ try {
     
     $params = [];
     
-    // Filtre par date de modification (préfixer avec a. pour éviter ambiguïté)
-    if ($since && !empty($since)) {
+    // Filtre par date de modification SEULEMENT si fourni (optimisation)
+    if ($since && !empty($since) && $since !== '2020-01-01T00:00:00.000') {
         $sql .= " AND a.last_modified_at > :since";
         $params[':since'] = $since;
+        error_log("📅 Filtre par date: dernière sync = $since");
+    } else {
+        error_log("📥 Première synchronisation agents: téléchargement de tous les agents");
     }
     
-    // Ordonner par date de modification (les plus récents en premier)
-    $sql .= " ORDER BY a.last_modified_at DESC";
+    // Filtre par shop SEULEMENT pour les agents (pas pour admin)
+    if ($shopId && $userRole !== 'admin') {
+        $sql .= " AND a.shop_id = :shop_id";
+        $params[':shop_id'] = $shopId;
+        error_log("🏪 Filtre par shop: shopId = $shopId (role: $userRole)");
+    } else if ($userRole === 'admin') {
+        error_log("👑 Admin: accès à tous les agents");
+    }
+    
+    // Ordonner par date de modification (les plus anciens en premier pour sync incrémentale)
+    $sql .= " ORDER BY a.last_modified_at ASC";
     
     // Limiter le nombre de résultats
     $sql .= " LIMIT :limit";

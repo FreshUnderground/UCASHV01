@@ -88,9 +88,11 @@ class SyncManager {
             
             // Marquer comme synchronisé seulement après insertion réussie
             if ($insertId > 0) {
-                $updateSql = "UPDATE shops SET is_synced = 1, synced_at = NOW() WHERE id = ?";
+                // Use the client's synced_at timestamp to maintain timezone consistency
+                $syncedAt = $data['synced_at'] ?? date('c'); // Use ISO 8601 format
+                $updateSql = "UPDATE shops SET is_synced = 1, synced_at = ? WHERE id = ?";
                 $updateStmt = $this->pdo->prepare($updateSql);
-                $updateStmt->execute([$insertId]);
+                $updateStmt->execute([$syncedAt, $insertId]);
             }
             
             return $insertId;
@@ -139,9 +141,11 @@ class SyncManager {
         
         if ($result) {
             // Marquer comme synchronisé seulement après mise à jour réussie
-            $updateSql = "UPDATE shops SET is_synced = 1, synced_at = NOW() WHERE id = ?";
+            // Use the client's synced_at timestamp to maintain timezone consistency
+            $syncedAt = $data['synced_at'] ?? date('c'); // Use ISO 8601 format
+            $updateSql = "UPDATE shops SET is_synced = 1, synced_at = ? WHERE id = ?";
             $updateStmt = $this->pdo->prepare($updateSql);
-            $updateStmt->execute([$data['id']]);
+            $updateStmt->execute([$syncedAt, $data['id']]);
             
             return $data['id'];
         }

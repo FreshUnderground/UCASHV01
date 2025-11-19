@@ -1,34 +1,21 @@
 <?php
-header('Content-Type: application/json');
+// En-têtes CORS
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Accept');
-header('Access-Control-Max-Age: 86400');
+header('Access-Control-Allow-Headers: Content-Type, Accept, Authorization, X-Requested-With');
+header('Content-Type: application/json');
 
-// Gestion des requêtes OPTIONS (preflight)
+// Gérer OPTIONS
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
 }
 
-// Test de connectivité simple
-try {
-    $response = [
-        'success' => true,
-        'message' => 'Serveur de synchronisation UCASH opérationnel',
-        'timestamp' => date('c'),
-        'server_time' => time(),
-        'version' => '1.0.0'
-    ];
-    
-    echo json_encode($response);
-    
-} catch (Exception $e) {
-    http_response_code(500);
-    echo json_encode([
-        'success' => false,
-        'message' => 'Erreur serveur: ' . $e->getMessage(),
-        'timestamp' => date('c')
-    ]);
-}
+// Réponse simple pour tester la connexion
+echo json_encode([
+    'success' => true,
+    'message' => 'Serveur accessible',
+    'timestamp' => date('c'),
+    'server' => $_SERVER['SERVER_NAME'] ?? 'unknown'
+]);
 ?>

@@ -11,7 +11,10 @@ import 'services/operation_service.dart';
 import 'services/rates_service.dart';
 import 'services/report_service.dart';
 import 'services/sync_service.dart'; // Add this import
+import 'services/transfer_notification_service.dart';
 import 'services/flot_service.dart';
+import 'services/document_header_service.dart';
+import 'services/transfer_sync_service.dart';
 import 'pages/login_page.dart';
 import 'pages/agent_login_page.dart';
 import 'pages/client_login_page.dart';
@@ -45,6 +48,10 @@ void main() async {
   final syncService = SyncService();
   await syncService.initialize();
   
+  // Initialize the document header service
+  final documentHeaderService = DocumentHeaderService();
+  await documentHeaderService.initialize();
+  
   // Configuration de production
   AppConfig.logInfo('UCASH ${AppConfig.appVersion} - Démarrage en mode ${AppConfig.isProduction ? 'PRODUCTION' : 'DEBUG'}');
   AppConfig.logConfig();  // Afficher la configuration complète
@@ -68,6 +75,9 @@ class UCashApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => RatesService.instance),
         ChangeNotifierProvider(create: (_) => ReportService()),
         ChangeNotifierProvider(create: (_) => FlotService.instance),
+        ChangeNotifierProvider(create: (_) => TransferNotificationService()),
+        ChangeNotifierProvider(create: (_) => DocumentHeaderService()),
+        ChangeNotifierProvider(create: (_) => TransferSyncService()),
       ],
       child: MaterialApp(
         title: 'UCASH - Transfert d\'Argent Moderne',

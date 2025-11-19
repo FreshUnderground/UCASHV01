@@ -1,52 +1,81 @@
-/// Modèle pour le Rapport de Clôture Journalière
+/// Modèle pour le Rapport de Clôture Journée
 class RapportClotureModel {
   final int shopId;
   final String shopDesignation;
   final DateTime dateRapport;
+  final String deviseLocale; // NOUVEAU: CDF, UGX, etc.
   
-  // Solde antérieur (solde de clôture du jour précédent)
+  // Solde antérieur USD
   final double soldeAnterieurCash;
   final double soldeAnterieurAirtelMoney;
   final double soldeAnterieurMPesa;
   final double soldeAnterieurOrangeMoney;
   
-  // Flots
-  final double flotRecu;        // Flots servis (reçus) aujourd'hui
-  final double flotEnCours;     // Flots envoyés mais pas encore servis
-  final double flotServi;       // Flots qu'on a envoyés et qui ont été servis
+  // NOUVEAU: Solde antérieur DEVISE LOCALE
+  final double soldeAnterieurCashDeviseLocale;
+  final double soldeAnterieurAirtelMoneyDeviseLocale;
+  final double soldeAnterieurMPesaDeviseLocale;
+  final double soldeAnterieurOrangeMoneyDeviseLocale;
   
-  // Transferts
-  final double transfertsRecus;      // Transferts initiés (clients ont payé)
-  final double transfertsServis;     // Transferts servis aux bénéficiaires
+  // Flots USD
+  final double flotRecu;
+  final double flotEnvoye;
   
-  // Clients
-  final double depotsClients;        // Dépôts dans comptes clients
-  final double retraitsClients;      // Retraits des comptes clients
+  // NOUVEAU: Flots DEVISE LOCALE
+  final double flotRecuDeviseLocale;
+  final double flotEnvoyeDeviseLocale;
+  
+  // Transferts USD
+  final double transfertsRecus;
+  final double transfertsServis;
+  
+  // NOUVEAU: Transferts DEVISE LOCALE
+  final double transfertsRecusDeviseLocale;
+  final double transfertsServisDeviseLocale;
+  
+  // Clients USD
+  final double depotsClients;
+  final double retraitsClients;
+  
+  // NOUVEAU: Clients DEVISE LOCALE
+  final double depotsClientsDeviseLocale;
+  final double retraitsClientsDeviseLocale;
   
   // Comptes clients
-  final List<CompteClientResume> clientsNousDoivent;  // Solde négatif
-  final List<CompteClientResume> clientsNousDevons;   // Solde positif
+  final List<CompteClientResume> clientsNousDoivent;
+  final List<CompteClientResume> clientsNousDevons;
   
-  // Comptes inter-shops (NOUVEAU)
-  final List<CompteShopResume> shopsNousDoivent;  // Shops qui nous doivent (transferts - floats)
-  final List<CompteShopResume> shopsNousDevons;   // Shops que nous devons
+  // Comptes inter-shops
+  final List<CompteShopResume> shopsNousDoivent;
+  final List<CompteShopResume> shopsNousDevons;
   
-  // NOUVEAU: Listes détaillées des FLOT individuels pour affichage dans le rapport  
-  final List<FlotResume> flotsRecusDetails;      // FLOT reçus (servis) avec détails
-  final List<FlotResume> flotsEnvoyes;           // FLOT envoyés (enRoute + servis) avec détails
-  final List<FlotResume> flotsEnCoursDetails;    // FLOT en cours (enRoute) avec détails
+  // Listes détaillées des FLOT
+  final List<FlotResume> flotsRecusDetails;
+  final List<FlotResume> flotsEnvoyes;
   
-  // Cash disponible par mode de paiement
+  // NOUVEAU: Listes détaillées des opérations clients (dépôts et retraits)
+  final List<OperationResume> depotsClientsDetails;
+  final List<OperationResume> retraitsClientsDetails;
+  
+  // Cash disponible USD
   final double cashDisponibleCash;
   final double cashDisponibleAirtelMoney;
   final double cashDisponibleMPesa;
   final double cashDisponibleOrangeMoney;
-  
-  // Total
   final double cashDisponibleTotal;
   
-  // Capital Net Calculation
+  // NOUVEAU: Cash disponible DEVISE LOCALE
+  final double cashDisponibleCashDeviseLocale;
+  final double cashDisponibleAirtelMoneyDeviseLocale;
+  final double cashDisponibleMPesaDeviseLocale;
+  final double cashDisponibleOrangeMoneyDeviseLocale;
+  final double cashDisponibleTotalDeviseLocale;
+  
+  // Capital Net USD
   final double capitalNet;
+  
+  // NOUVEAU: Capital Net DEVISE LOCALE
+  final double capitalNetDeviseLocale;
   
   // Métadonnées
   final String? generePar;
@@ -56,30 +85,47 @@ class RapportClotureModel {
     required this.shopId,
     required this.shopDesignation,
     required this.dateRapport,
+    this.deviseLocale = 'CDF', // Par défaut CDF
     required this.soldeAnterieurCash,
     required this.soldeAnterieurAirtelMoney,
     required this.soldeAnterieurMPesa,
     required this.soldeAnterieurOrangeMoney,
+    this.soldeAnterieurCashDeviseLocale = 0.0,
+    this.soldeAnterieurAirtelMoneyDeviseLocale = 0.0,
+    this.soldeAnterieurMPesaDeviseLocale = 0.0,
+    this.soldeAnterieurOrangeMoneyDeviseLocale = 0.0,
     required this.flotRecu,
-    required this.flotEnCours,
-    required this.flotServi,
+    required this.flotEnvoye,
+    this.flotRecuDeviseLocale = 0.0,
+    this.flotEnvoyeDeviseLocale = 0.0,
     required this.transfertsRecus,
     required this.transfertsServis,
+    this.transfertsRecusDeviseLocale = 0.0,
+    this.transfertsServisDeviseLocale = 0.0,
     required this.depotsClients,
     required this.retraitsClients,
+    this.depotsClientsDeviseLocale = 0.0,
+    this.retraitsClientsDeviseLocale = 0.0,
     required this.clientsNousDoivent,
     required this.clientsNousDevons,
     required this.shopsNousDoivent,
     required this.shopsNousDevons,
-    this.flotsRecusDetails = const [],     // NOUVEAU: par défaut liste vide
-    this.flotsEnvoyes = const [],          // NOUVEAU: par défaut liste vide
-    this.flotsEnCoursDetails = const [],    // NOUVEAU: par défaut liste vide
+    this.flotsRecusDetails = const [],
+    this.flotsEnvoyes = const [],
+    this.depotsClientsDetails = const [],
+    this.retraitsClientsDetails = const [],
     required this.cashDisponibleCash,
     required this.cashDisponibleAirtelMoney,
     required this.cashDisponibleMPesa,
     required this.cashDisponibleOrangeMoney,
     required this.cashDisponibleTotal,
+    this.cashDisponibleCashDeviseLocale = 0.0,
+    this.cashDisponibleAirtelMoneyDeviseLocale = 0.0,
+    this.cashDisponibleMPesaDeviseLocale = 0.0,
+    this.cashDisponibleOrangeMoneyDeviseLocale = 0.0,
+    this.cashDisponibleTotalDeviseLocale = 0.0,
     required this.capitalNet,
+    this.capitalNetDeviseLocale = 0.0,
     this.generePar,
     DateTime? dateGeneration,
   }) : dateGeneration = dateGeneration ?? DateTime.now();
@@ -101,36 +147,60 @@ class RapportClotureModel {
       soldeAnterieurAirtelMoney +
       soldeAnterieurMPesa +
       soldeAnterieurOrangeMoney;
+      
+  // NOUVEAU: Total solde antérieur devise locale
+  double get soldeAnterieurTotalDeviseLocale =>
+      soldeAnterieurCashDeviseLocale +
+      soldeAnterieurAirtelMoneyDeviseLocale +
+      soldeAnterieurMPesaDeviseLocale +
+      soldeAnterieurOrangeMoneyDeviseLocale;
 
   Map<String, dynamic> toJson() {
     return {
       'shop_id': shopId,
       'shop_designation': shopDesignation,
       'date_rapport': dateRapport.toIso8601String(),
+      'devise_locale': deviseLocale,
       'solde_anterieur_cash': soldeAnterieurCash,
       'solde_anterieur_airtel_money': soldeAnterieurAirtelMoney,
       'solde_anterieur_mpesa': soldeAnterieurMPesa,
       'solde_anterieur_orange_money': soldeAnterieurOrangeMoney,
+      'solde_anterieur_cash_devise_locale': soldeAnterieurCashDeviseLocale,
+      'solde_anterieur_airtel_money_devise_locale': soldeAnterieurAirtelMoneyDeviseLocale,
+      'solde_anterieur_mpesa_devise_locale': soldeAnterieurMPesaDeviseLocale,
+      'solde_anterieur_orange_money_devise_locale': soldeAnterieurOrangeMoneyDeviseLocale,
       'flot_recu': flotRecu,
-      'flot_en_cours': flotEnCours,
-      'flot_servi': flotServi,
+      'flot_envoye': flotEnvoye,
+      'flot_recu_devise_locale': flotRecuDeviseLocale,
+      'flot_envoye_devise_locale': flotEnvoyeDeviseLocale,
       'transferts_recus': transfertsRecus,
       'transferts_servis': transfertsServis,
+      'transferts_recus_devise_locale': transfertsRecusDeviseLocale,
+      'transferts_servis_devise_locale': transfertsServisDeviseLocale,
       'depots_clients': depotsClients,
       'retraits_clients': retraitsClients,
+      'depots_clients_devise_locale': depotsClientsDeviseLocale,
+      'retraits_clients_devise_locale': retraitsClientsDeviseLocale,
       'clients_nous_doivent': clientsNousDoivent.map((c) => c.toJson()).toList(),
       'clients_nous_devons': clientsNousDevons.map((c) => c.toJson()).toList(),
       'shops_nous_doivent': shopsNousDoivent.map((s) => s.toJson()).toList(),
       'shops_nous_devons': shopsNousDevons.map((s) => s.toJson()).toList(),
-      'flots_recus_details': flotsRecusDetails.map((f) => f.toJson()).toList(),  // NOUVEAU
-      'flots_envoyes': flotsEnvoyes.map((f) => f.toJson()).toList(),            // NOUVEAU
-      'flots_en_cours_details': flotsEnCoursDetails.map((f) => f.toJson()).toList(),  // NOUVEAU
+      'flots_recus_details': flotsRecusDetails.map((f) => f.toJson()).toList(),
+      'flots_envoyes': flotsEnvoyes.map((f) => f.toJson()).toList(),
+      'depots_clients_details': depotsClientsDetails.map((d) => d.toJson()).toList(),
+      'retraits_clients_details': retraitsClientsDetails.map((r) => r.toJson()).toList(),
       'cash_disponible_cash': cashDisponibleCash,
       'cash_disponible_airtel_money': cashDisponibleAirtelMoney,
       'cash_disponible_mpesa': cashDisponibleMPesa,
       'cash_disponible_orange_money': cashDisponibleOrangeMoney,
       'cash_disponible_total': cashDisponibleTotal,
+      'cash_disponible_cash_devise_locale': cashDisponibleCashDeviseLocale,
+      'cash_disponible_airtel_money_devise_locale': cashDisponibleAirtelMoneyDeviseLocale,
+      'cash_disponible_mpesa_devise_locale': cashDisponibleMPesaDeviseLocale,
+      'cash_disponible_orange_money_devise_locale': cashDisponibleOrangeMoneyDeviseLocale,
+      'cash_disponible_total_devise_locale': cashDisponibleTotalDeviseLocale,
       'capital_net': capitalNet,
+      'capital_net_devise_locale': capitalNetDeviseLocale,
       'genere_par': generePar,
       'date_generation': dateGeneration.toIso8601String(),
     };
@@ -222,6 +292,45 @@ class FlotResume {
       'statut': statut,
       'date_envoi': dateEnvoi.toIso8601String(),
       'date_reception': dateReception?.toIso8601String(),
+      'mode_paiement': modePaiement,
+    };
+  }
+}
+
+/// Résumé d'une opération client (dépôt ou retrait) pour le rapport de clôture
+class OperationResume {
+  final int operationId;
+  final String type; // 'depot' ou 'retrait'
+  final double montant;
+  final String devise;
+  final DateTime date;
+  final String? destinataire;
+  final String? observation; // IMPORTANT: Observation saisie par l'agent
+  final String? notes;
+  final String modePaiement;
+
+  OperationResume({
+    required this.operationId,
+    required this.type,
+    required this.montant,
+    required this.devise,
+    required this.date,
+    this.destinataire,
+    this.observation,
+    this.notes,
+    required this.modePaiement,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'operation_id': operationId,
+      'type': type,
+      'montant': montant,
+      'devise': devise,
+      'date': date.toIso8601String(),
+      'destinataire': destinataire,
+      'observation': observation,
+      'notes': notes,
       'mode_paiement': modePaiement,
     };
   }

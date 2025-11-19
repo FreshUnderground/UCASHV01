@@ -5,6 +5,7 @@ import '../services/client_service.dart';
 import '../services/operation_service.dart';
 import '../services/shop_service.dart';
 import '../services/flot_service.dart';
+import '../services/local_db.dart';
 import '../models/operation_model.dart';
 import '../models/shop_model.dart';
 import '../widgets/dashboard_card.dart';
@@ -54,12 +55,7 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
         children: [
           // Message de bienvenue
           _buildWelcomeSection(),
-          context.verticalSpace(mobile: 24, tablet: 32, desktop: 40),
-          
-          // Statistiques principales
-          _buildMainStats(),
-          context.verticalSpace(mobile: 24, tablet: 32, desktop: 40),
-          
+          context.verticalSpace(mobile: 24, tablet: 32, desktop: 40),          
           // Actions rapides
           _buildQuickActions(),
           context.verticalSpace(mobile: 24, tablet: 32, desktop: 40),
@@ -80,6 +76,7 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
         final currentUser = authService.currentUser;
         final now = DateTime.now();
         final hour = now.hour;
+        final isMobile = MediaQuery.of(context).size.width < 600;
         String greeting;
         
         if (hour < 12) {
@@ -90,186 +87,240 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
           greeting = 'Bonsoir';
         }
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '$greeting, ${currentUser?.username ?? 'Agent'} !',
-              style: context.h1.copyWith(
-                color: const Color(0xFF2D3748),
+        return Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(isMobile ? 16 : 24),
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(isMobile ? 16 : 24),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF6A11CB),
+                  Color(0xFF2575FC),
+                ],
               ),
-            ),
-            context.verticalSpace(mobile: 6, tablet: 8, desktop: 10),
-            Text(
-              'Voici un aperçu de votre activité',
-              style: context.bodySecondary,
-            ),
-            context.verticalSpace(mobile: 6, tablet: 8, desktop: 10),
-            context.badgeContainer(
-              backgroundColor: const Color(0xFFDC2626).withOpacity(0.1),
-              child: Text(
-                '${now.day}/${now.month}/${now.year} - ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}',
-                style: context.badge.copyWith(
-                  color: const Color(0xFFDC2626),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildMainStats() {
-    return Consumer4<ClientService, OperationService, ShopService, FlotService>(
-      builder: (context, clientService, operationService, shopService, flotService, child) {
-        final authService = Provider.of<AuthService>(context, listen: false);
-        final currentUser = authService.currentUser;
-        
-        if (currentUser?.id == null || currentUser?.shopId == null) {
-          return _buildLoadingStats();
-        }
-
-        final clientStats = _getClientStats(clientService, currentUser!.shopId!);
-        final shopStats = _getShopStats(shopService, currentUser.shopId!);
-        
-        // Use FutureBuilder to handle async operation stats
-        return FutureBuilder<Map<String, dynamic>>(
-          future: _getOperationStats(operationService, flotService, currentUser.id!),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return _buildLoadingStats();
-            }
-            
-            if (snapshot.hasError) {
-              return Center(child: Text('Erreur: ${snapshot.error}'));
-            }
-            
-            final operationStats = snapshot.data!;
-            
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Statistiques du jour',
-                  style: context.h3.copyWith(
-                    color: const Color(0xFF374151),
-                  ),
-                ),
-                context.verticalSpace(mobile: 12, tablet: 16, desktop: 20),
-                
-                // Grille de statistiques responsive
-                context.gridContainer(
-                  mobileColumns: 2,
-                  tabletColumns: 2,
-                  desktopColumns: 4,
-                  aspectRatio: context.isSmallScreen ? 1.2 : 1.0,
-                  children: [
-                    _buildStatCard(
-                      'Clients Actifs',
-                      '${clientStats['activeClients']}',
-                      Icons.people,
-                      Colors.blue,
-                    ),
-                    _buildStatCard(
-                      'Opérations Aujourd\'hui',
-                      '${operationStats['operationsToday']}',
-                      Icons.swap_horiz,
-                      Colors.green,
-                    ),
-                    _buildStatCard(
-                      'Cash en Caisse',
-                      '${shopStats['cashDisponible'].toStringAsFixed(0)} USD',
-                      Icons.account_balance_wallet,
-                      Colors.orange,
-                    ),
-                    _buildStatCard(
-                      'Commissions Gagnées',
-                      '${operationStats['totalCommissions'].toStringAsFixed(0)} USD',
-                      Icons.trending_up,
-                      Colors.purple,
-                    ),
-                  ],
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF6A11CB).withOpacity(0.3),
+                  blurRadius: isMobile ? 12 : 20,
+                  offset: Offset(0, isMobile ? 6 : 10),
                 ),
               ],
-            );
-          },
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(isMobile ? 16 : 28),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$greeting, ${currentUser?.username ?? 'Agent'} !',
+                    style: TextStyle(
+                      fontSize: isMobile ? 18 : 28,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  SizedBox(height: isMobile ? 6 : 10),
+                  Text(
+                    'Voici un aperçu de votre activité',
+                    style: TextStyle(
+                      fontSize: isMobile ? 13 : 17,
+                      color: Colors.white70,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                  SizedBox(height: isMobile ? 12 : 20),
+                  Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isMobile ? 10 : 16,
+                      vertical: isMobile ? 6 : 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.25),
+                      borderRadius: BorderRadius.circular(isMobile ? 16 : 24),
+                    ),
+                    child: Text(
+                      '${now.day}/${now.month}/${now.year} - ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w500,
+                        fontSize: isMobile ? 12 : 14,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         );
       },
     );
   }
 
-  Widget _buildLoadingStats() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Statistiques du jour',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF374151),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: _buildStatCard(
-                'Clients Actifs',
-                '...',
-                Icons.people,
-                Colors.blue,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _buildStatCard(
-                'Transactions Aujourd\'hui',
-                '...',
-                Icons.swap_horiz,
-                Colors.green,
-              ),
+
+  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+    final isMobile = context.isSmallScreen;
+    final isTablet = MediaQuery.of(context).size.width > 768 && MediaQuery.of(context).size.width <= 1024;
+    final isSmallMobile = MediaQuery.of(context).size.width < 600;
+    
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(isMobile ? 16 : 20),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(isMobile ? 16 : 20),
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              blurRadius: isMobile ? 8 : 12,
+              offset: Offset(0, isMobile ? 2 : 4),
             ),
           ],
         ),
-      ],
-    );
-  }
-
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
-    return context.statContainer(
-      backgroundColor: Colors.white,
-      borderColor: color.withOpacity(0.2),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        child: Padding(
+          padding: EdgeInsets.all(isMobile ? 12 : (isTablet ? 16 : 24)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                icon, 
-                color: color, 
-                size: context.fluidIcon(mobile: 20, tablet: 24, desktop: 28),
+              Container(
+                padding: EdgeInsets.all(isMobile ? 10 : (isTablet ? 12 : 14)),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(isMobile ? 12 : 16),
+                ),
+                child: Icon(
+                  icon,
+                  color: color,
+                  size: isMobile ? 24 : (isTablet ? 28 : 32),
+                ),
               ),
-              Flexible(
+              SizedBox(height: isMobile ? 12 : (isTablet ? 16 : 20)),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: isSmallMobile ? 11 : (isMobile ? 12 : (isTablet ? 13 : 15)),
+                  color: Colors.black54,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              SizedBox(height: isMobile ? 6 : (isTablet ? 8 : 10)),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
                 child: Text(
                   value,
-                  style: context.statValue.copyWith(color: color),
-                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: isSmallMobile ? 16 : (isMobile ? 18 : (isTablet ? 21 : 24)),
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
                 ),
               ),
             ],
           ),
-          context.verticalSpace(mobile: 6, tablet: 8, desktop: 10),
-          Text(
-            title,
-            style: context.statLabel,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
+  // NOUVEAU: Carte statistique avec affichage USD + Devise Locale
+  Widget _buildStatCardDualCurrency(
+    String title, 
+    double montantUSD, 
+    double montantDeviseLocale, 
+    String deviseLocale,
+    IconData icon, 
+    Color color,
+  ) {
+    final isMobile = context.isSmallScreen;
+    final isTablet = MediaQuery.of(context).size.width > 768 && MediaQuery.of(context).size.width <= 1024;
+    final isSmallMobile = MediaQuery.of(context).size.width < 600;
+    
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(isMobile ? 16 : 20),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(isMobile ? 16 : 20),
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              blurRadius: isMobile ? 8 : 12,
+              offset: Offset(0, isMobile ? 2 : 4),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: EdgeInsets.all(isMobile ? 12 : (isTablet ? 16 : 24)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: EdgeInsets.all(isMobile ? 10 : (isTablet ? 12 : 14)),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(isMobile ? 12 : 16),
+                ),
+                child: Icon(
+                  icon,
+                  color: color,
+                  size: isMobile ? 24 : (isTablet ? 28 : 32),
+                ),
+              ),
+              SizedBox(height: isMobile ? 12 : (isTablet ? 16 : 20)),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: isSmallMobile ? 11 : (isMobile ? 12 : (isTablet ? 13 : 15)),
+                  color: Colors.black54,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              SizedBox(height: isMobile ? 6 : (isTablet ? 8 : 10)),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '${montantUSD.toStringAsFixed(2)} \$',
+                  style: TextStyle(
+                    fontSize: isSmallMobile ? 15 : (isMobile ? 16 : (isTablet ? 19 : 22)),
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+              ),
+              if (montantDeviseLocale > 0)
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '${montantDeviseLocale.toStringAsFixed(2)} $deviseLocale',
+                    style: TextStyle(
+                      fontSize: isSmallMobile ? 12 : (isMobile ? 13 : (isTablet ? 15 : 17)),
+                      fontWeight: FontWeight.w600,
+                      color: color,
+                    ),
+                  ),
+                ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -279,58 +330,111 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Actions rapides',
+          'Actions Rapides',
           style: context.h3.copyWith(
             color: const Color(0xFF374151),
           ),
         ),
         context.verticalSpace(mobile: 12, tablet: 16, desktop: 20),
-        
         context.gridContainer(
           mobileColumns: 2,
           tabletColumns: 3,
-          desktopColumns: 3,
-          aspectRatio: context.isSmallScreen ? 1.1 : 1.0,
+          desktopColumns: 5,
+          aspectRatio: context.isSmallScreen ? 1.2 : 0.9,
           children: [
-            DashboardCard(
-              title: 'Nouveau Client',
-              icon: Icons.person_add,
-              color: Colors.blue,
-              onTap: () => _navigateToClients(),
+            _buildActionCard(
+              'Nouveau Transfert',
+              Icons.send,
+              const Color(0xFF6A11CB),
+              () => _navigateToTransfers(),
             ),
-            DashboardCard(
-              title: 'Nouvelle Opération',
-              icon: Icons.add_circle_outline,
-              color: Colors.green,
-              onTap: () => _navigateToOperations(),
+            _buildActionCard(
+              'Dépôt',
+              Icons.add,
+              const Color(0xFF2575FC),
+              () => _navigateToOperations(),
             ),
-            DashboardCard(
-              title: 'Mes Clients',
-              icon: Icons.people,
-              color: Colors.orange,
-              onTap: () => _navigateToClients(),
+            _buildActionCard(
+              'Retrait',
+              Icons.remove,
+              const Color(0xFF20BF6B),
+              () => _navigateToOperations(),
             ),
-            DashboardCard(
-              title: 'Validations',
-              icon: Icons.check_circle,
-              color: Colors.purple,
-              onTap: () => _navigateToValidations(),
+            _buildActionCard(
+              'Change Devises',
+              Icons.currency_exchange,
+              const Color(0xFFF7B731),
+              () => _safeNavigateToTab(3), // Index 3 = Change de Devises
             ),
-            DashboardCard(
-              title: 'Transferts',
-              icon: Icons.send,
-              color: Colors.indigo,
-              onTap: () => _navigateToTransfers(),
-            ),
-            DashboardCard(
-              title: 'Rapports',
-              icon: Icons.analytics,
-              color: Colors.teal,
-              onTap: () => _navigateToReports(),
+            _buildActionCard(
+              'Rapports',
+              Icons.analytics,
+              const Color(0xFF4B7BEC),
+              () => _safeNavigateToTab(6), // Index 6 = Rapports
             ),
           ],
         ),
       ],
+    );
+  }
+
+  Widget _buildActionCard(String title, IconData icon, Color color, VoidCallback onTap) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(isMobile ? 14 : 20),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(isMobile ? 14 : 20),
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              blurRadius: isMobile ? 8 : 12,
+              offset: Offset(0, isMobile ? 2 : 4),
+            ),
+          ],
+        ),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(isMobile ? 14 : 20),
+          child: Padding(
+            padding: EdgeInsets.all(isMobile ? 10 : 12),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(isMobile ? 12 : 16),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(isMobile ? 14 : 18),
+                  ),
+                  child: Icon(
+                    icon,
+                    color: color,
+                    size: isMobile ? 24 : 32,
+                  ),
+                ),
+                SizedBox(height: isMobile ? 8 : 12),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: isMobile ? 11 : 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -340,14 +444,17 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
         final authService = Provider.of<AuthService>(context, listen: false);
         final currentUser = authService.currentUser;
         
-        if (currentUser?.id == null) {
+        if (currentUser?.shopId == null) {
           return const SizedBox.shrink();
         }
 
+        // Filtrer par shopId pour afficher TOUTES les opérations du shop
         final recentOperations = operationService.operations
-            .where((op) => op.agentId == currentUser!.id)
-            .take(5)
-            .toList();
+            .where((op) => op.shopSourceId == currentUser!.shopId || op.shopDestinationId == currentUser.shopId)
+            .toList()
+          ..sort((a, b) => b.dateOp.compareTo(a.dateOp)); // Trier par date décroissante
+        
+        final displayedOperations = recentOperations.take(5).toList();
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -369,49 +476,62 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
             ),
             const SizedBox(height: 16),
             
-            if (recentOperations.isEmpty)
-              Container(
-                padding: const EdgeInsets.all(32),
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey[200]!),
-                ),
-                child: const Center(
-                  child: Column(
-                    children: [
-                      Icon(Icons.swap_horiz_outlined, size: 48, color: Colors.grey),
-                      SizedBox(height: 16),
-                      Text(
-                        'Aucune transaction récente',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.grey,
-                          fontWeight: FontWeight.w500,
-                        ),
+            if (displayedOperations.isEmpty)
+              Builder(
+                builder: (context) {
+                  final isMobile = MediaQuery.of(context).size.width < 600;
+                  return Container(
+                    padding: EdgeInsets.all(isMobile ? 20 : 32),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey[200]!),
+                    ),
+                    child: Center(
+                      child: Column(
+                        children: [
+                          Icon(Icons.swap_horiz_outlined, size: isMobile ? 36 : 48, color: Colors.grey),
+                          SizedBox(height: isMobile ? 12 : 16),
+                          Text(
+                            'Aucune transaction récente',
+                            style: TextStyle(
+                              fontSize: isMobile ? 14 : 16,
+                              color: Colors.grey,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          SizedBox(height: isMobile ? 6 : 8),
+                          Text(
+                            'Vos transactions apparaîtront ici',
+                            style: TextStyle(
+                              fontSize: isMobile ? 12 : 14,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
                       ),
-                      SizedBox(height: 8),
-                      Text(
-                        'Vos transactions apparaîtront ici',
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                    ],
-                  ),
-                ),
+                    ),
+                  );
+                },
               )
             else
-              Card(
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(16),
-                  itemCount: recentOperations.length,
-                  separatorBuilder: (context, index) => const Divider(),
-                  itemBuilder: (context, index) {
-                    final operation = recentOperations[index];
-                    return _buildOperationItem(operation);
-                  },
-                ),
+              Builder(
+                builder: (context) {
+                  final isMobile = MediaQuery.of(context).size.width < 600;
+                  return Card(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      padding: EdgeInsets.all(isMobile ? 12 : 16),
+                      itemCount: displayedOperations.length,
+                      separatorBuilder: (context, index) => const Divider(),
+                      itemBuilder: (context, index) {
+                        final operation = displayedOperations[index];
+                        return _buildOperationItem(operation);
+                      },
+                    ),
+                  );
+                },
               ),
           ],
         );
@@ -420,6 +540,7 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
   }
 
   Widget _buildOperationItem(OperationModel operation) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
     Color statusColor;
     IconData statusIcon;
     
@@ -442,65 +563,134 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
         break;
     }
 
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: statusColor.withOpacity(0.2),
-        child: Icon(statusIcon, color: statusColor, size: 20),
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(isMobile ? 12 : 16),
       ),
-      title: Text(
-        '${operation.typeLabel} - ${operation.destinataire}',
-        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-      ),
-      subtitle: Text(
-        '${operation.montantBrut.toStringAsFixed(2)} ${operation.devise}',
-        style: const TextStyle(fontSize: 12),
-      ),
-      trailing: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Container(
         decoration: BoxDecoration(
-          color: statusColor.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(isMobile ? 12 : 16),
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.08),
+              blurRadius: isMobile ? 6 : 8,
+              offset: Offset(0, isMobile ? 1 : 2),
+            ),
+          ],
         ),
-        child: Text(
-          _getStatusLabel(operation.statut),
-          style: TextStyle(
-            color: statusColor,
-            fontWeight: FontWeight.w500,
-            fontSize: 12,
+        child: ListTile(
+          contentPadding: EdgeInsets.symmetric(
+            horizontal: isMobile ? 12 : 20,
+            vertical: isMobile ? 8 : 12,
           ),
+          leading: Container(
+            padding: EdgeInsets.all(isMobile ? 8 : 12),
+            decoration: BoxDecoration(
+              color: statusColor.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(isMobile ? 10 : 14),
+            ),
+            child: Icon(statusIcon, color: statusColor, size: isMobile ? 20 : 24),
+          ),
+          title: Text(
+            '${operation.typeLabel} - ${operation.destinataire}',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: isMobile ? 13 : 15,
+            ),
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(height: isMobile ? 4 : 6),
+              Text(
+                '${operation.montantBrut.toStringAsFixed(2)} ${operation.devise}',
+                style: TextStyle(
+                  fontSize: isMobile ? 12 : 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              SizedBox(height: isMobile ? 2 : 4),
+              Text(
+                '${operation.dateOp.day}/${operation.dateOp.month}/${operation.dateOp.year}',
+                style: TextStyle(
+                  fontSize: isMobile ? 11 : 12,
+                  color: Colors.grey,
+                ),
+              ),
+            ],
+          ),
+          trailing: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 8 : 12,
+              vertical: isMobile ? 4 : 6,
+            ),
+            decoration: BoxDecoration(
+              color: statusColor.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(isMobile ? 12 : 16),
+            ),
+            child: Text(
+              _getStatusLabel(operation.statut),
+              style: TextStyle(
+                color: statusColor,
+                fontWeight: FontWeight.w600,
+                fontSize: isMobile ? 11 : 13,
+              ),
+            ),
+          ),
+          onTap: () => _navigateToOperations(),
         ),
       ),
-      onTap: () => _navigateToOperations(),
     );
   }
 
   void _navigateToClients() {
     if (widget.onTabChanged != null) {
-      widget.onTabChanged!(1); // Index 1 = Clients (identique pour mobile et desktop)
+      widget.onTabChanged!(1); // Index 1 = Opérations (nouveau mapping)
     }
   }
 
   void _navigateToOperations() {
     if (widget.onTabChanged != null) {
-      widget.onTabChanged!(2); // Index 2 = Opérations (identique pour mobile et desktop)
+      widget.onTabChanged!(1); // Index 1 = Opérations
     }
   }
 
   void _navigateToValidations() {
     if (widget.onTabChanged != null) {
-      widget.onTabChanged!(3); // Index 3 = Validations (identique pour mobile et desktop)
+      widget.onTabChanged!(2); // Index 2 = Validations
     }
   }
 
   void _navigateToTransfers() {
     if (widget.onTabChanged != null) {
-      widget.onTabChanged!(4); // Index 4 = Transferts (desktop seulement)
+      widget.onTabChanged!(2); // Index 2 = Validations (transferts = validations)
     }
   }
 
   void _navigateToReports() {
     if (widget.onTabChanged != null) {
-      widget.onTabChanged!(6); // Index 6 = Rapports (sera mappé correctement pour mobile)
+      widget.onTabChanged!(6); // Index 6 = Rapports (correct)
+    }
+  }
+
+  // Navigation sécurisée avec vérification d'index
+  void _safeNavigateToTab(int index) {
+    if (widget.onTabChanged != null) {
+      // Vérifier que l'index est dans les limites valides (0-8)
+      if (index >= 0 && index <= 8) {
+        widget.onTabChanged!(index);
+      } else {
+        debugPrint('⚠️ Erreur: Index $index hors limites (0-8)');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Erreur de navigation'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
     }
   }
 
@@ -573,24 +763,126 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
   }
 
   // Calculer les statistiques des operations DEPUIS DONNEES LOCALES
-  Future<Map<String, dynamic>> _getOperationStats(OperationService operationService, FlotService flotService, int agentId) async {
+  Future<Map<String, dynamic>> _getOperationStats(OperationService operationService, FlotService flotService, int shopId) async {  // Changed parameter from agentId to shopId
     final today = DateTime.now();
+    final shopService = Provider.of<ShopService>(context, listen: false);
+    final currentShop = shopService.shops.firstWhere(
+      (shop) => shop.id == shopId,
+      orElse: () => ShopModel(designation: 'Inconnu', localisation: ''),
+    );
+    
     // UTILISE LES DONNEES LOCALES (operations deja chargees dans le service)
+    // FILTRE PAR SHOP au lieu de agentId pour afficher toutes les operations du shop
     final todayOperations = operationService.operations.where((op) => 
-      op.agentId == agentId &&
+      (op.shopSourceId == shopId || op.shopDestinationId == shopId) &&  // Changed filter to shopId
       op.dateOp.year == today.year &&
       op.dateOp.month == today.month &&
       op.dateOp.day == today.day
     ).toList();
 
-    // Charger les FLOTs pour cet agent
-    await flotService.loadFlots();
+    // Utiliser les FLOTs déjà chargés dans le service au lieu de recharger
+    // FILTRE PAR SHOP: FLOTs envoyés depuis ce shop OU reçus vers ce shop
     final todayFlots = flotService.flots.where((flot) => 
-      (flot.agentEnvoyeurId == agentId || flot.agentRecepteurId == agentId) &&
+      (flot.shopSourceId == shopId || flot.shopDestinationId == shopId) &&  // Changed filter to shopId
       flot.dateEnvoi.year == today.year &&
       flot.dateEnvoi.month == today.month &&
       flot.dateEnvoi.day == today.day
     ).toList();
+
+    // CALCUL DU CASH DISPONIBLE DU JOUR selon la formule:
+    // Cash Disponible = (Solde Antérieur + Dépôts + FLOT En Cours + FLOT Reçu + Transfert Reçu) - (Transfert Servi + Retraits + FLOT Servi)
+    
+    // 1. Solde Antérieur : Récupérer le solde SAISI de la clôture précédente
+    double soldeAnterieurUSD = 0.0;
+    double soldeAnterieurDeviseLocale = 0.0;
+    
+    try {
+      // Chercher la clôture d'hier
+      final yesterday = today.subtract(const Duration(days: 1));
+      final clotureHier = await LocalDB.instance.getClotureCaisseByDate(shopId, yesterday);
+      
+      if (clotureHier != null) {
+        // Utiliser le solde SAISI de la clôture d'hier comme solde antérieur d'aujourd'hui
+        soldeAnterieurUSD = clotureHier.soldeSaisiTotal;
+        // Note: Pour la devise locale, on devrait avoir des champs séparés dans ClotureCaisseModel
+        // Pour l'instant, on utilise 0 car le modèle actuel ne stocke que l'USD
+      } else {
+        // Pas de clôture hier, utiliser le capital du shop comme fallback
+        soldeAnterieurUSD = currentShop.capitalCash + currentShop.capitalAirtelMoney + 
+                            currentShop.capitalMPesa + currentShop.capitalOrangeMoney;
+        soldeAnterieurDeviseLocale = (currentShop.capitalCashDevise2 ?? 0) + 
+                                     (currentShop.capitalAirtelMoneyDevise2 ?? 0) + 
+                                     (currentShop.capitalMPesaDevise2 ?? 0) + 
+                                     (currentShop.capitalOrangeMoneyDevise2 ?? 0);
+      }
+    } catch (e) {
+      // En cas d'erreur, utiliser le capital du shop
+      soldeAnterieurUSD = currentShop.capitalCash + currentShop.capitalAirtelMoney + 
+                          currentShop.capitalMPesa + currentShop.capitalOrangeMoney;
+      soldeAnterieurDeviseLocale = (currentShop.capitalCashDevise2 ?? 0) + 
+                                   (currentShop.capitalAirtelMoneyDevise2 ?? 0) + 
+                                   (currentShop.capitalMPesaDevise2 ?? 0) + 
+                                   (currentShop.capitalOrangeMoneyDevise2 ?? 0);
+    }
+    
+    // 2. Dépôts du jour (clients qui déposent)
+    final depotsUSD = todayOperations
+        .where((op) => op.type == OperationType.depot && op.devise == 'USD')
+        .fold<double>(0.0, (sum, op) => sum + op.montantNet);
+    final depotsDeviseLocale = todayOperations
+        .where((op) => op.type == OperationType.depot && (op.devise == 'CDF' || op.devise == 'UGX'))
+        .fold<double>(0.0, (sum, op) => sum + op.montantNet);
+    
+    // 3. FLOT Reçu (FLOTs vers nous: en cours + servis reçus aujourd'hui)
+    final flotRecuUSD = todayFlots
+        .where((flot) => flot.shopDestinationId == shopId && flot.devise == 'USD')
+        .fold<double>(0.0, (sum, flot) => sum + flot.montant);
+    final flotRecuDeviseLocale = todayFlots
+        .where((flot) => flot.shopDestinationId == shopId && (flot.devise == 'CDF' || flot.devise == 'UGX'))
+        .fold<double>(0.0, (sum, flot) => sum + flot.montant);
+    
+    // 4. FLOT Envoyé (FLOTs par nous: en cours + servis envoyés aujourd'hui)
+    final flotEnvoyeUSD = todayFlots
+        .where((flot) => flot.shopSourceId == shopId && flot.devise == 'USD')
+        .fold<double>(0.0, (sum, flot) => sum + flot.montant);
+    final flotEnvoyeDeviseLocale = todayFlots
+        .where((flot) => flot.shopSourceId == shopId && (flot.devise == 'CDF' || flot.devise == 'UGX'))
+        .fold<double>(0.0, (sum, flot) => sum + flot.montant);
+    
+    // 5. Transferts Reçus (client nous paie - ENTRÉE)
+    final transfertRecuUSD = todayOperations
+        .where((op) => (op.type == OperationType.transfertNational || op.type == OperationType.transfertInternationalSortant) && 
+                       op.shopSourceId == shopId && op.devise == 'USD')
+        .fold<double>(0.0, (sum, op) => sum + op.montantBrut);
+    final transfertRecuDeviseLocale = todayOperations
+        .where((op) => (op.type == OperationType.transfertNational || op.type == OperationType.transfertInternationalSortant) && 
+                       op.shopSourceId == shopId && (op.devise == 'CDF' || op.devise == 'UGX'))
+        .fold<double>(0.0, (sum, op) => sum + op.montantBrut);
+    
+    // 6. Transferts Servis (on sert le client - SORTIE)
+    final transfertServiUSD = todayOperations
+        .where((op) => (op.type == OperationType.transfertNational || op.type == OperationType.transfertInternationalEntrant) && 
+                       op.shopDestinationId == shopId && op.devise == 'USD')
+        .fold<double>(0.0, (sum, op) => sum + op.montantNet);
+    final transfertServiDeviseLocale = todayOperations
+        .where((op) => (op.type == OperationType.transfertNational || op.type == OperationType.transfertInternationalEntrant) && 
+                       op.shopDestinationId == shopId && (op.devise == 'CDF' || op.devise == 'UGX'))
+        .fold<double>(0.0, (sum, op) => sum + op.montantNet);
+    
+    // 7. Retraits du jour (clients qui retirent)
+    final retraitsUSD = todayOperations
+        .where((op) => op.type == OperationType.retrait && op.devise == 'USD')
+        .fold<double>(0.0, (sum, op) => sum + op.montantNet);
+    final retraitsDeviseLocale = todayOperations
+        .where((op) => op.type == OperationType.retrait && (op.devise == 'CDF' || op.devise == 'UGX'))
+        .fold<double>(0.0, (sum, op) => sum + op.montantNet);
+    
+    // FORMULE FINALE: Cash Disponible du Jour
+    // (Solde Ant. + Depot + FLOT Recu + Transfert Recu) - (Retrait + FLOT Envoyé + Transfert Servi)
+    final cashDisponibleJourUSD = (soldeAnterieurUSD + depotsUSD + flotRecuUSD + transfertRecuUSD) - 
+                                  (retraitsUSD + flotEnvoyeUSD + transfertServiUSD);
+    final cashDisponibleJourDeviseLocale = (soldeAnterieurDeviseLocale + depotsDeviseLocale + flotRecuDeviseLocale + transfertRecuDeviseLocale) - 
+                                           (retraitsDeviseLocale + flotEnvoyeDeviseLocale + transfertServiDeviseLocale);
 
     // CALCUL REEL: Montants par devise (utiliser le bon montant selon le type)
     double totalMontantUSD = 0.0;
@@ -650,6 +942,9 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
 
     return {
       'operationsToday': todayOperations.length + flots, // Inclure les FLOTs dans le total
+      // Cash Disponible du Jour (NOUVEAU - selon la formule)
+      'cashDisponibleJourUSD': cashDisponibleJourUSD,
+      'cashDisponibleJourDeviseLocale': cashDisponibleJourDeviseLocale,
       // Montants par devise
       'totalMontantUSD': totalMontantUSD,
       'totalMontantCDF': totalMontantCDF,
@@ -660,6 +955,7 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
       'totalCommissionsCDF': totalCommissionsCDF,
       'totalCommissionsUGX': totalCommissionsUGX,
       'totalCommissions': totalCommissionsUSD, // Pour compatibilite (USD par defaut)
+      'totalCommissionsDeviseLocale': totalCommissionsCDF, // NOUVEAU: CDF par défaut
       // Par type
       'depots': depots,
       'retraits': retraits,
@@ -697,6 +993,8 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
       // Devise secondaire (CDF ou UGX)
       'devisePrincipale': currentShop.devisePrincipale,
       'deviseSecondaire': currentShop.deviseSecondaire,
+      'deviseLocale': currentShop.deviseSecondaire ?? 'CDF', // NOUVEAU: Pour compat
+      'cashDisponibleDeviseLocale': currentShop.capitalCashDevise2 ?? 0, // NOUVEAU
       'cashDisponibleDevise2': currentShop.capitalCashDevise2 ?? 0,
       'airtelMoneyDevise2': currentShop.capitalAirtelMoneyDevise2 ?? 0,
       'mPesaDevise2': currentShop.capitalMPesaDevise2 ?? 0,

@@ -89,7 +89,7 @@ class _ClientLoginPageState extends State<ClientLoginPage> {
                           SizedBox(height: isMobile ? 6 : 8),
                           
                           Text(
-                            'Espace Client',
+                            'Espace Partenaire',
                             style: TextStyle(
                               fontSize: isMobile ? 14 : 16,
                               color: Colors.grey,
@@ -347,7 +347,7 @@ class _ClientLoginPageState extends State<ClientLoginPage> {
             Text('3. L\'agent pourra réinitialiser votre mot de passe'),
             SizedBox(height: 16),
             Text(
-              'Ou contactez le support client au +243 XXX XXX XXX',
+              'Ou contactez le support partenaire au +243 XXX XXX XXX',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
           ],

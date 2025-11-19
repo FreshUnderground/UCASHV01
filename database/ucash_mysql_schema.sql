@@ -178,6 +178,9 @@ CREATE TABLE IF NOT EXISTS operations (
     is_synced BOOLEAN DEFAULT FALSE,
     synced_at DATETIME NULL,
     
+    -- Code d'opération unique
+    code_ops VARCHAR(50) NULL UNIQUE COMMENT 'Code d\'opération unique pour les reçus',
+    
     FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE SET NULL ON UPDATE CASCADE,
     FOREIGN KEY (shop_source_id) REFERENCES shops(id) ON DELETE SET NULL ON UPDATE CASCADE,
     FOREIGN KEY (shop_destination_id) REFERENCES shops(id) ON DELETE SET NULL ON UPDATE CASCADE,
@@ -190,7 +193,8 @@ CREATE TABLE IF NOT EXISTS operations (
     INDEX idx_shop_destination_id (shop_destination_id),
     INDEX idx_agent_id (agent_id),
     INDEX idx_statut (statut),
-    INDEX idx_reference (reference)
+    INDEX idx_reference (reference),
+    INDEX idx_code_ops (code_ops)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ========================================

@@ -142,7 +142,7 @@ class JournalCaisseModel {
       case ModePaiement.airtelMoney:
         return 'Airtel Money';
       case ModePaiement.mPesa:
-        return 'M-Pesa';
+        return 'Vodacash';
       case ModePaiement.orangeMoney:
         return 'Orange Money';
     }

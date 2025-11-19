@@ -3,14 +3,17 @@ import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/shop_service.dart';
 import '../../services/client_service.dart';
+import '../../services/operation_service.dart';
 import '../../models/shop_model.dart';
+import '../../models/rapport_cloture_model.dart';
+import '../../services/rapport_cloture_service.dart';
 import 'report_filters_widget.dart';
 import 'mouvements_caisse_report.dart';
-import 'commissions_report.dart';
 
 import '../../widgets/rapport_cloture_widget.dart';
 import '../../widgets/rapportcloture.dart';
 import '../../widgets/flot_management_widget.dart';
+import '../../widgets/cloture_agent_widget.dart';
 import '../../services/rapportcloture_pdf_service.dart';
 import 'releve_compte_client_report.dart';
 
@@ -27,18 +30,16 @@ class _AgentReportsWidgetState extends State<AgentReportsWidget> with SingleTick
   DateTime? _startDate;
   DateTime? _endDate;
 
-  final List<Tab> _tabs = [
-    const Tab(icon: Icon(Icons.account_balance), text: 'Mouvements de Caisse'),
-    const Tab(icon: Icon(Icons.monetization_on), text: 'Commissions'),
-    const Tab(icon: Icon(Icons.receipt_long), text: 'Clôture Journalière'),
-    const Tab(icon: Icon(Icons.local_shipping), text: 'Mouvements FLOT'),
-    const Tab(icon: Icon(Icons.account_circle), text: 'Relevés Clients'),
+  final List<Map<String, dynamic>> _tabsData = [
+    {'icon': Icons.account_balance, 'text': 'Caisse'},
+    {'icon': Icons.lock, 'text': 'Clôtures'},
+    {'icon': Icons.local_shipping, 'text': 'FLOT'},
   ];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _tabs.length, vsync: this);
+    _tabController = TabController(length: _tabsData.length, vsync: this);
   }
 
   @override
@@ -56,93 +57,30 @@ class _AgentReportsWidgetState extends State<AgentReportsWidget> with SingleTick
           return _buildNoShopError();
         }
 
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Header avec titre et filtres
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.withOpacity(0.1),
-                    spreadRadius: 1,
-                    blurRadius: 3,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.person_outline,
-                        color: Colors.blue[700],
-                        size: 28,
-                      ),
-                      const SizedBox(width: 12),
-                      const Text(
-                        'Rapports Agent',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1F2937),
-                        ),
-                      ),
-                      const Spacer(),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.blue[100],
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.blue[300]!),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.store, color: Colors.blue[700], size: 16),
-                            const SizedBox(width: 4),
-                            Consumer<ShopService>(
-                              builder: (context, shopService, child) {
-                                if (user.shopId == null) {
-                                  return Text(
-                                    'Shop: ⚠️ Non assigné (ID: null)',
-                                    style: TextStyle(
-                                      color: Colors.red[700],
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  );
-                                }
-                                
-                                final shop = shopService.shops.firstWhere(
-                                  (s) => s.id == user.shopId,
-                                  orElse: () => ShopModel(designation: '⚠️ Shop introuvable (ID: ${user.shopId})', localisation: ''),
-                                );
-                                
-                                final isShopFound = shopService.shops.any((s) => s.id == user.shopId);
-                                return Text(
-                                  'Shop: ${shop.designation}',
-                                  style: TextStyle(
-                                    color: isShopFound ? Colors.blue[700] : Colors.red[700],
-                                    fontSize: 12,
-                                    fontWeight: isShopFound ? FontWeight.w600 : FontWeight.bold,
-                                  ),
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Filtres (sans sélection de shop)
-                  ReportFiltersWidget(
+        final isMobile = MediaQuery.of(context).size.width < 600;
+
+        return Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Colors.grey[50]!,
+                Colors.white,
+              ],
+            ),
+          ),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 0 : 24,
+              vertical: isMobile ? 4 : 20,
+            ),
+            child: Column(
+              children: [
+                // Filtres (sans sélection de shop)
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 0),
+                  child: ReportFiltersWidget(
                     showShopFilter: false,
                     startDate: _startDate,
                     endDate: _endDate,
@@ -151,171 +89,288 @@ class _AgentReportsWidgetState extends State<AgentReportsWidget> with SingleTick
                         _startDate = start;
                         _endDate = end;
                       });
-                      _refreshCurrentReport();
                     },
                     onReset: () {
                       setState(() {
                         _startDate = null;
                         _endDate = null;
                       });
-                      _refreshCurrentReport();
                     },
                   ),
-                ],
-              ),
+                ),
+                
+                SizedBox(height: isMobile ? 4 : 20),
+                
+                // Onglets
+                Container(
+                  margin: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 16),
+                  height: isMobile ? 80 : 120,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(isMobile ? 20 : 24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.blue.withOpacity(0.12),
+                        blurRadius: isMobile ? 16 : 24,
+                        offset: Offset(0, isMobile ? 4 : 6),
+                        spreadRadius: -2,
+                      ),
+                    ],
+                    border: Border.all(
+                      color: Colors.grey.withOpacity(0.15),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: 
+                  
+                  TabBar(
+                    controller: _tabController,
+                    isScrollable: true,
+                    padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 20, vertical: isMobile ? 10 : 14),
+                    tabAlignment: TabAlignment.center,
+                    tabs: _tabsData.map((tabData) {
+                      return Tab(
+                        icon: Icon(tabData['icon'] as IconData, size: isMobile ? 25 : 42),
+                        text: tabData['text'] as String,
+                        height: isMobile ? 70 : 100,
+                      );
+                    }).toList(),
+                    labelColor: const Color(0xFFDC2626),
+                    unselectedLabelColor: Colors.grey[600],
+                    labelStyle: TextStyle(
+                      fontSize: isMobile ? 14 : 17,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.3,
+                    ),
+                    unselectedLabelStyle: TextStyle(
+                      fontSize: isMobile ? 13 : 15,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    indicator: BoxDecoration(
+                      borderRadius: BorderRadius.circular(isMobile ? 18 : 22),
+                      gradient: LinearGradient(
+                        colors: [
+                          const Color(0xFFDC2626).withOpacity(0.18),
+                          const Color(0xFFDC2626).withOpacity(0.10),
+                        ],
+                      ),
+                    ),
+                    indicatorSize: TabBarIndicatorSize.tab,
+                  ),
+                ),
+                
+                SizedBox(height: isMobile ? 4 : 20),
+                
+                // Contenu des onglets
+                Flexible(
+                  fit: FlexFit.loose,
+                  child: Container(
+                    margin: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 0),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(isMobile ? 14 : 20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withOpacity(0.08),
+                          blurRadius: isMobile ? 10 : 20,
+                          offset: Offset(0, isMobile ? 2 : 4),
+                          spreadRadius: -4,
+                        ),
+                      ],
+                      border: Border.all(
+                        color: Colors.grey.withOpacity(0.1),
+                        width: 1,
+                      ),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(isMobile ? 14 : 20),
+                      child: TabBarView(
+                        controller: _tabController,
+                        children: [
+                          // Mouvements de caisse du shop de l'agent
+                          user.shopId != null 
+                            ? MouvementsCaisseReport(
+                                shopId: user.shopId!,
+                                startDate: _startDate,
+                                endDate: _endDate,
+                                showAllShops: false,
+                              )
+                            : _buildNoShopAssignedError(),
+                          
+                          // Gestion des clôtures
+                          user.shopId != null
+                            ? ClotureAgentWidget(shopId: user.shopId!)
+                            : _buildNoShopAssignedError(),
+                          
+                          // FLOT - Menu complet
+                          user.shopId != null
+                            ? FlotManagementWidget()
+                            : _buildNoShopAssignedError(),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(height: isMobile ? 8 : 0),
+              ],
             ),
-            
-            // Onglets
-            Container(
-              color: Colors.white,
-              child: TabBar(
-                controller: _tabController,
-                tabs: _tabs,
-                labelColor: const Color(0xFFDC2626),
-                unselectedLabelColor: Colors.grey[600],
-                indicatorColor: const Color(0xFFDC2626),
-                onTap: (index) => _refreshCurrentReport(),
-              ),
-            ),
-            
-            // Contenu des onglets - Hauteur fixe
-            SizedBox(
-              height: 500,
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  // Mouvements de caisse du shop de l'agent
-                  user.shopId != null 
-                    ? MouvementsCaisseReport(
-                        shopId: user.shopId!,
-                        startDate: _startDate,
-                        endDate: _endDate,
-                        showAllShops: false,
-                      )
-                    : _buildNoShopAssignedError(),
-                  
-                  // Commissions du shop de l'agent
-                  user.shopId != null
-                    ? CommissionsReport(
-                        shopId: user.shopId!,
-                        startDate: _startDate,
-                        endDate: _endDate,
-                        showAllShops: false,
-                      )
-                    : _buildNoShopAssignedError(),
-                  
-                  // Rapport de clôture journalière
-                  user.shopId != null
-                    ? _buildClotureReport(user.shopId!)
-                    : _buildNoShopAssignedError(),
-                  
-                  // Mouvements FLOT
-                  user.shopId != null
-                    ? _buildFlotReport(user.shopId!)
-                    : _buildNoShopAssignedError(),
-                  
-                  // Relevés Clients
-                  user.shopId != null
-                    ? _buildClientStatements(user.shopId!)
-                    : _buildNoShopAssignedError(),
-                ],
-              ),
-            ),
-          ],
+          ),
         );
       },
     );
   }
 
   Widget _buildNoShopAssignedError() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.warning_amber_rounded,
-            size: 64,
-            color: Colors.orange[600],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Shop Non Assigné',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.orange[800],
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    
+    return Container(
+      padding: EdgeInsets.all(isMobile ? 20 : 40),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: EdgeInsets.all(isMobile ? 16 : 24),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.orange[100]!, Colors.orange[50]!],
+                ),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.orange.withOpacity(0.3),
+                    blurRadius: isMobile ? 12 : 20,
+                    offset: Offset(0, isMobile ? 4 : 8),
+                  ),
+                ],
+              ),
+              child: Icon(
+                Icons.warning_amber_rounded,
+                size: isMobile ? 30 : 64,
+                color: Colors.orange[700],
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Cet agent n\'est assigné à aucun shop.',
-            style: TextStyle(fontSize: 16),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Contactez l\'administrateur pour assigner un shop à cet agent.',
-            style: TextStyle(fontSize: 14, color: Colors.grey),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: () {
-              // Recharger les données
-              setState(() {});
-            },
-            icon: const Icon(Icons.refresh),
-            label: const Text('Actualiser'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange[600],
-              foregroundColor: Colors.white,
+            SizedBox(height: isMobile ? 16 : 24),
+            Text(
+              'Shop Non Assigné',
+              style: TextStyle(
+                fontSize: isMobile ? 18 : 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.orange[900],
+              ),
             ),
-          ),
-        ],
+            SizedBox(height: isMobile ? 8 : 12),
+            Text(
+              'Cet agent n\'est assigné à aucun shop.',
+              style: TextStyle(
+                fontSize: isMobile ? 14 : 16,
+                color: Colors.grey[700],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: isMobile ? 6 : 8),
+            Text(
+              'Contactez l\'administrateur pour assigner un shop à cet agent.',
+              style: TextStyle(
+                fontSize: isMobile ? 12 : 14,
+                color: Colors.grey[600],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: isMobile ? 20 : 32),
+            ElevatedButton.icon(
+              onPressed: () {
+                setState(() {});
+              },
+              icon: Icon(Icons.refresh, size: isMobile ? 18 : 20),
+              label: Text('Actualiser', style: TextStyle(fontSize: isMobile ? 14 : 16)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange[600],
+                foregroundColor: Colors.white,
+                padding: EdgeInsets.symmetric(
+                  horizontal: isMobile ? 20 : 32,
+                  vertical: isMobile ? 12 : 16,
+                ),
+                elevation: 4,
+                shadowColor: Colors.orange.withOpacity(0.5),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(isMobile ? 12 : 16),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildNoShopError() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.error_outline,
-            size: 64,
-            color: Colors.red[400],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Erreur de configuration',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.red[600],
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    
+    return Container(
+      padding: EdgeInsets.all(isMobile ? 20 : 40),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.grey[50]!,
+            Colors.white,
+          ],
+        ),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: EdgeInsets.all(isMobile ? 16 : 24),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.red[100]!, Colors.red[50]!],
+                ),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.red.withOpacity(0.3),
+                    blurRadius: isMobile ? 12 : 20,
+                    offset: Offset(0, isMobile ? 4 : 8),
+                  ),
+                ],
+              ),
+              child: Icon(
+                Icons.error_outline,
+                size: isMobile ? 48 : 64,
+                color: Colors.red[700],
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Aucun shop assigné à cet agent.\nContactez l\'administrateur.',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey[600],
+            SizedBox(height: isMobile ? 16 : 24),
+            Text(
+              'Erreur de configuration',
+              style: TextStyle(
+                fontSize: isMobile ? 20 : 28,
+                fontWeight: FontWeight.bold,
+                color: Colors.red[800],
+              ),
             ),
-            textAlign: TextAlign.center,
-          ),
-        ],
+            SizedBox(height: isMobile ? 8 : 12),
+            Text(
+              'Aucun shop assigné à cet agent.\nContactez l\'administrateur.',
+              style: TextStyle(
+                fontSize: isMobile ? 14 : 16,
+                color: Colors.grey[700],
+                height: 1.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildClotureReport(int shopId) {
     return RapportCloture(shopId: shopId);
-  }
-
-  Widget _buildFlotReport(int shopId) {
-    // Pour les rapports FLOT, on peut afficher le widget de gestion avec un filtre
-    return const FlotManagementWidget();
   }
 
   void _refreshCurrentReport() {
@@ -343,7 +398,7 @@ class _AgentReportsWidgetState extends State<AgentReportsWidget> with SingleTick
                     children: [
                       CircularProgressIndicator(),
                       SizedBox(height: 16),
-                      Text('Chargement des clients...'),
+                      Text('Chargement des partenaires...'),
                     ],
                   ),
                 ),
@@ -378,15 +433,15 @@ class _AgentReportsWidgetState extends State<AgentReportsWidget> with SingleTick
                     children: [
                       Icon(Icons.people_outline, size: 64, color: Colors.grey),
                       SizedBox(height: 16),
-                      Text('Aucun client trouvé'),
+                      Text('Aucun partenaire trouvé'),
                       SizedBox(height: 8),
-                      Text('Créez des clients pour voir leurs relevés de compte'),
+                      Text('Créez des partenaires pour voir leurs relevés de compte'),
                     ],
                   ),
                 ),
               )
             else
-              Expanded(
+              Flexible(
                 child: ClientStatementsView(
                   clients: clientService.clients,
                   shopId: shopId,
@@ -453,7 +508,7 @@ class _ClientStatementsViewState extends State<ClientStatementsView> {
               // Client dropdown
               DropdownButtonFormField<dynamic>(
                 value: _selectedClient,
-                hint: const Text('Choisissez un client'),
+                hint: const Text('Choisissez un partenaire'),
                 items: widget.clients.map<DropdownMenuItem<dynamic>>((client) {
                   return DropdownMenuItem(
                     value: client,
@@ -467,7 +522,7 @@ class _ClientStatementsViewState extends State<ClientStatementsView> {
                   });
                 },
                 decoration: const InputDecoration(
-                  labelText: 'Client',
+                  labelText: 'Partenaire',
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -552,7 +607,7 @@ class _ClientStatementsViewState extends State<ClientStatementsView> {
         const SizedBox(height: 16),
         // Report display
         if (_showReport && _selectedClient != null)
-          Expanded(
+          Flexible(
             child: ReleveCompteClientReport(
               clientId: _selectedClient.id as int,
               startDate: _startDate,
@@ -560,6 +615,493 @@ class _ClientStatementsViewState extends State<ClientStatementsView> {
             ),
           ),
       ],
+    );
+  }
+}
+
+class RapportClotureEmbedded extends StatefulWidget {
+  final int? shopId;
+  
+  const RapportClotureEmbedded({super.key, this.shopId});
+
+  @override
+  State<RapportClotureEmbedded> createState() => _RapportClotureEmbeddedState();
+}
+
+class _RapportClotureEmbeddedState extends State<RapportClotureEmbedded> {
+  DateTime _selectedDate = DateTime.now();
+  RapportClotureModel? _rapport;
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _genererRapport();
+    });
+  }
+
+  Future<void> _genererRapport() async {
+    if (!mounted) return;
+    
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final operationService = Provider.of<OperationService>(context, listen: false);
+      final shopId = widget.shopId ?? authService.currentUser?.shopId ?? 1;
+      
+      // Charger les opérations de "Mes Ops" pour ce shop
+      await operationService.loadOperations(shopId: shopId);
+      if (!mounted) return;
+      
+      final rapport = await RapportClotureService.instance.genererRapport(
+        shopId: shopId,
+        date: _selectedDate,
+        generePar: authService.currentUser?.username ?? 'Admin',
+        operations: operationService.operations, // Utiliser les données de "Mes Ops"
+      );
+      if (!mounted) return;
+
+      setState(() {
+        _rapport = rapport;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      
+      setState(() {
+        _errorMessage = 'Erreur: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width <= 768;
+
+    return Padding(
+      padding: EdgeInsets.all(isMobile ? 8 : 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Sélection de date
+          _buildDateSelector(isMobile),
+          const SizedBox(height: 16),
+
+          // Contenu du rapport
+          if (_isLoading)
+            const Center(child: CircularProgressIndicator())
+          else if (_errorMessage != null)
+            _buildError(_errorMessage!)
+          else if (_rapport != null)
+            _buildRapport(_rapport!, isMobile)
+          else
+            const Center(child: Text('Aucun rapport disponible')),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDateSelector(bool isMobile) {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            const Icon(Icons.calendar_today, color: Color(0xFFDC2626)),
+            const SizedBox(width: 8),
+            const Text(
+              'Date du rapport:',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '${_selectedDate.day.toString().padLeft(2, '0')}/${_selectedDate.month.toString().padLeft(2, '0')}/${_selectedDate.year}',
+                style: const TextStyle(fontSize: 14),
+              ),
+            ),
+            ElevatedButton.icon(
+              onPressed: () async {
+                final date = await showDatePicker(
+                  context: context,
+                  initialDate: _selectedDate,
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime.now(),
+                );
+                if (date != null) {
+                  setState(() => _selectedDate = date);
+                  _genererRapport();
+                }
+              },
+              icon: const Icon(Icons.edit_calendar, size: 16),
+              label: const Text('Changer', style: TextStyle(fontSize: 12)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildError(String message) {
+    return Card(
+      color: Colors.red.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            const Icon(Icons.error, color: Colors.red),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRapport(RapportClotureModel rapport, bool isMobile) {
+    return Column(
+      children: [
+        // En-tête
+        _buildSection(
+          'Shop: ${rapport.shopDesignation}',
+          [
+            Text(
+              'Rapport du ${rapport.dateRapport.day}/${rapport.dateRapport.month}/${rapport.dateRapport.year}',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+          Colors.blue,
+        ),
+        const SizedBox(height: 12),
+
+        // Cash Disponible (TOTAL)
+        _buildCashDisponibleCard(rapport),
+        const SizedBox(height: 12),
+
+        // Détails par section
+        if (!isMobile)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: _buildLeftColumn(rapport)),
+              const SizedBox(width: 12),
+              Expanded(child: _buildRightColumn(rapport)),
+            ],
+          )
+        else
+          Column(
+            children: [
+              _buildLeftColumn(rapport),
+              const SizedBox(height: 12),
+              _buildRightColumn(rapport),
+            ],
+          ),
+        
+        const SizedBox(height: 16),
+        
+        // Capital Net Final
+        _buildCapitalNetCard(rapport),
+      ],
+    );
+  }
+
+  Widget _buildCashDisponibleCard(RapportClotureModel rapport) {
+    return Card(
+      elevation: 4,
+      color: Colors.green.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            const Text(
+              '💰 CASH DISPONIBLE TOTAL',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.green,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${rapport.cashDisponibleTotal.toStringAsFixed(2)} USD',
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.green,
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Divider(),
+            const SizedBox(height: 4),
+            _buildCashBreakdown('Cash', rapport.cashDisponibleCash),
+            _buildCashBreakdown('Airtel Money', rapport.cashDisponibleAirtelMoney),
+            _buildCashBreakdown('M-Pesa', rapport.cashDisponibleMPesa),
+            _buildCashBreakdown('Orange Money', rapport.cashDisponibleOrangeMoney),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCapitalNetCard(RapportClotureModel rapport) {
+    return Card(
+      elevation: 4,
+      color: Colors.blue.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            const Text(
+              '📈 CAPITAL NET FINAL',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.blue,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Formule: Cash Disponible + Ceux qui nous doivent - Ceux que nous devons',
+              style: TextStyle(
+                fontSize: 10,
+                fontStyle: FontStyle.italic,
+                color: Colors.grey,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${rapport.capitalNet.toStringAsFixed(2)} USD',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: rapport.capitalNet >= 0 ? Colors.blue[700] : Colors.red[700],
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 6),
+            _buildCapitalBreakdown('Cash Disponible', rapport.cashDisponibleTotal, Colors.green),
+            _buildCapitalBreakdown('+ Partenaires Servis', rapport.totalClientsNousDoivent, Colors.red),
+            _buildCapitalBreakdown('+ Shops Nous Doivent', rapport.totalShopsNousDoivent, Colors.orange),
+            _buildCapitalBreakdown('- Dépôts Partenaires', -rapport.totalClientsNousDevons, Colors.green),
+            _buildCapitalBreakdown('- Shops Nous Devons', -rapport.totalShopsNousDevons, Colors.purple),
+            const SizedBox(height: 6),
+            const Divider(thickness: 2),
+            const SizedBox(height: 6),
+            _buildCapitalBreakdown('= CAPITAL NET', rapport.capitalNet, rapport.capitalNet >= 0 ? Colors.blue : Colors.red, bold: true),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCashBreakdown(String label, double montant) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 12)),
+          Text(
+            '${montant.toStringAsFixed(2)} USD',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildCapitalBreakdown(String label, double montant, Color color, {bool bold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label, 
+            style: TextStyle(
+              fontSize: bold ? 14 : 12,
+              fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+          Text(
+            '${montant.toStringAsFixed(2)} USD',
+            style: TextStyle(
+              fontWeight: bold ? FontWeight.bold : FontWeight.w500,
+              fontSize: bold ? 14 : 12,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLeftColumn(RapportClotureModel rapport) {
+    return Column(
+      children: [
+        _buildSection(
+          '1️⃣ Solde Antérieur',
+          [
+            _buildLine('Cash', rapport.soldeAnterieurCash),
+            _buildLine('Airtel Money', rapport.soldeAnterieurAirtelMoney),
+            _buildLine('M-Pesa', rapport.soldeAnterieurMPesa),
+            _buildLine('Orange Money', rapport.soldeAnterieurOrangeMoney),
+            const Divider(),
+            _buildLine('TOTAL', rapport.soldeAnterieurTotal, bold: true),
+          ],
+          Colors.grey,
+        ),
+        const SizedBox(height: 12),
+        _buildSection(
+          '2️⃣ Flots',
+          [
+            _buildLine('Reçus', rapport.flotRecu, color: Colors.green),
+            _buildLine('Envoyés', rapport.flotEnvoye, color: Colors.red, prefix: '-'),
+          ],
+          Colors.purple,
+        ),
+        const SizedBox(height: 12),
+        _buildSection(
+          '3️⃣ Transferts',
+          [
+            _buildLine('Reçus', rapport.transfertsRecus, color: Colors.green),
+            _buildLine('Servis', rapport.transfertsServis, color: Colors.red, prefix: '-'),
+          ],
+          Colors.blue,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRightColumn(RapportClotureModel rapport) {
+    return Column(
+      children: [
+        // Masqué: Opérations Clients
+        // Partenaires Servis (anciennement Clients Nous Doivent)
+        _buildSection(
+          '5️⃣ Partenaires Servis',
+          [
+            Text(
+              '${rapport.clientsNousDoivent.length} partenaire(s)',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+            ),
+            const SizedBox(height: 4),
+            ...rapport.clientsNousDoivent.take(3).map((client) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 1),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(child: Text(client.nom, style: const TextStyle(fontSize: 10))),
+                  Text(
+                    '${client.solde.toStringAsFixed(2)} USD',
+                    style: const TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            )),
+            if (rapport.clientsNousDoivent.length > 3)
+              Text('... et ${rapport.clientsNousDoivent.length - 3} autre(s)', style: const TextStyle(fontSize: 10)),
+            const Divider(),
+            _buildLine('TOTAL', rapport.totalClientsNousDoivent, color: Colors.red),
+          ],
+          Colors.red,
+        ),
+        const SizedBox(height: 12),
+        // Dépôts Partenaires (anciennement Clients Nous Devons)
+        _buildSection(
+          '6️⃣ Dépôts Partenaires',
+          [
+            Text(
+              '${rapport.clientsNousDevons.length} partenaire(s)',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+            ),
+            const SizedBox(height: 4),
+            ...rapport.clientsNousDevons.take(3).map((client) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 1),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(child: Text(client.nom, style: const TextStyle(fontSize: 10))),
+                  Text(
+                    '${client.solde.toStringAsFixed(2)} USD',
+                    style: const TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            )),
+            if (rapport.clientsNousDevons.length > 3)
+              Text('... et ${rapport.clientsNousDevons.length - 3} autre(s)', style: const TextStyle(fontSize: 10)),
+            const Divider(),
+            _buildLine('TOTAL', rapport.totalClientsNousDevons, color: Colors.green),
+          ],
+          Colors.green,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSection(String title, List<Widget> children, Color color) {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLine(String label, double montant, {bool bold = false, Color? color, String prefix = ''}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+              fontSize: bold ? 14 : 12,
+            ),
+          ),
+          Text(
+            '$prefix${montant.toStringAsFixed(2)} USD',
+            style: TextStyle(
+              fontWeight: bold ? FontWeight.bold : FontWeight.w500,
+              fontSize: bold ? 14 : 12,
+              color: color,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

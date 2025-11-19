@@ -46,6 +46,7 @@ dependencies:
   esc_pos_utils_plus: ^2.0.1
   printing: ^5.11.1
   pdf: ^3.10.4
+  flutter_printer_qpos: ^0.0.8  # Q2I POS Printer
   
   # QR Code pour reçus
   qr_flutter: ^4.1.0

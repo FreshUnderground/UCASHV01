@@ -1,16 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
+import 'dart:async';
+import '../services/transfer_sync_service.dart';
 import '../services/auth_service.dart';
 import '../services/operation_service.dart';
-import '../services/shop_service.dart';
-import '../services/sync_service.dart';
 import '../models/operation_model.dart';
-import '../models/shop_model.dart';
-import '../utils/responsive_utils.dart';
-import '../theme/ucash_typography.dart';
-import '../theme/ucash_containers.dart';
 
+/// Widget de validation des transferts en attente
 class TransferValidationWidget extends StatefulWidget {
   const TransferValidationWidget({super.key});
 
@@ -19,151 +16,235 @@ class TransferValidationWidget extends StatefulWidget {
 }
 
 class _TransferValidationWidgetState extends State<TransferValidationWidget> {
-  OperationType? _filterType;
-  String _searchQuery = '';
-
+  bool _isInitialized = false;
+  String? _filterType;
+  String _searchDestinataire = '';
+  bool _showFilters = false;
+  Timer? _autoRefreshTimer;
+  int _selectedTab = 0; // 0 = Transferts en attente, 1 = Mes Validations
+  
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadPendingTransfers();
-    });
+    _initializeService();
   }
 
-  void _loadPendingTransfers() {
+  @override
+  void dispose() {
+    _autoRefreshTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _initializeService() async {
     final authService = Provider.of<AuthService>(context, listen: false);
-    final currentUser = authService.currentUser;
-    if (currentUser?.shopId != null) {
-      Provider.of<OperationService>(context, listen: false)
-          .loadOperations(shopId: currentUser!.shopId!);
-      Provider.of<ShopService>(context, listen: false).loadShops();
+    final operationService = Provider.of<OperationService>(context, listen: false);
+    final shopId = authService.currentUser?.shopId ?? 0;
+    final userRole = authService.currentUser?.role ?? '';
+    
+    if (shopId > 0) {
+      try {
+        // Charger les opérations du shop (pour "Mes Validations")
+        debugPrint('📥 [INIT] Chargement des opérations du shop $shopId...');
+        await operationService.loadOperations(shopId: shopId);
+        debugPrint('✅ [INIT] ${operationService.operations.length} opérations chargées');
+        
+        // Initialiser le service de transferts (pour "En attente")
+        final transferSync = Provider.of<TransferSyncService>(context, listen: false);
+        await transferSync.initialize(shopId);
+        
+        // Forcer un refresh immédiat depuis l'API (pas de cache)
+        try {
+          await transferSync.forceRefreshFromAPI();
+        } catch (e) {
+          // Si le premier refresh échoue, ce n'est pas grave, on continuera avec le cache
+          debugPrint('⚠️ [INIT] Première synchronisation échouée: $e');
+          debugPrint('   💡 Le service continuera avec les données en cache (si disponibles)');
+        }
+        
+        // Démarrer le rafraîchissement automatique toutes les 5 minutes
+        _startAutoRefresh(transferSync);
+        
+        if (mounted) {
+          setState(() => _isInitialized = true);
+        }
+      } catch (e) {
+        debugPrint('❌ [INIT] Erreur d\'initialisation: $e');
+        if (mounted) {
+          setState(() => _isInitialized = true);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('⚠️ Erreur d\'initialisation: ${e.toString()}'),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 5),
+              action: SnackBarAction(
+                label: 'Réessayer',
+                textColor: Colors.white,
+                onPressed: _initializeService,
+              ),
+            ),
+          );
+        }
+      }
+    } else {
+      // Handle case where shopId is not initialized
+      debugPrint('⚠️ [INIT] Shop ID non initialisé, affichage d\'un message d\'erreur');
+      if (mounted) {
+        setState(() => _isInitialized = true);
+      }
     }
   }
 
-  List<OperationModel> _getPendingTransfers(List<OperationModel> operations) {
-    final authService = Provider.of<AuthService>(context, listen: false);
-    final currentShopId = authService.currentUser?.shopId;
+  void _startAutoRefresh(TransferSyncService transferSync) {
+    _autoRefreshTimer?.cancel();
     
-    return operations.where((operation) {
-      // Filtrer seulement les transferts en attente dont la destination est notre shop
-      final matchesStatus = operation.statut == OperationStatus.enAttente;
-      final matchesType = operation.type == OperationType.transfertNational ||
-                         operation.type == OperationType.transfertInternationalSortant ||
-                         operation.type == OperationType.transfertInternationalEntrant;
-      final matchesDestination = operation.shopDestinationId == currentShopId;
-      
-      // Filtres additionnels
-      final matchesTypeFilter = _filterType == null || operation.type == _filterType;
-      final matchesSearch = _searchQuery.isEmpty ||
-                           (operation.destinataire?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false) ||
-                           operation.id.toString().contains(_searchQuery);
-      
-      return matchesStatus && matchesType && matchesDestination && matchesTypeFilter && matchesSearch;
-    }).toList();
+    _autoRefreshTimer = Timer.periodic(const Duration(minutes: 5), (timer) {
+      if (mounted && !transferSync.isSyncing) {
+        debugPrint('⏰ [AUTO-REFRESH] Rafraîchissement automatique depuis l\'API...');
+        transferSync.forceRefreshFromAPI();
+      }
+    });
+    
+    debugPrint('✅ [AUTO-REFRESH] Timer démarré (5 minutes)');
   }
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 768;
-    final padding = isMobile ? 16.0 : (size.width <= 1024 ? 20.0 : 24.0);
     
-    return Padding(
-      padding: EdgeInsets.all(padding),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          _buildHeader(),
-          SizedBox(height: isMobile ? 16 : 24),
-          
-          // Filtres
-          _buildFilters(),
-          SizedBox(height: isMobile ? 16 : 24),
-          
-          // Liste des transferts en attente - hauteur fixe
-          SizedBox(
-            height: 400,
-            child: _buildTransfersList(),
-          ),
-        ],
-      ),
-    );
-  }
+    if (!_isInitialized) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
 
-  Widget _buildHeader() {
-    return Consumer<OperationService>(
-      builder: (context, operationService, child) {
-        final pendingTransfers = _getPendingTransfers(operationService.operations);
-        final totalAmount = pendingTransfers.fold<double>(0, (sum, op) => sum + op.montantNet);
+    return Consumer<TransferSyncService>(
+      builder: (context, transferSync, child) {
+        final authService = Provider.of<AuthService>(context, listen: false);
+        final operationService = Provider.of<OperationService>(context, listen: false);
+        final shopId = authService.currentUser?.shopId ?? 0;
+        final userRole = authService.currentUser?.role ?? '';
+        final agentId = authService.currentUser?.id ?? 0;
         
-        return context.adaptiveCard(
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        // Handle case where shopId is not initialized
+        if (shopId <= 0) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    'Validation des Opérations',
-                    style: context.titleAccent,
+                  Icon(
+                    userRole == 'ADMIN' ? Icons.admin_panel_settings : Icons.error_outline,
+                    size: 60,
+                    color: userRole == 'ADMIN' ? Colors.blue[700] : Colors.orange[700],
                   ),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.orange,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            '${pendingTransfers.length} en attente',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          onPressed: _loadPendingTransfers,
-                          icon: const Icon(Icons.refresh),
-                          tooltip: 'Actualiser',
-                          color: const Color(0xFFDC2626),
-                        ),
-                      ],
+                  const SizedBox(height: 16),
+                  Text(
+                    userRole == 'ADMIN' ? 'Accès non autorisé' : 'Erreur d\'initialisation',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    userRole == 'ADMIN' 
+                        ? 'Cette fonctionnalité est réservée aux agents avec un shop assigné.'
+                        : 'Impossible de charger les transferts: Shop ID non initialisé',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  if (userRole != 'ADMIN') ...[
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: _initializeService,
+                      child: const Text('Réessayer'),
                     ),
                   ],
-                ),
-              context.verticalSpace(mobile: 16, tablet: 20, desktop: 24),
-              
-              // Statistiques
-              context.gridContainer(
-                mobileColumns: 1,
-                tabletColumns: 3,
-                desktopColumns: 3,
-                aspectRatio: context.isSmallScreen ? 2.5 : 1.8,
-                children: [
-                  _buildStatCard(
-                    'Transferts en Attente',
-                    '${pendingTransfers.length}',
-                    Icons.pending_actions,
-                    Colors.orange,
-                  ),
-                  _buildStatCard(
-                    'Montant Total',
-                    '${totalAmount.toStringAsFixed(2)} USD',
-                    Icons.attach_money,
-                    Colors.blue,
-                  ),
-                  _buildStatCard(
-                    'Destination',
-                    'Votre Shop',
-                    Icons.location_on,
-                    const Color(0xFFDC2626),
-                  ),
                 ],
+              ),
+            ),
+          );
+        }
+        
+        // Déterminer les opérations à afficher selon l'onglet
+        List<OperationModel> displayedOperations;
+        
+        if (_selectedTab == 0) {
+          // Onglet 1: Transferts en attente (depuis TransferSyncService)
+          displayedOperations = transferSync.getPendingTransfersForShop(shopId);
+        } else {
+          // Onglet 2: Mes Validations (opérations validées dans ce shop)
+          debugPrint('🔍 [MES VALIDATIONS] Filtrage des opérations...');
+          debugPrint('🔍 [MES VALIDATIONS] Total opérations: ${operationService.operations.length}');
+          debugPrint('🔍 [MES VALIDATIONS] ShopId: $shopId');
+          
+          displayedOperations = operationService.operations.where((op) {
+            // Transferts validés/terminés
+            final isTransfer = op.type == OperationType.transfertNational ||
+                op.type == OperationType.transfertInternationalEntrant ||
+                op.type == OperationType.transfertInternationalSortant;
+            final isValidated = op.statut == OperationStatus.validee || 
+                op.statut == OperationStatus.terminee;
+            // Validés dans ce shop (destination = shop qui reçoit et valide)
+            final isForThisShop = op.shopDestinationId == shopId;
+            
+            return isTransfer && isValidated && isForThisShop;
+          }).toList();
+          
+          debugPrint('✅ [MES VALIDATIONS] Trouvé: ${displayedOperations.length} opérations validées dans le shop');
+          
+          // Trier par date de modification (plus récents en premier)
+          displayedOperations.sort((a, b) => 
+            (b.lastModifiedAt ?? b.dateOp).compareTo(a.lastModifiedAt ?? a.dateOp)
+          );
+        }
+        
+        // Filtrer par nom de destinataire si recherche active
+        if (_searchDestinataire.isNotEmpty) {
+          displayedOperations = displayedOperations.where((op) {
+            final destinataire = op.destinataire?.toLowerCase() ?? '';
+            return destinataire.contains(_searchDestinataire.toLowerCase());
+          }).toList();
+        }
+        
+        // Filtrer par type si sélectionné
+        if (_filterType != null) {
+          displayedOperations = displayedOperations.where((op) {
+            return op.type.toString().split('.').last == _filterType;
+          }).toList();
+        }
+
+        return Padding(
+          padding: EdgeInsets.all(isMobile ? 2 : 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Onglets pour basculer entre En attente et Mes Validations
+              _buildTabBar(isMobile),
+              
+              SizedBox(height: isMobile ? 4 : 16),
+              
+              // Compteur et bouton pour afficher/masquer filtres
+              _buildStatusBar(isMobile, transferSync, displayedOperations.length),
+              
+              SizedBox(height: isMobile ? 4 : 20),
+              
+              // Filtres et actions (affichés conditionnellement)
+              if (_showFilters) ...[
+                _buildFiltersAndActions(isMobile, transferSync),
+                SizedBox(height: isMobile ? 7 : 20)
+              ],
+              
+              // Liste des transferts
+              Flexible(
+                fit: FlexFit.loose,
+                child: _buildTransfersList(isMobile, displayedOperations, transferSync),
               ),
             ],
           ),
@@ -172,248 +253,436 @@ class _TransferValidationWidgetState extends State<TransferValidationWidget> {
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
-    final isMobile = MediaQuery.of(context).size.width <= 768;
-    
-    return Container(
-      padding: EdgeInsets.all(isMobile ? 8 : 12),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            icon, 
-            color: color, 
-            size: isMobile ? 20 : 24,
-          ),
-          SizedBox(height: isMobile ? 4 : 8),
-          Flexible(
-            child: Text(
-              value,
-              style: TextStyle(
-                fontSize: isMobile ? 14 : 16,
-                fontWeight: FontWeight.bold,
-                color: color,
+  Widget _buildTabBar(bool isMobile) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: EdgeInsets.all(isMobile ? 6 : 10),
+        child: Row(
+          children: [
+            Flexible(
+              child: _buildTabButton(
+                label: 'En attente',
+                icon: Icons.pending_actions,
+                isSelected: _selectedTab == 0,
+                onTap: () {
+                  if (mounted) {
+                    setState(() => _selectedTab = 0);
+                  }
+                },
+                isMobile: isMobile,
               ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
-          ),
-          SizedBox(height: isMobile ? 2 : 4),
-          Flexible(
-            child: Text(
-              title,
-              style: TextStyle(
-                fontSize: isMobile ? 10 : 12,
-                color: Colors.grey[700],
+            SizedBox(width: isMobile ? 8 : 12),
+            Flexible(
+              child: _buildTabButton(
+                label: 'Mes Validations',
+                icon: Icons.check_circle,
+                isSelected: _selectedTab == 1,
+                onTap: () {
+                  if (mounted) {
+                    setState(() => _selectedTab = 1);
+                  }
+                },
+                isMobile: isMobile,
               ),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildFilters() {
-    return context.adaptiveCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Filtres et Recherche',
-            style: context.h4.copyWith(
-              color: const Color(0xFFDC2626),
-            ),
+  Widget _buildTabButton({
+    required String label,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required bool isMobile,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          vertical: isMobile ? 10 : 12,
+          horizontal: isMobile ? 8 : 12,
+        ),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFDC2626) : Colors.grey[100],
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? const Color(0xFFDC2626) : Colors.grey[300]!,
+            width: 1,
           ),
-          context.verticalSpace(mobile: 12, tablet: 16, desktop: 20),
-          
-          if (context.isSmallScreen) ..._buildMobileFilters() else ..._buildDesktopFilters(),
-        ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              color: isSelected ? Colors.white : Colors.grey[700],
+              size: isMobile ? 18 : 20,
+            ),
+            SizedBox(width: isMobile ? 6 : 8),
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: isSelected ? Colors.white : Colors.grey[700],
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                  fontSize: isMobile ? 13 : 14,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildTransfersList() {
-    return Consumer<OperationService>(
-      builder: (context, operationService, child) {
-        if (operationService.isLoading) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        if (operationService.errorMessage != null) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.error, color: Colors.red, size: 48),
-                const SizedBox(height: 16),
-                Text(
-                  'Erreur: ${operationService.errorMessage}',
-                  style: const TextStyle(color: Colors.red),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: _loadPendingTransfers,
-                  child: const Text('Réessayer'),
-                ),
-              ],
+  Widget _buildStatusBar(bool isMobile, TransferSyncService transferSync, int count) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: EdgeInsets.all(isMobile ? 12 : 16),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                Icons.notification_important,
+                color: Colors.orange[700],
+                size: 24,
+              ),
             ),
-          );
-        }
-
-        final pendingTransfers = _getPendingTransfers(operationService.operations);
-
-        if (pendingTransfers.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.check_circle_outline, color: Colors.green, size: 64),
-                const SizedBox(height: 16),
-                const Text(
-                  'Aucun transfert en attente de validation',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Tous les transferts vers votre shop ont été traités',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ],
-            ),
-          );
-        }
-
-        return context.adaptiveCard(
-          child: ListView.separated(
-            padding: context.fluidPadding(
-              mobile: const EdgeInsets.all(12),
-              tablet: const EdgeInsets.all(16),
-              desktop: const EdgeInsets.all(20),
-            ),
-            itemCount: pendingTransfers.length,
-            separatorBuilder: (context, index) => const Divider(),
-            itemBuilder: (context, index) {
-              final transfer = pendingTransfers[index];
-              return _buildTransferItem(transfer);
-            },
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildTransferItem(OperationModel transfer) {
-    return Consumer<ShopService>(
-      builder: (context, shopService, child) {
-        final sourceShop = shopService.shops.firstWhere(
-          (shop) => shop.id == transfer.shopSourceId,
-          orElse: () => ShopModel(designation: 'Shop Inconnu', localisation: ''),
-        );
-        
-        return Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.orange.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.orange.withOpacity(0.3)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header du transfert
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            const SizedBox(width: 12),
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.orange,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Text(
-                          'EN ATTENTE',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        'ID: ${transfer.id}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFFDC2626),
-                        ),
-                      ),
-                    ],
-                  ),
                   Text(
-                    _formatDate(transfer.dateOp),
+                    _selectedTab == 0 
+                        ? '$count en attente'
+                        : '$count validée(s)',
                     style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 12,
+                      fontSize: isMobile ? 15 : 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[800],
                     ),
                   ),
+                  if (transferSync.lastSyncTime != null)
+                    Text(
+                      'Dernière mise à jour: ${DateFormat('HH:mm:ss').format(transferSync.lastSyncTime!)}',
+                      style: TextStyle(
+                        fontSize: isMobile ? 11 : 12,
+                        color: Colors.grey[600],
+                      ),
+                    ),
                 ],
               ),
-              const SizedBox(height: 12),
-              
-              // Informations du shop source
+            ),
+            // Bouton pour afficher/masquer les filtres
+            IconButton(
+              onPressed: () {
+                if (mounted) {
+                  setState(() => _showFilters = !_showFilters);
+                }
+              },
+              icon: Icon(
+                _showFilters ? Icons.filter_alt_off : Icons.filter_alt,
+                color: const Color(0xFFDC2626),
+              ),
+              tooltip: _showFilters ? 'Masquer filtres' : 'Afficher filtres',
+            ),
+            // Bouton de rafraîchissement manuel
+            IconButton(
+              onPressed: transferSync.isSyncing ? null : () => transferSync.forceRefreshFromAPI(),
+              icon: transferSync.isSyncing
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh),
+              color: const Color(0xFFDC2626),
+              tooltip: 'Rafraîchir depuis l\'API',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFiltersAndActions(bool isMobile, TransferSyncService transferSync) {
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: EdgeInsets.all(isMobile ? 12 : 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Recherche par nom de destinataire
+            TextField(
+              decoration: InputDecoration(
+                labelText: 'Rechercher par destinataire',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchDestinataire.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          if (mounted) {
+                            setState(() => _searchDestinataire = '');
+                          }
+                        },
+                      )
+                    : null,
+                border: const OutlineInputBorder(),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+              onChanged: (value) {
+                if (mounted) {
+                  setState(() => _searchDestinataire = value);
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTransfersList(bool isMobile, List<OperationModel> transfers, TransferSyncService transferSync) {
+    // Vérifier s'il y a une erreur sur la première utilisation (onglet "En attente" uniquement)
+    if (_selectedTab == 0 && transfers.isEmpty && transferSync.error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.cloud_off_outlined,
+                size: isMobile ? 60 : 80,
+                color: Colors.orange[400],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Erreur de synchronisation',
+                style: TextStyle(
+                  fontSize: isMobile ? 16 : 18,
+                  color: Colors.grey[800],
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Impossible de charger les transferts depuis le serveur',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: isMobile ? 13 : 14,
+                  color: Colors.grey[600],
+                ),
+              ),
+              const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.withOpacity(0.3)),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.store, color: Colors.blue, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Provenance: ${sourceShop.designation}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                              color: Colors.blue,
-                            ),
+                    Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.orange[700], size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Solutions possibles:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.orange[700],
                           ),
-                          Text(
-                            sourceShop.localisation,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '• Vérifiez votre connexion internet',
+                      style: TextStyle(fontSize: isMobile ? 12 : 13),
+                    ),
+                    Text(
+                      '• Vérifiez que le serveur API est accessible',
+                      style: TextStyle(fontSize: isMobile ? 12 : 13),
+                    ),
+                    Text(
+                      '• Réessayez en utilisant le bouton ci-dessous',
+                      style: TextStyle(fontSize: isMobile ? 12 : 13),
                     ),
                   ],
                 ),
               ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: transferSync.isSyncing ? null : () async {
+                  try {
+                    await transferSync.forceRefreshFromAPI();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('✅ Synchronisation réussie'),
+                          backgroundColor: Colors.green,
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('❌ Erreur: ${e.toString()}'),
+                          backgroundColor: Colors.red,
+                          duration: const Duration(seconds: 3),
+                        ),
+                      );
+                    }
+                  }
+                },
+                icon: transferSync.isSyncing
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Icon(Icons.refresh),
+                label: Text(transferSync.isSyncing ? 'Synchronisation...' : 'Réessayer'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFDC2626),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
+    // Cas normal: aucune donnée (pas d'erreur)
+    if (transfers.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              _selectedTab == 0 ? Icons.check_circle_outline : Icons.history,
+              size: isMobile ? 60 : 80,
+              color: Colors.grey[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _selectedTab == 0 
+                  ? 'Aucun transfert en attente'
+                  : 'Aucune validation effectuée',
+              style: TextStyle(
+                fontSize: isMobile ? 16 : 18,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _selectedTab == 0
+                  ? 'Les transferts en attente apparaîtront ici'
+                  : 'Vos validations de transferts apparaîtront ici',
+              style: TextStyle(
+                fontSize: isMobile ? 13 : 14,
+                color: Colors.grey[500],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: () => transferSync.forceRefreshFromAPI(),
+      child: ListView.builder(
+        itemCount: transfers.length,
+        itemBuilder: (context, index) {
+          final transfer = transfers[index];
+          return _buildTransferCard(isMobile, transfer, transferSync);
+        },
+      ),
+    );
+  }
+
+  Widget _buildTransferCard(bool isMobile, OperationModel transfer, TransferSyncService transferSync) {
+    // Les transferts sont déjà filtrés pour être entrants, donc on peut afficher les boutons
+    final isIncoming = true;
+    
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      margin: EdgeInsets.symmetric(
+        horizontal: isMobile ? 4 : 8,
+        vertical: isMobile ? 8 : 10,
+      ),
+      child: Card(
+        elevation: 5,
+        shadowColor: Colors.green.withOpacity(0.3),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: Colors.green.withOpacity(0.2),
+            width: 1,
+          ),
+        ),
+        child: InkWell(
+          onTap: () => _showTransferDetails(transfer, transferSync),
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white,
+                  Colors.green.withOpacity(0.02),
+                ],
+              ),
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(isMobile ? 18 : 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+              // En-tête: Code de l'opération
+              Text(
+                transfer.codeOps ?? 'N/A',
+                style: TextStyle(
+                  fontSize: isMobile ? 14 : 16,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFFDC2626),
+                ),
+              ),
+              
+              const SizedBox(height: 12),
+              const Divider(height: 1),
               const SizedBox(height: 12),
               
               // Informations du transfert
@@ -423,137 +692,158 @@ class _TransferValidationWidgetState extends State<TransferValidationWidget> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildInfoRow('Type', _getTransferTypeLabel(transfer.type)),
-                        const SizedBox(height: 4),
-                        _buildInfoRow('Destinataire', transfer.destinataire ?? 'Non spécifié'),
-                        const SizedBox(height: 4),
-                        _buildInfoRow('Montant brut', '${transfer.montantBrut.toStringAsFixed(2)} USD'),
-                        const SizedBox(height: 4),
-                        _buildInfoRow('Commission', '${transfer.commission.toStringAsFixed(2)} USD'),
-                        const SizedBox(height: 4),
-                        _buildInfoRow('Montant net', '${transfer.montantNet.toStringAsFixed(2)} USD'),
-                        const SizedBox(height: 4),
-                        _buildInfoRow('Mode de paiement', transfer.modePaiementLabel),
+                        _buildInfoRow(Icons.person, 'Destinataire', transfer.destinataire ?? 'N/A', isMobile),
+                        const SizedBox(height: 8),
+                        _buildInfoRow(Icons.person_outline, 'Expéditeur', transfer.clientNom ?? 'N/A', isMobile),
                       ],
                     ),
                   ),
                   const SizedBox(width: 16),
-                  
-                  // Actions
-                  Column(
-                    children: [
-                      Row(
-                        children: [
-                          ElevatedButton.icon(
-                            onPressed: () => _validateTransfer(transfer),
-                            icon: const Icon(Icons.check, size: 16),
-                            label: const Text('Valider'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          ElevatedButton.icon(
-                            onPressed: () => _rejectTransfer(transfer),
-                            icon: const Icon(Icons.close, size: 16),
-                            label: const Text('Rejeter'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildInfoRow(Icons.calendar_today, 'Date', DateFormat('dd/MM/yyyy').format(transfer.dateOp), isMobile),
+                        const SizedBox(height: 8),
+                        _buildInfoRow(Icons.attach_money, 'Montant', '${transfer.montantNet.toStringAsFixed(2)} ${transfer.devise}', isMobile),
+                      ],
+                    ),
                   ),
                 ],
               ),
+              
+              const SizedBox(height: 12),
+              
+              // Route: Shop source → Shop destination
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        transfer.shopSourceDesignation ?? 'N/A',
+                        style: TextStyle(
+                          fontSize: isMobile ? 12 : 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        transfer.shopDestinationDesignation ?? 'N/A',
+                        style: TextStyle(
+                          fontSize: isMobile ? 12 : 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.end,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Boutons d'action (seulement dans l'onglet "En attente")
+              if (_selectedTab == 0) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _rejectTransfer(transfer, transferSync),
+                        icon: const Icon(Icons.close, size: 16),
+                        label: const Text('Rejeter', style: TextStyle(fontSize: 13)),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          side: const BorderSide(color: Colors.red),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _validateTransfer(transfer, transferSync),
+                        icon: const Icon(Icons.check, size: 16),
+                        label: const Text('Valider', style: TextStyle(fontSize: 13)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
-        );
-      },
+        ),
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
+  Widget _buildInfoRow(IconData icon, String label, String value, bool isMobile) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: 100,
-          child: Text(
-            '$label:',
-            style: TextStyle(
-              color: Colors.grey[600],
-              fontSize: 13,
-            ),
-          ),
-        ),
+        Icon(icon, size: isMobile ? 14 : 16, color: Colors.grey[600]),
+        const SizedBox(width: 6),
         Expanded(
           child: Text(
-            value,
-            style: const TextStyle(
-              fontWeight: FontWeight.w500,
-              fontSize: 13,
+            '$label: $value',
+            style: TextStyle(
+              fontSize: isMobile ? 12 : 13,
+              color: Colors.grey[700],
             ),
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
     );
   }
 
-  String _getTransferTypeLabel(OperationType type) {
-    switch (type) {
-      case OperationType.transfertNational:
-        return 'Transfert National';
-      case OperationType.transfertInternationalSortant:
-        return 'Transfert International Sortant';
-      case OperationType.transfertInternationalEntrant:
-        return 'Transfert International Entrant';
-      default:
-        return 'Transfert';
-    }
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-  }
-
-  void _showTransferImage(OperationModel transfer) {
+  void _showTransferDetails(OperationModel transfer, TransferSyncService transferSync) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Preuve de Paiement - ID ${transfer.id}'),
-        content: Container(
-          width: 300,
-          height: 400,
-          decoration: BoxDecoration(
-            color: Colors.grey[200],
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.image, size: 64, color: Colors.grey),
-                SizedBox(height: 16),
-                Text('Image de la preuve de paiement'),
-                SizedBox(height: 8),
-                Text(
-                  '(Dans une vraie application, l\'image serait affichée ici)',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
-                  textAlign: TextAlign.center,
-                ),
+        title: Text('Détails du transfert ${transfer.codeOps}'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildDetailRow('Code', transfer.codeOps ?? 'N/A'),
+              _buildDetailRow('Type', transfer.typeLabel),
+              _buildDetailRow('Date', DateFormat('dd/MM/yyyy HH:mm').format(transfer.dateOp)),
+              const Divider(),
+              _buildDetailRow('Destinataire', transfer.destinataire ?? 'N/A'),
+              _buildDetailRow('Téléphone', transfer.telephoneDestinataire ?? 'N/A'),
+              const Divider(),
+              _buildDetailRow('Shop source', transfer.shopSourceDesignation ?? 'N/A'),
+              _buildDetailRow('Shop destination', transfer.shopDestinationDesignation ?? 'N/A'),
+              const Divider(),
+              _buildDetailRow('Montant', '${transfer.montantNet.toStringAsFixed(2)} ${transfer.devise}'),
+              _buildDetailRow('Commission', '${transfer.commission.toStringAsFixed(2)} ${transfer.devise}'),
+              _buildDetailRow('Total', '${transfer.montantBrut.toStringAsFixed(2)} ${transfer.devise}'),
+              if (transfer.observation != null && transfer.observation!.isNotEmpty) ...[
+                const Divider(),
+                _buildDetailRow('Observation', transfer.observation!),
               ],
-            ),
+            ],
           ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.pop(context),
             child: const Text('Fermer'),
           ),
         ],
@@ -561,361 +851,136 @@ class _TransferValidationWidgetState extends State<TransferValidationWidget> {
     );
   }
 
-  Future<void> _validateTransfer(OperationModel transfer) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Valider le Transfert'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Êtes-vous sûr de vouloir valider ce transfert ?'),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.green.withOpacity(0.3)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('ID: ${transfer.id}'),
-                  Text('Destinataire: ${transfer.destinataire}'),
-                  Text('Montant: ${transfer.montantNet.toStringAsFixed(2)} USD'),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Annuler'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            child: const Text('Valider', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && mounted) {
-      try {
-        final operationService = Provider.of<OperationService>(context, listen: false);
-        final authService = Provider.of<AuthService>(context, listen: false);
-        
-        // Sélection du mode de paiement
-        final modePaiement = await _selectModePaiement();
-        if (modePaiement == null) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Mode de paiement requis'),
-                backgroundColor: Colors.orange,
-              ),
-            );
-          }
-          return;
-        }
-        
-        // UTILISER validerTransfertServeur au lieu de updateOperation
-        // pour forcer isSynced=false et synchronisation immédiate
-        final success = await operationService.validerTransfertServeur(
-          transfer.id!,
-          modePaiement,
-          currentShopId: authService.currentUser?.shopId,
-        );
-        
-        if (success && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Transfert ID ${transfer.id} validé avec succès'),
-              backgroundColor: Colors.green,
-            ),
-          );
-          _loadPendingTransfers();
-        } else if (mounted) {
-          throw Exception(operationService.errorMessage ?? 'Erreur lors de la validation');
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Erreur: $e'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
-    }
-  }
-
-  // Sélecteur de mode de paiement
-  Future<ModePaiement?> _selectModePaiement() async {
-    return showDialog<ModePaiement>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Mode de Paiement'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.money, color: Colors.green),
-              title: const Text('Cash'),
-              onTap: () => Navigator.of(context).pop(ModePaiement.cash),
-            ),
-            ListTile(
-              leading: const Icon(Icons.phone_android, color: Colors.red),
-              title: const Text('Airtel Money'),
-              onTap: () => Navigator.of(context).pop(ModePaiement.airtelMoney),
-            ),
-            ListTile(
-              leading: const Icon(Icons.account_balance_wallet, color: Colors.green),
-              title: const Text('M-Pesa'),
-              onTap: () => Navigator.of(context).pop(ModePaiement.mPesa),
-            ),
-            ListTile(
-              leading: const Icon(Icons.payment, color: Colors.orange),
-              title: const Text('Orange Money'),
-              onTap: () => Navigator.of(context).pop(ModePaiement.orangeMoney),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _rejectTransfer(OperationModel transfer) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Rejeter le Transfert'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Êtes-vous sûr de vouloir rejeter ce transfert ?'),
-            const SizedBox(height: 8),
-            const Text(
-              'Cette action est irréversible.',
-              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.withOpacity(0.3)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('ID: ${transfer.id}'),
-                  Text('Destinataire: ${transfer.destinataire}'),
-                  Text('Montant: ${transfer.montantNet.toStringAsFixed(2)} USD'),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Annuler'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Rejeter', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && mounted) {
-      try {
-        final operationService = Provider.of<OperationService>(context, listen: false);
-        final authService = Provider.of<AuthService>(context, listen: false);
-        
-        // Mettre à jour le statut à rejeté avec isSynced=false
-        final updatedTransfer = transfer.copyWith(
-          statut: OperationStatus.annulee,
-          lastModifiedAt: DateTime.now(),
-          lastModifiedBy: 'agent_${authService.currentUser?.id}',
-          isSynced: false,  // IMPORTANT: Forcer la synchronisation vers le serveur
-        );
-        
-        // Sauvegarder via le service
-        final success = await operationService.updateOperation(updatedTransfer);
-        
-        if (success) {
-          // Synchronisation immédiate
-          debugPrint('🔄 Synchronisation immédiate du transfert rejeté...');
-          try {
-            final syncService = SyncService();
-            await syncService.syncAll();
-            debugPrint('✅ Transfert ${transfer.id} rejeté et synchronisé avec le serveur');
-          } catch (e) {
-            debugPrint('⚠️ Erreur de synchronisation (transfert rejeté localement): $e');
-          }
-          
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Transfert ID ${transfer.id} rejeté'),
-                backgroundColor: Colors.orange,
-              ),
-            );
-            _loadPendingTransfers();
-          }
-        } else if (mounted) {
-          throw Exception('Erreur lors du rejet');
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Erreur: $e'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
-    }
-  }
-
-  List<Widget> _buildMobileFilters() {
-    return [
-      // Recherche
-      TextField(
-        decoration: const InputDecoration(
-          hintText: 'Rechercher par destinataire ou ID...',
-          prefixIcon: Icon(Icons.search),
-          border: OutlineInputBorder(),
-          isDense: true,
-        ),
-        onChanged: (value) {
-          setState(() {
-            _searchQuery = value;
-          });
-        },
-      ),
-      context.verticalSpace(mobile: 12, tablet: 16, desktop: 20),
-      
-      // Filtre par type
-      DropdownButtonFormField<OperationType?>(
-        value: _filterType,
-        decoration: const InputDecoration(
-          labelText: 'Type de transfert',
-          border: OutlineInputBorder(),
-          isDense: true,
-        ),
-        items: const [
-          DropdownMenuItem(value: null, child: Text('Tous les types')),
-          DropdownMenuItem(value: OperationType.transfertNational, child: Text('National')),
-          DropdownMenuItem(value: OperationType.transfertInternationalSortant, child: Text('Int. Sortant')),
-          DropdownMenuItem(value: OperationType.transfertInternationalEntrant, child: Text('Int. Entrant')),
-        ],
-        onChanged: (value) {
-          setState(() {
-            _filterType = value;
-          });
-        },
-      ),
-      context.verticalSpace(mobile: 12, tablet: 16, desktop: 20),
-      
-      // Bouton reset
-      SizedBox(
-        width: double.infinity,
-        child: ElevatedButton.icon(
-          onPressed: () {
-            setState(() {
-              _filterType = null;
-              _searchQuery = '';
-            });
-          },
-          icon: const Icon(Icons.clear, size: 16),
-          label: const Text('Effacer les filtres'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.grey,
-            foregroundColor: Colors.white,
-          ),
-        ),
-      ),
-    ];
-  }
-
-  List<Widget> _buildDesktopFilters() {
-    return [
-      Row(
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Recherche
-          Expanded(
-            flex: 2,
-            child: TextField(
-              decoration: const InputDecoration(
-                hintText: 'Rechercher par destinataire ou ID...',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value;
-                });
-              },
+          SizedBox(
+            width: 120,
+            child: Text(
+              '$label:',
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
-          context.horizontalSpace(mobile: 12, tablet: 16, desktop: 20),
-          
-          // Filtre par type
           Expanded(
-            child: DropdownButtonFormField<OperationType?>(
-              value: _filterType,
-              decoration: const InputDecoration(
-                labelText: 'Type de transfert',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              items: const [
-                DropdownMenuItem(value: null, child: Text('Tous les types')),
-                DropdownMenuItem(value: OperationType.transfertNational, child: Text('National')),
-                DropdownMenuItem(value: OperationType.transfertInternationalSortant, child: Text('Int. Sortant')),
-                DropdownMenuItem(value: OperationType.transfertInternationalEntrant, child: Text('Int. Entrant')),
-              ],
-              onChanged: (value) {
-                setState(() {
-                  _filterType = value;
-                });
-              },
-            ),
-          ),
-          
-          context.horizontalSpace(mobile: 12, tablet: 16, desktop: 20),
-          
-          // Bouton reset
-          ElevatedButton.icon(
-            onPressed: () {
-              setState(() {
-                _filterType = null;
-                _searchQuery = '';
-              });
-            },
-            icon: const Icon(Icons.clear, size: 16),
-            label: const Text('Reset'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.grey,
-              foregroundColor: Colors.white,
-            ),
+            child: Text(value),
           ),
         ],
       ),
-    ];
+    );
+  }
+
+  Future<void> _validateTransfer(OperationModel transfer, TransferSyncService transferSync) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Valider le transfert'),
+        content: Text('Confirmez-vous la réception de ce transfert ?\n\nMontant: ${transfer.montantNet.toStringAsFixed(2)} ${transfer.devise}'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            child: const Text('Valider'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await _updateTransferStatus(transfer, 'PAYE', transferSync);
+    }
+  }
+
+  Future<void> _rejectTransfer(OperationModel transfer, TransferSyncService transferSync) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rejeter le transfert'),
+        content: const Text('Voulez-vous vraiment rejeter ce transfert ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Rejeter'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await _updateTransferStatus(transfer, 'ANNULE', transferSync);
+    }
+  }
+
+  Future<void> _updateTransferStatus(OperationModel transfer, String newStatus, TransferSyncService transferSync) async {
+    try {
+      debugPrint('🔄 [VALIDATION] Début validation: ${transfer.codeOps} → $newStatus');
+      
+      // Utiliser le service pour valider (server-first)
+      final success = await transferSync.validateTransfer(transfer.codeOps ?? '', newStatus);
+      
+      if (success) {
+        debugPrint('✅ [VALIDATION] Validation réussie');
+        
+        // Afficher le succès
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ Transfert ${newStatus == 'PAYE' ? 'validé' : 'rejeté'} avec succès'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+        
+        // Le service a déjà rechargé les données depuis l'API
+        debugPrint('✅ [VALIDATION] Données rafraîchies automatiquement');
+      } else {
+        throw Exception('Échec de la validation sur le serveur');
+      }
+      
+    } catch (e) {
+      debugPrint('❌ [VALIDATION] Erreur: $e');
+      
+      // En cas d'erreur serveur, afficher message d'erreur clair
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '❌ Échec de la validation',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Erreur: $e',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Vérifiez votre connexion et réessayez',
+                  style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
   }
 }

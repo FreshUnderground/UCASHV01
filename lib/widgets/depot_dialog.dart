@@ -8,7 +8,7 @@ import '../models/client_model.dart';
 import '../models/operation_model.dart';
 import '../models/agent_model.dart';
 import '../utils/responsive_dialog_utils.dart';
-import 'print_receipt_dialog.dart';
+import '../utils/auto_print_helper.dart';
 
 class DepotDialog extends StatefulWidget {
   const DepotDialog({super.key});
@@ -364,7 +364,7 @@ class _DepotDialogState extends State<DepotDialog> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Client:'),
+                      const Text('Partenaire:'),
                       Text(
                         _selectedClient?.nom ?? 'Non sélectionné',
                         style: const TextStyle(fontWeight: FontWeight.bold),
@@ -421,6 +421,30 @@ class _DepotDialogState extends State<DepotDialog> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
+                  // Add CodeOps preview
+                  if (_selectedClient != null && _montantController.text.isNotEmpty)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Code Opération:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Text(
+                          // Generate a preview of what the CodeOps will look like
+                          'TRANSID-${DateTime.now().year}${DateTime.now().month.toString().padLeft(2, '0')}${DateTime.now().day.toString().padLeft(2, '0')}0001',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            color: Colors.blue,
+                          ),
+                        ),
+                      ],
+                    ),
                 ],
               ),
             ),
@@ -531,32 +555,13 @@ class _DepotDialogState extends State<DepotDialog> {
           telephone: authService.currentUser!.telephone,
         );
         
-        // Afficher le dialog d'impression
-        await showDialog(
+        // Imprimer automatiquement le reçu sur POS
+        await AutoPrintHelper.autoPrintWithDialog(
           context: context,
-          barrierDismissible: true,
-          builder: (context) => PrintReceiptDialog(
-            operation: savedOperation,
-            shop: shop,
-            agent: agent,
-            clientName: _selectedClient!.nom,
-            onPrintSuccess: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Dépôt de ${montant.toStringAsFixed(2)} USD effectué - Reçu imprimé'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            },
-            onSkipPrint: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Dépôt de ${montant.toStringAsFixed(2)} USD effectué (sans impression)'),
-                  backgroundColor: Colors.blue,
-                ),
-              );
-            },
-          ),
+          operation: savedOperation,
+          shop: shop,
+          agent: agent,
+          clientName: _selectedClient!.nom,
         );
       } else if (mounted) {
         throw Exception(operationService.errorMessage ?? 'Erreur inconnue');

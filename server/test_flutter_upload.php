@@ -46,7 +46,8 @@ try {
             $entity['last_modified_at'] = $timestamp;
             $entity['last_modified_by'] = $userId;
             $entity['is_synced'] = 1;
-            $entity['synced_at'] = date('c');
+            // Use the client's synced_at timestamp if provided, otherwise use server time
+            $entity['synced_at'] = $entity['synced_at'] ?? date('c');
             
             // Save the entity
             $syncManager->saveShop($entity);

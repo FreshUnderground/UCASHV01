@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../services/client_service.dart';
+import '../utils/responsive_utils.dart';
+import '../theme/ucash_typography.dart';
+import '../theme/ucash_containers.dart';
 
 class ClientProfileWidget extends StatefulWidget {
   const ClientProfileWidget({super.key});
@@ -43,198 +46,330 @@ class _ClientProfileWidgetState extends State<ClientProfileWidget> {
           return const Card(
             child: Padding(
               padding: EdgeInsets.all(16),
-              child: Text('Aucune information client disponible'),
+              child: Text('Aucune information partenaire disponible'),
             ),
           );
         }
 
-        return Column(
-          children: [
-            // Photo de profil et informations de base
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    // Avatar
-                    CircleAvatar(
-                      radius: 50,
-                      backgroundColor: const Color(0xFFDC2626),
-                      child: Text(
-                        client.nom.isNotEmpty ? client.nom[0].toUpperCase() : 'C',
-                        style: const TextStyle(
-                          fontSize: 36,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    Text(
-                      client.nom,
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1F2937),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: client.isActive ? Colors.green : Colors.red,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        client.isActive ? 'Compte Actif' : 'Compte Inactif',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            
-            const SizedBox(height: 16),
-            
-            // Informations détaillées
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Informations Personnelles',
+        return Padding(
+          padding: ResponsiveUtils.getFluidPadding(
+            context,
+            mobile: const EdgeInsets.all(12),
+            tablet: const EdgeInsets.all(16),
+            desktop: const EdgeInsets.all(24),
+          ),
+          child: Column(
+            children: [
+              // Photo de profil et informations de base
+              Card(
+                child: Padding(
+                  padding: ResponsiveUtils.getFluidPadding(
+                    context,
+                    mobile: const EdgeInsets.all(16),
+                    tablet: const EdgeInsets.all(20),
+                    desktop: const EdgeInsets.all(24),
+                  ),
+                  child: Column(
+                    children: [
+                      // Avatar
+                      CircleAvatar(
+                        radius: ResponsiveUtils.getFluidSpacing(context, mobile: 40, tablet: 45, desktop: 50),
+                        backgroundColor: const Color(0xFFDC2626),
+                        child: Text(
+                          client.nom.isNotEmpty ? client.nom[0].toUpperCase() : 'P',
                           style: TextStyle(
-                            fontSize: 20,
+                            fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 28, tablet: 32, desktop: 36),
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF1F2937),
+                            color: Colors.white,
                           ),
                         ),
-                        IconButton(
-                          onPressed: () {
-                            setState(() {
-                              _isEditing = !_isEditing;
-                              if (!_isEditing) {
-                                // Réinitialiser les contrôleurs si on annule
-                                _nomController.text = client.nom;
-                                _telephoneController.text = client.telephone;
-                                _adresseController.text = client.adresse ?? '';
-                              }
-                            });
-                          },
-                          icon: Icon(
-                            _isEditing ? Icons.close : Icons.edit,
-                            color: _isEditing ? Colors.red : const Color(0xFFDC2626),
-                          ),
-                          tooltip: _isEditing ? 'Annuler' : 'Modifier',
+                      ),
+                      SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
+                      
+                      Text(
+                        client.nom,
+                        style: TextStyle(
+                          fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 20, tablet: 22, desktop: 24),
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF1F2937),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    if (_isEditing)
-                      _buildEditForm(client)
-                    else
-                      _buildInfoDisplay(client),
-                  ],
+                      ),
+                      SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 6, tablet: 7, desktop: 8)),
+                      
+                      Container(
+                        padding: ResponsiveUtils.getFluidPadding(
+                          context,
+                          mobile: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                          tablet: const EdgeInsets.symmetric(horizontal: 11, vertical: 3.5),
+                          desktop: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        ),
+                        decoration: BoxDecoration(
+                          color: client.isActive ? Colors.green : Colors.red,
+                          borderRadius: BorderRadius.circular(
+                            ResponsiveUtils.getFluidBorderRadius(context, mobile: 10, tablet: 11, desktop: 12),
+                          ),
+                        ),
+                        child: Text(
+                          client.isActive ? 'Compte Actif' : 'Compte Inactif',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 10, tablet: 11, desktop: 12),
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            
-            const SizedBox(height: 16),
-            
-            // Statistiques du compte
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Statistiques du Compte',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1F2937),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    _buildStatRow('Solde actuel', '${client.solde.toStringAsFixed(2)} USD', 
-                        client.solde >= 0 ? Colors.green : Colors.red),
-                    _buildStatRow('Membre depuis', _formatDate(client.createdAt ?? DateTime.now()), Colors.blue),
-                    _buildStatRow('Dernière activité', _formatDate(client.lastModifiedAt ?? DateTime.now()), Colors.orange),
-                    _buildStatRow('Statut du compte', client.isActive ? 'Actif' : 'Inactif', 
-                        client.isActive ? Colors.green : Colors.red),
-                  ],
-                ),
-              ),
-            ),
-            
-            const SizedBox(height: 16),
-            
-            // Actions
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Actions',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1F2937),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: _showChangePasswordDialog,
-                            icon: const Icon(Icons.lock),
-                            label: const Text('Changer le mot de passe'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFDC2626),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 12),
+              
+              SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
+              
+              // Informations détaillées
+              Card(
+                child: Padding(
+                  padding: ResponsiveUtils.getFluidPadding(
+                    context,
+                    mobile: const EdgeInsets.all(16),
+                    tablet: const EdgeInsets.all(20),
+                    desktop: const EdgeInsets.all(24),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Informations Personnelles',
+                            style: TextStyle(
+                              fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 18, tablet: 19, desktop: 20),
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFF1F2937),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: _showContactSupportDialog,
-                            icon: const Icon(Icons.support_agent),
-                            label: const Text('Contacter le support'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: const Color(0xFFDC2626),
-                              side: const BorderSide(color: Color(0xFFDC2626)),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
+                          IconButton(
+                            onPressed: () {
+                              setState(() {
+                                _isEditing = !_isEditing;
+                                if (!_isEditing) {
+                                  // Réinitialiser les contrôleurs si on annule
+                                  _nomController.text = client.nom;
+                                  _telephoneController.text = client.telephone;
+                                  _adresseController.text = client.adresse ?? '';
+                                }
+                              });
+                            },
+                            icon: Icon(
+                              _isEditing ? Icons.close : Icons.edit,
+                              color: _isEditing ? Colors.red : const Color(0xFFDC2626),
                             ),
+                            tooltip: _isEditing ? 'Annuler' : 'Modifier',
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                      SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
+                      
+                      if (_isEditing)
+                        _buildEditForm(client)
+                      else
+                        _buildInfoDisplay(client),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+              
+              SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
+              
+              // Statistiques du compte
+              Card(
+                child: Padding(
+                  padding: ResponsiveUtils.getFluidPadding(
+                    context,
+                    mobile: const EdgeInsets.all(16),
+                    tablet: const EdgeInsets.all(20),
+                    desktop: const EdgeInsets.all(24),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Statistiques du Compte',
+                        style: TextStyle(
+                          fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 18, tablet: 19, desktop: 20),
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF1F2937),
+                        ),
+                      ),
+                      SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
+                      
+                      _buildStatRow('Solde actuel', '${client.solde.toStringAsFixed(2)} USD', 
+                          client.solde >= 0 ? Colors.green : Colors.red),
+                      _buildStatRow('Membre depuis', _formatDate(client.createdAt ?? DateTime.now()), Colors.blue),
+                      _buildStatRow('Dernière activité', _formatDate(client.lastModifiedAt ?? DateTime.now()), Colors.orange),
+                      _buildStatRow('Statut du compte', client.isActive ? 'Actif' : 'Inactif', 
+                          client.isActive ? Colors.green : Colors.red),
+                    ],
+                  ),
+                ),
+              ),
+              
+              SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
+              
+              // Actions
+              Card(
+                child: Padding(
+                  padding: ResponsiveUtils.getFluidPadding(
+                    context,
+                    mobile: const EdgeInsets.all(16),
+                    tablet: const EdgeInsets.all(20),
+                    desktop: const EdgeInsets.all(24),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Actions',
+                        style: TextStyle(
+                          fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 18, tablet: 19, desktop: 20),
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF1F2937),
+                        ),
+                      ),
+                      SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
+                      
+                      if (context.isSmallScreen)
+                        Column(
+                          children: [
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: _showChangePasswordDialog,
+                                icon: Icon(Icons.lock, 
+                                  size: ResponsiveUtils.getFluidIconSize(context, mobile: 18, tablet: 20, desktop: 22),
+                                ),
+                                label: Text('Changer le mot de passe',
+                                  style: TextStyle(
+                                    fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFDC2626),
+                                  foregroundColor: Colors.white,
+                                  padding: ResponsiveUtils.getFluidPadding(
+                                    context,
+                                    mobile: const EdgeInsets.symmetric(vertical: 10),
+                                    tablet: const EdgeInsets.symmetric(vertical: 11),
+                                    desktop: const EdgeInsets.symmetric(vertical: 12),
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(
+                                      ResponsiveUtils.getFluidBorderRadius(context, mobile: 6, tablet: 7, desktop: 8),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: _showContactSupportDialog,
+                                icon: Icon(Icons.support_agent,
+                                  size: ResponsiveUtils.getFluidIconSize(context, mobile: 18, tablet: 20, desktop: 22),
+                                ),
+                                label: Text('Contacter le support',
+                                  style: TextStyle(
+                                    fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
+                                  ),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFFDC2626),
+                                  side: const BorderSide(color: Color(0xFFDC2626)),
+                                  padding: ResponsiveUtils.getFluidPadding(
+                                    context,
+                                    mobile: const EdgeInsets.symmetric(vertical: 10),
+                                    tablet: const EdgeInsets.symmetric(vertical: 11),
+                                    desktop: const EdgeInsets.symmetric(vertical: 12),
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(
+                                      ResponsiveUtils.getFluidBorderRadius(context, mobile: 6, tablet: 7, desktop: 8),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      else
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: _showChangePasswordDialog,
+                                icon: Icon(Icons.lock,
+                                  size: ResponsiveUtils.getFluidIconSize(context, mobile: 18, tablet: 20, desktop: 22),
+                                ),
+                                label: Text('Changer le mot de passe',
+                                  style: TextStyle(
+                                    fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFDC2626),
+                                  foregroundColor: Colors.white,
+                                  padding: ResponsiveUtils.getFluidPadding(
+                                    context,
+                                    mobile: const EdgeInsets.symmetric(vertical: 10),
+                                    tablet: const EdgeInsets.symmetric(vertical: 11),
+                                    desktop: const EdgeInsets.symmetric(vertical: 12),
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(
+                                      ResponsiveUtils.getFluidBorderRadius(context, mobile: 6, tablet: 7, desktop: 8),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: _showContactSupportDialog,
+                                icon: Icon(Icons.support_agent,
+                                  size: ResponsiveUtils.getFluidIconSize(context, mobile: 18, tablet: 20, desktop: 22),
+                                ),
+                                label: Text('Contacter le support',
+                                  style: TextStyle(
+                                    fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
+                                  ),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFFDC2626),
+                                  side: const BorderSide(color: Color(0xFFDC2626)),
+                                  padding: ResponsiveUtils.getFluidPadding(
+                                    context,
+                                    mobile: const EdgeInsets.symmetric(vertical: 10),
+                                    tablet: const EdgeInsets.symmetric(vertical: 11),
+                                    desktop: const EdgeInsets.symmetric(vertical: 12),
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(
+                                      ResponsiveUtils.getFluidBorderRadius(context, mobile: 6, tablet: 7, desktop: 8),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -247,7 +382,7 @@ class _ClientProfileWidgetState extends State<ClientProfileWidget> {
         _buildInfoRow('Téléphone', client.telephone),
         _buildInfoRow('Adresse', client.adresse ?? 'Non renseignée'),
         _buildInfoRow('Nom d\'utilisateur', client.username ?? 'Non défini'),
-        _buildInfoRow('ID Client', client.id.toString()),
+        _buildInfoRow('ID Partenaire', client.id.toString()),
       ],
     );
   }
@@ -259,10 +394,25 @@ class _ClientProfileWidgetState extends State<ClientProfileWidget> {
         children: [
           TextFormField(
             controller: _nomController,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Nom complet',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.person),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(
+                  ResponsiveUtils.getFluidBorderRadius(context, mobile: 6, tablet: 7, desktop: 8),
+                ),
+              ),
+              prefixIcon: Icon(Icons.person,
+                size: ResponsiveUtils.getFluidIconSize(context, mobile: 18, tablet: 20, desktop: 22),
+              ),
+              contentPadding: ResponsiveUtils.getFluidPadding(
+                context,
+                mobile: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                tablet: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+                desktop: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+              ),
+            ),
+            style: TextStyle(
+              fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
             ),
             validator: (value) {
               if (value == null || value.isEmpty) {
@@ -271,14 +421,29 @@ class _ClientProfileWidgetState extends State<ClientProfileWidget> {
               return null;
             },
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
           
           TextFormField(
             controller: _telephoneController,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Téléphone',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.phone),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(
+                  ResponsiveUtils.getFluidBorderRadius(context, mobile: 6, tablet: 7, desktop: 8),
+                ),
+              ),
+              prefixIcon: Icon(Icons.phone,
+                size: ResponsiveUtils.getFluidIconSize(context, mobile: 18, tablet: 20, desktop: 22),
+              ),
+              contentPadding: ResponsiveUtils.getFluidPadding(
+                context,
+                mobile: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                tablet: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+                desktop: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+              ),
+            ),
+            style: TextStyle(
+              fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
             ),
             validator: (value) {
               if (value == null || value.isEmpty) {
@@ -287,44 +452,126 @@ class _ClientProfileWidgetState extends State<ClientProfileWidget> {
               return null;
             },
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
           
           TextFormField(
             controller: _adresseController,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Adresse (optionnel)',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.location_on),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(
+                  ResponsiveUtils.getFluidBorderRadius(context, mobile: 6, tablet: 7, desktop: 8),
+                ),
+              ),
+              prefixIcon: Icon(Icons.location_on,
+                size: ResponsiveUtils.getFluidIconSize(context, mobile: 18, tablet: 20, desktop: 22),
+              ),
+              contentPadding: ResponsiveUtils.getFluidPadding(
+                context,
+                mobile: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                tablet: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+                desktop: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+              ),
+            ),
+            style: TextStyle(
+              fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
             ),
             maxLines: 2,
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
           
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: _saveChanges,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
+          if (context.isSmallScreen)
+            Column(
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _saveChanges,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      padding: ResponsiveUtils.getFluidPadding(
+                        context,
+                        mobile: const EdgeInsets.symmetric(vertical: 12),
+                        tablet: const EdgeInsets.symmetric(vertical: 14),
+                        desktop: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(
+                          ResponsiveUtils.getFluidBorderRadius(context, mobile: 6, tablet: 7, desktop: 8),
+                        ),
+                      ),
+                    ),
+                    child: Text('Enregistrer',
+                      style: TextStyle(
+                        fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
+                      ),
+                    ),
                   ),
-                  child: const Text('Enregistrer'),
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () {
-                    setState(() {
-                      _isEditing = false;
-                    });
-                  },
-                  child: const Text('Annuler'),
+                SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () {
+                      setState(() {
+                        _isEditing = false;
+                      });
+                    },
+                    child: Text('Annuler',
+                      style: TextStyle(
+                        fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _saveChanges,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      padding: ResponsiveUtils.getFluidPadding(
+                        context,
+                        mobile: const EdgeInsets.symmetric(vertical: 12),
+                        tablet: const EdgeInsets.symmetric(vertical: 14),
+                        desktop: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(
+                          ResponsiveUtils.getFluidBorderRadius(context, mobile: 6, tablet: 7, desktop: 8),
+                        ),
+                      ),
+                    ),
+                    child: Text('Enregistrer',
+                      style: TextStyle(
+                        fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () {
+                      setState(() {
+                        _isEditing = false;
+                      });
+                    },
+                    child: Text('Annuler',
+                      style: TextStyle(
+                        fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );
@@ -332,26 +579,30 @@ class _ClientProfileWidgetState extends State<ClientProfileWidget> {
 
   Widget _buildInfoRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.only(
+        bottom: ResponsiveUtils.getFluidSpacing(context, mobile: 10, tablet: 11, desktop: 12),
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 120,
+            width: ResponsiveUtils.getFluidSpacing(context, mobile: 100, tablet: 110, desktop: 120),
             child: Text(
               '$label:',
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w500,
                 color: Colors.grey,
+                fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 13, tablet: 14, desktop: 15),
               ),
             ),
           ),
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF1F2937),
+                color: const Color(0xFF1F2937),
+                fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 13, tablet: 14, desktop: 15),
               ),
             ),
           ),
@@ -362,15 +613,18 @@ class _ClientProfileWidgetState extends State<ClientProfileWidget> {
 
   Widget _buildStatRow(String label, String value, Color color) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.only(
+        bottom: ResponsiveUtils.getFluidSpacing(context, mobile: 10, tablet: 11, desktop: 12),
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.w500,
               color: Colors.grey,
+              fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 13, tablet: 14, desktop: 15),
             ),
           ),
           Text(
@@ -378,6 +632,7 @@ class _ClientProfileWidgetState extends State<ClientProfileWidget> {
             style: TextStyle(
               fontWeight: FontWeight.bold,
               color: color,
+              fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 13, tablet: 14, desktop: 15),
             ),
           ),
         ],
@@ -469,7 +724,7 @@ class _ClientProfileWidgetState extends State<ClientProfileWidget> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Support Client UCASH'),
+            Text('Support Partenaire UCASH'),
             SizedBox(height: 16),
             Row(
               children: [

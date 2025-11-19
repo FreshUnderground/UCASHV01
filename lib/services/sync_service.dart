@@ -11,6 +11,7 @@ import 'agent_service.dart';
 import 'client_service.dart';
 import 'operation_service.dart';
 import 'rates_service.dart';
+import 'transfer_sync_service.dart';
 import 'local_db.dart';
 import '../models/shop_model.dart';
 import '../models/agent_model.dart';
@@ -19,6 +20,8 @@ import '../models/operation_model.dart';
 import '../models/journal_caisse_model.dart';
 import '../models/taux_model.dart';
 import '../models/commission_model.dart';
+import '../models/document_header_model.dart';
+import '../models/cloture_caisse_model.dart';
 import '../config/app_config.dart';
 
 /// Service de synchronisation bidirectionnelle avec gestion des conflits
@@ -47,7 +50,7 @@ class SyncService {
   
   // Timer pour la synchronisation automatique périodique
   Timer? _autoSyncTimer;
-  static Duration get _autoSyncInterval => AppConfig.autoSyncInterval;
+  static Duration get _autoSyncInterval => const Duration(minutes: 2);
   DateTime? _lastSyncTime;
   
   // File d'attente pour les données en attente de synchronisation (mode offline)
@@ -57,9 +60,7 @@ class SyncService {
   /// Initialise le service de synchronisation
   Future<void> initialize() async {
     debugPrint('🔄 Initialisation du service de synchronisation...');
-    
-    // Charger les opérations en attente
-    await _loadPendingOperations();
+
     
     // Écouter les changements de connectivité
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen(_onConnectivityChanged);
@@ -130,8 +131,9 @@ class SyncService {
     _isSyncing = true;
     _updateStatus(SyncStatus.syncing);
     
-    final userIdToUse = userId ?? 'unknown';
-    debugPrint('🚀 === DÉBUT SYNCHRONISATION BIDIRECTIONNELLE (User: $userIdToUse) ===');
+    // TEMPORAIRE: Forcer le mode admin pour les tests
+    final userIdToUse = userId ?? 'admin';  // Changed from 'unknown' to 'admin'
+    debugPrint('🚀 === DÉBUT SYNCHRONISATION BIDIRECTIONNELLE (User: $userIdToUse - Mode: ADMIN) ===');
     
     try {
       // Vérifier la connectivité
@@ -163,16 +165,27 @@ class SyncService {
       debugPrint('📥 PHASE 1B: Download Shops ← Serveur (pour obtenir IDs)');
       try {
         await _downloadTableData('shops', userIdToUse);
+        // Recharger les shops en mémoire après le download
+        await ShopService.instance.loadShops();
+        debugPrint('✅ Shops rechargés en mémoire après synchronisation');
       } catch (e) {
         debugPrint('❌ Erreur download shops: $e');
       }
       
       // Phase 2: Upload des entités dépendantes (avec IDs serveur)
       debugPrint('📤 PHASE 2: Upload Entités Dépendantes → Serveur');
-      final dependentTables = ['agents', 'clients', 'operations', 'taux', 'commissions'];
+      final dependentTables = ['agents', 'clients', 'taux', 'commissions', 'document_headers', 'cloture_caisse'];
       for (String table in dependentTables) {
         try {
-          await _uploadTableData(table, userIdToUse);
+          await _uploadTableDataWithRetry(table, userIdToUse); // Utiliser version avec retry
+          // Recharger les entités en mémoire après l'upload
+          if (table == 'agents') {
+            await AgentService.instance.loadAgents();
+            debugPrint('✅ Agents rechargés en mémoire après upload');
+          } else if (table == 'clients') {
+            await ClientService().loadClients();
+            debugPrint('✅ Clients rechargés en mémoire après upload');
+          }
         } catch (e) {
           debugPrint('❌ Erreur upload $table: $e');
         }
@@ -186,6 +199,26 @@ class SyncService {
         } catch (e) {
           debugPrint('❌ Erreur download $table: $e');
         }
+      }
+      
+      // CRITIQUE: Recharger TOUTES les entités en mémoire après le download
+      debugPrint('🔄 Rechargement de toutes les entités en mémoire...');
+      await ShopService.instance.loadShops();
+      await AgentService.instance.loadAgents();
+      await ClientService().loadClients();
+      // NOTE: Operations rechargées par TransferSyncService.syncTransfers()
+      await RatesService.instance.loadRatesAndCommissions();
+      debugPrint('✅ Toutes les entités rechargées en mémoire');
+      
+      // Phase 4: Synchronisation des opérations (transferts)
+      debugPrint('🔄 PHASE 4: Synchronisation des opérations (TransferSyncService)');
+      try {
+        final transferSyncService = TransferSyncService();
+        await transferSyncService.syncTransfers();
+        debugPrint('✅ Opérations synchronisées avec succès');
+      } catch (e) {
+        debugPrint('❌ Erreur synchronisation opérations: $e');
+        // Continuer même si la sync des ops échoue
       }
       
       // Marquer la dernière synchronisation
@@ -218,33 +251,42 @@ class SyncService {
     }
   }
 
+  /// Upload avec retry logic pour échecs temporaires
+  Future<void> _uploadTableDataWithRetry(String tableName, String userId, {int maxRetries = 3}) async {
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        await _uploadTableData(tableName, userId);
+        return; // Succès - sortir
+      } catch (e) {
+        debugPrint('⚠️ Upload $tableName tentative $attempt/$maxRetries échouée: $e');
+        
+        if (attempt == maxRetries) {
+          debugPrint('❌ Upload $tableName échoué après $maxRetries tentatives');
+          rethrow; // Dernier essai échoué - propager l'erreur
+        }
+        
+        // Attendre avant de réessayer (backoff exponentiel)
+        final delaySeconds = 2 * attempt;
+        debugPrint('⏳ Nouvelle tentative dans ${delaySeconds}s...');
+        await Future.delayed(Duration(seconds: delaySeconds));
+      }
+    }
+  }
+
   /// Upload des changements locaux vers le serveur
   Future<void> _uploadLocalChanges(String userId) async {
-    final tables = ['shops', 'agents', 'clients', 'operations', 'taux', 'commissions'];
+    // NOTE: 'operations' géré par TransferSyncService
+    final tables = ['shops', 'agents', 'clients', 'taux', 'commissions', 'document_headers', 'cloture_caisse'];
     int successCount = 0;
     int errorCount = 0;
     
     debugPrint('📤 Début de l\'upload des données locales (${tables.length} tables)');
     
-    // DIAGNOSTIC: Vérifier que des agents existent avant de synchroniser les opérations
-    if (tables.contains('operations')) {
-      final agents = AgentService.instance.agents;
-      if (agents.isEmpty) {
-        debugPrint('⚠️⚠️⚠️ ATTENTION: Aucun agent disponible localement!');
-        debugPrint('🚫 Les opérations ne pourront pas être synchronisées car agent_username sera vide.');
-        debugPrint('💡 SOLUTION 1: Créez un agent dans MySQL via:');
-        debugPrint('   http://localhost/UCASHV01/server/database/create_agent.html');
-        debugPrint('💡 SOLUTION 2: Synchronisez d\'abord pour télécharger les agents depuis MySQL');
-        debugPrint('💡 SOLUTION 3: Créez un agent depuis l\'interface Admin Flutter');
-      } else {
-        debugPrint('✅ ${agents.length} agent(s) disponible(s) pour résolution');
-      }
-    }
     
     for (String table in tables) {
       try {
         debugPrint('📤 Upload $table...');
-        await _uploadTableData(table, userId);
+        await _uploadTableDataWithRetry(table, userId); // Utiliser version avec retry
         successCount++;
       } catch (e) {
         debugPrint('❌ Erreur upload $table: $e');
@@ -254,6 +296,44 @@ class SyncService {
     }
     
     debugPrint('📤 Upload terminé: $successCount succès, $errorCount erreurs');
+  }
+
+  /// Valide les données d'une entité avant upload
+  bool _validateEntityData(String tableName, Map<String, dynamic> data) {
+    switch (tableName) {
+      case 'agents':
+        if (data['username'] == null || data['username'].toString().isEmpty) {
+          debugPrint('❌ Validation: username manquant pour agent ${data['id']}');
+          return false;
+        }
+        if (data['shop_id'] == null || data['shop_id'] <= 0) {
+          debugPrint('❌ Validation: shop_id manquant pour agent ${data['id']}');
+          return false;
+        }
+        return true;
+        
+      case 'clients':
+        if (data['nom'] == null || data['nom'].toString().isEmpty) {
+          debugPrint('❌ Validation: nom manquant pour client ${data['id']}');
+          return false;
+        }
+        if (data['shop_id'] == null || data['shop_id'] <= 0) {
+          debugPrint('❌ Validation: shop_id manquant pour client ${data['id']}');
+          return false;
+        }
+        return true;
+        
+      case 'shops':
+        if (data['designation'] == null || data['designation'].toString().isEmpty) {
+          debugPrint('❌ Validation: designation manquant pour shop ${data['id']}');
+          return false;
+        }
+        return true;
+        
+      default:
+        // Autres tables: validation minimale (ID présent)
+        return data['id'] != null;
+    }
   }
 
   /// Upload des données d'une table spécifique
@@ -269,6 +349,28 @@ class SyncService {
 
       debugPrint('📤 $tableName: ${localData.length} éléments à uploader');
       
+      // VALIDATION: Vérifier les données AVANT upload
+      final validatedData = <Map<String, dynamic>>[];
+      final invalidData = <Map<String, dynamic>>[];
+      
+      for (var data in localData) {
+        if (_validateEntityData(tableName, data)) {
+          validatedData.add(data);
+        } else {
+          invalidData.add(data);
+          debugPrint('⚠️ $tableName: Données invalides pour ID ${data['id']} - ignorées');
+        }
+      }
+      
+      if (invalidData.isNotEmpty) {
+        debugPrint('⚠️ $tableName: ${invalidData.length} éléments invalides ignorés');
+      }
+      
+      if (validatedData.isEmpty) {
+        debugPrint('⚠️ $tableName: Aucune donnée valide à uploader');
+        return;
+      }
+          
       final baseUrl = await _baseUrl;
       final response = await http.post(
         Uri.parse('$baseUrl/$tableName/upload.php'),
@@ -277,7 +379,7 @@ class SyncService {
           'Accept': 'application/json',
         },
         body: jsonEncode({
-          'entities': localData,
+          'entities': validatedData,
           'user_id': userId,
           'timestamp': DateTime.now().toIso8601String(),
         }),
@@ -299,9 +401,23 @@ class SyncService {
             }
           }
           
+          // Vérifier les opérations de capital initial dans la réponse
+          if (tableName == 'operations' && (uploaded > 0 || updated > 0)) {
+            int initialCapitalUploaded = 0;
+            for (var data in localData) {
+              if (data['destinataire'] == 'CAPITAL INITIAL') {
+                initialCapitalUploaded++;
+                debugPrint('💰 OP ${data['id']}: Opération de capital initial uploadée avec succès');
+              }
+            }
+            if (initialCapitalUploaded > 0) {
+              debugPrint('💰 $tableName: $initialCapitalUploaded opérations de capital initial uploadées');
+            }
+          }
+          
           // Marquer les éléments comme synchronisés uniquement si pas d'erreurs
           if (uploaded > 0 || updated > 0) {
-            await _markEntitiesAsSynced(tableName, localData);
+            await _markEntitiesAsSynced(tableName, validatedData);
           }
         } else {
           debugPrint('⚠️ Erreur serveur $tableName: ${result['message']}');
@@ -319,7 +435,8 @@ class SyncService {
 
   /// Download des changements du serveur vers l'app
   Future<void> _downloadRemoteChanges(String userId) async {
-    final tables = ['shops', 'agents', 'clients', 'operations', 'taux', 'commissions'];
+    // NOTE: 'operations' géré par TransferSyncService
+    final tables = ['shops', 'agents', 'clients', 'taux', 'commissions', 'document_headers', 'cloture_caisse'];
     int successCount = 0;
     int errorCount = 0;
     
@@ -345,14 +462,44 @@ class SyncService {
     try {
       final lastSync = await _getLastSyncTimestamp(tableName);
       
-      // IMPORTANT: Pour la première sync, utiliser une date très ancienne pour tout télécharger
-      final sinceParam = lastSync != null 
+      // Pour les tables standards, utiliser le timestamp de dernière sync
+      String sinceParam = lastSync != null 
           ? lastSync.toIso8601String() 
           : '2020-01-01T00:00:00.000';  // Date par défaut très ancienne
       
       final baseUrl = await _baseUrl;
-      // Remove user_id parameter since we want all data to sync regardless of user
-      final uri = Uri.parse('$baseUrl/$tableName/changes.php?since=$sinceParam');
+      
+      // Récupérer les informations de l'utilisateur connecté pour le filtrage
+      final prefs = await SharedPreferences.getInstance();
+      final currentUserRole = prefs.getString('user_role') ?? 'admin';  // TEMPORAIRE: admin par défaut pour tests
+      final currentShopId = prefs.getInt('current_shop_id');  // Shop de l'utilisateur connecté
+      
+      // Endpoint standard pour toutes les tables (sauf operations)
+      final endpoint = 'changes.php';
+      var uri = Uri.parse('$baseUrl/$tableName/$endpoint?since=$sinceParam');
+      
+      // Ajouter les paramètres de filtrage pour agents
+      if (tableName == 'agents') {
+        final queryParams = {
+          'since': sinceParam,
+          'user_id': userId,
+          'user_role': currentUserRole,
+        };
+        
+        // Ajouter shop_id seulement pour les agents (pas pour admin)
+        if (currentUserRole != 'admin' && currentShopId != null) {
+          queryParams['shop_id'] = currentShopId.toString();
+        }
+        
+        uri = Uri.parse('$baseUrl/$tableName/$endpoint').replace(queryParameters: queryParams);
+        
+        if (currentUserRole == 'admin') {
+          debugPrint('👑 Mode ADMIN: téléchargement de toutes les données $tableName');
+        } else {
+          debugPrint('👤 Mode AGENT: filtrage $tableName par shop_id=$currentShopId');
+        }
+      }
+      
       debugPrint('📥 Requête download: $uri');
       
       final response = await http.get(
@@ -371,7 +518,36 @@ class SyncService {
           
           if (remoteData.isNotEmpty) {
             await _processRemoteChanges(tableName, remoteData, userId);
+            
+            // CRITIQUE: Recharger les données en mémoire après le traitement
+            debugPrint('🔄 Rechargement des données $tableName en mémoire après download...');
+            switch (tableName) {
+              case 'shops':
+                await ShopService.instance.loadShops();
+                break;
+              case 'agents':
+                await AgentService.instance.loadAgents();
+                break;
+              case 'clients':
+                await ClientService().loadClients();
+                break;
+              case 'taux':
+              case 'commissions':
+                await RatesService.instance.loadRatesAndCommissions();
+                break;
+              case 'document_headers':
+              case 'cloture_caisse':
+                // Ces données sont chargées à la demande, pas besoin de recharger
+                debugPrint('ℹ️ $tableName: Chargement à la demande');
+                break;
+            }
+            debugPrint('✅ Données $tableName rechargées en mémoire');
           }
+          
+          // Mettre à jour le timestamp de dernière sync pour cette table SEULEMENT
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('last_sync_$tableName', DateTime.now().toIso8601String());
+          debugPrint('📅 Timestamp mis à jour pour $tableName');
         } else {
           debugPrint('⚠️ Erreur serveur $tableName: ${result['message']}');
           throw Exception('Erreur serveur: ${result['message']}');
@@ -392,26 +568,7 @@ class SyncService {
     
     debugPrint('🔄 Traitement de ${remoteData.length} éléments pour $tableName');
     
-    // CRITIQUE: Avant de traiter les opérations, recharger agents/clients/shops en mémoire
-    if (tableName == 'operations') {
-      debugPrint('🔄 Rechargement des entités de référence avant traitement des opérations...');
-      await ShopService.instance.loadShops();
-      await AgentService.instance.loadAgents();
-      await ClientService().loadClients();
-      
-      final shops = ShopService.instance.shops;
-      final agents = AgentService.instance.agents;
-      final clients = ClientService().clients;
-      
-      debugPrint('✅ Entités en mémoire: ${shops.length} shops, ${agents.length} agents, ${clients.length} clients');
-      
-      if (agents.isEmpty) {
-        debugPrint('❌❌❌ ERREUR CRITIQUE: Aucun agent en mémoire!');
-        debugPrint('🚨 Les opérations ne pourront pas être traitées correctement.');
-        debugPrint('💡 Synchronisez d\'abord les agents avant les opérations.');
-      }
-    }
-    
+   
     // Afficher un aperçu des données pour débogage
     if (tableName == 'clients' && remoteData.isNotEmpty) {
       debugPrint('🔍 Exemple de client reçu du serveur:');
@@ -443,11 +600,6 @@ class SyncService {
           // Entité existante - vérifier les conflits
           final conflict = await _detectConflict(localEntity, remoteEntity);
           
-          // DÉTECTION SPÉCIALE: Transfert validé (pour Shop Source)
-          if (tableName == 'operations') {
-            await _handleTransfertValidation(localEntity, remoteEntity);
-          }
-          
           if (conflict != null) {
             // Résoudre le conflit
             final resolved = await _resolveConflict(tableName, conflict, userId);
@@ -470,6 +622,30 @@ class SyncService {
     }
     
     debugPrint('✅ $tableName: $inserted insérés, $updated mis à jour, $conflicts conflits, $errors erreurs');
+    
+    // CRITIQUE: Recharger les services en mémoire après traitement
+    debugPrint('🔄 Rechargement du service $tableName en mémoire après traitement...');
+    switch (tableName) {
+      case 'shops':
+        await ShopService.instance.loadShops();
+        break;
+      case 'agents':
+        await AgentService.instance.loadAgents();
+        break;
+      case 'clients':
+        await ClientService().loadClients();
+        break;
+      case 'taux':
+      case 'commissions':
+        await RatesService.instance.loadRatesAndCommissions();
+        break;
+      case 'document_headers':
+      case 'cloture_caisse':
+        // Ces données sont chargées à la demande, pas besoin de recharger
+        debugPrint('ℹ️ $tableName: Chargement à la demande');
+        break;
+    }
+    debugPrint('✅ Service $tableName rechargé en mémoire');
   }
 
   /// Détecte un conflit entre données locales et distantes
@@ -600,18 +776,28 @@ class SyncService {
           
         case 'agents':
           final agents = AgentService.instance.agents;
+          final totalAgents = agents.length;
+          debugPrint('👥 AGENTS: Total agents en mémoire: $totalAgents');
+          
+          // Afficher les shops disponibles pour le débogage
+          final shops = ShopService.instance.shops;
+          debugPrint('🏪 SHOPS: Total shops en mémoire: ${shops.length}');
+          for (var shop in shops) {
+            debugPrint('   - Shop ID: ${shop.id}, Designation: "${shop.designation}"');
+          }
+          
           // Filtrer les agents non synchronisés
           unsyncedData = agents
               .map((agent) {
                 final json = _addSyncMetadata(agent.toJson(), 'agent');
                 // Si is_synced n'est pas true, inclure cet agent
                 if (json['is_synced'] != true) {
+                  debugPrint('🔄 Traitement agent ${agent.username} (ID ${json['id']}, Shop ID: ${agent.shopId})');
                   // ✅ Résoudre shop_designation depuis le shopId de l'agent
-                  final shops = ShopService.instance.shops;
                   final agentShop = shops.where((s) => s.id == agent.shopId).firstOrNull;
                   if (agentShop != null) {
                     json['shop_designation'] = agentShop.designation;
-                    debugPrint('🔄 Agent ${agent.username} (ID ${json['id']}): shopId=${agent.shopId} → shop_designation "${agentShop.designation}"');
+                    debugPrint('✅ Agent ${agent.username}: shopId=${agent.shopId} → shop_designation "${agentShop.designation}"');
                   } else {
                     debugPrint('⚠️ Agent ${agent.username}: shop ID ${agent.shopId} NON trouvé!');
                   }
@@ -623,13 +809,14 @@ class SyncService {
               .cast<Map<String, dynamic>>()
               .toList();
           
+          debugPrint('👥 AGENTS: ${unsyncedData.length}/${totalAgents} non synchronisés (TOUS shops confondus)');
+          
           // Si aucun agent non synchronisé mais qu'il y a des agents, forcer l'upload du premier
           if (unsyncedData.isEmpty && agents.isNotEmpty && since == null) {
             debugPrint('🔄 Première synchronisation: envoi de tous les agents');
             unsyncedData = agents.map((agent) {
               final json = _addSyncMetadata(agent.toJson(), 'agent');
               // Résoudre shop_designation
-              final shops = ShopService.instance.shops;
               final agentShop = shops.where((s) => s.id == agent.shopId).firstOrNull;
               if (agentShop != null) {
                 json['shop_designation'] = agentShop.designation;
@@ -667,103 +854,7 @@ class SyncService {
               .cast<Map<String, dynamic>>()
               .toList();
           break;
-          
-        case 'operations':
-          final operations = OperationService().operations;
-          // Pour l'instant, envoyer toutes les opérations jusqu'à ce que le modèle soit mis à jour
-          unsyncedData = operations
-              .map((op) {
-                final json = _addSyncMetadata(op.toJson(), 'operation');
-                if (json['is_synced'] != true) {
-                  // CRITIQUE: Logger le statut de l'opération AVANT upload
-                  debugPrint('🚨 UPLOAD OP ${json['id']}: type=${op.type.name}, statut=${op.statut.name} (index=${json['statut']})');
-                  
-                  // Logger les données AVANT résolution
-                  debugPrint('🔍 [OP ID ${json['id']}] AVANT résolution: agent_id=${json['agent_id']}, shop_source_id=${json['shop_source_id']}, client_id=${json['client_id']}');
-                  
-                  // Utiliser shop_designation et agent_username au lieu des IDs
-                  final shops = ShopService.instance.shops;
-                  final agents = AgentService.instance.agents;
-                  final clients = ClientService().clients;
-                  
-                  debugPrint('   Total agents disponibles: ${agents.length}');
-                  debugPrint('   Total shops disponibles: ${shops.length}');
-                  debugPrint('   Total clients disponibles: ${clients.length}');
-                  
-                  // Résoudre shop_source_designation depuis shop_source_id
-                  if (json['shop_source_id'] != null) {
-                    final shopSource = shops.where((s) => s.id == json['shop_source_id']).firstOrNull;
-                    if (shopSource != null) {
-                      json['shop_source_designation'] = shopSource.designation;
-                      debugPrint('✅ Shop source résolu: ID ${json['shop_source_id']} -> "${shopSource.designation}"');
-                    } else {
-                      debugPrint('⚠️ Shop source NON trouvé pour ID ${json['shop_source_id']}');
-                    }
-                  }
-                  
-                  // Résoudre shop_destination_designation depuis shop_destination_id
-                  if (json['shop_destination_id'] != null) {
-                    final shopDest = shops.where((s) => s.id == json['shop_destination_id']).firstOrNull;
-                    if (shopDest != null) {
-                      json['shop_destination_designation'] = shopDest.designation;
-                      debugPrint('✅ Shop destination résolu: ID ${json['shop_destination_id']} -> "${shopDest.designation}"');
-                    } else {
-                      debugPrint('⚠️ Shop destination NON trouvé pour ID ${json['shop_destination_id']}');
-                    }
-                  }
-                  
-                  // Résoudre agent_username depuis agent_id OU lastModifiedBy
-                  if (json['agent_id'] != null) {
-                    final agent = agents.where((a) => a.id == json['agent_id']).firstOrNull;
-                    if (agent != null) {
-                      json['agent_username'] = agent.username;
-                      debugPrint('✅ Agent résolu: ID ${json['agent_id']} -> username "${agent.username}"');
-                    } else {
-                      // FALLBACK: Extraire username depuis lastModifiedBy
-                      final lastModifiedBy = json['last_modified_by'];
-                      if (lastModifiedBy != null && lastModifiedBy.toString().startsWith('agent_')) {
-                        final username = lastModifiedBy.toString().replaceFirst('agent_', '');
-                        json['agent_username'] = username;
-                        debugPrint('✅ Agent résolu depuis lastModifiedBy: username "$username"');
-                      } else {
-                        debugPrint('⚠️ Agent NON trouvé pour ID ${json['agent_id']} (total agents: ${agents.length})');
-                        // Logger tous les agents disponibles
-                        debugPrint('   Agents disponibles: ${agents.map((a) => "ID=${a.id} username=${a.username}").join(", ")}');
-                        
-                        // Si aucun agent n'est disponible localement, envoyer une clé vide pour déclencher l'erreur côté serveur
-                        if (agents.isEmpty) {
-                          debugPrint('❌ CRITIQUE: Aucun agent disponible localement!');
-                          debugPrint('   📥 Solution: Synchronisez d\'abord pour télécharger les agents depuis le serveur');
-                          debugPrint('   📥 OU créez un agent dans MySQL via: http://localhost/UCASHV01/server/database/create_agent.html');
-                        }
-                        json['agent_username'] = ''; // Envoyer vide pour déclencher erreur explicite côté serveur
-                      }
-                    }
-                  } else {
-                    debugPrint('⚠️ Opération sans agent_id!');
-                    json['agent_username'] = ''; // Envoyer vide pour déclencher erreur
-                  }
-                  
-                  // Résoudre client_nom depuis client_id
-                  if (json['client_id'] != null) {
-                    final client = clients.where((c) => c.id == json['client_id']).firstOrNull;
-                    if (client != null) {
-                      json['client_nom'] = client.nom;
-                      debugPrint('✅ Client résolu: ID ${json['client_id']} -> nom "${client.nom}"');
-                    } else {
-                      debugPrint('⚠️ Client NON trouvé pour ID ${json['client_id']}');
-                    }
-                  }
-                  
-                  return json;
-                }
-                return null;
-              })
-              .where((item) => item != null)
-              .cast<Map<String, dynamic>>()
-              .toList();
-          break;
-          
+
         case 'taux':
           final taux = RatesService.instance.taux;
           // Pour l'instant, envoyer tous les taux jusqu'à ce que le modèle soit mis à jour
@@ -796,6 +887,38 @@ class SyncService {
               .toList();
           break;
           
+        case 'document_headers':
+          // Les headers sont chargés à la demande depuis LocalDB
+          final prefs = await LocalDB.instance.database;
+          final headerKeys = prefs.getKeys().where((key) => key.startsWith('document_header_'));
+          unsyncedData = [];
+          for (var key in headerKeys) {
+            final headerData = prefs.getString(key);
+            if (headerData != null) {
+              final json = jsonDecode(headerData);
+              if (json['is_synced'] != true) {
+                unsyncedData.add(_addSyncMetadata(json, 'document_header'));
+              }
+            }
+          }
+          break;
+          
+        case 'cloture_caisse':
+          // Les clôtures sont chargées à la demande depuis LocalDB
+          final prefs = await LocalDB.instance.database;
+          final clotureKeys = prefs.getKeys().where((key) => key.startsWith('cloture_caisse_'));
+          unsyncedData = [];
+          for (var key in clotureKeys) {
+            final clotureData = prefs.getString(key);
+            if (clotureData != null) {
+              final json = jsonDecode(clotureData);
+              if (json['is_synced'] != true) {
+                unsyncedData.add(_addSyncMetadata(json, 'cloture_caisse'));
+              }
+            }
+          }
+          break;
+          
         default:
           debugPrint('⚠️ Table inconnue pour récupération des changements: $tableName');
           return [];
@@ -822,7 +945,7 @@ class SyncService {
       'entity_type': entityType,
       'sync_version': 1,
       'is_synced': data['is_synced'] ?? false, // Par défaut non synchronisé
-      'synced_at': data['synced_at'],
+      'synced_at': data['synced_at'] ?? now.toIso8601String(), // Use client's timestamp for timezone consistency
     };
   }
 
@@ -830,7 +953,8 @@ class SyncService {
   Future<Map<String, dynamic>?> _getLocalEntity(String tableName, dynamic entityId) async {
     try {
       final id = entityId is int ? entityId : int.tryParse(entityId.toString()) ?? 0;
-      if (id <= 0) return null;
+      final codeOps = entityId is String ? entityId : entityId.toString();
+      if (id <= 0 && (codeOps.isEmpty || codeOps == '0')) return null;
       
       switch (tableName) {
         case 'shops':
@@ -843,12 +967,7 @@ class SyncService {
           
         case 'clients':
           final client = ClientService().getClientById(id);
-          return client?.toJson();
-          
-        case 'operations':
-          final operation = await LocalDB.instance.getOperationById(id);
-          return operation?.toJson();
-          
+          return client?.toJson();         
         case 'taux':
           final taux = RatesService.instance.getTauxById(id);
           return taux?.toJson();
@@ -931,12 +1050,14 @@ class SyncService {
           }
           
           // IMPORTANT: Créer l'agent avec l'ID MySQL et le shop résolu
+          // GARDER le shop_designation qui vient du serveur
           final agentData = {
             ...data,
             'shop_id': shopId,
+            'shop_designation': shopDesignation,  // ✅ Préserver le nom du shop
           };
           final agent = AgentModel.fromJson(agentData);
-          debugPrint('📥 Insertion agent depuis MySQL: ID=${agent.id}, username=${agent.username}, shopId=$shopId');
+          debugPrint('📥 Insertion agent depuis MySQL: ID=${agent.id}, username=${agent.username}, shopId=$shopId, shopDesignation=$shopDesignation');
           
           // Sauvegarder directement avec l'ID MySQL
           await LocalDB.instance.saveAgent(agent);
@@ -1000,106 +1121,6 @@ class SyncService {
           // Recharger les clients en mémoire
           await ClientService().loadClients();
           break;
-          
-        case 'operations':
-          // Vérifier doublon par montant + agent + date + type (doublon logique)
-          final operations = OperationService().operations;
-          final montantBrut = data['montant_brut'] is String 
-              ? double.tryParse(data['montant_brut']) ?? 0.0 
-              : (data['montant_brut'] ?? 0.0).toDouble();
-          final typeIndex = data['type'] is String ? int.tryParse(data['type']) ?? 0 : data['type'] ?? 0;
-          final agentUsername = data['agent_username'];
-          final dateOp = data['date_op'] != null ? DateTime.parse(data['date_op']) : data['created_at'] != null ? DateTime.parse(data['created_at']) : DateTime.now();
-          
-          // Vérifier si une opération similaire existe (même jour, même montant, même type)
-          final existingOp = operations.where((o) {
-            final sameDate = o.dateOp.year == dateOp.year && 
-                             o.dateOp.month == dateOp.month && 
-                             o.dateOp.day == dateOp.day;
-            final sameMontant = (o.montantBrut - montantBrut).abs() < 0.01; // Tolérance de 1 centime
-            final sameType = o.type.index == typeIndex;
-            return sameDate && sameMontant && sameType;
-          }).firstOrNull;
-          
-          if (existingOp != null) {
-            debugPrint('⚠️ Doublon ignoré: opération montant $montantBrut du ${dateOp.toIso8601String().split('T')[0]} existe déjà');
-            return;
-          }
-          
-          // Résoudre les IDs depuis les clés naturelles
-          final shops = ShopService.instance.shops;
-          final agents = AgentService.instance.agents;
-          
-          // Résoudre shop_source_id depuis shop_source_designation
-          int? shopSourceId;
-          final shopSourceDesignation = data['shop_source_designation'];
-          if (shopSourceDesignation != null && shopSourceDesignation.isNotEmpty) {
-            final shop = shops.where((s) => s.designation == shopSourceDesignation).firstOrNull;
-            if (shop != null) {
-              shopSourceId = shop.id!;
-              debugPrint('🔍 Operation: shop_source_designation "$shopSourceDesignation" → shop_source_id $shopSourceId');
-            } else {
-              debugPrint('⚠️ Shop source "$shopSourceDesignation" non trouvé');
-            }
-          }
-          
-          // Résoudre shop_destination_id depuis shop_destination_designation
-          int? shopDestinationId;
-          final shopDestDesignation = data['shop_destination_designation'];
-          if (shopDestDesignation != null && shopDestDesignation.isNotEmpty) {
-            final shop = shops.where((s) => s.designation == shopDestDesignation).firstOrNull;
-            if (shop != null) {
-              shopDestinationId = shop.id!;
-              debugPrint('🔍 Operation: shop_destination_designation "$shopDestDesignation" → shop_destination_id $shopDestinationId');
-            } else {
-              debugPrint('⚠️ Shop destination "$shopDestDesignation" non trouvé');
-            }
-          }
-          
-          // Résoudre agent_id depuis agent_username
-          int agentId = 1;
-          // agentUsername déjà défini ligne 827 pour vérification doublon
-          if (agentUsername != null && agentUsername.isNotEmpty) {
-            final agent = agents.where((a) => a.username == agentUsername).firstOrNull;
-            if (agent != null) {
-              agentId = agent.id!;
-              debugPrint('🔍 Operation: agent_username "$agentUsername" → agent_id $agentId');
-            } else {
-              debugPrint('⚠️ Agent "$agentUsername" non trouvé');
-            }
-          }
-          
-          // Créer l'opération avec les IDs résolus
-          final operationData = {
-            ...data,
-            'shop_source_id': shopSourceId,
-            'shop_destination_id': shopDestinationId,
-            'agent_id': agentId,
-          };
-          
-          final operation = OperationModel.fromJson(operationData);
-          
-          // CRITIQUE: Logger le statut pour débogage
-          debugPrint('🚨 STATUT DEBUG OP ${operation.id}:');
-          debugPrint('   type: ${operation.type.name}');
-          debugPrint('   statut depuis JSON: ${operationData['statut']}');
-          debugPrint('   statut après parsing: ${operation.statut.name} (index=${operation.statut.index})');
-          debugPrint('   destinataire: ${operation.destinataire}');
-          
-          // IMPORTANT: Utiliser saveOperation DIRECT pour éviter la logique métier
-          // (calcul commission, mise à jour soldes, journal)
-          // Car les opérations reçues du serveur sont déjà complètes
-          await LocalDB.instance.saveOperation(operation);
-          debugPrint('📥 Opération ${operation.id} insérée depuis serveur (statut: ${operation.statut.name})');
-          
-          // IMPORTANT: Créer l'entrée de journal pour l'opération synchronisée
-          await _createJournalEntryForOperation(operation);
-          
-          // Recharger les opérations dans le service pour affichage SANS FILTRE
-          // Ne pas filtrer par agent pour voir TOUTES les opérations synchronisées
-          await OperationService().loadOperations();  // Pas de shopId ni agentId
-          break;
-          
         case 'taux':
           final taux = TauxModel.fromJson(data);
           // Vérifier doublon par devise_source + devise_cible + type
@@ -1138,6 +1159,29 @@ class SyncService {
           );
           break;
           
+        case 'document_headers':
+          final header = DocumentHeaderModel.fromJson(data);
+          final prefs = await LocalDB.instance.database;
+          await prefs.setString('document_header_${header.id}', jsonEncode(header.toJson()));
+          debugPrint('✅ Document header ID ${header.id} sauvegardé');
+          break;
+          
+        case 'cloture_caisse':
+          final cloture = ClotureCaisseModel.fromJson(data);
+          final prefs = await LocalDB.instance.database;
+          // Clé unique: shop_id + date_cloture
+          final clotureKey = 'cloture_caisse_${cloture.shopId}_${cloture.dateCloture.toIso8601String().split('T')[0]}';
+          
+          // Vérifier si clôture existe déjà pour ce shop et cette date
+          if (prefs.containsKey(clotureKey)) {
+            debugPrint('⚠️ Doublon ignoré: clôture pour shop ${cloture.shopId} du ${cloture.dateCloture.toIso8601String().split('T')[0]} existe déjà');
+            return;
+          }
+          
+          await prefs.setString(clotureKey, jsonEncode(cloture.toJson()));
+          debugPrint('✅ Clôture caisse shop ${cloture.shopId} du ${cloture.dateCloture.toIso8601String().split('T')[0]} sauvegardée');
+          break;
+          
         default:
           debugPrint('⚠️ Table inconnue pour insertion: $tableName');
       }
@@ -1170,13 +1214,13 @@ class SyncService {
           break;
           
         case OperationType.depot:
-          libelle = 'Dépôt - ${operation.destinataire ?? "Client"}';
+          libelle = 'Dépôt - ${operation.destinataire ?? "Partenaire"}';
           montant = operation.montantNet;
           type = TypeMouvement.entree; // ENTRÉE en caisse
           break;
           
         case OperationType.retrait:
-          libelle = 'Retrait - ${operation.destinataire ?? "Client"}';
+          libelle = 'Retrait - ${operation.destinataire ?? "Partenaire"}';
           montant = operation.montantNet;
           type = TypeMouvement.sortie; // SORTIE de caisse
           break;
@@ -1237,11 +1281,6 @@ class SyncService {
           await ClientService().updateClient(client);
           break;
           
-        case 'operations':
-          final operation = OperationModel.fromJson(data);
-          await OperationService().updateOperation(operation);
-          break;
-          
         case 'taux':
           final taux = TauxModel.fromJson(data);
           await RatesService.instance.updateTaux(taux);
@@ -1250,6 +1289,21 @@ class SyncService {
         case 'commissions':
           final commission = CommissionModel.fromJson(data);
           await RatesService.instance.updateCommission(commission);
+          break;
+          
+        case 'document_headers':
+          final header = DocumentHeaderModel.fromJson(data);
+          final prefs = await LocalDB.instance.database;
+          await prefs.setString('document_header_${header.id}', jsonEncode(header.toJson()));
+          debugPrint('✅ Document header ID ${header.id} mis à jour');
+          break;
+          
+        case 'cloture_caisse':
+          final cloture = ClotureCaisseModel.fromJson(data);
+          final prefs = await LocalDB.instance.database;
+          final clotureKey = 'cloture_caisse_${cloture.shopId}_${cloture.dateCloture.toIso8601String().split('T')[0]}';
+          await prefs.setString(clotureKey, jsonEncode(cloture.toJson()));
+          debugPrint('✅ Clôture caisse shop ${cloture.shopId} mis à jour');
           break;
           
         default:
@@ -1310,17 +1364,6 @@ class SyncService {
             await ClientService().loadClients();
             break;
             
-          case 'operations':
-            final prefs = await LocalDB.instance.database;
-            final operationData = prefs.getString('operation_$entityId');
-            if (operationData != null) {
-              final operationJson = jsonDecode(operationData);
-              operationJson['is_synced'] = true;
-              operationJson['synced_at'] = now.toIso8601String();
-              await prefs.setString('operation_$entityId', jsonEncode(operationJson));
-            }
-            break;
-            
           case 'taux':
             final prefs = await LocalDB.instance.database;
             final tauxData = prefs.getString('taux_$entityId');
@@ -1345,6 +1388,32 @@ class SyncService {
             }
             // Recharger les commissions en mémoire
             await RatesService.instance.loadRatesAndCommissions();
+            break;
+            
+          case 'document_headers':
+            final prefs = await LocalDB.instance.database;
+            final headerData = prefs.getString('document_header_$entityId');
+            if (headerData != null) {
+              final headerJson = jsonDecode(headerData);
+              headerJson['is_synced'] = true;
+              headerJson['synced_at'] = now.toIso8601String();
+              await prefs.setString('document_header_$entityId', jsonEncode(headerJson));
+            }
+            break;
+            
+          case 'cloture_caisse':
+            final prefs = await LocalDB.instance.database;
+            // Pour les clôtures, l'ID est composé de shop_id + date
+            final clotureKeys = prefs.getKeys().where((key) => key.contains('cloture_caisse_') && key.contains('_$entityId'));
+            for (var key in clotureKeys) {
+              final clotureData = prefs.getString(key);
+              if (clotureData != null) {
+                final clotureJson = jsonDecode(clotureData);
+                clotureJson['is_synced'] = true;
+                clotureJson['synced_at'] = now.toIso8601String();
+                await prefs.setString(key, jsonEncode(clotureJson));
+              }
+            }
             break;
         }
       }
@@ -1459,14 +1528,7 @@ class SyncService {
   Future<DateTime?> _getLastSyncTimestamp(String tableName) async {
     final prefs = await SharedPreferences.getInstance();
     final timestamp = prefs.getString('last_sync_$tableName');
-    
-    // Pour les opérations: si première sync, retourner une date très ancienne
-    // pour télécharger TOUTES les opérations (dépôts initiaux, etc.)
-    if (tableName == 'operations' && timestamp == null) {
-      debugPrint('🔄 Première sync operations - téléchargement de TOUTES les opérations');
-      return DateTime(2020, 1, 1); // Date très ancienne pour tout télécharger
-    }
-    
+      
     return timestamp != null ? DateTime.tryParse(timestamp) : null;
   }
 
@@ -1475,7 +1537,8 @@ class SyncService {
     final prefs = await SharedPreferences.getInstance();
     final now = DateTime.now().toIso8601String();
     
-    final tables = ['shops', 'users', 'agents', 'clients', 'operations', 'journal_caisse', 'taux', 'commissions'];
+    // NOTE: 'operations' timestamp géré par TransferSyncService
+    final tables = ['shops', 'users', 'agents', 'clients', 'journal_caisse', 'taux', 'commissions', 'document_headers', 'cloture_caisse'];
     for (String table in tables) {
       await prefs.setString('last_sync_$table', now);
     }
@@ -1511,7 +1574,8 @@ class SyncService {
     debugPrint('🔄 Réinitialisation du statut de synchronisation...');
     
     final prefs = await SharedPreferences.getInstance();
-    final tables = ['shops', 'users', 'agents', 'clients', 'operations', 'journal_caisse', 'taux', 'commissions'];
+    // NOTE: 'operations' timestamp géré par TransferSyncService
+    final tables = ['shops', 'users', 'agents', 'clients', 'journal_caisse', 'taux', 'commissions', 'document_headers', 'cloture_caisse'];
     
     for (String table in tables) {
       await prefs.remove('last_sync_$table');
@@ -1542,16 +1606,16 @@ class SyncService {
       debugPrint('   ➢ isOnline: $_isOnline');
       
       if (_isAutoSyncEnabled && !_isSyncing) {
-        debugPrint('🔄 [🕒 ${DateTime.now().toIso8601String()}] Synchronisation automatique - TOUTES LES DONNÉES');
+        debugPrint('🔄 [🕒 ${DateTime.now().toIso8601String()}] Synchronisation automatique - OPERATIONS SEULEMENT');
         
-        // Utiliser la MÊME fonction que la synchronisation manuelle
-        final result = await syncAll(userId: 'auto_sync');
+        // Synchroniser UNIQUEMENT les opérations (plus rapide)
+        final result = await syncOperations();
         
-        if (result.success) {
+        if (result) {
           _lastSyncTime = DateTime.now();
-          debugPrint('✅ Synchronisation automatique terminée avec succès');
+          debugPrint('✅ Synchronisation automatique des opérations terminée avec succès');
         } else {
-          debugPrint('⚠️ Synchronisation automatique échouée: ${result.message}');
+          debugPrint('⚠️ Synchronisation automatique des opérations échouée');
         }
       } else {
         debugPrint('⏸️ Synchronisation automatique ignorée (conditions non remplies)');
@@ -1571,38 +1635,18 @@ class SyncService {
   }
   
   /// Synchronise uniquement les opérations (transferts, dépôts, retraits)
+  /// DEPRECATED: Utiliser TransferSyncService.syncTransfers() à la place
+  @Deprecated('Utiliser TransferSyncService.syncTransfers() pour synchroniser les opérations')
   Future<bool> syncOperations() async {
-    if (_isSyncing) {
-      debugPrint('⚠️ Synchronisation déjà en cours...');
-      return false;
-    }
-    
+    debugPrint('⚠️ syncOperations() est obsolète - utilisez TransferSyncService.syncTransfers()');
+    // Rediriger vers TransferSyncService
     try {
-      // Vérifier la connectivité
-      if (!await _checkConnectivity()) {
-        debugPrint('⚠️ Mode offline - synchronisation reportée');
-        return false;
-      }
-      
-      _isSyncing = true;
-      debugPrint('📤 Upload des opérations locales...');
-      // Use 'auto_sync' as userId for automatic operations
-      await _uploadTableData('operations', 'auto_sync');
-      
-      debugPrint('📥 Download des opérations distantes...');
-      // Use 'auto_sync' as userId for automatic operations
-      await _downloadTableData('operations', 'auto_sync');
-      
-      // Mettre à jour le timestamp de sync pour les opérations
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('last_sync_operations', DateTime.now().toIso8601String());
-      
+      final transferSyncService = TransferSyncService();
+      await transferSyncService.syncTransfers();
       return true;
     } catch (e) {
-      debugPrint('❌ Erreur sync opérations: $e');
+      debugPrint('❌ Erreur sync opérations via TransferSyncService: $e');
       return false;
-    } finally {
-      _isSyncing = false;
     }
   }
   
@@ -1636,25 +1680,6 @@ class SyncService {
     await prefs.setString('pending_operations', jsonEncode(_pendingOperations));
     
     debugPrint('📋 Opération mise en file d\'attente (total: $_pendingSyncCount)');
-  }
-  
-  /// Charge les opérations en attente depuis shared_preferences
-  Future<void> _loadPendingOperations() async {
-    final prefs = await SharedPreferences.getInstance();
-    final pendingJson = prefs.getString('pending_operations');
-    
-    if (pendingJson != null && pendingJson.isNotEmpty) {
-      try {
-        final List<dynamic> pending = jsonDecode(pendingJson);
-        _pendingOperations.clear();
-        _pendingOperations.addAll(pending.cast<Map<String, dynamic>>());
-        _pendingSyncCount = _pendingOperations.length;
-        
-        debugPrint('📋 ${_pendingSyncCount} opérations en attente chargées');
-      } catch (e) {
-        debugPrint('❌ Erreur chargement opérations en attente: $e');
-      }
-    }
   }
   
   /// Synchronise les données en attente (appelé lors du retour en ligne)
@@ -1715,6 +1740,22 @@ class SyncService {
     if (synced > 0) {
       // Synchroniser le reste des données
       await syncAll();
+    }
+  }
+  
+  /// Force le téléchargement complet de toutes les opérations (ignore synced_at)
+  /// DEPRECATED: Utiliser TransferSyncService.syncTransfers() à la place
+  @Deprecated('Utiliser TransferSyncService.syncTransfers() pour télécharger les opérations')
+  Future<void> forceFullOperationsDownload({String? userId}) async {
+    debugPrint('⚠️ forceFullOperationsDownload() est obsolète - utilisez TransferSyncService.syncTransfers()');
+    // Rediriger vers TransferSyncService
+    try {
+      final transferSyncService = TransferSyncService();
+      await transferSyncService.syncTransfers();
+      debugPrint('✅ Téléchargement complet via TransferSyncService terminé');
+    } catch (e) {
+      debugPrint('❌ Erreur téléchargement via TransferSyncService: $e');
+      rethrow;
     }
   }
 }

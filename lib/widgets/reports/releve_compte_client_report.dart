@@ -551,7 +551,7 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
                 Expanded(
                   flex: 2,
                   child: Text(
-                    'Reçu (Dépôt)',
+                    'Reçu',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.grey[700],
@@ -562,7 +562,7 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
                 Expanded(
                   flex: 2,
                   child: Text(
-                    'Payé (Retrait)',
+                    'Payé',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.grey[700],

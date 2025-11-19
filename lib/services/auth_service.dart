@@ -196,6 +196,16 @@ class AuthService extends ChangeNotifier {
     await prefs.setBool('remember_me', rememberMe);
     await prefs.setString('last_login', DateTime.now().toIso8601String());
     
+    // Sauvegarder le rôle et shop_id pour le filtrage de la synchronisation
+    if (_currentUser != null) {
+      await prefs.setString('user_role', _currentUser!.role.toLowerCase());  // admin ou agent
+      if (_currentUser!.shopId != null) {
+        await prefs.setInt('current_shop_id', _currentUser!.shopId!);
+      } else {
+        await prefs.remove('current_shop_id');  // Admin n'a pas de shop
+      }
+    }
+    
     if (rememberMe && _currentUser != null) {
       await prefs.setString('remembered_username', _currentUser!.username);
     } else {

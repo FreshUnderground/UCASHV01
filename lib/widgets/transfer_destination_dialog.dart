@@ -9,7 +9,8 @@ import '../services/rates_service.dart';
 import '../models/shop_model.dart';
 import '../models/operation_model.dart';
 import '../models/agent_model.dart';
-import 'print_receipt_dialog.dart';
+import '../utils/auto_print_helper.dart';
+import '../utils/responsive_dialog_utils.dart';
 
 class TransferDestinationDialog extends StatefulWidget {
   const TransferDestinationDialog({super.key});
@@ -22,6 +23,7 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
   final _formKey = GlobalKey<FormState>();
   final _montantController = TextEditingController();
   final _destinataireController = TextEditingController();
+  final _expediteurController = TextEditingController(); // Add expediteur controller
   
   XFile? _selectedImage;
   Uint8List? _imageBytes;
@@ -50,6 +52,7 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
     _montantController.removeListener(_calculateCommission);
     _montantController.dispose();
     _destinataireController.dispose();
+    _expediteurController.dispose(); // Dispose expediteur controller
     super.dispose();
   }
   
@@ -58,7 +61,7 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
   }
   
   void _calculateCommission() async {
-    final montant = double.tryParse(_montantController.text) ?? 0.0;
+    final montantNet = double.tryParse(_montantController.text) ?? 0.0;  // Montant que le destinataire REÇOIT
     
     // Récupérer la VRAIE commission depuis RatesService
     final ratesService = RatesService.instance;
@@ -72,8 +75,8 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
         final commissionData = ratesService.getCommissionByType('SORTANT');
         if (commissionData != null) {
           _tauxCommission = commissionData.taux; // Stocker le taux réel
-          _commission = montant * (commissionData.taux / 100);
-          debugPrint('✅ Commission SORTANT récupérée: ${commissionData.taux}% sur $montant = $_commission');
+          _commission = montantNet * (commissionData.taux / 100);  // Commission sur montantNet
+          debugPrint('✅ Commission SORTANT récupérée: ${commissionData.taux}% sur $montantNet = $_commission');
         } else {
           _tauxCommission = 0.0;
           _commission = 0.0;
@@ -85,8 +88,8 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
         final commissionData = ratesService.getCommissionByType('ENTRANT');
         if (commissionData != null) {
           _tauxCommission = commissionData.taux; // Stocker le taux réel
-          _commission = montant * (commissionData.taux / 100);
-          debugPrint('✅ Commission ENTRANT récupérée: ${commissionData.taux}% sur $montant = $_commission');
+          _commission = montantNet * (commissionData.taux / 100);  // Commission sur montantNet
+          debugPrint('✅ Commission ENTRANT récupérée: ${commissionData.taux}% sur $montantNet = $_commission');
         } else {
           _tauxCommission = 0.0;
           _commission = 0.0;
@@ -97,7 +100,9 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
         _commission = 0.0;
     }
     
-    _montantNet = montant - _commission;
+    // LE CLIENT PAIE: Montant Net + Commission
+    _montantNet = montantNet;  // Ce que le destinataire reçoit
+    // montantBrut sera = montantNet + commission (calculé lors de la création)
     
     if (mounted) {
       setState(() {});
@@ -106,562 +111,583 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      child: Container(
-        width: 600,
-        constraints: const BoxConstraints(maxHeight: 700),
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth <= 480;
+    final fieldSpacing = ResponsiveDialogUtils.getFieldSpacing(context);
+    final labelFontSize = ResponsiveDialogUtils.getLabelFontSize(context);
+    
+    return ResponsiveDialogUtils.buildResponsiveDialog(
+      context: context,
+      header: ResponsiveDialogUtils.buildResponsiveHeader(
+        context: context,
+        title: 'Transfert vers Destination',
+        icon: Icons.send,
+        color: const Color(0xFFDC2626),
+      ),
+      body: Form(
+        key: _formKey,
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                color: Color(0xFFDC2626),
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(8),
-                  topRight: Radius.circular(8),
+            // Type de transfert
+            Text(
+              '1. Type de transfert *',
+              style: TextStyle(
+                fontSize: labelFontSize,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFFDC2626),
+              ),
+            ),
+            SizedBox(height: isMobile ? 8 : 12),
+                      
+            DropdownButtonFormField<OperationType>(
+              value: _transferType,
+              isExpanded: true,
+              decoration: InputDecoration(
+                labelText: 'Type de transfert',
+                border: const OutlineInputBorder(),
+                prefixIcon: Icon(Icons.swap_horiz, size: ResponsiveDialogUtils.getIconSize(context)),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: isMobile ? 12 : 16,
+                  vertical: isMobile ? 12 : 16,
                 ),
               ),
-              child: Row(
-                children: [
-                  const Icon(Icons.send, color: Colors.white),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'Transfert vers Destination',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+              items: [
+                DropdownMenuItem(
+                  value: OperationType.transfertNational,
+                  child: Text(
+                    'Transfert Sortant (National + International)',
+                    style: TextStyle(fontSize: isMobile ? 14 : 16),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: OperationType.transfertInternationalEntrant,
+                  child: Text(
+                    'Transfert International Entrant',
+                    style: TextStyle(fontSize: isMobile ? 14 : 16),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  _transferType = value!;
+                  _calculateCommission();
+                });
+              },
+              validator: (value) {
+                if (value == null) {
+                  return 'Sélectionnez le type de transfert';
+                }
+                return null;
+              },
+            ),
+            SizedBox(height: fieldSpacing),
+                      
+            // Shop de destination (pour tous les transferts sortants)
+            if (_transferType == OperationType.transfertNational) ...[
+              Text(
+                '2. Shop de destination *',
+                style: TextStyle(
+                  fontSize: labelFontSize,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFFDC2626),
+                ),
+              ),
+              SizedBox(height: isMobile ? 8 : 12),
+                        
+              Consumer<ShopService>(
+                builder: (context, shopService, child) {
+                  final authService = Provider.of<AuthService>(context, listen: false);
+                  final currentUser = authService.currentUser;
+                  
+                  // Exclure le shop actuel de l'agent
+                  final availableShops = shopService.shops
+                      .where((shop) => shop.id != currentUser?.shopId)
+                      .toList();
+                  
+                  return DropdownButtonFormField<ShopModel>(
+                    value: _selectedShop,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: 'Shop de destination',
+                      border: const OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.store, size: ResponsiveDialogUtils.getIconSize(context)),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: isMobile ? 12 : 16,
+                        vertical: isMobile ? 12 : 16,
                       ),
                     ),
+                    items: availableShops.map((shop) {
+                      return DropdownMenuItem(
+                        value: shop,
+                        child: Text(
+                          '${shop.designation} - ${shop.localisation}',
+                          style: TextStyle(fontSize: isMobile ? 14 : 16),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedShop = value;
+                      });
+                    },
+                    validator: (value) {
+                      if (_transferType == OperationType.transfertNational && value == null) {
+                        return 'Sélectionnez le shop de destination';
+                      }
+                      return null;
+                    },
+                  );
+                },
+              ),
+              SizedBox(height: fieldSpacing),
+            ],
+                      
+            // Informations du destinataire
+            Text(
+              '${OperationType.transfertNational == OperationType.transfertNational ? '3' : '2'}. Personne qui sera servie *',
+              style: TextStyle(
+                fontSize: labelFontSize,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFFDC2626),
+              ),
+            ),
+            SizedBox(height: isMobile ? 8 : 12),
+            
+            TextFormField(
+              controller: _destinataireController,
+              decoration: InputDecoration(
+                labelText: 'Nom de la personne qui sera servie',
+                border: const OutlineInputBorder(),
+                prefixIcon: Icon(Icons.person, size: ResponsiveDialogUtils.getIconSize(context)),
+                hintText: 'Ex: Jean Mukendi',
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: isMobile ? 12 : 16,
+                  vertical: isMobile ? 12 : 16,
+                ),
+              ),
+              style: TextStyle(fontSize: isMobile ? 16 : 18),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Le nom de la personne est requis';
+                }
+                return null;
+              },
+            ),
+            SizedBox(height: fieldSpacing),
+            
+            // Nom de l'expéditeur
+            Text(
+              '${_transferType == OperationType.transfertNational ? '4' : '3'}. Nom de l\'expéditeur',
+              style: TextStyle(
+                fontSize: labelFontSize,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFFDC2626),
+              ),
+            ),
+            SizedBox(height: isMobile ? 8 : 12),
+            
+            TextFormField(
+              controller: _expediteurController,
+              decoration: InputDecoration(
+                labelText: 'Nom de l\'expéditeur (optionnel)',
+                border: const OutlineInputBorder(),
+                prefixIcon: Icon(Icons.person_outline, size: ResponsiveDialogUtils.getIconSize(context)),
+                hintText: 'Ex: Marie Dupont',
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: isMobile ? 12 : 16,
+                  vertical: isMobile ? 12 : 16,
+                ),
+              ),
+              style: TextStyle(fontSize: isMobile ? 16 : 18),
+            ),
+            SizedBox(height: fieldSpacing),
+            
+            // Montant
+            Text(
+              '${_transferType == OperationType.transfertNational ? '5' : '4'}. Montant du transfert *',
+              style: TextStyle(
+                fontSize: labelFontSize,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFFDC2626),
+              ),
+            ),
+            SizedBox(height: isMobile ? 8 : 12),
+            
+            TextFormField(
+              controller: _montantController,
+              decoration: InputDecoration(
+                labelText: 'Montant en USD',
+                border: const OutlineInputBorder(),
+                prefixIcon: Icon(Icons.attach_money, size: ResponsiveDialogUtils.getIconSize(context)),
+                suffixText: 'USD',
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: isMobile ? 12 : 16,
+                  vertical: isMobile ? 12 : 16,
+                ),
+              ),
+              keyboardType: TextInputType.number,
+              style: TextStyle(fontSize: isMobile ? 16 : 18),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Le montant est requis';
+                }
+                final montant = double.tryParse(value);
+                if (montant == null || montant <= 0) {
+                  return 'Montant invalide';
+                }
+                return null;
+              },
+            ),
+            SizedBox(height: fieldSpacing),
+            
+            // Mode de paiement
+            Text(
+              '${_transferType == OperationType.transfertNational ? '6' : '5'}. Mode de paiement *',
+              style: TextStyle(
+                fontSize: labelFontSize,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFFDC2626),
+              ),
+            ),
+            SizedBox(height: isMobile ? 8 : 12),
+            
+            DropdownButtonFormField<ModePaiement>(
+              value: _modePaiement,
+              isExpanded: true,
+              decoration: InputDecoration(
+                labelText: 'Mode de paiement',
+                border: const OutlineInputBorder(),
+                prefixIcon: Icon(Icons.payment, size: ResponsiveDialogUtils.getIconSize(context)),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: isMobile ? 12 : 16,
+                  vertical: isMobile ? 12 : 16,
+                ),
+              ),
+              items: [
+                DropdownMenuItem(
+                  value: ModePaiement.cash,
+                  child: Row(
+                    children: [
+                      Icon(Icons.money, color: Colors.green, size: isMobile ? 18 : 20),
+                      SizedBox(width: 8),
+                      Text('Cash', style: TextStyle(fontSize: isMobile ? 14 : 16)),
+                    ],
                   ),
-                  IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close, color: Colors.white),
+                ),
+                DropdownMenuItem(
+                  value: ModePaiement.airtelMoney,
+                  child: Row(
+                    children: [
+                      Icon(Icons.phone_android, color: Colors.orange, size: isMobile ? 18 : 20),
+                      SizedBox(width: 8),
+                      Text('Airtel Money', style: TextStyle(fontSize: isMobile ? 14 : 16)),
+                    ],
                   ),
-                ],
+                ),
+                DropdownMenuItem(
+                  value: ModePaiement.mPesa,
+                  child: Row(
+                    children: [
+                      Icon(Icons.account_balance_wallet, color: Colors.blue, size: isMobile ? 18 : 20),
+                      SizedBox(width: 8),
+                      Text('M-Pesa', style: TextStyle(fontSize: isMobile ? 14 : 16)),
+                    ],
+                  ),
+                ),
+                DropdownMenuItem(
+                  value: ModePaiement.orangeMoney,
+                  child: Row(
+                    children: [
+                      Icon(Icons.payment, color: Colors.orange, size: isMobile ? 18 : 20),
+                      SizedBox(width: 8),
+                      Text('Orange Money', style: TextStyle(fontSize: isMobile ? 14 : 16)),
+                    ],
+                  ),
+                ),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  _modePaiement = value!;
+                });
+              },
+            ),
+            SizedBox(height: fieldSpacing),
+            
+            // Capture d'écran
+            Text(
+              '${_transferType == OperationType.transfertNational ? '7' : '6'}. Preuve de paiement *',
+              style: TextStyle(
+                fontSize: labelFontSize,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFFDC2626),
+              ),
+            ),
+            SizedBox(height: isMobile ? 8 : 12),
+            
+            GestureDetector(
+              onTap: _pickImage,
+              child: Container(
+                width: double.infinity,
+                height: isMobile ? 120 : 150,
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: _selectedImage != null ? Colors.green : Colors.grey,
+                    width: 2,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                  color: _selectedImage != null 
+                      ? Colors.green.withOpacity(0.05)
+                      : Colors.grey.withOpacity(0.05),
+                ),
+                child: _selectedImage != null && _imageBytes != null
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: kIsWeb || _imageBytes!.length <= 3
+                            ? Container(
+                                color: Colors.green.withOpacity(0.1),
+                                child: Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.check_circle,
+                                        size: isMobile ? 36 : 48,
+                                        color: Colors.green,
+                                      ),
+                                      SizedBox(height: 8),
+                                      Text(
+                                        'Preuve sélectionnée',
+                                        style: TextStyle(
+                                          color: Colors.green,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: isMobile ? 13 : 14,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )
+                            : Image.memory(
+                                _imageBytes!,
+                                fit: BoxFit.cover,
+                              ),
+                      )
+                    : Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.camera_alt,
+                            size: isMobile ? 36 : 48,
+                            color: Colors.grey,
+                          ),
+                          SizedBox(height: 12),
+                          Text(
+                            'Cliquez pour ajouter une preuve',
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontSize: isMobile ? 14 : 16,
+                            ),
+                          ),
+                        ],
+                      ),
               ),
             ),
             
-            // Form
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            if (_selectedImage != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.green, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Preuve sélectionnée: ${_selectedImage!.name}',
+                      style: const TextStyle(
+                        color: Colors.green,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _selectedImage = null;
+                        _imageBytes = null;
+                      });
+                    },
+                    child: const Text('Changer'),
+                  ),
+                ],
+              ),
+            ],
+            
+            SizedBox(height: fieldSpacing),
+            
+            // Résumé
+            Container(
+              padding: EdgeInsets.all(isMobile ? 12 : 16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFDC2626).withOpacity(0.05),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFDC2626).withOpacity(0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Résumé du transfert',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: isMobile ? 14 : 16,
+                      color: const Color(0xFFDC2626),
+                    ),
+                  ),
+                  SizedBox(height: isMobile ? 8 : 12),
+                  
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // Type de transfert
-                      const Text(
-                        '1. Type de transfert *',
+                      Text('Type:', style: TextStyle(fontSize: isMobile ? 12 : 14)),
+                      Text(
+                        _getTransferTypeLabel(),
                         style: TextStyle(
-                          fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFFDC2626),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      
-                      DropdownButtonFormField<OperationType>(
-                        value: _transferType,
-                        decoration: const InputDecoration(
-                          labelText: 'Type de transfert',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.swap_horiz),
-                        ),
-                        items: [
-                          DropdownMenuItem(
-                            value: OperationType.transfertNational,
-                            child: Text('Transfert Sortant (National + International)'),
-                          ),
-                          DropdownMenuItem(
-                            value: OperationType.transfertInternationalEntrant,
-                            child: Text('Transfert International Entrant'),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          setState(() {
-                            _transferType = value!;
-                            _calculateCommission();
-                          });
-                        },
-                        validator: (value) {
-                          if (value == null) {
-                            return 'Sélectionnez le type de transfert';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 24),
-                      
-                      // Shop de destination (pour tous les transferts sortants)
-                      if (_transferType == OperationType.transfertNational) ...[
-                        const Text(
-                          '2. Shop de destination *',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFFDC2626),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        
-                        Consumer<ShopService>(
-                          builder: (context, shopService, child) {
-                            final authService = Provider.of<AuthService>(context, listen: false);
-                            final currentUser = authService.currentUser;
-                            
-                            // Exclure le shop actuel de l'agent
-                            final availableShops = shopService.shops
-                                .where((shop) => shop.id != currentUser?.shopId)
-                                .toList();
-                            
-                            return DropdownButtonFormField<ShopModel>(
-                              value: _selectedShop,
-                              decoration: const InputDecoration(
-                                labelText: 'Shop de destination',
-                                border: OutlineInputBorder(),
-                                prefixIcon: Icon(Icons.store),
-                              ),
-                              items: availableShops.map((shop) {
-                                return DropdownMenuItem(
-                                  value: shop,
-                                  child: Text('${shop.designation} - ${shop.localisation}'),
-                                );
-                              }).toList(),
-                              onChanged: (value) {
-                                setState(() {
-                                  _selectedShop = value;
-                                });
-                              },
-                              validator: (value) {
-                                if (_transferType == OperationType.transfertNational && value == null) {
-                                  return 'Sélectionnez le shop de destination';
-                                }
-                                return null;
-                              },
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 24),
-                      ],
-                      
-                      // Informations du destinataire
-                      const Text(
-                        '${OperationType.transfertNational == OperationType.transfertNational ? '3' : '2'}. Personne qui sera servie *',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFFDC2626),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      
-                      TextFormField(
-                        controller: _destinataireController,
-                        decoration: const InputDecoration(
-                          labelText: 'Nom de la personne qui sera servie',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.person),
-                          hintText: 'Ex: Jean Mukendi',
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Le nom de la personne est requis';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 24),
-                      
-                      // Montant
-                      Text(
-                        '${_transferType == OperationType.transfertNational ? '4' : '3'}. Montant du transfert *',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFFDC2626),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      
-                      TextFormField(
-                        controller: _montantController,
-                        decoration: const InputDecoration(
-                          labelText: 'Montant en USD',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.attach_money),
-                          suffixText: 'USD',
-                        ),
-                        keyboardType: TextInputType.number,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Le montant est requis';
-                          }
-                          final montant = double.tryParse(value);
-                          if (montant == null || montant <= 0) {
-                            return 'Montant invalide';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 24),
-                      
-                      // Mode de paiement
-                      Text(
-                        '${_transferType == OperationType.transfertNational ? '5' : '4'}. Mode de paiement *',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFFDC2626),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      
-                      DropdownButtonFormField<ModePaiement>(
-                        value: _modePaiement,
-                        decoration: const InputDecoration(
-                          labelText: 'Mode de paiement',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.payment),
-                        ),
-                        items: [
-                          DropdownMenuItem(
-                            value: ModePaiement.cash,
-                            child: Row(
-                              children: [
-                                Icon(Icons.money, color: Colors.green),
-                                SizedBox(width: 8),
-                                Text('Cash'),
-                              ],
-                            ),
-                          ),
-                          DropdownMenuItem(
-                            value: ModePaiement.airtelMoney,
-                            child: Row(
-                              children: [
-                                Icon(Icons.phone_android, color: Colors.orange),
-                                SizedBox(width: 8),
-                                Text('Airtel Money'),
-                              ],
-                            ),
-                          ),
-                          DropdownMenuItem(
-                            value: ModePaiement.mPesa,
-                            child: Row(
-                              children: [
-                                Icon(Icons.account_balance_wallet, color: Colors.blue),
-                                SizedBox(width: 8),
-                                Text('M-Pesa'),
-                              ],
-                            ),
-                          ),
-                          DropdownMenuItem(
-                            value: ModePaiement.orangeMoney,
-                            child: Row(
-                              children: [
-                                Icon(Icons.payment, color: Colors.orange),
-                                SizedBox(width: 8),
-                                Text('Orange Money'),
-                              ],
-                            ),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          setState(() {
-                            _modePaiement = value!;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 24),
-                      
-                      // Capture d'écran
-                      Text(
-                        '${_transferType == OperationType.transfertNational ? '6' : '5'}. Preuve de paiement *',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFFDC2626),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      
-                      GestureDetector(
-                        onTap: _pickImage,
-                        child: Container(
-                          width: double.infinity,
-                          height: 150,
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: _selectedImage != null ? Colors.green : Colors.grey,
-                              width: 2,
-                            ),
-                            borderRadius: BorderRadius.circular(8),
-                            color: _selectedImage != null 
-                                ? Colors.green.withOpacity(0.05)
-                                : Colors.grey.withOpacity(0.05),
-                          ),
-                          child: _selectedImage != null && _imageBytes != null
-                              ? ClipRRect(
-                                  borderRadius: BorderRadius.circular(6),
-                                  child: kIsWeb || _imageBytes!.length <= 3
-                                      ? Container(
-                                          color: Colors.green.withOpacity(0.1),
-                                          child: Center(
-                                            child: Column(
-                                              mainAxisAlignment: MainAxisAlignment.center,
-                                              children: [
-                                                Icon(
-                                                  Icons.check_circle,
-                                                  size: 48,
-                                                  color: Colors.green,
-                                                ),
-                                                SizedBox(height: 8),
-                                                Text(
-                                                  'Preuve sélectionnée',
-                                                  style: TextStyle(
-                                                    color: Colors.green,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        )
-                                      : Image.memory(
-                                          _imageBytes!,
-                                          fit: BoxFit.cover,
-                                        ),
-                                )
-                              : Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.camera_alt,
-                                      size: 48,
-                                      color: Colors.grey,
-                                    ),
-                                    SizedBox(height: 12),
-                                    Text(
-                                      'Cliquez pour ajouter une preuve',
-                                      style: TextStyle(
-                                        color: Colors.grey,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                        ),
-                      ),
-                      
-                      if (_selectedImage != null) ...[
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            const Icon(Icons.check_circle, color: Colors.green, size: 16),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Preuve sélectionnée: ${_selectedImage!.name}',
-                                style: const TextStyle(
-                                  color: Colors.green,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: () {
-                                setState(() {
-                                  _selectedImage = null;
-                                  _imageBytes = null;
-                                });
-                              },
-                              child: const Text('Changer'),
-                            ),
-                          ],
-                        ),
-                      ],
-                      
-                      const SizedBox(height: 24),
-                      
-                      // Résumé
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFDC2626).withOpacity(0.05),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFFDC2626).withOpacity(0.3)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Résumé du transfert',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                                color: Color(0xFFDC2626),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('Type:'),
-                                Text(
-                                  _getTransferTypeLabel(),
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            
-                            if (_selectedShop != null) ...[
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text('Destination:'),
-                                  Text(
-                                    _selectedShop!.designation,
-                                    style: const TextStyle(fontWeight: FontWeight.bold),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                            ],
-                            
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('Personne à servir:'),
-                                Text(
-                                  _destinataireController.text.isEmpty ? 'Non renseigné' : _destinataireController.text,
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('Montant:'),
-                                Text(
-                                  '${_montantController.text.isEmpty ? '0' : _montantController.text} USD',
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Commission (${_tauxCommission > 0 ? '${_tauxCommission.toStringAsFixed(1)}%' : 'Gratuit'}):', 
-                                ),
-                                Text(
-                                  '${_commission.toStringAsFixed(2)} USD',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: _commission > 0 ? Colors.orange : Colors.green,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('Montant net:'),
-                                Text(
-                                  '${_montantNet.toStringAsFixed(2)} USD',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.green,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            
-                            const Divider(),
-                            const SizedBox(height: 8),
-                            
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text(
-                                  'Total à payer:',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                Text(
-                                  '${_montantController.text.isEmpty ? '0.00' : double.tryParse(_montantController.text)?.toStringAsFixed(2) ?? '0.00'} USD',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                    color: Color(0xFFDC2626),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
+                          fontSize: isMobile ? 12 : 14,
                         ),
                       ),
                     ],
                   ),
-                ),
-              ),
-            ),
-            
-            // Actions
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.grey[50],
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(8),
-                  bottomRight: Radius.circular(8),
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
-                    child: const Text('Annuler'),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton(
-                    onPressed: _isLoading ? null : _handleSubmit,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFDC2626),
-                      foregroundColor: Colors.white,
+                  SizedBox(height: isMobile ? 6 : 8),
+                  
+                  if (_selectedShop != null) ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Destination:', style: TextStyle(fontSize: isMobile ? 12 : 14)),
+                        Text(
+                          _selectedShop!.designation,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: isMobile ? 12 : 14,
+                          ),
+                        ),
+                      ],
                     ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          )
-                        : const Text('Envoyer Transfert'),
+                    SizedBox(height: isMobile ? 6 : 8),
+                  ],
+                  
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Personne à servir:', style: TextStyle(fontSize: isMobile ? 12 : 14)),
+                      Flexible(
+                        child: Text(
+                          _destinataireController.text.isEmpty ? 'Non renseigné' : _destinataireController.text,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: isMobile ? 12 : 14,
+                          ),
+                          textAlign: TextAlign.right,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: isMobile ? 6 : 8),
+                  
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Montant à servir:', style: TextStyle(fontSize: isMobile ? 12 : 14)),
+                      Text(
+                        '${_montantController.text.isEmpty ? '0' : _montantController.text} USD',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: isMobile ? 12 : 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: isMobile ? 6 : 8),
+                  
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Commission (${_tauxCommission > 0 ? '${_tauxCommission.toStringAsFixed(1)}%' : 'Gratuit'}):', 
+                        style: TextStyle(fontSize: isMobile ? 12 : 14),
+                      ),
+                      Text(
+                        '${_commission.toStringAsFixed(2)} USD',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: isMobile ? 12 : 14,
+                          color: _commission > 0 ? Colors.orange : Colors.green,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: isMobile ? 6 : 8),
+                  
+                  const Divider(),
+                  SizedBox(height: isMobile ? 6 : 8),
+                  
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Total à payer:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: isMobile ? 14 : 16,
+                        ),
+                      ),
+                      Text(
+                        '${(_montantNet + _commission).toStringAsFixed(2)} USD',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: isMobile ? 14 : 16,
+                          color: const Color(0xFFDC2626),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
           ],
         ),
+      ),
+      actions: ResponsiveDialogUtils.buildResponsiveActions(
+        context: context,
+        actions: [
+          TextButton(
+            onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: _isLoading ? null : _handleSubmit,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+            ),
+            child: _isLoading
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Text('Envoyer Transfert'),
+          ),
+        ],
       ),
     );
   }
@@ -782,6 +808,15 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
 
       final montant = double.parse(_montantController.text);
       
+      // Create notes with image info and expediteur if provided
+      String notes = 'Transfert avec destination - ${_getTransferTypeLabel()}';
+      if (_selectedImage != null) {
+        notes += ' - Photo: ${_selectedImage!.path}';
+      }
+      if (_expediteurController.text.isNotEmpty) {
+        notes += ' - Expéditeur: ${_expediteurController.text}';
+      }
+      
       // Créer l'opération
       final operation = OperationModel(
         agentId: currentUser!.id!,
@@ -796,7 +831,8 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
         devise: 'USD',
         modePaiement: _modePaiement,
         destinataire: _destinataireController.text,
-        notes: 'Transfert avec destination - ${_getTransferTypeLabel()} - Photo: ${_selectedImage!.path}',
+        notes: notes,
+        observation: _expediteurController.text.isNotEmpty ? _expediteurController.text : null, // Store expediteur in observation field
         statut: OperationStatus.enAttente,
         dateOp: DateTime.now(),
         lastModifiedAt: DateTime.now(),
@@ -830,36 +866,13 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
           telephone: currentUser.telephone,
         );
         
-        // Afficher le dialog d'impression
-        await showDialog(
+        // Imprimer automatiquement le reçu sur POS
+        await AutoPrintHelper.autoPrintWithDialog(
           context: context,
-          barrierDismissible: true,
-          builder: (context) => PrintReceiptDialog(
-            operation: savedOperation,
-            shop: shop,
-            agent: agent,
-            clientName: _destinataireController.text,
-            onPrintSuccess: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Transfert de ${montant.toStringAsFixed(2)} USD vers ${_destinataireController.text} ${_selectedShop != null ? 'au ${_selectedShop!.designation}' : ''} effectué - Reçu imprimé',
-                  ),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            },
-            onSkipPrint: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Transfert de ${montant.toStringAsFixed(2)} USD vers ${_destinataireController.text} ${_selectedShop != null ? 'au ${_selectedShop!.designation}' : ''} effectué (sans impression)',
-                  ),
-                  backgroundColor: Colors.blue,
-                ),
-              );
-            },
-          ),
+          operation: savedOperation,
+          shop: shop,
+          agent: agent,
+          clientName: _destinataireController.text,
         );
       }
     } catch (e) {

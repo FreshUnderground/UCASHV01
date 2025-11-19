@@ -3,6 +3,7 @@ import '../models/transaction_model.dart';
 import '../models/taux_model.dart';
 import 'local_db.dart';
 import 'rates_service.dart';
+import 'sync_service.dart';
 
 class TransactionService extends ChangeNotifier {
   static final TransactionService _instance = TransactionService._internal();
@@ -113,11 +114,14 @@ class TransactionService extends ChangeNotifier {
       
       // Recharger la liste
       await loadTransactions(shopId: shopId);
- 
+
+      // Synchronisation en arrière-plan (non bloquante)
+      _syncInBackground();
       
       _errorMessage = null;
       _setLoading(false);
-      debugPrint('✅ Transaction créée avec succès: $reference');
+      debugPrint('✅ Transaction créée localement: $reference');
+      debugPrint('🔄 Synchronisation en arrière-plan démarrée...');
       return true;
     } catch (e) {
       _errorMessage = 'Erreur lors de la création de la transaction: $e';
@@ -137,7 +141,11 @@ class TransactionService extends ChangeNotifier {
       await LocalDB.instance.updateTransaction(updatedTransaction);
       await loadTransactions(shopId: transaction.shopId);
       
+      // Synchronisation en arrière-plan
+      _syncInBackground();
+      
       _errorMessage = null;
+      debugPrint('✅ Transaction mise à jour localement');
       return true;
     } catch (e) {
       _errorMessage = 'Erreur lors de la mise à jour de la transaction: $e';
@@ -159,7 +167,11 @@ class TransactionService extends ChangeNotifier {
       await LocalDB.instance.updateTransaction(updatedTransaction);
       await loadTransactions(shopId: shopId);
       
+      // Synchronisation en arrière-plan
+      _syncInBackground();
+      
       _errorMessage = null;
+      debugPrint('✅ Transaction annulée localement');
       return true;
     } catch (e) {
       _errorMessage = 'Erreur lors de l\'annulation de la transaction: $e';
@@ -317,5 +329,20 @@ class TransactionService extends ChangeNotifier {
   void clearError() {
     _errorMessage = null;
     notifyListeners();
+  }
+
+  // Synchronisation en arrière-plan (non bloquante)
+  void _syncInBackground() {
+    Future.delayed(Duration.zero, () async {
+      try {
+        debugPrint('🔄 [TransactionService] Synchronisation en arrière-plan...');
+        final syncService = SyncService();
+        await syncService.syncAll();
+        debugPrint('✅ [TransactionService] Synchronisation terminée');
+      } catch (e) {
+        debugPrint('⚠️ [TransactionService] Erreur sync (non bloquante): $e');
+        // Ne pas bloquer l'opération locale en cas d'erreur de sync
+      }
+    });
   }
 }

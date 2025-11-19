@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:bluetooth_print/bluetooth_print.dart';
 import 'package:bluetooth_print/bluetooth_print_model.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
@@ -11,6 +12,8 @@ import '../models/operation_model.dart';
 import '../models/shop_model.dart';
 import '../models/agent_model.dart';
 import 'native_printer_service.dart';
+import 'pdf_config_service.dart';
+import 'pdf_service.dart';
 
 class PrinterService {
   static final PrinterService _instance = PrinterService._internal();
@@ -39,73 +42,108 @@ class PrinterService {
       
       // 1. PRIORITÉ: Vérifier imprimante locale/native (Q2i)
       debugPrint('📱 Recherche imprimante locale Q2i...');
-      _hasNativePrinter = await _nativePrinter.checkAvailability();
-      
-      if (_hasNativePrinter) {
-        debugPrint('✅ Imprimante locale Q2i détectée');
-        return true;
+      try {
+        _hasNativePrinter = await _nativePrinter.checkAvailability().timeout(
+          const Duration(seconds: 3),
+          onTimeout: () {
+            debugPrint('⏱️ Timeout vérification imprimante locale');
+            return false;
+          },
+        );
+        
+        if (_hasNativePrinter) {
+          debugPrint('✅ Imprimante locale Q2i détectée');
+          return true;
+        }
+      } catch (e) {
+        debugPrint('⚠️ Erreur vérification imprimante locale: $e');
+        _hasNativePrinter = false;
       }
       
+      // ⚠️ DÉSACTIVATION TEMPORAIRE DU BLUETOOTH POUR Q2I
+      // Le scan Bluetooth cause des crashes sur Q2I
+      // Retourner false si l'imprimante native n'est pas disponible
+      debugPrint('ℹ️ Bluetooth désactivé pour Q2I - imprimante native requise');
+      return false;
+      
+      /* BLUETOOTH CODE DÉSACTIVÉ TEMPORAIREMENT
       // 2. FALLBACK: Vérifier si déjà connecté en Bluetooth
       if (_isConnected && _connectedDevice != null) {
         debugPrint('✅ Déjà connecté en Bluetooth: ${_connectedDevice!.name}');
         return true;
       }
 
-      // 3. Scanner les imprimantes Bluetooth externes
-      debugPrint('🔍 Scan Bluetooth pour imprimante externe (4 secondes)...');
-      _bluetoothPrint.startScan(timeout: const Duration(seconds: 4));
+      // 3. Scanner les imprimantes Bluetooth externes avec timeout
+      debugPrint('🔍 Scan Bluetooth pour imprimante externe (3 secondes)...');
       
-      final List<BluetoothDevice> devices = [];
-      await Future.delayed(const Duration(seconds: 4));
-      _bluetoothPrint.stopScan();
-      
-      await for (final results in _bluetoothPrint.scanResults.take(1)) {
-        devices.addAll(results);
-        break;
-      }
-      
-      if (devices.isEmpty) {
-        debugPrint('❌ Aucune imprimante Bluetooth externe trouvée');
-        return false;
-      }
-      
-      debugPrint('📱 ${devices.length} appareil(s) Bluetooth trouvé(s)');
-
-      // Se connecter à la première imprimante Bluetooth trouvée
-      for (final device in devices) {
-        final name = device.name?.toLowerCase() ?? '';
-        debugPrint('🔍 Appareil trouvé: ${device.name ?? "Inconnu"} (${device.address})');
+      try {
+        final List<BluetoothDevice> devices = [];
         
-        if (name.contains('printer') || 
-            name.contains('pos') || 
-            name.contains('thermal') ||
-            name.contains('inner') ||
-            name.contains('built') ||
-            name.contains('internal')) {
-          debugPrint('🎯 Tentative connexion à: ${device.name}');
-          await _connectToDevice(device);
-          if (_isConnected) {
-            return true;
+        // Démarrer le scan
+        _bluetoothPrint.startScan(timeout: const Duration(seconds: 3));
+        
+        // Écouter les résultats avec timeout
+        await _bluetoothPrint.scanResults.first.timeout(
+          const Duration(seconds: 4),
+          onTimeout: () {
+            debugPrint('⏱️ Timeout scan Bluetooth');
+            return <BluetoothDevice>[];
+          },
+        ).then((results) {
+          devices.addAll(results);
+        });
+        
+        // Arrêter le scan
+        _bluetoothPrint.stopScan();
+        
+        if (devices.isEmpty) {
+          debugPrint('❌ Aucune imprimante Bluetooth externe trouvée');
+          return false;
+        }
+        
+        debugPrint('📱 ${devices.length} appareil(s) Bluetooth trouvé(s)');
+
+        // Se connecter à la première imprimante Bluetooth trouvée
+        for (final device in devices) {
+          final name = device.name?.toLowerCase() ?? '';
+          debugPrint('🔍 Appareil trouvé: ${device.name ?? "Inconnu"} (${device.address})');
+          
+          if (name.contains('printer') || 
+              name.contains('pos') || 
+              name.contains('thermal') ||
+              name.contains('inner') ||
+              name.contains('built') ||
+              name.contains('internal')) {
+            debugPrint('🎯 Tentative connexion à: ${device.name}');
+            await _connectToDevice(device);
+            if (_isConnected) {
+              return true;
+            }
           }
         }
-      }
 
-      // Si aucune imprimante trouvée par nom, essayer le premier appareil
-      if (!_isConnected && devices.isNotEmpty) {
-        debugPrint('⚠️ Aucun nom d\'imprimante détecté, essai du premier appareil...');
-        await _connectToDevice(devices.first);
-      }
-      
-      if (_isConnected) {
-        debugPrint('✅ Connecté à l\'imprimante Bluetooth');
-      } else {
-        debugPrint('❌ Échec connexion Bluetooth');
-      }
+        // Si aucune imprimante trouvée par nom, essayer le premier appareil
+        if (!_isConnected && devices.isNotEmpty) {
+          debugPrint('⚠️ Aucun nom d\'imprimante détecté, essai du premier appareil...');
+          await _connectToDevice(devices.first);
+        }
+        
+        if (_isConnected) {
+          debugPrint('✅ Connecté à l\'imprimante Bluetooth');
+        } else {
+          debugPrint('❌ Échec connexion Bluetooth');
+        }
 
-      return _isConnected;
-    } catch (e) {
-      debugPrint('Erreur vérification imprimante: $e');
+        return _isConnected;
+      } catch (e) {
+        debugPrint('⚠️ Erreur scan Bluetooth: $e');
+        _bluetoothPrint.stopScan();
+        return false;
+      }
+      */
+    } catch (e, stackTrace) {
+      debugPrint('❌ Erreur vérification imprimante: $e');
+      debugPrint('📚 Stack trace: $stackTrace');
       return false;
     }
   }
@@ -114,7 +152,16 @@ class PrinterService {
   Future<void> _connectToDevice(BluetoothDevice device) async {
     try {
       debugPrint('🔗 Connexion à: ${device.name ?? "Appareil inconnu"}...');
-      await _bluetoothPrint.connect(device);
+      
+      // Ajouter un timeout de 5 secondes pour éviter les blocages
+      await _bluetoothPrint.connect(device).timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          debugPrint('⏱️ Timeout connexion à ${device.name ?? "Appareil"} (5s)');
+          throw Exception('Connexion timeout');
+        },
+      );
+      
       _connectedDevice = device;
       _isConnected = true;
       debugPrint('✅ Connecté à: ${device.name ?? "Appareil inconnu"}');
@@ -133,90 +180,9 @@ class PrinterService {
     }
   }
 
-  /// Génère les lignes texte pour l'imprimante native (Q2i)
-  List<String> _generateReceiptTextLines({
-    required OperationModel operation,
-    required ShopModel shop,
-    required AgentModel agent,
-    String? clientName,
-  }) {
-    final List<String> lines = [];
-    final isDepotOrRetrait = operation.type == OperationType.depot || operation.type == OperationType.retrait;
-    final String dateTime = DateFormat('dd/MM/yyyy HH:mm:ss').format(operation.dateOp);
-    final String typeOp = _getOperationType(operation.type);
-    final String modePaiement = _getModePaiement(operation.modePaiement);
 
-    // En-tête
-    lines.add('================================');
-    lines.add('          UCASH');
-    lines.add('   SERVICE DE TRANSFERT');
-    lines.add('================================');
-    lines.add('');
-    
-    // Shop
-    lines.add('  ${shop.designation.toUpperCase()}');
-    lines.add('      ${shop.localisation}');
-    lines.add('');
-    
-    // Type opération
-    lines.add('    ${typeOp.toUpperCase()}');
-    lines.add('--------------------------------');
-    lines.add('');
-    
-    // Détails
-    lines.add('Date: $dateTime');
-    lines.add('ID: ${operation.id ?? "N/A"}');
-    // Afficher le nom de l'agent s'il existe
-    if (agent.nom != null && agent.nom!.isNotEmpty) {
-      lines.add('Agent: ${agent.nom}');
-    } else if (agent.username.isNotEmpty) {
-      lines.add('Agent: ${agent.username}');
-    }
-    
-    // Pour Dépôt/Retrait: Nom titulaire + N° compte
-    if (isDepotOrRetrait && clientName != null && clientName.isNotEmpty) {
-      lines.add('');
-      lines.add('Titulaire: $clientName');
-      if (operation.clientId != null) {
-        lines.add('N° Compte: ${operation.clientId.toString().padLeft(6, '0')}');
-      }
-      lines.add('');
-    }
-    // Pour Transfert: Destinataire
-    else if (!isDepotOrRetrait && operation.destinataire != null) {
-      lines.add('Destinataire: ${operation.destinataire}');
-      lines.add('');
-    }
-    
-    lines.add('--------------------------------');
-    lines.add('');
-    
-    // Détails financiers
-    lines.add('Montant: ${operation.montantBrut.toStringAsFixed(2)} ${operation.devise}');
-    if (operation.commission > 0) {
-      lines.add('Commission: ${operation.commission.toStringAsFixed(2)} ${operation.devise}');
-    }
-    lines.add('--------------------------------');
-    lines.add('TOTAL: ${operation.montantNet.toStringAsFixed(2)} ${operation.devise}');
-    lines.add('');
-    lines.add('--------------------------------');
-    lines.add('');
-    
-    // Mode de paiement uniquement (pas de statut)
-    lines.add('Mode: $modePaiement');
-    lines.add('');
-    lines.add('================================');
-    lines.add('  Merci pour votre confiance!');
-    lines.add('UCASH - Transfert rapide et sûr');
-    lines.add('================================');
-    lines.add('');
-    lines.add('');
-    lines.add('');
-    
-    return lines;
-  }
-
-  /// Impression du reçu d'opération (Native Q2i en priorité, puis Bluetooth)
+  /// Impression du reçu d'opération (PDF avec sélecteur d'imprimante)
+  /// Utilise Printing.layoutPdf() pour ouvrir le sélecteur d'imprimante système
   Future<bool> printReceipt({
     required OperationModel operation,
     required ShopModel shop,
@@ -224,44 +190,45 @@ class PrinterService {
     String? clientName,
   }) async {
     try {
-      // Sur Web, pas d'impression disponible
+      debugPrint('🖨️ [PrinterService] Début printReceipt pour opération #${operation.id}');
+      
+      // Sur Web, suggérer le PDF au lieu de lancer une exception
       if (kIsWeb) {
-        debugPrint('⚠️ Impression non disponible sur Web');
-        throw Exception('Impression non supportée sur navigateur Web');
+        debugPrint('⚠️ [PrinterService] Impression non disponible sur Web - Utilisez le PDF à la place');
+        throw Exception('Impression non disponible sur navigateur Web. Veuillez utiliser l\'option de téléchargement PDF.');
       }
       
-      // 1. PRIORITÉ: Essayer l'imprimante native (Q2i)
-      if (_hasNativePrinter) {
-        debugPrint('🖨️ Impression via imprimante locale Q2i...');
-        final lines = _generateReceiptTextLines(
-          operation: operation,
-          shop: shop,
-          agent: agent,
-          clientName: clientName,
-        );
-        
-        final success = await _nativePrinter.printReceipt(lines);
-        if (success) {
-          debugPrint('✅ Impression locale Q2i réussie');
-          return true;
-        } else {
-          debugPrint('⚠️ Échec impression locale, tentative Bluetooth...');
-        }
-      }
-      
-      // 2. FALLBACK: Impression via Bluetooth
-      debugPrint('🖨️ Impression via Bluetooth...');
-      return await _printViaBluetooth(
+      // Générer le PDF du reçu avec le service PDF amélioré
+      debugPrint('📄 [PrinterService] Génération PDF du reçu...');
+      final pdfService = PdfService();
+      final doc = await pdfService.generateReceiptPdf(
         operation: operation,
         shop: shop,
         agent: agent,
         clientName: clientName,
       );
-    } catch (e) {
-      debugPrint('Erreur impression reçu: $e');
+      
+      // Ouvrir le sélecteur d'imprimante avec le PDF (format 58mm pour Q2I)
+      debugPrint('🖨️ [PrinterService] Ouverture du sélecteur d\'imprimante...');
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => doc.save(),
+        format: PdfPageFormat(
+          58 * PdfPageFormat.mm, // Largeur 58mm pour imprimante thermique Q2I
+          double.infinity, // Hauteur auto
+          marginAll: 2 * PdfPageFormat.mm,
+        ),
+        name: 'recu_${operation.codeOps ?? operation.id ?? "operation"}_${DateTime.now().millisecondsSinceEpoch}.pdf',
+      );
+      
+      debugPrint('✅ [PrinterService] Sélecteur d\'imprimante ouvert avec succès');
+      return true;
+    } catch (e, stackTrace) {
+      debugPrint('❌ [PrinterService] ERREUR impression reçu: $e');
+      debugPrint('📍 [PrinterService] Stack trace: $stackTrace');
       rethrow;
     }
   }
+  
 
   /// Impression via imprimante système (Android POS intégré)
   Future<bool> _printViaSystemPrinter({
@@ -304,27 +271,61 @@ class PrinterService {
     String? clientName,
   }) async {
     try {
+      debugPrint('🔍 [PrinterService] Vérification disponibilité imprimante Bluetooth...');
+      
       // Vérifier la disponibilité de l'imprimante Bluetooth
       if (!await checkPrinterAvailability()) {
+        debugPrint('❌ [PrinterService] Aucune imprimante Bluetooth disponible');
         throw Exception('Aucune imprimante Bluetooth disponible');
       }
 
+      debugPrint('📄 [PrinterService] Génération contenu du reçu...');
+      
       // Générer le contenu du reçu
-      final List<LineText> lines = _generateReceiptLines(
+      final List<LineText> lines = await _generateReceiptLines(
         operation: operation,
         shop: shop,
         agent: agent,
         clientName: clientName,
       );
-
-      // Envoyer à l'imprimante via printReceipt
-      final Map<String, dynamic> config = {};
-      await _bluetoothPrint.printReceipt(config, lines);
       
-      debugPrint('✅ Reçu imprimé via Bluetooth');
+      if (lines.isEmpty) {
+        debugPrint('⚠️ [PrinterService] Aucune ligne générée pour l\'impression');
+        throw Exception('Contenu du reçu vide');
+      }
+      
+      debugPrint('📤 [PrinterService] Envoi de ${lines.length} lignes à l\'imprimante Bluetooth...');
+
+      // Vérifier la connexion avant l'impression
+      final isConnected = await _bluetoothPrint.isConnected;
+      if (isConnected != true) {
+        debugPrint('❌ [PrinterService] Perte de connexion Bluetooth avant impression');
+        throw Exception('Connexion Bluetooth perdue');
+      }
+
+      // Envoyer à l'imprimante via printReceipt avec timeout
+      final Map<String, dynamic> config = {};
+      await _bluetoothPrint.printReceipt(config, lines).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          debugPrint('⏱️ [PrinterService] Timeout impression Bluetooth (15s)');
+          throw Exception('Timeout impression');
+        },
+      );
+      
+      debugPrint('✅ [PrinterService] Reçu imprimé via Bluetooth');
       return true;
-    } catch (e) {
-      debugPrint('❌ Erreur impression Bluetooth: $e');
+    } on AssertionError catch (e, stackTrace) {
+      debugPrint('❌ [PrinterService] AssertionError Bluetooth (plugin): $e');
+      debugPrint('📍 [PrinterService] Stack trace: $stackTrace');
+      // Déconnecter et réinitialiser l'état
+      try {
+        await disconnect();
+      } catch (_) {}
+      throw Exception('Erreur plugin Bluetooth: Vérifiez que l\'imprimante est allumée et accessible');
+    } catch (e, stackTrace) {
+      debugPrint('❌ [PrinterService] ERREUR impression Bluetooth: $e');
+      debugPrint('📍 [PrinterService] Stack trace: $stackTrace');
       rethrow;
     }
   }
@@ -337,6 +338,13 @@ class PrinterService {
     String? clientName,
   }) async {
     final pdf = pw.Document();
+    
+    // Charger la configuration PDF
+    final companyName = await PdfConfigService.getCompanyName();
+    final companyAddress = await PdfConfigService.getCompanyAddress();
+    final companyPhone = await PdfConfigService.getCompanyPhone();
+    final footerMessage = await PdfConfigService.getFooterMessage();
+    
     final dateTime = DateFormat('dd/MM/yyyy HH:mm:ss').format(operation.dateOp);
     final typeOp = _getOperationType(operation.type);
     final modePaiement = _getModePaiement(operation.modePaiement);
@@ -357,10 +365,14 @@ class PrinterService {
               pw.Text('=' * 32, style: pw.TextStyle(fontSize: 8)),
               pw.SizedBox(height: 2),
               pw.Text(
-                'UCASH',
+                companyName,
                 style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
               ),
-              pw.Text('SERVICE DE TRANSFERT', style: pw.TextStyle(fontSize: 8)),
+              
+              if (companyAddress.isNotEmpty)
+                pw.Text(companyAddress, style: pw.TextStyle(fontSize: 8)),
+              if (companyPhone.isNotEmpty)
+                pw.Text(companyPhone, style: pw.TextStyle(fontSize: 8)),
               pw.Text('=' * 32, style: pw.TextStyle(fontSize: 8)),
               pw.SizedBox(height: 6),
               
@@ -387,29 +399,60 @@ class PrinterService {
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     pw.Text('Date: $dateTime', style: pw.TextStyle(fontSize: 7)),
-                    pw.Text('ID: ${operation.id ?? "N/A"}', style: pw.TextStyle(fontSize: 7)),
+                    pw.Text('Code: ${operation.codeOps ?? operation.id ?? "N/A"}', style: pw.TextStyle(fontSize: 7)),
+                    // Add reference if available
+                    if (operation.reference != null && operation.reference!.isNotEmpty)
+                      pw.Text('Réf: ${operation.reference}', style: pw.TextStyle(fontSize: 7)),
                     // Afficher le nom de l'agent s'il existe
                     if (agent.nom != null && agent.nom!.isNotEmpty)
                       pw.Text('Agent: ${agent.nom}', style: pw.TextStyle(fontSize: 7))
                     else if (agent.username.isNotEmpty)
                       pw.Text('Agent: ${agent.username}', style: pw.TextStyle(fontSize: 7)),
-                    
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 4),
+              pw.Text('-' * 32, style: pw.TextStyle(fontSize: 8)),
+              pw.SizedBox(height: 4),
+              
+              // Informations spécifiques selon le type d'opération
+              pw.Align(
+                alignment: pw.Alignment.centerLeft,
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
                     // Pour Dépôt/Retrait: Nom titulaire + N° compte
                     if (isDepotOrRetrait && clientName != null && clientName.isNotEmpty) ...[
-                      pw.SizedBox(height: 3),
                       pw.Text(
-                        'Titulaire: $clientName',
-                        style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+                        'TITULAIRE:',
+                        style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold),
+                      ),
+                      pw.Text(
+                        clientName,
+                        style: pw.TextStyle(fontSize: 8),
                       ),
                       if (operation.clientId != null)
                         pw.Text(
                           'N° Compte: ${operation.clientId.toString().padLeft(6, '0')}',
                           style: pw.TextStyle(fontSize: 7),
                         ),
-                    ]
-                    // Pour Transfert: Destinataire
-                    else if (!isDepotOrRetrait && operation.destinataire != null)
-                      pw.Text('Destinataire: ${operation.destinataire}', style: pw.TextStyle(fontSize: 7)),
+                    ],
+                    // Pour Transfert: Expéditeur et Destinataire
+                    if (!isDepotOrRetrait) ...[
+                      if (operation.shopSourceDesignation != null)
+                        pw.Text('De: ${operation.shopSourceDesignation}', style: pw.TextStyle(fontSize: 7)),
+                      if (operation.shopDestinationDesignation != null)
+                        pw.Text('À: ${operation.shopDestinationDesignation}', style: pw.TextStyle(fontSize: 7)),
+                      if (operation.destinataire != null) ...[
+                        pw.Text(
+                          'Destinataire:',
+                          style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold),
+                        ),
+                        pw.Text(operation.destinataire!, style: pw.TextStyle(fontSize: 8)),
+                      ],
+                      if (operation.telephoneDestinataire != null)
+                        pw.Text('Tél: ${operation.telephoneDestinataire}', style: pw.TextStyle(fontSize: 7)),
+                    ],
                   ],
                 ),
               ),
@@ -455,10 +498,10 @@ class PrinterService {
               // Footer optimisé pour 54mm
               pw.Text('=' * 32, style: pw.TextStyle(fontSize: 8)),
               pw.Text(
-                'Merci pour votre confiance!',
+                footerMessage,
                 style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
               ),
-              pw.Text('UCASH - Transfert rapide et sûr', style: pw.TextStyle(fontSize: 6)),
+              pw.Text(companyName, style: pw.TextStyle(fontSize: 6)),
               pw.Text('=' * 32, style: pw.TextStyle(fontSize: 8)),
               pw.SizedBox(height: 12),
             ],
@@ -471,13 +514,20 @@ class PrinterService {
   }
 
   /// Génère les lignes du reçu pour bluetooth_print (format 54mm)
-  List<LineText> _generateReceiptLines({
+  Future<List<LineText>> _generateReceiptLines({
     required OperationModel operation,
     required ShopModel shop,
     required AgentModel agent,
     String? clientName,
-  }) {
+  }) async {
     final List<LineText> lines = [];
+    
+    // Charger la configuration PDF
+    final companyName = await PdfConfigService.getCompanyName();
+    final companyAddress = await PdfConfigService.getCompanyAddress();
+    final companyPhone = await PdfConfigService.getCompanyPhone();
+    final footerMessage = await PdfConfigService.getFooterMessage();
+    
     final isDepotOrRetrait = operation.type == OperationType.depot || operation.type == OperationType.retrait;
 
     // En-tête optimisée pour 54mm
@@ -490,20 +540,32 @@ class PrinterService {
     
     lines.add(LineText(
       type: LineText.TYPE_TEXT,
-      content: 'UCASH',
+      content: companyName,
       weight: 1,
       height: 1,
       align: LineText.ALIGN_CENTER,
       linefeed: 1,
     ));
     
-    lines.add(LineText(
-      type: LineText.TYPE_TEXT,
-      content: 'SERVICE DE TRANSFERT',
-      weight: 0,
-      align: LineText.ALIGN_CENTER,
-      linefeed: 1,
-    ));
+    if (companyAddress.isNotEmpty) {
+      lines.add(LineText(
+        type: LineText.TYPE_TEXT,
+        content: companyAddress,
+        weight: 0,
+        align: LineText.ALIGN_CENTER,
+        linefeed: 1,
+      ));
+    }
+    
+    if (companyPhone.isNotEmpty) {
+      lines.add(LineText(
+        type: LineText.TYPE_TEXT,
+        content: companyPhone,
+        weight: 0,
+        align: LineText.ALIGN_CENTER,
+        linefeed: 1,
+      ));
+    }
     
     lines.add(LineText(
       type: LineText.TYPE_TEXT,
@@ -528,92 +590,133 @@ class PrinterService {
       linefeed: 1,
     ));
 
-    // Type d'opération
-    final String typeOp = _getOperationType(operation.type);
-    lines.add(LineText(
-      type: LineText.TYPE_TEXT,
-      content: typeOp.toUpperCase(),
-      weight: 1,
-      height: 1,
-      align: LineText.ALIGN_CENTER,
-      linefeed: 1,
-    ));
-    
-    lines.add(LineText(
-      type: LineText.TYPE_TEXT,
-      content: '--------------------------------',
-      align: LineText.ALIGN_CENTER,
-      linefeed: 1,
-    ));
+    // Type d'opération - Titre du bordereau
+    if (isDepotOrRetrait) {
+      lines.add(LineText(
+        type: LineText.TYPE_TEXT,
+        content: operation.type == OperationType.depot ? 'BORDEREAU DE VERSEMENT' : 'BORDEREAU DE RETRAIT',
+        weight: 1,
+        align: LineText.ALIGN_CENTER,
+        linefeed: 1,
+      ));
+      
+      lines.add(LineText(
+        type: LineText.TYPE_TEXT,
+        content: '--------------------------------',
+        align: LineText.ALIGN_CENTER,
+        linefeed: 1,
+      ));
 
-    // Date et heure
-    final String dateTime = DateFormat('dd/MM/yyyy HH:mm:ss').format(operation.dateOp);
-    lines.add(LineText(
-      type: LineText.TYPE_TEXT,
-      content: 'Date: $dateTime',
-      weight: 0,
-      linefeed: 1,
-    ));
-    
-    // ID Opération
-    lines.add(LineText(
-      type: LineText.TYPE_TEXT,
-      content: 'ID: ${operation.id ?? "N/A"}',
-      linefeed: 1,
-    ));
-    
-    // Agent
-    // Afficher le nom de l'agent s'il existe
-    if (agent.nom != null && agent.nom!.isNotEmpty) {
-      lines.add(LineText(
-        type: LineText.TYPE_TEXT,
-        content: 'Agent: ${agent.nom}',
-        linefeed: 1,
-      ));
-    } else if (agent.username.isNotEmpty) {
-      lines.add(LineText(
-        type: LineText.TYPE_TEXT,
-        content: 'Agent: ${agent.username}',
-        linefeed: 1,
-      ));
-    }
-    
-    // Pour Dépôt/Retrait: Nom titulaire + N° compte
-    if (isDepotOrRetrait && clientName != null && clientName.isNotEmpty) {
+      // Code (seulement le code en gras, sans label)
+      if (operation.codeOps != null && operation.codeOps!.isNotEmpty) {
+        lines.add(LineText(
+          type: LineText.TYPE_TEXT,
+          content: operation.codeOps!,
+          weight: 1,
+          align: LineText.ALIGN_CENTER,
+          linefeed: 1,
+        ));
+      }
+      
       lines.add(LineText(
         type: LineText.TYPE_TEXT,
         content: '',
         linefeed: 1,
       ));
       
-      lines.add(LineText(
-        type: LineText.TYPE_TEXT,
-        content: 'Titulaire: $clientName',
-        weight: 0,
-        linefeed: 1,
-      ));
-      
-      if (operation.clientId != null) {
+      // EXP.: Nom du client
+      if (clientName != null && clientName.isNotEmpty) {
         lines.add(LineText(
           type: LineText.TYPE_TEXT,
-          content: 'N° Compte: ${operation.clientId.toString().padLeft(6, '0')}',
-          linefeed: 1,
-        ));
-      } else {
-        lines.add(LineText(
-          type: LineText.TYPE_TEXT,
-          content: '',
+          content: 'EXP.: $clientName',
           linefeed: 1,
         ));
       }
-    }
-    // Pour Transfert: Destinataire
-    else if (!isDepotOrRetrait && operation.destinataire != null) {
+      
+      // DEST: Numéro du compte
+      if (operation.clientId != null) {
+        lines.add(LineText(
+          type: LineText.TYPE_TEXT,
+          content: 'DEST: ${operation.clientId.toString().padLeft(6, '0')}',
+          linefeed: 1,
+        ));
+      }
+      
+      // Montant
       lines.add(LineText(
         type: LineText.TYPE_TEXT,
-        content: 'Destinataire: ${operation.destinataire}',
+        content: 'MONTANT: ${operation.montantNet.toStringAsFixed(2)} ${operation.devise}',
+        weight: 1,
+        height: 1,
         linefeed: 1,
       ));
+    }
+    // Pour Transfert: Expéditeur et Destinataire
+    else if (!isDepotOrRetrait) {
+      
+      // Shop Source - Shop Destination (avec tiret, taille réduite)
+      if (operation.shopSourceDesignation != null && operation.shopDestinationDesignation != null) {
+        lines.add(LineText(
+          type: LineText.TYPE_TEXT,
+          content: '${operation.shopSourceDesignation} - ${operation.shopDestinationDesignation}',
+          weight: 0,
+          align: LineText.ALIGN_CENTER,
+          linefeed: 1,
+        ));
+      }
+      
+      lines.add(LineText(
+        type: LineText.TYPE_TEXT,
+        content: '--------------------------------',
+        align: LineText.ALIGN_CENTER,
+        linefeed: 1,
+      ));
+      
+      // Code (seulement le code en gras, sans label)
+      if (operation.codeOps != null) {
+        lines.add(LineText(
+          type: LineText.TYPE_TEXT,
+          content: operation.codeOps!,
+          weight: 1,
+          align: LineText.ALIGN_CENTER,
+          linefeed: 1,
+        ));
+      }
+      
+      lines.add(LineText(
+        type: LineText.TYPE_TEXT,
+        content: '',
+        linefeed: 1,
+      ));
+      
+      // Expéditeur
+      if (clientName != null && clientName.isNotEmpty) {
+        lines.add(LineText(
+          type: LineText.TYPE_TEXT,
+          content: 'EXP.: $clientName',
+          linefeed: 1,
+        ));
+      }
+      
+      // DEST: affiche l'observation (nom du destinataire)
+      if (operation.observation != null && operation.observation!.isNotEmpty) {
+        lines.add(LineText(
+          type: LineText.TYPE_TEXT,
+          content: 'DEST: ${operation.observation}',
+          linefeed: 1,
+        ));
+      }
+      
+      // Montant (sans "TOTAL")
+      lines.add(LineText(
+        type: LineText.TYPE_TEXT,
+        content: 'MONTANT: ${operation.montantNet.toStringAsFixed(2)} ${operation.devise}',
+        weight: 1,
+        height: 1,
+        linefeed: 1,
+      ));
+      
+      // Ligne de séparation supprimée
     } else {
       lines.add(LineText(
         type: LineText.TYPE_TEXT,
@@ -683,7 +786,7 @@ class PrinterService {
     
     lines.add(LineText(
       type: LineText.TYPE_TEXT,
-      content: 'Merci pour votre confiance!',
+      content: footerMessage,
       weight: 0,
       align: LineText.ALIGN_CENTER,
       linefeed: 1,
@@ -691,7 +794,7 @@ class PrinterService {
     
     lines.add(LineText(
       type: LineText.TYPE_TEXT,
-      content: 'UCASH - Transfert rapide et sûr',
+      content: companyName,
       align: LineText.ALIGN_CENTER,
       linefeed: 1,
     ));
@@ -752,124 +855,165 @@ class PrinterService {
     );
     bytes += generator.emptyLines(1);
 
-    // Type d'opération
-    final String typeOp = _getOperationType(operation.type);
+    // Type d'opération - Titre du bordereau
+    final isDepotOrRetrait = operation.type == OperationType.depot || operation.type == OperationType.retrait;
+    if (isDepotOrRetrait) {
+      bytes += generator.text(
+        operation.type == OperationType.depot ? 'BORDEREAU DE VERSEMENT' : 'BORDEREAU DE RETRAIT',
+        styles: const PosStyles(
+          align: PosAlign.center,
+          height: PosTextSize.size1,
+          width: PosTextSize.size1,
+          bold: true,
+        ),
+      );
+      bytes += generator.text(
+        '--------------------------------',
+        styles: const PosStyles(align: PosAlign.center, ),
+      );
+
+      // Code (seulement le code en gras, sans label)
+      if (operation.codeOps != null && operation.codeOps!.isNotEmpty) {
+        bytes += generator.text(
+          operation.codeOps!,
+          styles: const PosStyles(align: PosAlign.center, bold: true),
+        );
+      }
+      
+      bytes += generator.emptyLines(1);
+      
+      // EXP.: Nom du client
+      if (clientName != null && clientName.isNotEmpty) {
+        bytes += generator.text('EXP.: $clientName', styles: const PosStyles());
+      }
+      
+      // DEST: Numéro du compte
+      if (operation.clientId != null) {
+        bytes += generator.text(
+          'DEST: ${operation.clientId.toString().padLeft(6, '0')}',
+          styles: const PosStyles(),
+        );
+      }
+      
+      // Montant
+      bytes += generator.text(
+        'MONTANT: ${operation.montantNet.toStringAsFixed(2)} ${operation.devise}',
+        styles: const PosStyles(
+          height: PosTextSize.size1,
+          width: PosTextSize.size1,
+          bold: true,
+        ),
+      );
+    }
+    // Pour Transfert: Expéditeur et Destinataire
+    else if (!isDepotOrRetrait) {
+      
+      // Shop Source - Shop Destination (avec tiret, centré, taille réduite)
+      if (operation.shopSourceDesignation != null && operation.shopDestinationDesignation != null) {
+        bytes += generator.text(
+          '${operation.shopSourceDesignation} - ${operation.shopDestinationDesignation}',
+          styles: const PosStyles(align: PosAlign.center),
+        );
+      }
+      
+      bytes += generator.text(
+        '--------------------------------',
+        styles: const PosStyles(align: PosAlign.center),
+      );
+      
+      // Code (seulement le code en gras, sans label)
+      if (operation.codeOps != null) {
+        bytes += generator.text(operation.codeOps!, styles: const PosStyles(align: PosAlign.center, bold: true));
+      }
+      
+      bytes += generator.emptyLines(1);
+      
+      // Expéditeur
+      if (clientName != null && clientName.isNotEmpty) {
+        bytes += generator.text('EXP.: $clientName', styles: const PosStyles());
+      }
+      
+      // DEST: affiche l'observation (nom du destinataire)
+      if (operation.observation != null && operation.observation!.isNotEmpty) {
+        bytes += generator.text('DEST: ${operation.observation}', styles: const PosStyles());
+      }
+      
+      // Montant (sans "TOTAL")
+      bytes += generator.text(
+        'MONTANT: ${operation.montantNet.toStringAsFixed(2)} ${operation.devise}',
+        styles: const PosStyles(
+          height: PosTextSize.size1,
+          width: PosTextSize.size1,
+          bold: true,
+        ),
+      );
+      
+      // Ligne de séparation supprimée
+    }
+
+    bytes += generator.emptyLines(1);
+
+    // Détails financiers
     bytes += generator.text(
-      typeOp.toUpperCase(),
+      'Montant: ${operation.montantBrut.toStringAsFixed(2)} ${operation.devise}',
+      styles: const PosStyles(),
+    );
+    
+    if (operation.commission > 0) {
+      bytes += generator.text(
+        'Commission: ${operation.commission.toStringAsFixed(2)} ${operation.devise}',
+        styles: const PosStyles(),
+      );
+    }
+    
+    bytes += generator.text(
+      '--------------------------------',
+      styles: const PosStyles(),
+    );
+    
+    bytes += generator.text(
+      'TOTAL: ${operation.montantNet.toStringAsFixed(2)} ${operation.devise}',
       styles: const PosStyles(
-        align: PosAlign.center,
         height: PosTextSize.size1,
         width: PosTextSize.size1,
         bold: true,
       ),
     );
+    
     bytes += generator.text(
       '--------------------------------',
-      styles: const PosStyles(align: PosAlign.center, ),
-    );
-    bytes += generator.emptyLines(1);
-
-    // Date et heure
-    final String dateTime = DateFormat('dd/MM/yyyy HH:mm:ss').format(operation.dateOp);
-    bytes += generator.text(
-      'Date: $dateTime',
       styles: const PosStyles(),
     );
     
-    // ID Opération
-    bytes += generator.text('ID: ${operation.id ?? "N/A"}', styles: const PosStyles());
-    
-    // Agent
-    // Afficher le nom de l'agent s'il existe
-    if (agent.nom != null && agent.nom!.isNotEmpty) {
-      bytes += generator.text('Agent: ${agent.nom}', styles: const PosStyles());
-    } else if (agent.username.isNotEmpty) {
-      bytes += generator.text('Agent: ${agent.username}', styles: const PosStyles());
-    }
-    
-    // Client si disponible
-    if (clientName != null && clientName.isNotEmpty) {
-      bytes += generator.text('Client: $clientName', styles: const PosStyles());
-    } else if (operation.destinataire != null) {
-      bytes += generator.text('Destinataire: ${operation.destinataire}', styles: const PosStyles());
-    }
-
-    bytes += generator.emptyLines(1);
-    bytes += generator.text('--------------------------------', styles: const PosStyles());
-    bytes += generator.emptyLines(1);
-
-    // Détails financiers
-    bytes += generator.row([
-      PosColumn(
-        text: 'Montant:',
-        width: 6,
-        styles: const PosStyles()
-      ),
-      PosColumn(
-        text: '${operation.montantBrut.toStringAsFixed(2)} ${operation.devise}',
-        width: 6,
-        styles: const PosStyles(align: PosAlign.right)
-      ),
-    ]);
-
-    if (operation.commission > 0) {
-      bytes += generator.row([
-        PosColumn(text: 'Commission:', width: 6, styles: const PosStyles()),
-        PosColumn(
-          text: '${operation.commission.toStringAsFixed(2)} ${operation.devise}',
-          width: 6,
-          styles: const PosStyles(align: PosAlign.right)
-        ),
-      ]);
-    }
-
-    bytes += generator.text('--------------------------------', styles: const PosStyles());
-    
-    bytes += generator.row([
-      PosColumn(
-        text: 'TOTAL:',
-        width: 6,
-        styles: const PosStyles(bold: true)
-      ),
-      PosColumn(
-        text: '${operation.montantNet.toStringAsFixed(2)} ${operation.devise}',
-        width: 6,
-        styles: const PosStyles(align: PosAlign.right, bold: true)
-      ),
-    ]);
-
-    bytes += generator.emptyLines(1);
-    bytes += generator.text('--------------------------------', styles: const PosStyles());
-    bytes += generator.emptyLines(1);
-
     // Mode de paiement uniquement (pas de statut)
-    String modePaiement = _getModePaiement(operation.modePaiement);
-    bytes += generator.text(
-      'Mode: $modePaiement',
-      styles: const PosStyles(),
-    );
-
+    final String modePaiement = _getModePaiement(operation.modePaiement);
+    bytes += generator.text('Mode: $modePaiement', styles: const PosStyles());
+    
     bytes += generator.emptyLines(1);
-
+    
     // Message de remerciement
     bytes += generator.text(
       '================================',
       styles: const PosStyles(align: PosAlign.center, ),
     );
+    
     bytes += generator.text(
-      'Merci pour votre confiance!',
+      'MAHANAIM votre remercie!',
       styles: const PosStyles(align: PosAlign.center, bold: true, ),
     );
+    
     bytes += generator.text(
       'UCASH - Transfert rapide et sûr',
       styles: const PosStyles(align: PosAlign.center, ),
     );
+    
     bytes += generator.text(
       '================================',
       styles: const PosStyles(align: PosAlign.center, ),
     );
-
-    bytes += generator.emptyLines(1);
+    
+    // Ajouter des lignes vides pour couper le papier
+    bytes += generator.feed(3);
     bytes += generator.cut();
 
     return bytes;

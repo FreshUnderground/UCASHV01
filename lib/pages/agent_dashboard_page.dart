@@ -1,22 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/agent_auth_service.dart';
-import '../services/agent_service.dart';
 import '../services/operation_service.dart';
 import '../services/shop_service.dart';
+import '../services/agent_service.dart';
+import '../services/flot_service.dart';
 import '../services/sync_service.dart';
-import '../widgets/agent_stats_cards.dart';
+import '../widgets/connectivity_indicator.dart';
+import '../widgets/agent_clients_widget.dart';
+import '../widgets/agent_transfers_widget.dart';
 import '../widgets/agent_operations_list.dart';
 import '../widgets/agent_capital_overview.dart';
 import '../widgets/journal_caisse_widget.dart';
 import '../widgets/flot_management_widget.dart';
 import '../widgets/rapport_cloture_widget.dart';
-import '../widgets/reports_menu_widget.dart';
 import 'agent_login_page.dart';
-import '../widgets/reports/agent_reports_widget.dart' as reports;
+import '../widgets/reports/agent_reports_widget.dart';
 import '../widgets/agent_dashboard_widget.dart';
 import '../widgets/agent_operations_widget.dart';
 import '../widgets/rapportcloture.dart';
+import '../widgets/agent_transactions_widget.dart';
+import '../widgets/change_devise_widget.dart';
+import '../widgets/agent_stats_cards.dart';
 
 class AgentDashboardPage extends StatefulWidget {
   const AgentDashboardPage({super.key});
@@ -32,7 +37,8 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
     'Dashboard',
     'Nouvelle Transaction',
     'Transactions',
-    'Clients',
+    'Change de Devises',
+    'Partenaires',
     'Journal de Caisse',
     'Rapports',
     'Gestion FLOT',
@@ -43,6 +49,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
     Icons.dashboard,
     Icons.add_circle_outline,
     Icons.list_alt,
+    Icons.currency_exchange,
     Icons.people,
     Icons.account_balance_wallet,
     Icons.assessment,
@@ -61,17 +68,20 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
     final operationService = Provider.of<OperationService>(context, listen: false);
     final shopService = Provider.of<ShopService>(context, listen: false);
     final agentService = Provider.of<AgentService>(context, listen: false);
+    final flotService = Provider.of<FlotService>(context, listen: false);
     
     if (authService.currentAgent != null) {
       // IMPORTANT: Recharger TOUS les services après sync
       shopService.loadShops();
       agentService.loadAgents();
       operationService.loadOperations(agentId: authService.currentAgent!.id);
+      flotService.loadFlots(shopId: authService.currentAgent!.shopId, isAdmin: false);
       
       debugPrint('🔄 _loadData: Rechargement des données après sync');
       debugPrint('   Agents disponibles: ${agentService.agents.length}');
       debugPrint('   Shops disponibles: ${shopService.shops.length}');
       debugPrint('   Opérations pour agent ${authService.currentAgent!.id}: ${operationService.operations.length}');
+      debugPrint('   FLOTs pour shop ${authService.currentAgent!.shopId}: ${flotService.flots.length}');
     }
   }
 
@@ -132,13 +142,6 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
       backgroundColor: const Color(0xFFDC2626),
       elevation: 0,
       actions: [
-        // Bouton de synchronisation
-        IconButton(
-          onPressed: _syncData,
-          icon: const Icon(Icons.sync, color: Colors.white),
-          tooltip: 'Synchroniser',
-        ),
-        
         // Menu utilisateur
         PopupMenuButton<String>(
           icon: const Icon(Icons.account_circle, color: Colors.white),
@@ -391,16 +394,18 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
       case 1:
         return const Center(child: Text('Nouvelle Transaction - À implémenter'));
       case 2:
-        return const Center(child: Text('Transactions - À implémenter'));
+        return const AgentTransactionsWidget();
       case 3:
-        return const Center(child: Text('Clients - À implémenter'));
+        return const ChangeDeviseWidget();
       case 4:
-        return _buildJournalCaisseContent();
+        return const Center(child: Text('Partenaires - À implémenter'));
       case 5:
-        return const ReportsMenuWidget();
+        return _buildJournalCaisseContent();
       case 6:
-        return const FlotManagementWidget();
+        return const AgentReportsWidget();
       case 7:
+        return const FlotManagementWidget();
+      case 8:
         return _buildRapportClotureContent();
       default:
         return _buildDashboardContent();

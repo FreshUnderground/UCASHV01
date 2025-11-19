@@ -122,7 +122,7 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Bonjour ${client?.nom ?? 'Client'}',
+                        'Bonjour ${client?.nom ?? 'Partenaire'}',
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -214,7 +214,7 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Bonjour ${client?.nom ?? 'Client'}',
+                    'Bonjour ${client?.nom ?? 'Partenaire'}',
                     style: TextStyle(
                       fontSize: isTablet ? 18 : 20,
                       fontWeight: FontWeight.bold,
@@ -495,7 +495,7 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
             ),
           ),
           SizedBox(height: isMobile ? 16 : 24),
-          const Expanded(
+          Expanded(
             child: ClientTransactionHistory(),
           ),
         ],

@@ -5,8 +5,13 @@ import '../models/operation_model.dart';
 import '../services/flot_service.dart';
 import '../services/shop_service.dart';
 import '../services/auth_service.dart';
-import '../services/local_db.dart'; // This should be correct
+import '../services/operation_service.dart';
+import '../services/local_db.dart';
 import 'flot_dialog.dart';
+import '../utils/responsive_utils.dart';
+import '../theme/ucash_typography.dart';
+import '../theme/ucash_containers.dart';
+import 'package:intl/intl.dart';
 
 /// Widget pour gérer les FLOTS (approvisionnement de liquidité entre shops)
 class FlotManagementWidget extends StatefulWidget {
@@ -58,38 +63,88 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final isMobile = size.width <= 768;
+    final isMobile = MediaQuery.of(context).size.width < 600;
     
     return Scaffold(
+      backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
-        title: const Text('💸 Gestion des FLOTS'),
-        backgroundColor: const Color(0xFF9C27B0),
+        elevation: 0,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Colors.purple.shade700, Colors.blue.shade600],
+            ),
+          ),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Icon(Icons.local_shipping_rounded, size: 26),
+            ),
+            const SizedBox(width: 14),
+            Flexible(
+              child: Text(
+                'Gestion des FLOT',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: isMobile ? 18 : 22,
+                  letterSpacing: -0.5,
+                ),
+              ),
+            ),
+          ],
+        ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _chargerFlots,
+          Container(
+            margin: const EdgeInsets.only(right: 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.refresh_rounded, size: 24),
+              onPressed: _chargerFlots,
+              tooltip: 'Actualiser',
+            ),
           ),
         ],
       ),
-      body: Column(
+      body: ListView(
         children: [
           _buildHeaderInfo(),
-          _buildFiltres(),
-          Expanded(child: _buildListe()),
+          _buildModernFiltres(),
+          _buildListe(),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _afficherDialogueNouveauFlot(),
-        backgroundColor: const Color(0xFF9C27B0),
-        foregroundColor: Colors.white,
-        elevation: 8,
-        icon: const Icon(Icons.add, size: 20),
-        label: Text(
-          isMobile ? 'Nouveau Flot' : 'Nouvel Approvisionnement',
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            colors: [Colors.purple.shade600, Colors.blue.shade500],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.purple.withOpacity(0.4),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: FloatingActionButton.extended(
+          onPressed: () => _afficherDialogueNouveauFlot(),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          icon: const Icon(Icons.add_rounded, size: 24),
+          label: Text(
+            isMobile ? 'Nouveau' : 'Nouveau FLOT',
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
           ),
         ),
       ),
@@ -97,39 +152,124 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
   }
 
   Widget _buildHeaderInfo() {
-    return Consumer3<FlotService, AuthService, ShopService>(
-      builder: (context, flotService, authService, shopService, child) {
-        final size = MediaQuery.of(context).size;
-        final isMobile = size.width <= 768;
-        
+    return Consumer4<FlotService, AuthService, ShopService, OperationService>(
+      builder: (context, flotService, authService, shopService, operationService, child) {
         final currentShopId = authService.currentUser?.shopId;
         if (currentShopId == null) return const SizedBox.shrink();
         
         final currentShop = shopService.getShopById(currentShopId);
         if (currentShop == null) return const SizedBox.shrink();
         
-        // Calculer les dettes et créances
-        double totalDette = currentShop.dettes;
-        double totalCreance = currentShop.creances;
+        // NOUVELLE LOGIQUE: Calculer les dettes et créances inter-shop
+        final Map<int, double> soldesParShop = {};
+        
+        // 1. TRANSFERTS SERVIS PAR NOUS (shop source nous doit directement)
+        for (final op in operationService.operations) {
+          if ((op.type == OperationType.transfertNational || op.type == OperationType.transfertInternationalEntrant) &&
+              op.shopDestinationId == currentShopId && // Nous servons le client
+              op.devise == 'USD') {
+            final autreShopId = op.shopSourceId; // Shop qui a reçu l'argent du client
+            if (autreShopId != null) {
+              soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + op.montantNet;
+            }
+          }
+        }
+        
+        // 2. TRANSFERTS REÇUS/INITIÉS PAR NOUS (on doit à l'autre shop)
+        for (final op in operationService.operations) {
+          if ((op.type == OperationType.transfertNational || op.type == OperationType.transfertInternationalSortant) &&
+              op.shopSourceId == currentShopId && // Client nous a payé
+              op.devise == 'USD') {
+            final autreShopId = op.shopDestinationId; // Shop qui va servir
+            if (autreShopId != null) {
+              soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - op.montantNet;
+            }
+          }
+        }
+        
+        // 3. FLOTS EN COURS - Deux sens selon qui a initié
+        for (final flot in flotService.flots) {
+          if (flot.statut == flot_model.StatutFlot.enRoute && flot.devise == 'USD') {
+            if (flot.shopSourceId == currentShopId) {
+              // NOUS avons envoyé en cours → Ils nous doivent rembourser
+              final autreShopId = flot.shopDestinationId;
+              if (autreShopId != null) {
+                soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + flot.montant;
+              }
+            } else if (flot.shopDestinationId == currentShopId) {
+              // ILS ont envoyé en cours → On leur doit rembourser
+              final autreShopId = flot.shopSourceId;
+              if (autreShopId != null) {
+                soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - flot.montant;
+              }
+            }
+          }
+        }
+        
+        // 4. FLOTS REÇUS ET SERVIS (shopDestinationId = nous) → On leur doit rembourser
+        for (final flot in flotService.flots) {
+          if (flot.shopDestinationId == currentShopId &&
+              flot.statut == flot_model.StatutFlot.servi &&
+              flot.devise == 'USD') {
+            final autreShopId = flot.shopSourceId;
+            if (autreShopId != null) {
+              soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - flot.montant;
+            }
+          }
+        }
+        
+        // 5. FLOTS ENVOYÉS ET SERVIS (shopSourceId = nous) → Ils nous doivent rembourser
+        for (final flot in flotService.flots) {
+          if (flot.shopSourceId == currentShopId &&
+              flot.statut == flot_model.StatutFlot.servi &&
+              flot.devise == 'USD') {
+            final autreShopId = flot.shopDestinationId;
+            if (autreShopId != null) {
+              soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + flot.montant;
+            }
+          }
+        }
+        
+        // Calculer les totaux
+        double totalCreance = 0.0; // Ils nous doivent (solde > 0)
+        double totalDette = 0.0;   // On leur doit (solde < 0)
+        
+        for (final solde in soldesParShop.values) {
+          if (solde > 0) {
+            totalCreance += solde;
+          } else if (solde < 0) {
+            totalDette += solde.abs();
+          }
+        }
         
         return Card(
-          margin: const EdgeInsets.all(16),
-          elevation: 2,
+          margin: EdgeInsets.all(ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
+          elevation: ResponsiveUtils.getFluidSpacing(context, mobile: 2, tablet: 3, desktop: 4),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(
+              ResponsiveUtils.getFluidBorderRadius(context, mobile: 12, tablet: 14, desktop: 16),
+            ),
+          ),
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: ResponsiveUtils.getFluidPadding(
+              context,
+              mobile: const EdgeInsets.all(16),
+              tablet: const EdgeInsets.all(20),
+              desktop: const EdgeInsets.all(24),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   '📊 Votre Position Financière',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 18, tablet: 20, desktop: 22),
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF333333),
+                    color: const Color(0xFF333333),
                   ),
                 ),
-                const SizedBox(height: 16),
-                if (isMobile)
+                SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 16, tablet: 18, desktop: 20)),
+                if (context.isSmallScreen)
                   Column(
                     children: [
                       _buildFinancialCard(
@@ -138,14 +278,14 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
                         color: Colors.red,
                         icon: Icons.arrow_upward,
                       ),
-                      const SizedBox(height: 12),
+                      SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
                       _buildFinancialCard(
                         title: 'On vous doit',
                         amount: totalCreance,
                         color: Colors.green,
                         icon: Icons.arrow_downward,
                       ),
-                      const SizedBox(height: 12),
+                      SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
                       _buildFinancialCard(
                         title: 'Solde net',
                         amount: totalCreance - totalDette,
@@ -165,7 +305,7 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
                           icon: Icons.arrow_upward,
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
                       Expanded(
                         child: _buildFinancialCard(
                           title: 'On vous doit',
@@ -174,7 +314,7 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
                           icon: Icons.arrow_downward,
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
                       Expanded(
                         child: _buildFinancialCard(
                           title: 'Solde net',
@@ -185,18 +325,29 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
                       ),
                     ],
                   ),
-                const SizedBox(height: 12),
+                SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: ResponsiveUtils.getFluidPadding(
+                    context,
+                    mobile: const EdgeInsets.all(12),
+                    tablet: const EdgeInsets.all(14),
+                    desktop: const EdgeInsets.all(16),
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.blue.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(
+                      ResponsiveUtils.getFluidBorderRadius(context, mobile: 12, tablet: 14, desktop: 16),
+                    ),
                     border: Border.all(color: Colors.blue.withOpacity(0.2)),
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
-                      Icon(Icons.info, color: Colors.blue, size: 18),
-                      SizedBox(width: 8),
+                      Icon(
+                        Icons.info, 
+                        color: Colors.blue, 
+                        size: ResponsiveUtils.getFluidIconSize(context, mobile: 16, tablet: 18, desktop: 20),
+                      ),
+                      SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 8, tablet: 10, desktop: 12)),
                       Expanded(
                         child: Text(
                           'ℹ️ Les approvisionnements (FLOT) réduisent vos dettes envers d\'autres shops',
@@ -261,127 +412,141 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
     );
   }
   
-  Widget _buildFiltres() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isCompact = constraints.maxWidth < 500;
-        
-        return Card(
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Filtres', 
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: Color(0xFF333333),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                if (isCompact)
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _buildFilterChip(
-                        label: 'Tous',
-                        selected: _filtreStatut == null,
-                        onSelected: (selected) {
-                          setState(() => _filtreStatut = null);
-                        },
-                      ),
-                      _buildFilterChip(
-                        label: 'En Route',
-                        selected: _filtreStatut == flot_model.StatutFlot.enRoute,
-                        selectedColor: Colors.orange.shade200,
-                        onSelected: (selected) {
-                          setState(() => _filtreStatut = flot_model.StatutFlot.enRoute);
-                        },
-                      ),
-                      _buildFilterChip(
-                        label: 'Servi',
-                        selected: _filtreStatut == flot_model.StatutFlot.servi,
-                        selectedColor: Colors.green.shade200,
-                        onSelected: (selected) {
-                          setState(() => _filtreStatut = flot_model.StatutFlot.servi);
-                        },
-                      ),
-                      _buildFilterChip(
-                        label: 'Annulé',
-                        selected: _filtreStatut == flot_model.StatutFlot.annule,
-                        selectedColor: Colors.red.shade200,
-                        onSelected: (selected) {
-                          setState(() => _filtreStatut = flot_model.StatutFlot.annule);
-                        },
-                      ),
-                    ],
-                  )
-                else
-                  Row(
-                    children: [
-                      _buildFilterChip(
-                        label: 'Tous',
-                        selected: _filtreStatut == null,
-                        onSelected: (selected) {
-                          setState(() => _filtreStatut = null);
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      _buildFilterChip(
-                        label: 'En Route',
-                        selected: _filtreStatut == flot_model.StatutFlot.enRoute,
-                        selectedColor: Colors.orange.shade200,
-                        onSelected: (selected) {
-                          setState(() => _filtreStatut = flot_model.StatutFlot.enRoute);
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      _buildFilterChip(
-                        label: 'Servi',
-                        selected: _filtreStatut == flot_model.StatutFlot.servi,
-                        selectedColor: Colors.green.shade200,
-                        onSelected: (selected) {
-                          setState(() => _filtreStatut = flot_model.StatutFlot.servi);
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      _buildFilterChip(
-                        label: 'Annulé',
-                        selected: _filtreStatut == flot_model.StatutFlot.annule,
-                        selectedColor: Colors.red.shade200,
-                        onSelected: (selected) {
-                          setState(() => _filtreStatut = flot_model.StatutFlot.annule);
-                        },
-                      ),
-                    ],
-                  ),
-              ],
-            ),
+  Widget _buildModernFiltres() {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
           ),
-        );
-      },
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.purple.shade400, Colors.blue.shade400],
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.filter_list_rounded, color: Colors.white, size: 18),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Filtrer par statut',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                  letterSpacing: -0.3,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _buildModernFilterChip(
+                label: 'Tous',
+                icon: Icons.apps_rounded,
+                selected: _filtreStatut == null,
+                color: Colors.grey.shade700,
+                onTap: () => setState(() => _filtreStatut = null),
+              ),
+              _buildModernFilterChip(
+                label: 'En Route',
+                icon: Icons.local_shipping_rounded,
+                selected: _filtreStatut == flot_model.StatutFlot.enRoute,
+                color: Colors.orange.shade600,
+                onTap: () => setState(() => _filtreStatut = flot_model.StatutFlot.enRoute),
+              ),
+              _buildModernFilterChip(
+                label: 'Servi',
+                icon: Icons.check_circle_rounded,
+                selected: _filtreStatut == flot_model.StatutFlot.servi,
+                color: Colors.green.shade600,
+                onTap: () => setState(() => _filtreStatut = flot_model.StatutFlot.servi),
+              ),
+              _buildModernFilterChip(
+                label: 'Annulé',
+                icon: Icons.cancel_rounded,
+                selected: _filtreStatut == flot_model.StatutFlot.annule,
+                color: Colors.red.shade600,
+                onTap: () => setState(() => _filtreStatut = flot_model.StatutFlot.annule),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
-  
-  /// Widget helper pour les filtres
-  Widget _buildFilterChip({
+
+  Widget _buildModernFilterChip({
     required String label,
+    required IconData icon,
     required bool selected,
-    required ValueChanged<bool> onSelected,
-    Color? selectedColor,
+    required Color color,
+    required VoidCallback onTap,
   }) {
-    return FilterChip(
-      label: Text(label, style: const TextStyle(fontSize: 13)),
-      selected: selected,
-      selectedColor: selectedColor,
-      onSelected: onSelected,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      labelStyle: TextStyle(
-        fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          gradient: selected
+              ? LinearGradient(colors: [color, color.withOpacity(0.8)])
+              : null,
+          color: selected ? null : color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? color : color.withOpacity(0.3),
+            width: selected ? 2 : 1,
+          ),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: color.withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: selected ? Colors.white : color,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                color: selected ? Colors.white : color,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -401,22 +566,26 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
         }
 
         if (flots.isEmpty) {
-          return const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.inbox, size: 64, color: Colors.grey),
-                SizedBox(height: 16),
-                Text('Aucun flot', style: TextStyle(color: Colors.grey)),
-              ],
+          return Container(
+            padding: const EdgeInsets.all(64),
+            child: const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.inbox, size: 64, color: Colors.grey),
+                  SizedBox(height: 16),
+                  Text('Aucun flot', style: TextStyle(color: Colors.grey)),
+                ],
+              ),
             ),
           );
         }
 
-        return ListView.builder(
+        return Padding(
           padding: const EdgeInsets.all(16),
-          itemCount: flots.length,
-          itemBuilder: (context, index) => _buildFlotCard(flots[index]),
+          child: Column(
+            children: flots.map((flot) => _buildFlotCard(flot)).toList(),
+          ),
         );
       },
     );
@@ -429,6 +598,7 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
     final peutMarquerServi = isDestination && flot.statut == flot_model.StatutFlot.enRoute;
     final peutModifier = flot.shopSourceId == currentShopId && flot.statut == flot_model.StatutFlot.enRoute;
     final peutSupprimer = flot.shopSourceId == currentShopId && flot.statut == flot_model.StatutFlot.enRoute;
+    final isMobile = MediaQuery.of(context).size.width < 600;
 
     Color statutColor;
     IconData statutIcon;
@@ -436,341 +606,340 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
     
     switch (flot.statut) {
       case flot_model.StatutFlot.enRoute:
-        statutColor = Colors.orange;
-        statutIcon = Icons.local_shipping;
+        statutColor = Colors.orange.shade600;
+        statutIcon = Icons.local_shipping_rounded;
         statutDescription = 'En attente de réception';
         break;
       case flot_model.StatutFlot.servi:
-        statutColor = Colors.green;
-        statutIcon = Icons.check_circle;
+        statutColor = Colors.green.shade600;
+        statutIcon = Icons.check_circle_rounded;
         statutDescription = 'Reçu par le destinataire';
         break;
       case flot_model.StatutFlot.annule:
-        statutColor = Colors.red;
-        statutIcon = Icons.cancel;
+        statutColor = Colors.red.shade600;
+        statutIcon = Icons.cancel_rounded;
         statutDescription = 'Annulé';
         break;
     }
 
-    return Card(
-      elevation: 3,
+    return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Colors.white,
-              statutColor.withOpacity(0.05),
-            ],
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 4),
           ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header avec montant et statut
-              Row(
+          BoxShadow(
+            color: statutColor.withOpacity(0.08),
+            blurRadius: 30,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(isMobile ? 18 : 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header with gradient background
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    statutColor.withOpacity(0.1),
+                    statutColor.withOpacity(0.05),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
                 children: [
+                  // Circular icon with gradient
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: statutColor.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: statutColor.withOpacity(0.3)),
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [statutColor, statutColor.withOpacity(0.7)],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: statutColor.withOpacity(0.4),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                    child: Icon(statutIcon, color: Colors.white, size: 28),
+                  ),
+                  const SizedBox(width: 16),
+                  
+                  // Status label
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(statutIcon, size: 20, color: statutColor),
-                        const SizedBox(width: 8),
                         Text(
                           flot.statutLabel,
                           style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
                             color: statutColor,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          statutDescription,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade600,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const Spacer(),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        '${flot.montant.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF9C27B0),
-                        ),
+                  
+                  // Amount badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Colors.purple.shade600, Colors.blue.shade500],
                       ),
-                      Text(
-                        flot.devise,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey,
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.purple.withOpacity(0.3),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              
-              const SizedBox(height: 16),
-              
-              // Description du statut
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: statutColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: statutColor.withOpacity(0.2)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(statutIcon, color: statutColor, size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        statutDescription,
-                        style: TextStyle(
-                          color: statutColor,
-                          fontSize: 13,
-                        ),
-                      ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
-              
-              const SizedBox(height: 16),
-              
-              // Information sur l'impact sur les dettes
-              if (flot.statut == flot_model.StatutFlot.enRoute) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.blue.withOpacity(0.2)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.info, color: Colors.blue, size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Ce flot réduira la dette de ${flot.shopSourceDesignation} envers ${flot.shopDestinationDesignation}',
+                    child: Column(
+                      children: [
+                        Text(
+                          '${flot.montant.toStringAsFixed(2)}',
                           style: const TextStyle(
-                            color: Colors.blue,
-                            fontSize: 12,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
                           ),
                         ),
-                      ),
-                    ],
+                        Text(
+                          flot.devise,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 16),
-              ],
-              
-              // Shops
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey[200]!),
-                ),
-                child: Column(
-                  children: [
-                    _buildShopInfo(
-                      title: 'Expéditeur',
-                      shopName: flot.shopSourceDesignation,
-                      isCurrentShop: flot.shopSourceId == currentShopId,
-                      icon: Icons.upload,
-                      iconColor: Colors.orange,
-                    ),
-                    const SizedBox(height: 12),
-                    const Icon(Icons.arrow_downward, color: Colors.grey),
-                    const SizedBox(height: 12),
-                    _buildShopInfo(
-                      title: 'Destinataire',
-                      shopName: flot.shopDestinationDesignation,
-                      isCurrentShop: flot.shopDestinationId == currentShopId,
-                      icon: Icons.download,
-                      iconColor: Colors.green,
-                    ),
-                  ],
-                ),
-              ),
-              
-              const SizedBox(height: 16),
-              
-              // Dates
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _buildDateInfo(
-                    icon: Icons.send,
-                    label: 'Envoyé',
-                    date: flot.dateEnvoi,
-                    color: Colors.orange,
-                  ),
-                  if (flot.dateReception != null)
-                    _buildDateInfo(
-                      icon: Icons.check_circle,
-                      label: 'Reçu',
-                      date: flot.dateReception!,
-                      color: Colors.green,
-                    ),
                 ],
               ),
-              
-              if (flot.reference != null) ...[
-                const SizedBox(height: 12),
+            ),
+            
+            const SizedBox(height: 20),
+            
+            // Shops info with modern design
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Column(
+                children: [
+                  _buildModernShopInfo(
+                    title: 'Expéditeur',
+                    shopName: flot.shopSourceDesignation,
+                    isCurrentShop: flot.shopSourceId == currentShopId,
+                    icon: Icons.upload_rounded,
+                    color: Colors.orange.shade600,
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.arrow_downward_rounded, color: Colors.grey.shade400, size: 20),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildModernShopInfo(
+                    title: 'Destinataire',
+                    shopName: flot.shopDestinationDesignation,
+                    isCurrentShop: flot.shopDestinationId == currentShopId,
+                    icon: Icons.download_rounded,
+                    color: Colors.green.shade600,
+                  ),
+                ],
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Dates in modern cards
+            Row(
+              children: [
+                Expanded(
+                  child: _buildModernDateCard(
+                    icon: Icons.send_rounded,
+                    label: 'Envoyé',
+                    date: flot.dateEnvoi,
+                    color: Colors.orange.shade600,
+                  ),
+                ),
+                if (flot.dateReception != null) ...[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildModernDateCard(
+                      icon: Icons.check_circle_rounded,
+                      label: 'Reçu',
+                      date: flot.dateReception!,
+                      color: Colors.green.shade600,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            
+            if (flot.reference != null || (flot.notes != null && flot.notes!.isNotEmpty)) ...[
+              const SizedBox(height: 16),
+              if (flot.reference != null)
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.tag, size: 14, color: Colors.grey),
+                      Icon(Icons.tag_rounded, size: 16, color: Colors.blue.shade700),
                       const SizedBox(width: 6),
                       Text(
                         'Réf: ${flot.reference}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: Colors.grey,
-                          fontWeight: FontWeight.w500,
+                          color: Colors.blue.shade700,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
                   ),
                 ),
-              ],
-              
               if (flot.notes != null && flot.notes!.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: Colors.grey[100],
+                    color: Colors.amber.shade50,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey[300]!),
+                    border: Border.all(color: Colors.amber.shade200),
                   ),
-                  child: Column(
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        '📝 Notes',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey,
+                      Icon(Icons.note_rounded, size: 18, color: Colors.amber.shade700),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Notes',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.amber.shade900,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              flot.notes!,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.amber.shade900,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        flot.notes!,
-                        style: const TextStyle(fontSize: 13),
                       ),
                     ],
                   ),
                 ),
               ],
-              
+            ],
+            
+            if (peutModifier || peutSupprimer || peutMarquerServi) ...[
+              const SizedBox(height: 20),
+              const Divider(height: 1),
               const SizedBox(height: 20),
               
-              // Actions
-              Row(
+              // Action buttons
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
                 children: [
-                  if (peutModifier) ...[
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => _afficherDialogueModifierFlot(flot),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        icon: const Icon(Icons.edit, size: 18),
-                        label: const Text('Modifier', style: TextStyle(fontSize: 14)),
-                      ),
+                  if (peutModifier)
+                    _buildModernActionButton(
+                      label: 'Modifier',
+                      icon: Icons.edit_rounded,
+                      color: Colors.blue.shade600,
+                      onPressed: () => _afficherDialogueModifierFlot(flot),
                     ),
-                    const SizedBox(width: 8),
-                  ],
-                  if (peutSupprimer) ...[
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => _supprimerFlot(flot),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          side: const BorderSide(color: Colors.red),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        icon: const Icon(Icons.delete, size: 18, color: Colors.red),
-                        label: const Text('Supprimer', style: TextStyle(fontSize: 14, color: Colors.red)),
-                      ),
+                  if (peutSupprimer)
+                    _buildModernActionButton(
+                      label: 'Supprimer',
+                      icon: Icons.delete_rounded,
+                      color: Colors.red.shade600,
+                      onPressed: () => _supprimerFlot(flot),
                     ),
-                    const SizedBox(width: 8),
-                  ],
-                  if (peutMarquerServi) ...[
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () => _marquerServi(flot),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        icon: const Icon(Icons.check_circle, size: 18),
-                        label: const Text('Marquer SERVI', style: TextStyle(fontSize: 14)),
-                      ),
+                  if (peutMarquerServi)
+                    _buildModernActionButton(
+                      label: 'Marquer SERVI',
+                      icon: Icons.check_circle_rounded,
+                      color: Colors.green.shade600,
+                      onPressed: () => _marquerServi(flot),
+                      gradient: true,
                     ),
-                  ],
                 ],
               ),
             ],
-          ),
+          ],
         ),
       ),
     );
   }
-  
-  /// Widget helper pour afficher les informations d'un shop
-  Widget _buildShopInfo({
+
+  Widget _buildModernShopInfo({
     required String title,
     required String shopName,
     required bool isCurrentShop,
     required IconData icon,
-    required Color iconColor,
+    required Color color,
   }) {
     return Row(
       children: [
         Container(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: iconColor.withOpacity(0.1),
-            shape: BoxShape.circle,
+            color: color.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(12),
           ),
-          child: Icon(icon, color: iconColor, size: 16),
+          child: Icon(icon, color: color, size: 20),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -779,81 +948,147 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
             children: [
               Text(
                 title,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
-              const SizedBox(height: 2),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      shopName,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                  if (isCurrentShop)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF9C27B0).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFF9C27B0).withOpacity(0.3)),
-                      ),
-                      child: const Text(
-                        'Vous',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Color(0xFF9C27B0),
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                ],
+              const SizedBox(height: 3),
+              Text(
+                shopName,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                  letterSpacing: -0.3,
+                ),
               ),
             ],
           ),
         ),
+        if (isCurrentShop)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.purple.shade600, Colors.blue.shade500],
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Text(
+              'Vous',
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
       ],
     );
   }
-  
-  /// Widget helper pour afficher les dates
-  Widget _buildDateInfo({
+
+  Widget _buildModernDateCard({
     required IconData icon,
     required String label,
     required DateTime date,
     required Color color,
   }) {
-    return Row(
-      children: [
-        Icon(icon, color: color, size: 16),
-        const SizedBox(width: 6),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                color: color,
-                fontWeight: FontWeight.w500,
-              ),
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: color,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _formatDate(date),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade700,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
             ),
-            Text(
-              _formatDate(date),
-              style: const TextStyle(
-                fontSize: 11,
-                color: Colors.grey,
-              ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModernActionButton({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onPressed,
+    bool gradient = false,
+  }) {
+    return Container(
+      height: 44,
+      decoration: BoxDecoration(
+        gradient: gradient
+            ? LinearGradient(colors: [color, color.withOpacity(0.8)])
+            : null,
+        color: gradient ? null : color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: gradient ? Colors.transparent : color.withOpacity(0.3)),
+        boxShadow: gradient
+            ? [
+                BoxShadow(
+                  color: color.withOpacity(0.4),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : null,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 18,
+                  color: gradient ? Colors.white : color,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: gradient ? Colors.white : color,
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-      ],
+      ),
     );
   }
 

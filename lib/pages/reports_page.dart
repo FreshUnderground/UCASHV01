@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../services/report_service.dart';
 import '../widgets/reports/admin_reports_widget.dart';
-import '../widgets/reports/agent_reports_widget.dart';
+import '../widgets/agent_reports_widget.dart';
 import '../widgets/reports/client_reports_widget.dart';
 
 class ReportsPage extends StatefulWidget {

@@ -72,8 +72,13 @@ try {
                 ]);
                 
                 // Marquer comme synchronisé après mise à jour réussie
-                $syncStmt = $pdo->prepare("UPDATE commissions SET is_synced = 1, synced_at = NOW() WHERE id = :id");
-                $syncStmt->execute([':id' => $entity['id']]);
+                // Use the client's synced_at timestamp to maintain timezone consistency
+                $syncedAt = $entity['synced_at'] ?? date('c'); // Use ISO 8601 format
+                $syncStmt = $pdo->prepare("UPDATE commissions SET is_synced = 1, synced_at = :synced_at WHERE id = :id");
+                $syncStmt->execute([
+                    ':id' => $entity['id'],
+                    ':synced_at' => $syncedAt
+                ]);
                 
                 $updatedCount++;
             } else {
@@ -99,9 +104,14 @@ try {
                 ]);
                 
                 // Marquer comme synchronisé après insertion réussie
+                // Use the client's synced_at timestamp to maintain timezone consistency
+                $syncedAt = $entity['synced_at'] ?? date('c'); // Use ISO 8601 format
                 $insertId = $pdo->lastInsertId();
-                $syncStmt = $pdo->prepare("UPDATE commissions SET is_synced = 1, synced_at = NOW() WHERE id = :id");
-                $syncStmt->execute([':id' => $insertId]);
+                $syncStmt = $pdo->prepare("UPDATE commissions SET is_synced = 1, synced_at = :synced_at WHERE id = :id");
+                $syncStmt->execute([
+                    ':id' => $insertId,
+                    ':synced_at' => $syncedAt
+                ]);
                 
                 $uploadedCount++;
             }

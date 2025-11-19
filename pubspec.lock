@@ -230,6 +230,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.0.19"
+  flutter_printer_qpos:
+    dependency: "direct main"
+    description:
+      name: flutter_printer_qpos
+      sha256: "8525e3cb1116623a7f2f8a16b1ea1264fc1e80938a1de9fadc9e126fb70b42fd"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.8"
   flutter_test:
     dependency: "direct dev"
     description: flutter

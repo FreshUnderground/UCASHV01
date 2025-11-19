@@ -150,28 +150,32 @@ class _CommissionsReportState extends State<CommissionsReport> {
   Widget _buildHeader() {
     final periode = _reportData!['periode'] as Map<String, dynamic>;
     final totalCommissions = _reportData!['totalCommissions'] as double;
+    final isMobile = MediaQuery.of(context).size.width < 600;
     
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(isMobile ? 12 : 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.monetization_on, color: Colors.green[700]),
-                const SizedBox(width: 8),
+                Icon(Icons.monetization_on, color: Colors.green[700], size: isMobile ? 20 : 24),
+                SizedBox(width: isMobile ? 6 : 8),
                 Text(
                   'Commissions Encaissées',
                   style: TextStyle(
-                    fontSize: 20,
+                    fontSize: isMobile ? 16 : 20,
                     fontWeight: FontWeight.bold,
                     color: Colors.green[700],
                   ),
                 ),
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isMobile ? 8 : 12,
+                    vertical: isMobile ? 4 : 6,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.green[100],
                     borderRadius: BorderRadius.circular(20),
@@ -180,6 +184,7 @@ class _CommissionsReportState extends State<CommissionsReport> {
                   child: Text(
                     'Total: ${totalCommissions.toStringAsFixed(2)} USD',
                     style: TextStyle(
+                      fontSize: isMobile ? 11 : 14,
                       color: Colors.green[700],
                       fontWeight: FontWeight.bold,
                     ),
@@ -187,11 +192,14 @@ class _CommissionsReportState extends State<CommissionsReport> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: isMobile ? 6 : 8),
             if (periode['debut'] != null && periode['fin'] != null)
               Text(
                 'Période: ${_formatDate(DateTime.parse(periode['debut']))} - ${_formatDate(DateTime.parse(periode['fin']))}',
-                style: TextStyle(color: Colors.grey[600]),
+                style: TextStyle(
+                  fontSize: isMobile ? 12 : 14,
+                  color: Colors.grey[600],
+                ),
               ),
           ],
         ),
@@ -249,17 +257,19 @@ class _CommissionsReportState extends State<CommissionsReport> {
   }
 
   Widget _buildSummaryCard(String title, String value, IconData icon, Color color) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(isMobile ? 10 : 16),
         child: Column(
           children: [
-            Icon(icon, color: color, size: 32),
-            const SizedBox(height: 8),
+            Icon(icon, color: color, size: isMobile ? 24 : 32),
+            SizedBox(height: isMobile ? 6 : 8),
             Text(
               value,
               style: TextStyle(
-                fontSize: 18,
+                fontSize: isMobile ? 14 : 18,
                 fontWeight: FontWeight.bold,
                 color: color,
               ),
@@ -267,7 +277,7 @@ class _CommissionsReportState extends State<CommissionsReport> {
             Text(
               title,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: isMobile ? 10 : 12,
                 color: Colors.grey[600],
               ),
               textAlign: TextAlign.center,

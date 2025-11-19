@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/shop_service.dart';
+import '../../utils/responsive_utils.dart';
+import '../../theme/ucash_typography.dart';
+import '../../theme/ucash_containers.dart';
 
 class ReportFiltersWidget extends StatefulWidget {
   final bool showShopFilter;
@@ -28,8 +31,8 @@ class ReportFiltersWidget extends StatefulWidget {
 
 class _ReportFiltersWidgetState extends State<ReportFiltersWidget> {
   String _selectedPeriod = 'custom';
-  bool _isExpanded = true; // État pour afficher/cacher les filtres
-
+  bool _isExpanded = false; // Already set to false to hide filters by default
+  
   final Map<String, String> _periodOptions = {
     'today': 'Aujourd\'hui',
     'week': 'Cette semaine',
@@ -40,19 +43,25 @@ class _ReportFiltersWidgetState extends State<ReportFiltersWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final isMobile = size.width <= 768;
-    final isTablet = size.width > 768 && size.width <= 1024;
-    
     return Card(
-      elevation: 2,
+      elevation: ResponsiveUtils.getFluidSpacing(context, mobile: 2, tablet: 3, desktop: 4),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(
+          ResponsiveUtils.getFluidBorderRadius(context, mobile: 8, tablet: 10, desktop: 12),
+        ),
+      ),
       child: Padding(
-        padding: EdgeInsets.all(isMobile ? 12 : 16),
+        padding: ResponsiveUtils.getFluidPadding(
+          context,
+          mobile: const EdgeInsets.all(12),
+          tablet: const EdgeInsets.all(14),
+          desktop: const EdgeInsets.all(16),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header adaptatif
-            _buildFilterHeader(isMobile),
+            _buildFilterHeader(context.isSmallScreen),
             
             // Filtres avec animation d'ouverture/fermeture
             AnimatedSize(
@@ -62,32 +71,43 @@ class _ReportFiltersWidgetState extends State<ReportFiltersWidget> {
                   ? Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        SizedBox(height: isMobile ? 12 : 16),
+                        SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
                         
                         // Filtres adaptatifs
-                        _buildResponsiveFilters(isMobile, isTablet),
+                        _buildResponsiveFilters(context.isSmallScreen, context.isTablet),
                         
                         // Résumé de la période sélectionnée
                         if (widget.startDate != null || widget.endDate != null)
                           Container(
-                            margin: EdgeInsets.only(top: isMobile ? 8 : 12),
-                            padding: EdgeInsets.all(isMobile ? 6 : 8),
+                            margin: EdgeInsets.only(top: ResponsiveUtils.getFluidSpacing(context, mobile: 8, tablet: 10, desktop: 12)),
+                            padding: ResponsiveUtils.getFluidPadding(
+                              context,
+                              mobile: const EdgeInsets.all(6),
+                              tablet: const EdgeInsets.all(7),
+                              desktop: const EdgeInsets.all(8),
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.blue[50],
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(
+                                ResponsiveUtils.getFluidBorderRadius(context, mobile: 6, tablet: 7, desktop: 8),
+                              ),
                               border: Border.all(color: Colors.blue[200]!),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.info_outline, color: Colors.blue[700], size: 16),
-                                const SizedBox(width: 8),
+                                Icon(
+                                  Icons.info_outline, 
+                                  color: Colors.blue[700], 
+                                  size: ResponsiveUtils.getFluidIconSize(context, mobile: 14, tablet: 15, desktop: 16),
+                                ),
+                                SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 6, tablet: 7, desktop: 8)),
                                 Flexible(
                                   child: Text(
                                     _getPeriodSummary(),
                                     style: TextStyle(
                                       color: Colors.blue[700],
-                                      fontSize: isMobile ? 11 : 12,
+                                      fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 11, tablet: 11.5, desktop: 12),
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
@@ -187,14 +207,18 @@ class _ReportFiltersWidgetState extends State<ReportFiltersWidget> {
         children: [
           Row(
             children: [
-              Icon(Icons.filter_list, color: Colors.grey[600], size: 20),
-              const SizedBox(width: 8),
-              const Text(
+              Icon(
+                Icons.filter_list, 
+                color: Colors.grey[600], 
+                size: ResponsiveUtils.getFluidIconSize(context, mobile: 18, tablet: 20, desktop: 22),
+              ),
+              SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 6, tablet: 7, desktop: 8)),
+              Text(
                 'Filtres',
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 15, tablet: 16, desktop: 17),
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF1F2937),
+                  color: const Color(0xFF1F2937),
                 ),
               ),
               const Spacer(),
@@ -203,6 +227,7 @@ class _ReportFiltersWidgetState extends State<ReportFiltersWidget> {
                 icon: Icon(
                   _isExpanded ? Icons.expand_less : Icons.expand_more,
                   color: Colors.grey[600],
+                  size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
                 ),
                 onPressed: () => setState(() => _isExpanded = !_isExpanded),
                 tooltip: _isExpanded ? 'Masquer les filtres' : 'Afficher les filtres',
@@ -212,7 +237,7 @@ class _ReportFiltersWidgetState extends State<ReportFiltersWidget> {
             ],
           ),
           if (widget.onReset != null && _isExpanded) ...[
-            const SizedBox(height: 8),
+            SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 8, tablet: 9, desktop: 10)),
             SizedBox(
               width: double.infinity,
               child: TextButton.icon(
@@ -222,8 +247,16 @@ class _ReportFiltersWidgetState extends State<ReportFiltersWidget> {
                   });
                   widget.onReset!();
                 },
-                icon: const Icon(Icons.clear, size: 16),
-                label: const Text('Effacer les filtres'),
+                icon: Icon(
+                  Icons.clear, 
+                  size: ResponsiveUtils.getFluidIconSize(context, mobile: 14, tablet: 15, desktop: 16),
+                ),
+                label: Text(
+                  'Effacer les filtres',
+                  style: TextStyle(
+                    fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 13, tablet: 14, desktop: 15),
+                  ),
+                ),
                 style: TextButton.styleFrom(
                   foregroundColor: Colors.grey[600],
                   alignment: Alignment.centerLeft,
@@ -237,14 +270,18 @@ class _ReportFiltersWidgetState extends State<ReportFiltersWidget> {
 
     return Row(
       children: [
-        Icon(Icons.filter_list, color: Colors.grey[600]),
-        const SizedBox(width: 8),
-        const Text(
+        Icon(
+          Icons.filter_list, 
+          color: Colors.grey[600], 
+          size: ResponsiveUtils.getFluidIconSize(context, mobile: 22, tablet: 23, desktop: 24),
+        ),
+        SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 10, tablet: 11, desktop: 12)),
+        Text(
           'Filtres',
           style: TextStyle(
-            fontSize: 18,
+            fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 18, tablet: 19, desktop: 20),
             fontWeight: FontWeight.bold,
-            color: Color(0xFF1F2937),
+            color: const Color(0xFF1F2937),
           ),
         ),
         const Spacer(),
@@ -253,10 +290,12 @@ class _ReportFiltersWidgetState extends State<ReportFiltersWidget> {
           icon: Icon(
             _isExpanded ? Icons.expand_less : Icons.expand_more,
             color: Colors.grey[600],
+            size: ResponsiveUtils.getFluidIconSize(context, mobile: 22, tablet: 23, desktop: 24),
           ),
           onPressed: () => setState(() => _isExpanded = !_isExpanded),
           tooltip: _isExpanded ? 'Masquer les filtres' : 'Afficher les filtres',
         ),
+        SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 8, tablet: 10, desktop: 12)),
         if (widget.onReset != null && _isExpanded)
           TextButton.icon(
             onPressed: () {
@@ -265,8 +304,16 @@ class _ReportFiltersWidgetState extends State<ReportFiltersWidget> {
               });
               widget.onReset!();
             },
-            icon: const Icon(Icons.clear, size: 16),
-            label: const Text('Reset'),
+            icon: Icon(
+              Icons.clear, 
+              size: ResponsiveUtils.getFluidIconSize(context, mobile: 16, tablet: 17, desktop: 18),
+            ),
+            label: Text(
+              'Reset',
+              style: TextStyle(
+                fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
+              ),
+            ),
             style: TextButton.styleFrom(
               foregroundColor: Colors.grey[600],
             ),
@@ -285,41 +332,94 @@ class _ReportFiltersWidgetState extends State<ReportFiltersWidget> {
               builder: (context, shopService, child) {
                 return DropdownButtonFormField<int?>(
                   value: widget.selectedShopId,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Shop',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.store),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(
+                        ResponsiveUtils.getFluidBorderRadius(context, mobile: 6, tablet: 8, desktop: 10),
+                      ),
+                    ),
+                    prefixIcon: Icon(
+                      Icons.store,
+                      size: ResponsiveUtils.getFluidIconSize(context, mobile: 18, tablet: 20, desktop: 22),
+                    ),
+                    contentPadding: ResponsiveUtils.getFluidPadding(
+                      context,
+                      mobile: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      tablet: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      desktop: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    labelStyle: TextStyle(
+                      fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
+                    ),
                   ),
                   items: [
-                    const DropdownMenuItem<int?>(
+                    DropdownMenuItem<int?>(
                       value: null,
-                      child: Text('Tous les shops'),
+                      child: Text(
+                        'Tous les shops',
+                        style: TextStyle(
+                          color: Colors.black87,
+                          fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
+                        ),
+                      ),
                     ),
                     ...shopService.shops.map((shop) => DropdownMenuItem<int?>(
                       value: shop.id,
-                      child: Text(shop.designation),
+                      child: Text(
+                        shop.designation,
+                        style: TextStyle(
+                          color: Colors.black87,
+                          fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
+                        ),
+                      ),
                     )),
                   ],
                   onChanged: widget.onShopChanged,
+                  dropdownColor: Colors.white,
+                  style: TextStyle(
+                    color: Colors.black87,
+                    fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
+                  ),
                 );
               },
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 10, tablet: 12, desktop: 12)),
           ],
           
           // Sélection de période
           DropdownButtonFormField<String>(
             value: _selectedPeriod,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Période',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.date_range),
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(
+                  ResponsiveUtils.getFluidBorderRadius(context, mobile: 6, tablet: 8, desktop: 10),
+                ),
+              ),
+              prefixIcon: Icon(
+                Icons.date_range,
+                size: ResponsiveUtils.getFluidIconSize(context, mobile: 18, tablet: 20, desktop: 22),
+              ),
+              contentPadding: ResponsiveUtils.getFluidPadding(
+                context,
+                mobile: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                tablet: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                desktop: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+              labelStyle: TextStyle(
+                fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
+              ),
             ),
             items: _periodOptions.entries.map((entry) => DropdownMenuItem<String>(
               value: entry.key,
-              child: Text(entry.value),
+              child: Text(
+                entry.value,
+                style: TextStyle(
+                  color: Colors.black87,
+                  fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
+                ),
+              ),
             )).toList(),
             onChanged: (value) {
               setState(() {
@@ -327,22 +427,42 @@ class _ReportFiltersWidgetState extends State<ReportFiltersWidget> {
               });
               _applyPeriodFilter(value!);
             },
+            dropdownColor: Colors.white,
+            style: TextStyle(
+              color: Colors.black87,
+              fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
+            ),
           ),
           
           // Dates personnalisées (si période personnalisée)
           if (_selectedPeriod == 'custom') ...[
-            const SizedBox(height: 12),
+            SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 10, tablet: 12, desktop: 12)),
             Row(
               children: [
                 Expanded(
                   child: InkWell(
                     onTap: () => _selectStartDate(context),
                     child: InputDecorator(
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Début',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.calendar_today),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(
+                            ResponsiveUtils.getFluidBorderRadius(context, mobile: 6, tablet: 8, desktop: 10),
+                          ),
+                        ),
+                        prefixIcon: Icon(
+                          Icons.calendar_today,
+                          size: ResponsiveUtils.getFluidIconSize(context, mobile: 16, tablet: 18, desktop: 20),
+                        ),
+                        contentPadding: ResponsiveUtils.getFluidPadding(
+                          context,
+                          mobile: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          tablet: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          desktop: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                        labelStyle: TextStyle(
+                          fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 13, tablet: 14, desktop: 15),
+                        ),
                       ),
                       child: Text(
                         widget.startDate != null
@@ -350,22 +470,37 @@ class _ReportFiltersWidgetState extends State<ReportFiltersWidget> {
                             : 'Sélectionner',
                         style: TextStyle(
                           color: widget.startDate != null ? Colors.black : Colors.grey[600],
-                          fontSize: 14,
+                          fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
                         ),
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 10, tablet: 12, desktop: 12)),
                 Expanded(
                   child: InkWell(
                     onTap: () => _selectEndDate(context),
                     child: InputDecorator(
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Fin',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.calendar_today),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(
+                            ResponsiveUtils.getFluidBorderRadius(context, mobile: 6, tablet: 8, desktop: 10),
+                          ),
+                        ),
+                        prefixIcon: Icon(
+                          Icons.calendar_today,
+                          size: ResponsiveUtils.getFluidIconSize(context, mobile: 16, tablet: 18, desktop: 20),
+                        ),
+                        contentPadding: ResponsiveUtils.getFluidPadding(
+                          context,
+                          mobile: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          tablet: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          desktop: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                        labelStyle: TextStyle(
+                          fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 13, tablet: 14, desktop: 15),
+                        ),
                       ),
                       child: Text(
                         widget.endDate != null
@@ -373,7 +508,7 @@ class _ReportFiltersWidgetState extends State<ReportFiltersWidget> {
                             : 'Sélectionner',
                         style: TextStyle(
                           color: widget.endDate != null ? Colors.black : Colors.grey[600],
-                          fontSize: 14,
+                          fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
                         ),
                       ),
                     ),
@@ -388,37 +523,69 @@ class _ReportFiltersWidgetState extends State<ReportFiltersWidget> {
 
     // Layout desktop/tablet avec Wrap adaptatif
     return Wrap(
-      spacing: isTablet ? 12 : 16,
-      runSpacing: isTablet ? 12 : 16,
+      spacing: ResponsiveUtils.getFluidSpacing(context, mobile: 10, tablet: 12, desktop: 16),
+      runSpacing: ResponsiveUtils.getFluidSpacing(context, mobile: 10, tablet: 12, desktop: 16),
       children: [
         // Sélection de shop (si activée)
         if (widget.showShopFilter)
           ConstrainedBox(
             constraints: BoxConstraints(
-              minWidth: isTablet ? 200 : 250,
-              maxWidth: isTablet ? 220 : 280,
+              minWidth: context.fluidWidth(mobile: 180, tablet: 200, desktop: 250),
+              maxWidth: context.fluidWidth(mobile: 200, tablet: 220, desktop: 280),
             ),
             child: Consumer<ShopService>(
               builder: (context, shopService, child) {
                 return DropdownButtonFormField<int?>(
                   value: widget.selectedShopId,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Shop',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.store),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(
+                        ResponsiveUtils.getFluidBorderRadius(context, mobile: 6, tablet: 8, desktop: 10),
+                      ),
+                    ),
+                    prefixIcon: Icon(
+                      Icons.store,
+                      size: ResponsiveUtils.getFluidIconSize(context, mobile: 18, tablet: 20, desktop: 22),
+                    ),
+                    contentPadding: ResponsiveUtils.getFluidPadding(
+                      context,
+                      mobile: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      tablet: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      desktop: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    ),
+                    labelStyle: TextStyle(
+                      fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 15, tablet: 16, desktop: 17),
+                    ),
                   ),
                   items: [
-                    const DropdownMenuItem<int?>(
+                    DropdownMenuItem<int?>(
                       value: null,
-                      child: Text('Tous les shops'),
+                      child: Text(
+                        'Tous les shops',
+                        style: TextStyle(
+                          color: Colors.black87,
+                          fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 15, tablet: 16, desktop: 17),
+                        ),
+                      ),
                     ),
                     ...shopService.shops.map((shop) => DropdownMenuItem<int?>(
                       value: shop.id,
-                      child: Text(shop.designation),
+                      child: Text(
+                        shop.designation,
+                        style: TextStyle(
+                          color: Colors.black87,
+                          fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 15, tablet: 16, desktop: 17),
+                        ),
+                      ),
                     )),
                   ],
                   onChanged: widget.onShopChanged,
+                  dropdownColor: Colors.white,
+                  style: TextStyle(
+                    color: Colors.black87,
+                    fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 15, tablet: 16, desktop: 17),
+                  ),
                 );
               },
             ),
@@ -427,20 +594,41 @@ class _ReportFiltersWidgetState extends State<ReportFiltersWidget> {
         // Sélection de période
         ConstrainedBox(
           constraints: BoxConstraints(
-            minWidth: isTablet ? 160 : 200,
-            maxWidth: isTablet ? 180 : 220,
+            minWidth: context.fluidWidth(mobile: 140, tablet: 160, desktop: 200),
+            maxWidth: context.fluidWidth(mobile: 160, tablet: 180, desktop: 220),
           ),
           child: DropdownButtonFormField<String>(
             value: _selectedPeriod,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Période',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.date_range),
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(
+                  ResponsiveUtils.getFluidBorderRadius(context, mobile: 6, tablet: 8, desktop: 10),
+                ),
+              ),
+              prefixIcon: Icon(
+                Icons.date_range,
+                size: ResponsiveUtils.getFluidIconSize(context, mobile: 18, tablet: 20, desktop: 22),
+              ),
+              contentPadding: ResponsiveUtils.getFluidPadding(
+                context,
+                mobile: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                tablet: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                desktop: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+              labelStyle: TextStyle(
+                fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 15, tablet: 16, desktop: 17),
+              ),
             ),
             items: _periodOptions.entries.map((entry) => DropdownMenuItem<String>(
               value: entry.key,
-              child: Text(entry.value),
+              child: Text(
+                entry.value,
+                style: TextStyle(
+                  color: Colors.black87,
+                  fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 15, tablet: 16, desktop: 17),
+                ),
+              ),
             )).toList(),
             onChanged: (value) {
               setState(() {
@@ -448,6 +636,11 @@ class _ReportFiltersWidgetState extends State<ReportFiltersWidget> {
               });
               _applyPeriodFilter(value!);
             },
+            dropdownColor: Colors.white,
+            style: TextStyle(
+              color: Colors.black87,
+              fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 15, tablet: 16, desktop: 17),
+            ),
           ),
         ),
         
@@ -455,17 +648,32 @@ class _ReportFiltersWidgetState extends State<ReportFiltersWidget> {
         if (_selectedPeriod == 'custom')
           ConstrainedBox(
             constraints: BoxConstraints(
-              minWidth: isTablet ? 140 : 180,
-              maxWidth: isTablet ? 160 : 200,
+              minWidth: context.fluidWidth( mobile: 120, tablet: 140, desktop: 180),
+              maxWidth: context.fluidWidth( mobile: 140, tablet: 160, desktop: 200),
             ),
             child: InkWell(
               onTap: () => _selectStartDate(context),
               child: InputDecorator(
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Date de début',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.calendar_today),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(
+                      ResponsiveUtils.getFluidBorderRadius(context, mobile: 6, tablet: 8, desktop: 10),
+                    ),
+                  ),
+                  prefixIcon: Icon(
+                    Icons.calendar_today,
+                    size: ResponsiveUtils.getFluidIconSize(context, mobile: 18, tablet: 20, desktop: 22),
+                  ),
+                  contentPadding: ResponsiveUtils.getFluidPadding(
+                    context,
+                    mobile: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    tablet: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    desktop: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  ),
+                  labelStyle: TextStyle(
+                    fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
+                  ),
                 ),
                 child: Text(
                   widget.startDate != null
@@ -473,6 +681,7 @@ class _ReportFiltersWidgetState extends State<ReportFiltersWidget> {
                       : 'Sélectionner',
                   style: TextStyle(
                     color: widget.startDate != null ? Colors.black : Colors.grey[600],
+                    fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 15, tablet: 16, desktop: 17),
                   ),
                 ),
               ),
@@ -483,17 +692,32 @@ class _ReportFiltersWidgetState extends State<ReportFiltersWidget> {
         if (_selectedPeriod == 'custom')
           ConstrainedBox(
             constraints: BoxConstraints(
-              minWidth: isTablet ? 140 : 180,
-              maxWidth: isTablet ? 160 : 200,
+              minWidth: context.fluidWidth( mobile: 120, tablet: 140, desktop: 180),
+              maxWidth: context.fluidWidth( mobile: 140, tablet: 160, desktop: 200),
             ),
             child: InkWell(
               onTap: () => _selectEndDate(context),
               child: InputDecorator(
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Date de fin',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.calendar_today),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(
+                      ResponsiveUtils.getFluidBorderRadius(context, mobile: 6, tablet: 8, desktop: 10),
+                    ),
+                  ),
+                  prefixIcon: Icon(
+                    Icons.calendar_today,
+                    size: ResponsiveUtils.getFluidIconSize(context, mobile: 18, tablet: 20, desktop: 22),
+                  ),
+                  contentPadding: ResponsiveUtils.getFluidPadding(
+                    context,
+                    mobile: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    tablet: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    desktop: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  ),
+                  labelStyle: TextStyle(
+                    fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
+                  ),
                 ),
                 child: Text(
                   widget.endDate != null
@@ -501,6 +725,7 @@ class _ReportFiltersWidgetState extends State<ReportFiltersWidget> {
                       : 'Sélectionner',
                   style: TextStyle(
                     color: widget.endDate != null ? Colors.black : Colors.grey[600],
+                    fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 15, tablet: 16, desktop: 17),
                   ),
                 ),
               ),

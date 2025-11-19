@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 import '../config/app_config.dart';
 import '../services/auth_service.dart';
 import '../services/sync_service.dart';
+import '../services/pdf_config_service.dart';
 import 'journal_caisse_widget.dart';
+import 'document_header_widget.dart';
 
 class ConfigReportsWidget extends StatefulWidget {
   const ConfigReportsWidget({super.key});
@@ -17,13 +19,23 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
   final _currentPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  
+  // PDF Configuration controllers
+  final _companyNameController = TextEditingController();
+  final _companyAddressController = TextEditingController();
+  final _companyPhoneController = TextEditingController();
+  final _footerMessageController = TextEditingController();
+  
   bool _isLoadingApi = true;
   bool _isChangingPassword = false;
+  bool _isLoadingPdfConfig = true;
+  bool _isSavingPdfConfig = false;
 
   @override
   void initState() {
     super.initState();
     _loadApiUrl();
+    _loadPdfConfig();
   }
 
   Future<void> _loadApiUrl() async {
@@ -54,6 +66,46 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
       await AppConfig.resetToDefaultApiUrl();
       await _loadApiUrl();
       _showSnackBar('✅ URL réinitialisée', Colors.green);
+    } catch (e) {
+      _showSnackBar('❌ Erreur: $e', Colors.red);
+    }
+  }
+
+  Future<void> _loadPdfConfig() async {
+    setState(() => _isLoadingPdfConfig = true);
+    try {
+      final config = await PdfConfigService.getAllConfig();
+      _companyNameController.text = config['companyName'] ?? '';
+      _companyAddressController.text = config['companyAddress'] ?? '';
+      _companyPhoneController.text = config['companyPhone'] ?? '';
+      _footerMessageController.text = config['footerMessage'] ?? '';
+    } finally {
+      setState(() => _isLoadingPdfConfig = false);
+    }
+  }
+
+  Future<void> _savePdfConfig() async {
+    setState(() => _isSavingPdfConfig = true);
+    try {
+      await PdfConfigService.saveAllConfig(
+        companyName: _companyNameController.text.trim(),
+        companyAddress: _companyAddressController.text.trim(),
+        companyPhone: _companyPhoneController.text.trim(),
+        footerMessage: _footerMessageController.text.trim(),
+      );
+      _showSnackBar('✅ Configuration PDF sauvegardée', Colors.green);
+    } catch (e) {
+      _showSnackBar('❌ Erreur: $e', Colors.red);
+    } finally {
+      setState(() => _isSavingPdfConfig = false);
+    }
+  }
+
+  Future<void> _resetPdfConfig() async {
+    try {
+      await PdfConfigService.resetToDefaults();
+      await _loadPdfConfig();
+      _showSnackBar('✅ Configuration réinitialisée', Colors.green);
     } catch (e) {
       _showSnackBar('❌ Erreur: $e', Colors.red);
     }
@@ -164,6 +216,10 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
     _currentPasswordController.dispose();
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
+    _companyNameController.dispose();
+    _companyAddressController.dispose();
+    _companyPhoneController.dispose();
+    _footerMessageController.dispose();
     super.dispose();
   }
 
@@ -184,7 +240,11 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
             ),
             child: Column(
               children: [
+                _buildDocumentHeaderSection(),
+                const SizedBox(height: 16),
                 _buildSyncSection(),
+                const SizedBox(height: 16),
+                _buildPdfConfigSection(),
                 const SizedBox(height: 16),
                 _buildPasswordSection(),
                 const SizedBox(height: 16),
@@ -205,7 +265,11 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
                 Expanded(
                   child: Column(
                     children: [
+                      _buildDocumentHeaderSection(),
+                      const SizedBox(height: 20),
                       _buildSyncSection(),
+                      const SizedBox(height: 20),
+                      _buildPdfConfigSection(),
                       const SizedBox(height: 20),
                       _buildPasswordSection(),
                       const SizedBox(height: 20),
@@ -229,7 +293,11 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
                   child: SingleChildScrollView(
                     child: Column(
                       children: [
+                        _buildDocumentHeaderSection(),
+                        const SizedBox(height: 20),
                         _buildSyncSection(),
+                        const SizedBox(height: 20),
+                        _buildPdfConfigSection(),
                         const SizedBox(height: 20),
                         _buildPasswordSection(),
                         const SizedBox(height: 20),
@@ -255,6 +323,13 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
           );
         }
       },
+    );
+  }
+
+  Widget _buildDocumentHeaderSection() {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 1200),
+      child: const DocumentHeaderManagementWidget(),
     );
   }
 
@@ -383,6 +458,209 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
                           Expanded(
                             child: OutlinedButton.icon(
                               onPressed: _resetApiUrl,
+                              icon: const Icon(Icons.refresh, size: 18),
+                              label: const Text('Réinitialiser'),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+                  },
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPdfConfigSection() {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 600),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              spreadRadius: 2,
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.picture_as_pdf, color: Color(0xFFDC2626), size: 24),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Configuration En-têtes PDF',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFDC2626),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              
+              if (_isLoadingPdfConfig)
+                const Center(child: CircularProgressIndicator())
+              else ...[
+                TextFormField(
+                  controller: _companyNameController,
+                  decoration: InputDecoration(
+                    labelText: 'Nom de l\'entreprise',
+                    hintText: 'UCASH',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(Icons.business),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                
+                TextFormField(
+                  controller: _companyAddressController,
+                  decoration: InputDecoration(
+                    labelText: 'Adresse',
+                    hintText: 'Adresse complète',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(Icons.location_on),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 12),
+                
+                TextFormField(
+                  controller: _companyPhoneController,
+                  decoration: InputDecoration(
+                    labelText: 'Téléphone',
+                    hintText: '+243 XXX XXX XXX',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(Icons.phone),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                
+                TextFormField(
+                  controller: _footerMessageController,
+                  decoration: InputDecoration(
+                    labelText: 'Message de pied de page',
+                    hintText: 'Merci de votre confiance',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(Icons.message),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (constraints.maxWidth < 400) {
+                      // Mobile: Boutons en colonne
+                      return Column(
+                        children: [
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: _isSavingPdfConfig ? null : _savePdfConfig,
+                              icon: _isSavingPdfConfig
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                      ),
+                                    )
+                                  : const Icon(Icons.save, size: 18),
+                              label: Text(_isSavingPdfConfig ? 'Sauvegarde...' : 'Sauvegarder'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFDC2626),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: _isSavingPdfConfig ? null : _resetPdfConfig,
+                              icon: const Icon(Icons.refresh, size: 18),
+                              label: const Text('Réinitialiser'),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    } else {
+                      // Desktop/Tablette: Boutons en rangée
+                      return Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: _isSavingPdfConfig ? null : _savePdfConfig,
+                              icon: _isSavingPdfConfig
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                      ),
+                                    )
+                                  : const Icon(Icons.save, size: 18),
+                              label: Text(_isSavingPdfConfig ? 'Sauvegarde...' : 'Sauvegarder'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFDC2626),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _isSavingPdfConfig ? null : _resetPdfConfig,
                               icon: const Icon(Icons.refresh, size: 18),
                               label: const Text('Réinitialiser'),
                               style: OutlinedButton.styleFrom(

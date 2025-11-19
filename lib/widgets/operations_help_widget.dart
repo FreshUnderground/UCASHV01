@@ -131,7 +131,7 @@ class OperationsHelpWidget extends StatelessWidget {
                   const SizedBox(height: 8),
                   const Text(
                     '• L\'application démarre sans données par défaut\n'
-                    '• Vous devez d\'abord créer des clients dans l\'onglet "Clients"\n'
+                    '• Vous devez d\'abord créer des partenaires dans l\'onglet "Partenaires"\n'
                     '• Les dépôts/retraits ne fonctionnent qu\'avec des clients existants\n'
                     '• Toutes les opérations sont réelles et mettent à jour les soldes\n'
                     '• Les commissions sont calculées selon les taux du marché congolais',

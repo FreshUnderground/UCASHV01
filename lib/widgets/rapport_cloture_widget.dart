@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import '../models/rapport_cloture_model.dart';
@@ -77,10 +76,7 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
       }
 
       // Générer le PDF avec le nouveau service
-      final pdf = await generateRapportCloturePdf(
-        rapport: _rapport!,
-        shop: shop,
-      );
+      final pdf = await genererRapportCloturePDF(_rapport!, shop);
 
       // Sauvegarder ou partager le PDF
       final pdfBytes = await pdf.save();
@@ -117,10 +113,7 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
       }
 
       // Générer le PDF avec le nouveau service
-      final pdf = await generateRapportCloturePdf(
-        rapport: _rapport!,
-        shop: shop,
-      );
+      final pdf = await genererRapportCloturePDF(_rapport!, shop);
 
       // Prévisualiser le PDF
       await Printing.layoutPdf(
@@ -148,17 +141,76 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
         throw Exception('Shop non trouvé');
       }
 
-      // Générer le PDF avec le nouveau service
-      final pdf = await generateRapportCloturePdf(
-        rapport: _rapport!,
-        shop: shop,
+      // Confirmation avant impression
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.print, color: Color(0xFFDC2626)),
+              SizedBox(width: 12),
+              Text('Confirmer l\'impression'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Rapport de clôture du ${_selectedDate.day.toString().padLeft(2, '0')}/${_selectedDate.month.toString().padLeft(2, '0')}/${_selectedDate.year}'),
+              const SizedBox(height: 8),
+              Text('Shop: ${shop.designation}'),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: const Text(
+                  '💡 Conseil: Utilisez "Prévisualiser" pour voir le contenu avant d\'imprimer',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Annuler'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.of(context).pop(true),
+              icon: const Icon(Icons.print),
+              label: const Text('Imprimer'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626),
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
       );
+      
+      if (confirmed != true) return;
+
+      // Générer le PDF avec le nouveau service
+      final pdf = await genererRapportCloturePDF(_rapport!, shop);
 
       // Imprimer directement
       await Printing.layoutPdf(
         onLayout: (PdfPageFormat format) async => pdf.save(),
         name: 'rapportcloture_${shop.designation}_${DateFormat('yyyy-MM-dd').format(_selectedDate)}.pdf',
       );
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Impression lancée avec succès'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -406,9 +458,9 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
             const Divider(),
             const SizedBox(height: 12),
             _buildCapitalBreakdown('Cash Disponible', rapport.cashDisponibleTotal, Colors.green),
-            _buildCapitalBreakdown('+ Clients Nous Doivent', rapport.totalClientsNousDoivent, Colors.red),
+            _buildCapitalBreakdown('+ Partenaires Servis', rapport.totalClientsNousDoivent, Colors.red),
             _buildCapitalBreakdown('+ Shops Nous Doivent', rapport.totalShopsNousDoivent, Colors.orange),
-            _buildCapitalBreakdown('- Clients Nous Devons', -rapport.totalClientsNousDevons, Colors.green),
+            _buildCapitalBreakdown('- Dépôts Partenaires', -rapport.totalClientsNousDevons, Colors.green),
             _buildCapitalBreakdown('- Shops Nous Devons', -rapport.totalShopsNousDevons, Colors.purple),
             const SizedBox(height: 8),
             const Divider(thickness: 2),
@@ -482,8 +534,7 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
           '2️⃣ Flots',
           [
             _buildLine('Reçus', rapport.flotRecu, color: Colors.green),
-            _buildLine('En cours', rapport.flotEnCours, color: Colors.orange),
-            _buildLine('Servis', rapport.flotServi, color: Colors.red, prefix: '-'),
+            _buildLine('Envoyés', rapport.flotEnvoye, color: Colors.red, prefix: '-'),
           ],
           Colors.purple,
         ),
@@ -503,20 +554,13 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
   Widget _buildRightColumn(RapportClotureModel rapport) {
     return Column(
       children: [
+        // Masqué: Opérations Clients
+        // Partenaires Servis (anciennement Clients Nous Doivent)
         _buildSection(
-          '4️⃣ Opérations Clients',
-          [
-            _buildLine('Dépôts', rapport.depotsClients, color: Colors.green),
-            _buildLine('Retraits', rapport.retraitsClients, color: Colors.red, prefix: '-'),
-          ],
-          Colors.orange,
-        ),
-        const SizedBox(height: 16),
-        _buildSection(
-          '5️⃣ Clients Nous Doivent',
+          '5️⃣ Partenaires Servis',
           [
             Text(
-              '${rapport.clientsNousDoivent.length} client(s)',
+              '${rapport.clientsNousDoivent.length} partenaire(s)',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
@@ -536,16 +580,17 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
             if (rapport.clientsNousDoivent.length > 5)
               Text('... et ${rapport.clientsNousDoivent.length - 5} autre(s)'),
             const Divider(),
-            _buildLine('TOTAL Dettes', rapport.totalClientsNousDoivent, color: Colors.red),
+            _buildLine('TOTAL', rapport.totalClientsNousDoivent, color: Colors.red),
           ],
           Colors.red,
         ),
         const SizedBox(height: 16),
+        // Dépôts Partenaires (anciennement Clients Nous Devons)
         _buildSection(
-          '6️⃣ Clients Nous Devons',
+          '6️⃣ Dépôts Partenaires',
           [
             Text(
-              '${rapport.clientsNousDevons.length} client(s)',
+              '${rapport.clientsNousDevons.length} partenaire(s)',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
@@ -565,7 +610,7 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
             if (rapport.clientsNousDevons.length > 5)
               Text('... et ${rapport.clientsNousDevons.length - 5} autre(s)'),
             const Divider(),
-            _buildLine('TOTAL Créances', rapport.totalClientsNousDevons, color: Colors.green),
+            _buildLine('TOTAL', rapport.totalClientsNousDevons, color: Colors.green),
           ],
           Colors.green,
         ),

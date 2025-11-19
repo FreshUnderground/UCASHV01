@@ -6,6 +6,7 @@ import '../widgets/admin_stats_cards.dart';
 import '../widgets/shops_management.dart';
 import '../widgets/taux_commissions_management.dart';
 import '../widgets/agents_management_complete.dart';
+import '../widgets/admin_clients_widget.dart';
 import '../widgets/config_reports_widget.dart';
 import '../widgets/reports/admin_reports_widget.dart';
 import '../widgets/connectivity_indicator.dart';
@@ -17,6 +18,7 @@ import '../widgets/sync_status_widget.dart';
 import '../utils/responsive_utils.dart';
 import '../theme/ucash_typography.dart';
 import '../theme/ucash_containers.dart';
+import '../services/transfer_sync_service.dart';
 
 class DashboardAdminPage extends StatefulWidget {
   const DashboardAdminPage({super.key});
@@ -30,8 +32,9 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
 
   final List<String> _menuItems = [
     'Dashboard',
-    'Shops',
+    'CLIENT VIP',
     'Agents',
+    'Partenaires',
     'Taux & Commissions',
     'Rapports',
     'Synchronisation',
@@ -40,8 +43,9 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
 
   final List<IconData> _menuIcons = [
     Icons.dashboard,
-    Icons.store,
     Icons.people,
+    Icons.people,
+    Icons.account_circle,
     Icons.currency_exchange,
     Icons.analytics,
     Icons.sync,
@@ -52,6 +56,44 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
   void initState() {
     super.initState();
     // SyncService is now initialized in main.dart, so we don't need to initialize it here
+    
+    // Trigger synchronization of operation data when dashboard opens
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _triggerOperationSync();
+    });
+  }
+  
+  // Function to trigger synchronization of operation data
+  void _triggerOperationSync() async {
+    try {
+      final transferSyncService = TransferSyncService();
+      debugPrint('🔄 Déclenchement de la synchronisation des opérations...');
+      
+      // Force a refresh from API to get latest operation data
+      await transferSyncService.forceRefreshFromAPI();
+      
+      debugPrint('✅ Synchronisation des opérations terminée');
+      
+      // Show a snackbar to inform user
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Données des opérations synchronisées'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('❌ Erreur lors de la synchronisation des opérations: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Erreur lors de la synchronisation des opérations'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -101,30 +143,6 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
     return AppBar(
       title: Row(
         children: [
-          // Logo/Icône UCASH
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(
-              Icons.admin_panel_settings,
-              color: Colors.white,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 12),
-          // Titre
-          Text(
-            isMobile ? 'UCASH Admin' : 'UCASH - Administration',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-              fontSize: isMobile ? 18 : 20,
-              letterSpacing: 0.5,
-            ),
-          ),
         ],
       ),
       flexibleSpace: Container(
@@ -382,12 +400,14 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
       case 2:
         return _buildAgentsContent();
       case 3:
-        return _buildTauxCommissionsContent();
+        return _buildClientsContent();
       case 4:
-        return _buildReportsContent();
+        return _buildTauxCommissionsContent();
       case 5:
-        return _buildSynchronisationContent();
+        return _buildReportsContent();
       case 6:
+        return _buildSynchronisationContent();
+      case 7:
         return _buildConfigurationContent();
       default:
         return _buildDashboardContent();
@@ -535,7 +555,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
   }
 
   Widget _buildShopsContent() {
-    return const ShopsManagement();
+    return const AdminClientsWidget();
   }
 
   Widget _buildAgentsContent() {
@@ -562,6 +582,10 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
         ],
       ),
     );
+  }
+
+  Widget _buildClientsContent() {
+    return const AdminClientsWidget();
   }
 
   Widget _buildTauxCommissionsContent() {
@@ -770,7 +794,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
     return LayoutBuilder(
       builder: (context, constraints) {
         int columns = isMobile ? 2 : (isTablet ? 3 : 4);
-        double childAspectRatio = isMobile ? 1.2 : (isTablet ? 1.1 : 1.0);
+        double childAspectRatio = isMobile ? 1.3 : (isTablet ? 1.2 : 1.1);
         
         return GridView.count(
           shrinkWrap: true,
@@ -781,28 +805,52 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
           childAspectRatio: childAspectRatio,
           children: [
             _buildFluidActionCard(
-              title: 'Nouveau Shop',
-              icon: Icons.add_business,
-              color: const Color(0xFF059669),
-              onTap: () => _showCreateShopDialog(),
+              title: 'Dashboard',
+              icon: Icons.dashboard,
+              color: const Color(0xFF3B82F6),
+              onTap: () => setState(() => _selectedIndex = 0),  // Index 0 = Dashboard
             ),
             _buildFluidActionCard(
-              title: 'Nouvel Agent',
-              icon: Icons.person_add,
+              title: 'CLIENT VIP',
+              icon: Icons.people,
+              color: const Color(0xFF059669),
+              onTap: () => setState(() => _selectedIndex = 1),  // Index 1 = Gestion Clients
+            ),
+            _buildFluidActionCard(
+              title: 'Agents',
+              icon: Icons.people,
               color: const Color(0xFF7C3AED),
-              onTap: () => _showCreateAgentDialog(),
+              onTap: () => setState(() => _selectedIndex = 2),  // Index 2 = Agents
+            ),
+            _buildFluidActionCard(
+              title: 'Partenaires',
+              icon: Icons.account_circle,
+              color: const Color(0xFFF59E0B),
+              onTap: () => setState(() => _selectedIndex = 3),  // Index 3 = Partenaires
+            ),
+            _buildFluidActionCard(
+              title: 'Taux & Commissions',
+              icon: Icons.currency_exchange,
+              color: const Color(0xFF10B981),
+              onTap: () => setState(() => _selectedIndex = 4),  // Index 4 = Taux
             ),
             _buildFluidActionCard(
               title: 'Rapports',
               icon: Icons.analytics,
               color: const Color(0xFFDC2626),
-              onTap: () => setState(() => _selectedIndex = 4),
+              onTap: () => setState(() => _selectedIndex = 5),  // Index 5 = Rapports
+            ),
+            _buildFluidActionCard(
+              title: 'Synchronisation',
+              icon: Icons.sync,
+              color: const Color(0xFF8B5CF6),
+              onTap: () => setState(() => _selectedIndex = 6),  // Index 6 = Synchronisation
             ),
             _buildFluidActionCard(
               title: 'Configuration',
               icon: Icons.settings,
               color: const Color(0xFF0891B2),
-              onTap: () => setState(() => _selectedIndex = 5),
+              onTap: () => setState(() => _selectedIndex = 7),  // Index 7 = Configuration
             ),
           ],
         );
@@ -829,6 +877,33 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
     );
   }
 
+  // Mapper l'index desktop (8 items) vers l'index mobile (5 items)
+  int _getMobileNavIndex(int desktopIndex) {
+    // Desktop: 0=Dashboard, 1=Gestion Clients, 2=Agents, 3=Partenaires, 4=Taux, 5=Rapports, 6=Sync, 7=Config
+    // Mobile:  0=Dashboard, 1=Clients, 2=Agents, 3=Taux, 4=Rapports
+    if (desktopIndex == 0) return 0; // Dashboard
+    if (desktopIndex == 1) return 1; // Gestion Clients → Clients
+    if (desktopIndex == 2) return 2; // Agents
+    if (desktopIndex == 3) return 2; // Partenaires → Agents
+    if (desktopIndex == 4) return 3; // Taux → Taux
+    if (desktopIndex >= 5) return 4; // Rapports/Sync/Config → Rapports
+    return 0;
+  }
+
+  // Mapper l'index mobile vers l'index desktop
+  int _getDesktopIndexFromMobile(int mobileIndex) {
+    // Mobile:  0=Dashboard, 1=Clients, 2=Agents, 3=Taux, 4=Rapports
+    // Desktop: 0=Dashboard, 1=Gestion Clients, 2=Agents, 3=Partenaires, 4=Taux, 5=Rapports, 6=Sync, 7=Config
+    switch (mobileIndex) {
+      case 0: return 0; // Dashboard
+      case 1: return 1; // Gestion Clients
+      case 2: return 2; // Agents
+      case 3: return 4; // Taux
+      case 4: return 5; // Rapports
+      default: return 0;
+    }
+  }
+
   Widget _buildBottomNavigation() {
     return Container(
       decoration: BoxDecoration(
@@ -843,8 +918,11 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
         ],
       ),
       child: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) => setState(() => _selectedIndex = index),
+        currentIndex: _getMobileNavIndex(_selectedIndex),
+        onTap: (mobileIndex) {
+          final desktopIndex = _getDesktopIndexFromMobile(mobileIndex);
+          setState(() => _selectedIndex = desktopIndex);
+        },
         backgroundColor: Colors.white,
         selectedItemColor: const Color(0xFFDC2626),
         unselectedItemColor: Colors.grey,
@@ -859,18 +937,18 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
           ),
           BottomNavigationBarItem(
             icon: Icon(_menuIcons[1]),
-            label: 'Shops',
+            label: 'Clients',
           ),
           BottomNavigationBarItem(
             icon: Icon(_menuIcons[2]),
             label: 'Agents',
           ),
           BottomNavigationBarItem(
-            icon: Icon(_menuIcons[3]),
+            icon: Icon(_menuIcons[4]),
             label: 'Taux',
           ),
           BottomNavigationBarItem(
-            icon: Icon(_menuIcons[4]),
+            icon: Icon(_menuIcons[5]),
             label: 'Rapports',
           ),
         ],

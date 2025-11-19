@@ -43,6 +43,9 @@ class OperationModel {
   final int agentId;
   final String? agentUsername;
   
+  // Code d'opération unique
+  final String? codeOps;
+  
   // Détails opération
   final String? destinataire;
   final String? telephoneDestinataire;
@@ -81,6 +84,9 @@ class OperationModel {
     // Agent
     required this.agentId,
     this.agentUsername,
+    
+    // Code d'opération
+    this.codeOps,
     
     // Détails
     this.destinataire,
@@ -122,6 +128,7 @@ class OperationModel {
       // Agent
       agentId: json['agent_id'],
       agentUsername: json['agent_username'],
+      codeOps: json['code_ops'] ?? _generateCodeOps(json['id']),
       
       // Détails
       destinataire: json['destinataire'],
@@ -208,6 +215,21 @@ class OperationModel {
     return ModePaiement.cash;
   }
   
+  /// Génère un code d'opération unique
+  static String _generateCodeOps(dynamic id) {
+    // Si l'ID est disponible, l'utiliser pour générer le code
+    if (id != null) {
+      final now = DateTime.now();
+      final timestamp = now.millisecondsSinceEpoch;
+      return 'TRANSID-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}${id}${timestamp.toString().substring(timestamp.toString().length - 4)}';
+    }
+    
+    // Sinon, générer un code aléatoire
+    final now = DateTime.now();
+    final random = (DateTime.now().millisecondsSinceEpoch % 10000).toString().padLeft(4, '0');
+    return 'TRANSID-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}${random}';
+  }
+  
   /// Parse OperationStatus depuis String (MySQL) ou int (local)
   static OperationStatus _parseOperationStatus(dynamic value) {
     if (value == null) return OperationStatus.terminee;
@@ -261,6 +283,7 @@ class OperationModel {
       // Agent
       'agent_id': agentId,
       'agent_username': agentUsername,
+      'code_ops': codeOps,
       
       // Détails
       'destinataire': destinataire,
@@ -318,7 +341,7 @@ class OperationModel {
       case ModePaiement.airtelMoney:
         return 'Airtel Money';
       case ModePaiement.mPesa:
-        return 'M-Pesa';
+        return 'Vodacash';
       case ModePaiement.orangeMoney:
         return 'Orange Money';
     }
@@ -345,6 +368,7 @@ class OperationModel {
     // Agent
     int? agentId,
     String? agentUsername,
+    String? codeOps,
     
     // Détails
     String? destinataire,
@@ -384,6 +408,7 @@ class OperationModel {
       // Agent
       agentId: agentId ?? this.agentId,
       agentUsername: agentUsername ?? this.agentUsername,
+      codeOps: codeOps ?? this.codeOps,
       
       // Détails
       destinataire: destinataire ?? this.destinataire,

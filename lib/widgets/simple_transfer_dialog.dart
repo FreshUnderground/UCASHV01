@@ -10,7 +10,7 @@ import '../services/auth_service.dart';
 import '../services/shop_service.dart';
 import '../services/rates_service.dart';
 import '../utils/responsive_dialog_utils.dart';
-import 'print_receipt_dialog.dart';
+import '../utils/auto_print_helper.dart';
 
 class SimpleTransferDialog extends StatefulWidget {
   const SimpleTransferDialog({super.key});
@@ -23,6 +23,8 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
   final _formKey = GlobalKey<FormState>();
   final _montantController = TextEditingController();
   final _destinataireController = TextEditingController();
+  final _referenceController = TextEditingController();
+  final _expediteurController = TextEditingController(); // Add expediteur controller
   
   XFile? _selectedImage;
   Uint8List? _imageBytes;
@@ -44,6 +46,8 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
     _montantController.removeListener(_calculateCommission);
     _montantController.dispose();
     _destinataireController.dispose();
+    _referenceController.dispose();
+    _expediteurController.dispose(); // Dispose expediteur controller
     super.dispose();
   }
   
@@ -111,8 +115,8 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
                   Expanded(
                     child: Text(
                       isMobile
-                          ? 'Ajoutez une capture, montant et destinataire.'
-                          : 'Pour effectuer un transfert, vous avez besoin de :\n• Une capture d\'écran de la preuve de paiement\n• Le montant exact\n• Le nom du destinataire',
+                          ? 'Ajoutez une capture (optionnelle), montant, destinataire, expéditeur et référence.'
+                          : 'Pour effectuer un transfert, vous avez besoin de :\n• Une capture d\'écran de la preuve de paiement (optionnelle)\n• Le montant exact\n• Le nom du destinataire\n• Le nom de l\'expéditeur (optionnel)\n• La référence du transfert',
                       style: TextStyle(
                         color: Colors.blue,
                         fontSize: isMobile ? 13 : 14,
@@ -124,9 +128,9 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
             ),
             SizedBox(height: fieldSpacing),
             
-            // 1. Capture d'écran
+            // 1. Capture d'écran (optionnelle)
             Text(
-              '1. Capture d\'écran de la preuve *',
+              '1. Capture d\'écran de la preuve (optionnelle)',
               style: TextStyle(
                 fontSize: labelFontSize,
                 fontWeight: FontWeight.bold,
@@ -194,7 +198,7 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
                           ),
                           SizedBox(height: isMobile ? 8 : 12),
                           Text(
-                            'Cliquez pour ajouter une capture',
+                            'Cliquez pour ajouter une capture (optionnelle)',
                             style: TextStyle(
                               color: Colors.grey[600],
                               fontSize: isMobile ? 13 : 14,
@@ -238,9 +242,67 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
             ),
             SizedBox(height: fieldSpacing),
             
-            // 3. Montant
+            // 3. Nom de l'expéditeur
             Text(
-              '3. Montant du transfert *',
+              '3. Nom de l\'expéditeur',
+              style: TextStyle(
+                fontSize: labelFontSize,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFFDC2626),
+              ),
+            ),
+            SizedBox(height: isMobile ? 8 : 12),
+            
+            TextFormField(
+              controller: _expediteurController,
+              decoration: InputDecoration(
+                labelText: 'Nom de l\'expéditeur (optionnel)',
+                border: const OutlineInputBorder(),
+                prefixIcon: Icon(Icons.person_outline, size: ResponsiveDialogUtils.getIconSize(context)),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: isMobile ? 12 : 16,
+                  vertical: isMobile ? 12 : 16,
+                ),
+              ),
+              style: TextStyle(fontSize: isMobile ? 16 : 18),
+            ),
+            SizedBox(height: fieldSpacing),
+            
+            // 4. Référence
+            Text(
+              '4. Référence du transfert *',
+              style: TextStyle(
+                fontSize: labelFontSize,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFFDC2626),
+              ),
+            ),
+            SizedBox(height: isMobile ? 8 : 12),
+            
+            TextFormField(
+              controller: _referenceController,
+              decoration: InputDecoration(
+                labelText: 'Référence unique',
+                border: const OutlineInputBorder(),
+                prefixIcon: Icon(Icons.confirmation_number, size: ResponsiveDialogUtils.getIconSize(context)),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: isMobile ? 12 : 16,
+                  vertical: isMobile ? 12 : 16,
+                ),
+              ),
+              style: TextStyle(fontSize: isMobile ? 16 : 18),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'La référence du transfert est requise';
+                }
+                return null;
+              },
+            ),
+            SizedBox(height: fieldSpacing),
+            
+            // 5. Montant
+            Text(
+              '5. Montant du transfert *',
               style: TextStyle(
                 fontSize: labelFontSize,
                 fontWeight: FontWeight.bold,
@@ -274,6 +336,38 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
                 return null;
               },
             ),
+            const SizedBox(height: 16),
+            // Add CodeOps preview
+            if (_montantController.text.isNotEmpty && _destinataireController.text.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Code Opération:',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                    Text(
+                      // Generate a preview of what the CodeOps will look like
+                      'TRANSID-${DateTime.now().year}${DateTime.now().month.toString().padLeft(2, '0')}${DateTime.now().day.toString().padLeft(2, '0')}0001',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: Colors.blue,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             SizedBox(height: fieldSpacing),
             
             // Résumé commission
@@ -290,7 +384,7 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Montant:', style: TextStyle(fontSize: isMobile ? 13 : 14)),
+                        Text('Montant à servir:', style: TextStyle(fontSize: isMobile ? 13 : 14)),
                         Text(
                           '${_montantController.text} USD',
                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: isMobile ? 13 : 14),
@@ -316,13 +410,13 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Montant net:',
+                          'Total à payer:',
                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: isMobile ? 14 : 16),
                         ),
                         Text(
-                          '${_montantNet.toStringAsFixed(2)} USD',
+                          '${(_montantNet + _commission).toStringAsFixed(2)} USD',
                           style: TextStyle(
-                            color: Colors.green,
+                            color: Color(0xFFDC2626),
                             fontWeight: FontWeight.bold,
                             fontSize: isMobile ? 14 : 16,
                           ),
@@ -442,20 +536,8 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
     
-    if (_selectedImage == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Veuillez ajouter une capture d\'écran de la preuve de paiement'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      });
-      return;
-    }
-
+    // Image is now optional, so we don't check for it
+    
     setState(() {
       _isLoading = true;
     });
@@ -471,6 +553,17 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
       final operationService = OperationService();
       final montant = double.parse(_montantController.text);
       
+      // Create notes with image info if available
+      String notes = 'Transfert simple';
+      if (_selectedImage != null) {
+        notes += ' - Photo: ${_selectedImage!.path}';
+      }
+      
+      // Add expediteur info to notes if provided
+      if (_expediteurController.text.isNotEmpty) {
+        notes += ' - Expéditeur: ${_expediteurController.text}';
+      }
+      
       // Créer l'opération de transfert simple
       final operation = OperationModel(
         agentId: currentUser!.id!,
@@ -483,7 +576,9 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
         devise: 'USD',
         modePaiement: ModePaiement.cash,
         destinataire: _destinataireController.text,
-        notes: 'Transfert simple - Photo: ${_selectedImage!.path}',
+        reference: _referenceController.text,
+        notes: notes,
+        observation: _expediteurController.text.isNotEmpty ? _expediteurController.text : null, // Store expediteur in observation field
         statut: OperationStatus.enAttente,
         dateOp: DateTime.now(),
         lastModifiedAt: DateTime.now(),
@@ -517,32 +612,13 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
           telephone: currentUser.telephone,
         );
         
-        // Afficher le dialog d'impression
-        await showDialog(
+        // Imprimer automatiquement le reçu sur POS
+        await AutoPrintHelper.autoPrintWithDialog(
           context: context,
-          barrierDismissible: true,
-          builder: (context) => PrintReceiptDialog(
-            operation: savedOperation,
-            shop: shop,
-            agent: agent,
-            clientName: _destinataireController.text,
-            onPrintSuccess: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Transfert de ${montant.toStringAsFixed(2)} USD effectué - Reçu imprimé'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            },
-            onSkipPrint: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Transfert de ${montant.toStringAsFixed(2)} USD effectué (sans impression)'),
-                  backgroundColor: Colors.blue,
-                ),
-              );
-            },
-          ),
+          operation: savedOperation,
+          shop: shop,
+          agent: agent,
+          clientName: _destinataireController.text,
         );
       }
     } catch (e) {

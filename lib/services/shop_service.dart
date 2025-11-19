@@ -5,6 +5,8 @@ import '../models/caisse_model.dart';
 import '../models/operation_model.dart';
 import '../models/journal_caisse_model.dart';
 import 'local_db.dart';
+import 'sync_service.dart';
+import '../utils/sync_diagnostics.dart';
 
 class ShopService extends ChangeNotifier {
   static final ShopService _instance = ShopService._internal();
@@ -59,6 +61,10 @@ class ShopService extends ChangeNotifier {
         capitalMPesa: capitalMPesa,
         capitalOrangeMoney: capitalOrangeMoney,
         createdAt: DateTime.now(),
+        // Marquer comme non synchronisé pour forcer l'upload
+        isSynced: false,
+        lastModifiedAt: DateTime.now(),
+        lastModifiedBy: 'local_user',
       );
 
       // Sauvegarder localement
@@ -73,8 +79,16 @@ class ShopService extends ChangeNotifier {
       }
       
       // Recharger la liste
-      await loadShops();     
+      await loadShops();
+      
+      // Attendre un peu pour s'assurer que l'opération est bien enregistrée
+      await Future.delayed(const Duration(milliseconds: 100));
+      
+      // Synchronisation en arrière-plan
+      _syncInBackground();
+      
       _errorMessage = null;
+      debugPrint('✅ Shop créé localement: $designation');
       return true;
     } catch (e) {
       _errorMessage = 'Erreur lors de la création du shop: $e';
@@ -88,9 +102,21 @@ class ShopService extends ChangeNotifier {
   Future<bool> updateShop(ShopModel shop) async {
     _setLoading(true);
     try {
-      await LocalDB.instance.updateShop(shop);
+      // Marquer comme non synchronisé pour forcer l'upload
+      final updatedShop = shop.copyWith(
+        isSynced: false,
+        lastModifiedAt: DateTime.now(),
+        lastModifiedBy: 'local_user',
+      );
+      
+      await LocalDB.instance.updateShop(updatedShop);
       await loadShops();
+      
+      // Synchronisation en arrière-plan
+      _syncInBackground();
+      
       _errorMessage = null;
+      debugPrint('✅ Shop mis à jour localement: ${updatedShop.designation}');
       return true;
     } catch (e) {
       _errorMessage = 'Erreur lors de la mise à jour du shop: $e';
@@ -161,8 +187,9 @@ class ShopService extends ChangeNotifier {
 
   // Créer une opération de dépôt pour le cash initial
   Future<void> _createInitialCashDeposit(int shopId, double montant, String shopName) async {
+    final operationId = DateTime.now().millisecondsSinceEpoch;
     final operation = OperationModel(
-      id: DateTime.now().millisecondsSinceEpoch,
+      id: operationId,
       type: OperationType.depot,
       montantBrut: montant,
       montantNet: montant,
@@ -178,6 +205,9 @@ class ShopService extends ChangeNotifier {
       destinataire: 'CAPITAL INITIAL',
       notes: 'Dépôt initial du capital cash lors de la création du shop $shopName',
       lastModifiedBy: 'SYSTEM',
+      // Marquer comme non synchronisé pour forcer l'upload
+      isSynced: false,
+      lastModifiedAt: DateTime.now(),
     );
 
     await LocalDB.instance.saveOperation(operation);
@@ -191,13 +221,14 @@ class ShopService extends ChangeNotifier {
       type: TypeMouvement.entree,
       mode: ModePaiement.cash,
       dateAction: DateTime.now(),
-      operationId: operation.id,
+      operationId: operationId,
       notes: 'Capital initial lors de la création du shop $shopName',
       lastModifiedBy: 'SYSTEM',
+      lastModifiedAt: DateTime.now(),
     );
     
     await LocalDB.instance.saveJournalEntry(journalEntry);
-    debugPrint('✅ Dépôt initial créé: opération + journal de caisse');
+    debugPrint('✅ Dépôt initial créé: opération ID $operationId + journal de caisse');
   }
 
   void _setLoading(bool loading) {
@@ -231,5 +262,28 @@ class ShopService extends ChangeNotifier {
         }
       }
     }
+  }
+
+  // Synchronisation en arrière-plan (non bloquante)
+  void _syncInBackground() {
+    Future.delayed(Duration.zero, () async {
+      try {
+        debugPrint('🔄 [ShopService] Synchronisation en arrière-plan...');
+        final syncService = SyncService();
+        await syncService.syncAll();
+        debugPrint('✅ [ShopService] Synchronisation terminée');
+      } catch (e) {
+        debugPrint('⚠️ [ShopService] Erreur sync (non bloquante): $e');
+      }
+    });
+  }
+  
+  /// Diagnostique et corrige les problèmes de synchronisation des opérations de capital initial
+  Future<void> diagnoseAndFixInitialCapitalSync() async {
+    await SyncDiagnostics.checkInitialCapitalOperations();
+    await SyncDiagnostics.forceSyncInitialCapitalOperations();
+    
+    // Déclencher une synchronisation
+    _syncInBackground();
   }
 }

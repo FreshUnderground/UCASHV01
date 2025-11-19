@@ -9,6 +9,9 @@ import 'commissions_report.dart';
 
 import 'admin_cloture_report.dart';
 import 'admin_flot_report.dart';
+import '../../utils/responsive_utils.dart';
+import '../../theme/ucash_typography.dart';
+import '../../theme/ucash_containers.dart';
 
 class AdminReportsWidget extends StatefulWidget {
   const AdminReportsWidget({super.key});
@@ -62,15 +65,16 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final isMobile = size.width <= 768;
-    final isTablet = size.width > 768 && size.width <= 1024;
-    
     return Column(
       children: [
         // Header avec titre et filtres
         Container(
-          padding: EdgeInsets.all(isMobile ? 12 : 16),
+          padding: ResponsiveUtils.getFluidPadding(
+            context,
+            mobile: const EdgeInsets.all(12),
+            tablet: const EdgeInsets.all(14),
+            desktop: const EdgeInsets.all(16),
+          ),
           decoration: BoxDecoration(
             color: Colors.white,
             boxShadow: [
@@ -86,8 +90,8 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header adaptatif
-              _buildResponsiveHeader(isMobile, isTablet),
-              SizedBox(height: isMobile ? 12 : 16),
+              _buildResponsiveHeader(context.isSmallScreen, context.screenType == ScreenType.tablet),
+              SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
               
               // Filtres
               ReportFiltersWidget(
@@ -126,14 +130,16 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
           color: Colors.white,
           child: TabBar(
             controller: _tabController,
-            tabs: _buildResponsiveTabs(isMobile),
+            tabs: _buildResponsiveTabs(context.isSmallScreen),
             labelColor: const Color(0xFFDC2626),
             unselectedLabelColor: Colors.grey[600],
             indicatorColor: const Color(0xFFDC2626),
             isScrollable: true,
-            labelPadding: EdgeInsets.symmetric(
-              horizontal: isMobile ? 8 : 16,
-              vertical: isMobile ? 8 : 12,
+            labelPadding: ResponsiveUtils.getFluidPadding(
+              context,
+              mobile: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              tablet: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              desktop: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             ),
             onTap: (index) => _refreshCurrentReport(),
           ),
@@ -200,14 +206,14 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
               Icon(
                 Icons.admin_panel_settings,
                 color: Colors.orange[700],
-                size: 24,
+                size: ResponsiveUtils.getFluidIconSize(context, mobile: 22, tablet: 24, desktop: 26),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 6, tablet: 7, desktop: 8)),
               Expanded(
                 child: Text(
                   'Rapports Admin',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 16, tablet: 17, desktop: 18),
                     fontWeight: FontWeight.bold,
                     color: const Color(0xFF1F2937),
                   ),
@@ -215,24 +221,34 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 6, tablet: 7, desktop: 8)),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: ResponsiveUtils.getFluidPadding(
+              context,
+              mobile: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              tablet: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5),
+              desktop: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            ),
             decoration: BoxDecoration(
               color: Colors.orange[100],
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(
+                ResponsiveUtils.getFluidBorderRadius(context, mobile: 14, tablet: 15, desktop: 16),
+              ),
               border: Border.all(color: Colors.orange[300]!),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.visibility, color: Colors.orange[700], size: 14),
-                const SizedBox(width: 4),
+                Icon(Icons.visibility, 
+                  color: Colors.orange[700], 
+                  size: ResponsiveUtils.getFluidIconSize(context, mobile: 12, tablet: 13, desktop: 14),
+                ),
+                SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 3, tablet: 3.5, desktop: 4)),
                 Text(
                   'Tous les shops',
                   style: TextStyle(
                     color: Colors.orange[700],
-                    fontSize: 11,
+                    fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 10, tablet: 10.5, desktop: 11),
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -248,28 +264,32 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
         Icon(
           Icons.admin_panel_settings,
           color: Colors.orange[700],
-          size: isTablet ? 26 : 28,
+          size: ResponsiveUtils.getFluidIconSize(context, mobile: 24, tablet: 26, desktop: 28),
         ),
-        const SizedBox(width: 12),
+        SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 10, tablet: 11, desktop: 12)),
         Expanded(
           child: Text(
             isTablet ? 'Rapports Admin' : 'Rapports Administrateur',
             style: TextStyle(
-              fontSize: isTablet ? 20 : 24,
+              fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 18, tablet: 20, desktop: 24),
               fontWeight: FontWeight.bold,
               color: const Color(0xFF1F2937),
             ),
           ),
         ),
-        const SizedBox(width: 8),
+        SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 6, tablet: 7, desktop: 8)),
         Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: isTablet ? 10 : 12,
-            vertical: isTablet ? 5 : 6,
+          padding: ResponsiveUtils.getFluidPadding(
+            context,
+            mobile: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            tablet: const EdgeInsets.symmetric(horizontal: 11, vertical: 5.5),
+            desktop: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           ),
           decoration: BoxDecoration(
             color: Colors.orange[100],
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(
+              ResponsiveUtils.getFluidBorderRadius(context, mobile: 18, tablet: 19, desktop: 20),
+            ),
             border: Border.all(color: Colors.orange[300]!),
           ),
           child: Row(
@@ -278,14 +298,14 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
               Icon(
                 Icons.visibility,
                 color: Colors.orange[700],
-                size: isTablet ? 14 : 16,
+                size: ResponsiveUtils.getFluidIconSize(context, mobile: 14, tablet: 15, desktop: 16),
               ),
-              const SizedBox(width: 4),
+              SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 3, tablet: 3.5, desktop: 4)),
               Text(
                 isTablet ? 'Tous shops' : 'Accès : Tous les shops',
                 style: TextStyle(
                   color: Colors.orange[700],
-                  fontSize: isTablet ? 11 : 12,
+                  fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 10, tablet: 11, desktop: 12),
                   fontWeight: FontWeight.w600,
                 ),
               ),

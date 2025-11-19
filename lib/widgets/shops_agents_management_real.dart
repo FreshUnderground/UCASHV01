@@ -29,6 +29,188 @@ class _ShopsAgentsManagementRealState extends State<ShopsAgentsManagementReal> {
     Provider.of<AgentService>(context, listen: false).loadAgents();
   }
 
+  Widget _buildHeader() {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFDC2626), Color(0xFFB91C1C)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Gestion des Shops & Agents',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Gérez efficacement vos shops et agents',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.white70,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: _loadData,
+                    icon: const Icon(Icons.refresh, color: Colors.white),
+                    label: const Text('Actualiser', style: TextStyle(color: Colors.white)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white24,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    onPressed: _verifyAdminExists,
+                    icon: const Icon(Icons.admin_panel_settings, color: Colors.white),
+                    label: const Text('Vérifier Admin', style: TextStyle(color: Colors.white)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white24,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatisticsSection() {
+    return Consumer2<ShopService, AgentService>(
+      builder: (context, shopService, agentService, child) {
+        final shopCount = shopService.shops.length;
+        final agentCount = agentService.agents.length;
+        // Since ShopModel doesn't have isActive, we'll show total shops
+        final activeShops = shopCount;
+        final activeAgents = agentService.agents.where((agent) => agent.isActive).length;
+        
+        return Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Statistiques',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFDC2626),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isCompact = constraints.maxWidth < 600;
+                    
+                    if (isCompact) {
+                      return Column(
+                        children: [
+                          _buildStatCard('Shops', '$shopCount', Icons.store, Colors.blue, compact: true),
+                          const SizedBox(height: 12),
+                          _buildStatCard('Agents', '$agentCount', Icons.person, Colors.green, compact: true),
+                          const SizedBox(height: 12),
+                          _buildStatCard('Shops', '$activeShops', Icons.check_circle, Colors.orange, compact: true),
+                          const SizedBox(height: 12),
+                          _buildStatCard('Agents Actifs', '$activeAgents', Icons.verified, Colors.purple, compact: true),
+                        ],
+                      );
+                    } else {
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _buildStatCard('Shops', '$shopCount', Icons.store, Colors.blue),
+                          _buildStatCard('Agents', '$agentCount', Icons.person, Colors.green),
+                          _buildStatCard('Shops', '$activeShops', Icons.check_circle, Colors.orange),
+                          _buildStatCard('Agents Actifs', '$activeAgents', Icons.verified, Colors.purple),
+                        ],
+                      );
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStatCard(String title, String value, IconData icon, Color color, {bool compact = false}) {
+    return Container(
+      width: compact ? double.infinity : null,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisAlignment: compact ? MainAxisAlignment.start : MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 24),
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
 
   Future<void> _verifyAdminExists() async {
     await LocalDB.instance.ensureAdminExists();
@@ -148,26 +330,58 @@ class _ShopsAgentsManagementRealState extends State<ShopsAgentsManagementReal> {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final isMobile = size.width < 768;
-
-    if (isMobile) {
-      return Column(
-        children: [
-          _buildShopsSection(),
-          const SizedBox(height: 20),
-          _buildAgentsSection(),
-        ],
-      );
-    }
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(child: _buildShopsSection()),
-        const SizedBox(width: 20),
-        Expanded(child: _buildAgentsSection()),
-      ],
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isMobile = constraints.maxWidth < 768;
+            final isTablet = constraints.maxWidth >= 768 && constraints.maxWidth < 1024;
+            
+            if (isMobile) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildHeader(),
+                  const SizedBox(height: 20),
+                  _buildStatisticsSection(),
+                  const SizedBox(height: 20),
+                  _buildShopsSection(),
+                  const SizedBox(height: 20),
+                  _buildAgentsSection(),
+                ],
+              );
+            } else {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildHeader(),
+                  const SizedBox(height: 20),
+                  _buildStatisticsSection(),
+                  const SizedBox(height: 20),
+                  if (isTablet)
+                    Column(
+                      children: [
+                        _buildShopsSection(),
+                        const SizedBox(height: 20),
+                        _buildAgentsSection(),
+                      ],
+                    )
+                  else
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(flex: 1, child: _buildShopsSection()),
+                        const SizedBox(width: 20),
+                        Expanded(flex: 1, child: _buildAgentsSection()),
+                      ],
+                    ),
+                ],
+              );
+            }
+          },
+        ),
+      ),
     );
   }
 
@@ -248,16 +462,8 @@ class _ShopsAgentsManagementRealState extends State<ShopsAgentsManagementReal> {
                 );
               }
 
-              return Container(
-                constraints: const BoxConstraints(maxHeight: 300),
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: shops.length,
-                  itemBuilder: (context, index) {
-                    final shop = shops[index];
-                    return _buildShopItem(shop);
-                  },
-                ),
+              return Column(
+                children: shops.map((shop) => _buildShopItem(shop)).toList(),
               );
             },
           ),
@@ -372,16 +578,8 @@ class _ShopsAgentsManagementRealState extends State<ShopsAgentsManagementReal> {
                 );
               }
 
-              return Container(
-                constraints: const BoxConstraints(maxHeight: 300),
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: agents.length,
-                  itemBuilder: (context, index) {
-                    final agent = agents[index];
-                    return _buildAgentItem(agent);
-                  },
-                ),
+              return Column(
+                children: agents.map((agent) => _buildAgentItem(agent)).toList(),
               );
             },
           ),
@@ -391,124 +589,245 @@ class _ShopsAgentsManagementRealState extends State<ShopsAgentsManagementReal> {
   }
 
   Widget _buildShopItem(ShopModel shop) {
-    return ListTile(
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: const Color(0xFFDC2626).withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: const Icon(
-          Icons.store,
-          color: Color(0xFFDC2626),
-          size: 20,
-        ),
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
       ),
-      title: Text(
-        shop.designation,
-        style: const TextStyle(fontWeight: FontWeight.w600),
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(shop.localisation ?? 'Non spécifié'),
-          Text(
-            'Capital: ${shop.capitalActuel.toStringAsFixed(0)} USD',
-            style: const TextStyle(
-              color: Color(0xFFDC2626),
-              fontWeight: FontWeight.w500,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFDC2626).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.store,
+                color: Color(0xFFDC2626),
+                size: 24,
+              ),
             ),
-          ),
-        ],
-      ),
-      trailing: PopupMenuButton(
-        itemBuilder: (context) => [
-          const PopupMenuItem(
-            value: 'edit',
-            child: Row(
-              children: [
-                Icon(Icons.edit, size: 16),
-                SizedBox(width: 8),
-                Text('Modifier'),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    shop.designation,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFDC2626),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    shop.localisation ?? 'Non spécifié',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF388E3C).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Capital: ${shop.capitalActuel.toStringAsFixed(0)} USD',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF388E3C),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            PopupMenuButton(
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'edit',
+                  child: Row(
+                    children: [
+                      Icon(Icons.edit, size: 16, color: Colors.blue),
+                      SizedBox(width: 8),
+                      Text('Modifier'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete, size: 16, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text('Supprimer'),
+                    ],
+                  ),
+                ),
               ],
+              onSelected: (value) {
+                if (value == 'edit') {
+                  // TODO: Implement edit functionality
+                } else if (value == 'delete') {
+                  _confirmDeleteShop(shop);
+                }
+              },
+              icon: const Icon(Icons.more_vert, color: Colors.grey),
             ),
-          ),
-          const PopupMenuItem(
-            value: 'delete',
-            child: Row(
-              children: [
-                Icon(Icons.delete, size: 16, color: Colors.red),
-                SizedBox(width: 8),
-                Text('Supprimer', style: TextStyle(color: Colors.red)),
-              ],
-            ),
-          ),
-        ],
-        onSelected: (value) {
-          if (value == 'delete') {
-            _confirmDeleteShop(shop);
-          }
-        },
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildAgentItem(AgentModel agent) {
-    return ListTile(
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: const Color(0xFFDC2626).withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: const Icon(
-          Icons.person,
-          color: Color(0xFFDC2626),
-          size: 20,
-        ),
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
       ),
-      title: Text(
-        agent.username,
-        style: const TextStyle(fontWeight: FontWeight.w600),
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (agent.nom != null) Text('Nom: ${agent.nom}'),
-          Text('Shop ID: ${agent.shopId}'),
-          if (agent.telephone != null) Text('Tél: ${agent.telephone}'),
-        ],
-      ),
-      trailing: PopupMenuButton(
-        itemBuilder: (context) => [
-          const PopupMenuItem(
-            value: 'edit',
-            child: Row(
-              children: [
-                Icon(Icons.edit, size: 16),
-                SizedBox(width: 8),
-                Text('Modifier'),
-              ],
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1976D2).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.person,
+                color: Color(0xFF1976D2),
+                size: 24,
+              ),
             ),
-          ),
-          const PopupMenuItem(
-            value: 'delete',
-            child: Row(
-              children: [
-                Icon(Icons.delete, size: 16, color: Colors.red),
-                SizedBox(width: 8),
-                Text('Supprimer', style: TextStyle(color: Colors.red)),
-              ],
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          agent.username,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1976D2),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (agent.isActive)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            'Actif',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.green,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        )
+                      else
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            'Inactif',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.red,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  if (agent.nom != null)
+                    Text(
+                      agent.nom!,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Shop ID: ${agent.shopId}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  if (agent.telephone != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Tél: ${agent.telephone}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
-          ),
-        ],
-        onSelected: (value) {
-          if (value == 'delete') {
-            _confirmDeleteAgent(agent);
-          }
-        },
+            PopupMenuButton(
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'edit',
+                  child: Row(
+                    children: [
+                      Icon(Icons.edit, size: 16, color: Colors.blue),
+                      SizedBox(width: 8),
+                      Text('Modifier'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete, size: 16, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text('Supprimer'),
+                    ],
+                  ),
+                ),
+              ],
+              onSelected: (value) {
+                if (value == 'edit') {
+                  // TODO: Implement edit functionality
+                } else if (value == 'delete') {
+                  _confirmDeleteAgent(agent);
+                }
+              },
+              icon: const Icon(Icons.more_vert, color: Colors.grey),
+            ),
+          ],
+        ),
       ),
     );
   }

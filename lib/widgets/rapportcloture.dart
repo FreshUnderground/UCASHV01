@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import '../models/rapport_cloture_model.dart';
@@ -9,6 +8,7 @@ import '../services/rapport_cloture_service.dart';
 import '../services/auth_service.dart';
 import '../services/rapportcloture_pdf_service.dart';
 import '../services/shop_service.dart';
+import '../services/operation_service.dart';
 
 /// Widget pour afficher et générer le Rapport de Clôture Journalière
 /// Nom du fichier: rapportcloture.dart
@@ -25,6 +25,7 @@ class _RapportClotureState extends State<RapportCloture> {
   DateTime _selectedDate = DateTime.now();
   RapportClotureModel? _rapport;
   bool _isLoading = false;
+  bool _journeeCloturee = false;
   String? _errorMessage;
 
   @override
@@ -36,6 +37,8 @@ class _RapportClotureState extends State<RapportCloture> {
   }
 
   Future<void> _genererRapport() async {
+    if (!mounted) return;
+    
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -43,19 +46,33 @@ class _RapportClotureState extends State<RapportCloture> {
 
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
+      final operationService = Provider.of<OperationService>(context, listen: false);
       final shopId = widget.shopId ?? authService.currentUser?.shopId ?? 1;
+      
+      // Vérifier si la journée est déjà clôturée
+      final estCloturee = await RapportClotureService.instance.journeeEstCloturee(shopId, _selectedDate);
+      if (!mounted) return;
+      
+      // Charger les opérations de "Mes Ops" pour ce shop
+      await operationService.loadOperations(shopId: shopId);
+      if (!mounted) return;
       
       final rapport = await RapportClotureService.instance.genererRapport(
         shopId: shopId,
         date: _selectedDate,
         generePar: authService.currentUser?.username ?? 'Admin',
+        operations: operationService.operations, // Utiliser les données de "Mes Ops"
       );
+      if (!mounted) return;
 
       setState(() {
         _rapport = rapport;
+        _journeeCloturee = estCloturee;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
+      
       setState(() {
         _errorMessage = 'Erreur: $e';
         _isLoading = false;
@@ -78,10 +95,7 @@ class _RapportClotureState extends State<RapportCloture> {
       }
 
       // Générer le PDF avec le nouveau service
-      final pdf = await generateRapportCloturePdf(
-        rapport: _rapport!,
-        shop: shop,
-      );
+      final pdf = await genererRapportCloturePDF(_rapport!, shop);
 
       // Sauvegarder ou partager le PDF
       final pdfBytes = await pdf.save();
@@ -118,10 +132,7 @@ class _RapportClotureState extends State<RapportCloture> {
       }
 
       // Générer le PDF
-      final pdf = await generateRapportCloturePdf(
-        rapport: _rapport!,
-        shop: shop,
-      );
+      final pdf = await genererRapportCloturePDF(_rapport!, shop);
 
       final pdfBytes = await pdf.save();
 
@@ -211,10 +222,7 @@ class _RapportClotureState extends State<RapportCloture> {
       }
 
       // Générer le PDF avec le nouveau service
-      final pdf = await generateRapportCloturePdf(
-        rapport: _rapport!,
-        shop: shop,
-      );
+      final pdf = await genererRapportCloturePDF(_rapport!, shop);
 
       // Imprimer directement
       await Printing.layoutPdf(
@@ -227,6 +235,164 @@ class _RapportClotureState extends State<RapportCloture> {
           SnackBar(content: Text('❌ Erreur: $e')),
         );
       }
+    }
+  }
+
+  /// Clôturer la journée - enregistre le solde actuel comme solde de clôture
+  Future<void> _cloturerJournee() async {
+    if (!mounted) return;
+    
+    // Contrôleurs pour la saisie des montants
+    final cashController = TextEditingController(text: _rapport?.cashDisponibleCash.toStringAsFixed(2) ?? '0.00');
+    final airtelController = TextEditingController(text: _rapport?.cashDisponibleAirtelMoney.toStringAsFixed(2) ?? '0.00');
+    final mpesaController = TextEditingController(text: _rapport?.cashDisponibleMPesa.toStringAsFixed(2) ?? '0.00');
+    final orangeController = TextEditingController(text: _rapport?.cashDisponibleOrangeMoney.toStringAsFixed(2) ?? '0.00');
+    
+    // Afficher le dialogue de saisie
+    final confirm = await showDialog<Map<String, double>?>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('🔒 Clôturer la journée'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Clôture pour le ${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}'),
+              const SizedBox(height: 16),
+              const Text(
+                'Saisissez les montants comptés physiquement:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              
+              // USD (Cash)
+              TextField(
+                controller: cashController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'USD (Espèces)',
+                  prefixIcon: const Icon(Icons.attach_money),
+                  border: const OutlineInputBorder(),
+                  hintText: 'Montant en USD',
+                  helperText: _rapport != null ? 'Calculé: ${_rapport!.cashDisponibleCash.toStringAsFixed(2)}' : null,
+                ),
+              ),
+              const SizedBox(height: 12),
+              
+              // Airtel Money
+              TextField(
+                controller: airtelController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'Airtel Money',
+                  prefixIcon: const Icon(Icons.phone_android),
+                  border: const OutlineInputBorder(),
+                  hintText: 'Montant Airtel',
+                  helperText: _rapport != null ? 'Calculé: ${_rapport!.cashDisponibleAirtelMoney.toStringAsFixed(2)}' : null,
+                ),
+              ),
+              const SizedBox(height: 12),
+              
+              // M-Pesa (Vodacash)
+              TextField(
+                controller: mpesaController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'M-Pesa (Vodacash)',
+                  prefixIcon: const Icon(Icons.phone_android),
+                  border: const OutlineInputBorder(),
+                  hintText: 'Montant M-Pesa',
+                  helperText: _rapport != null ? 'Calculé: ${_rapport!.cashDisponibleMPesa.toStringAsFixed(2)}' : null,
+                ),
+              ),
+              const SizedBox(height: 12),
+              
+              // Orange Money
+              TextField(
+                controller: orangeController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'Orange Money',
+                  prefixIcon: const Icon(Icons.phone_android),
+                  border: const OutlineInputBorder(),
+                  hintText: 'Montant Orange',
+                  helperText: _rapport != null ? 'Calculé: ${_rapport!.cashDisponibleOrangeMoney.toStringAsFixed(2)}' : null,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, null),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final cash = double.tryParse(cashController.text) ?? 0.0;
+              final airtel = double.tryParse(airtelController.text) ?? 0.0;
+              final mpesa = double.tryParse(mpesaController.text) ?? 0.0;
+              final orange = double.tryParse(orangeController.text) ?? 0.0;
+              
+              Navigator.pop(context, {
+                'cash': cash,
+                'airtel': airtel,
+                'mpesa': mpesa,
+                'orange': orange,
+              });
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+            ),
+            child: const Text('Clôturer'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == null || !mounted) return;
+
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final shopId = widget.shopId ?? authService.currentUser?.shopId ?? 1;
+      
+      await RapportClotureService.instance.cloturerJournee(
+        shopId: shopId,
+        dateCloture: _selectedDate,
+        cloturePar: authService.currentUser?.username ?? 'Admin',
+        soldeSaisiCash: confirm['cash']!,
+        soldeSaisiAirtelMoney: confirm['airtel']!,
+        soldeSaisiMPesa: confirm['mpesa']!,
+        soldeSaisiOrangeMoney: confirm['orange']!,
+      );
+      if (!mounted) return;
+
+      setState(() {
+        _journeeCloturee = true;
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Journée clôturée avec succès'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Erreur: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      cashController.dispose();
+      airtelController.dispose();
+      mpesaController.dispose();
+      orangeController.dispose();
     }
   }
 
@@ -288,40 +454,79 @@ class _RapportClotureState extends State<RapportCloture> {
       elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Row(
+        child: Column(
           children: [
-            const Icon(Icons.calendar_today, color: Color(0xFFDC2626)),
-            const SizedBox(width: 12),
-            const Text(
-              'Date du rapport:',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            Row(
+              children: [
+                const Icon(Icons.calendar_today, color: Color(0xFFDC2626)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '${_selectedDate.day.toString().padLeft(2, '0')}/${_selectedDate.month.toString().padLeft(2, '0')}/${_selectedDate.year}',
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: _selectedDate,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now(),
+                    );
+                    if (date != null) {
+                      setState(() => _selectedDate = date);
+                      _genererRapport();
+                    }
+                  },
+                  icon: const Icon(Icons.edit_calendar),
+                  label: const Text('Changer'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFDC2626),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                '${_selectedDate.day.toString().padLeft(2, '0')}/${_selectedDate.month.toString().padLeft(2, '0')}/${_selectedDate.year}',
-                style: const TextStyle(fontSize: 16),
-              ),
-            ),
-            ElevatedButton.icon(
-              onPressed: () async {
-                final date = await showDatePicker(
-                  context: context,
-                  initialDate: _selectedDate,
-                  firstDate: DateTime(2020),
-                  lastDate: DateTime.now(),
-                );
-                if (date != null) {
-                  setState(() => _selectedDate = date);
-                  _genererRapport();
-                }
-              },
-              icon: const Icon(Icons.edit_calendar),
-              label: const Text('Changer'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFDC2626),
-              ),
-            ),
+            
+            // Bouton de clôture
+            if (_rapport != null) ...[
+              const SizedBox(height: 16),
+              const Divider(),
+              const SizedBox(height: 8),
+              if (_journeeCloturee)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.green),
+                      SizedBox(width: 8),
+                      Text(
+                        'Journée déjà clôturée',
+                        style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _cloturerJournee,
+                    icon: const Icon(Icons.lock),
+                    label: const Text('Clôturer la journée'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.all(16),
+                    ),
+                  ),
+                ),
+            ],
           ],
         ),
       ),
@@ -477,8 +682,7 @@ class _RapportClotureState extends State<RapportCloture> {
           '2️⃣ Flots',
           [
             _buildMovementRow('Reçus', rapport.flotRecu, true),
-            _buildMovementRow('En cours', rapport.flotEnCours, false),
-            _buildMovementRow('Servis', rapport.flotServi, false),
+            _buildMovementRow('Envoyés', rapport.flotEnvoye, false),
             
             // Détails des FLOTs reçus
             if (rapport.flotsRecusDetails.isNotEmpty) ...[
@@ -493,7 +697,7 @@ class _RapportClotureState extends State<RapportCloture> {
               )).toList(),
             ],
             
-            // Détails des FLOTs envoyés
+            // Détails des FLOTС envoyés
             if (rapport.flotsEnvoyes.isNotEmpty) ...[
               const SizedBox(height: 8),
               const Text('FLOTs Envoyés Détails:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
@@ -505,19 +709,6 @@ class _RapportClotureState extends State<RapportCloture> {
                 Colors.red,
               )).toList(),
             ],
-            
-            // Détails des FLOTs en cours
-            if (rapport.flotsEnCoursDetails.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              const Text('FLOTs En Cours Détails:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-              const Divider(),
-              ...rapport.flotsEnCoursDetails.map((flot) => _buildFlotDetailRow(
-                flot.shopDestinationDesignation,
-                '${DateFormat('dd/MM HH:mm').format(flot.dateEnvoi)} - ${flot.modePaiement}',
-                flot.montant,
-                Colors.orange,
-              )).toList(),
-            ],
           ],
           Colors.purple,
         ),
@@ -527,8 +718,8 @@ class _RapportClotureState extends State<RapportCloture> {
         _buildSection(
           '3️⃣ Transferts',
           [
-            _buildMovementRow('Reçus', rapport.transfertsRecus, true),
-            _buildMovementRow('Servis', rapport.transfertsServis, false),
+            _buildMovementRow('Transferts Reçus', rapport.transfertsRecus, true),
+            _buildMovementRow('Transferts Servis', rapport.transfertsServis, false),
           ],
           Colors.blue,
         ),
@@ -539,22 +730,11 @@ class _RapportClotureState extends State<RapportCloture> {
   Widget _buildRightColumn(RapportClotureModel rapport) {
     return Column(
       children: [
-        // Opérations Clients
+        // Partenaires Servis (anciennement Clients Nous Doivent)
         _buildSection(
-          '4️⃣ Opérations Clients',
+          '5️⃣ Partenaires Servis',
           [
-            _buildMovementRow('Dépôts', rapport.depotsClients, true),
-            _buildMovementRow('Retraits', rapport.retraitsClients, false),
-          ],
-          Colors.orange,
-        ),
-        const SizedBox(height: 16),
-
-        // Clients Nous Doivent
-        _buildSection(
-          '5️⃣ Clients Nous Doivent',
-          [
-            Text('${rapport.clientsNousDoivent.length} client(s)', style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text('${rapport.clientsNousDoivent.length} partenaire(s)', style: const TextStyle(fontWeight: FontWeight.bold)),
             const Divider(),
             // Show detailed client list like UI
             ...rapport.clientsNousDoivent.map((client) => _buildClientRow(
@@ -563,17 +743,17 @@ class _RapportClotureState extends State<RapportCloture> {
               Colors.red,
             )).toList(),
             const Divider(),
-            _buildTotalRow('TOTAL Dettes', rapport.totalClientsNousDoivent, color: Colors.red),
+            _buildTotalRow('TOTAL', rapport.totalClientsNousDoivent, color: Colors.red),
           ],
           Colors.red,
         ),
         const SizedBox(height: 16),
 
-        // Clients Nous Devons
+        // Dépôts Partenaires (anciennement Clients Nous Devons)
         _buildSection(
-          '6️⃣ Clients Nous Devons',
+          '6️⃣ Dépôts Partenaires',
           [
-            Text('${rapport.clientsNousDevons.length} client(s)', style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text('${rapport.clientsNousDevons.length} partenaire(s)', style: const TextStyle(fontWeight: FontWeight.bold)),
             const Divider(),
             // Show detailed client list like UI
             ...rapport.clientsNousDevons.map((client) => _buildClientRow(
@@ -582,7 +762,7 @@ class _RapportClotureState extends State<RapportCloture> {
               Colors.green,
             )).toList(),
             const Divider(),
-            _buildTotalRow('TOTAL Créances', rapport.totalClientsNousDevons, color: Colors.green),
+            _buildTotalRow('TOTAL', rapport.totalClientsNousDevons, color: Colors.green),
           ],
           Colors.green,
         ),
@@ -661,9 +841,9 @@ class _RapportClotureState extends State<RapportCloture> {
             const Divider(color: Colors.blue),
             const SizedBox(height: 8),
             _buildCashRow('Cash Disponible', rapport.cashDisponibleTotal),
-            _buildCashRow('+ Clients Nous Doivent', rapport.totalClientsNousDoivent),
+            _buildCashRow('+ Partenaires Servis', rapport.totalClientsNousDoivent),
             _buildCashRow('+ Shops Nous Doivent', rapport.totalShopsNousDoivent),
-            _buildCashRow('- Clients Nous Devons', rapport.totalClientsNousDevons),
+            _buildCashRow('- Dépôts Partenaires', rapport.totalClientsNousDevons),
             _buildCashRow('- Shops Nous Devons', rapport.totalShopsNousDevons),
             const Divider(thickness: 2, color: Colors.blue),
             _buildTotalRow('= CAPITAL NET', rapport.capitalNet, bold: true, color: rapport.capitalNet >= 0 ? Colors.blue : Colors.red),
@@ -824,6 +1004,42 @@ class _RapportClotureState extends State<RapportCloture> {
               children: [
                 Text(
                   shopName,
+                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  details,
+                  style: const TextStyle(fontSize: 9, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            '${amount.toStringAsFixed(2)} USD',
+            style: TextStyle(
+              fontSize: 10,
+              color: color,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOperationDetailRow(String observation, String details, double amount, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            flex: 2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  observation,
                   style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500),
                   overflow: TextOverflow.ellipsis,
                 ),

@@ -146,24 +146,25 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final isMobile = size.width <= 768;
-    final padding = isMobile ? 16.0 : (size.width <= 1024 ? 20.0 : 24.0);
-
     return Padding(
-      padding: EdgeInsets.all(padding),
+      padding: ResponsiveUtils.getFluidPadding(
+        context,
+        mobile: const EdgeInsets.all(12),
+        tablet: const EdgeInsets.all(16),
+        desktop: const EdgeInsets.all(24),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildHeader(),
-          SizedBox(height: isMobile ? 16 : 24),
+          SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 16, desktop: 20)),
           _buildFilters(),
-          SizedBox(height: isMobile ? 16 : 24),
-          _buildTabBar(), // Add tab bar
-          SizedBox(height: isMobile ? 16 : 24),
+          SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 16, desktop: 20)),
+          _buildTabBar(),
+          SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 16, desktop: 20)),
           if (_selectedTabIndex == 0) ...[
             _buildSummaryCards(),
-            SizedBox(height: isMobile ? 16 : 24),
+            SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 16, desktop: 20)),
             Expanded(
               child: _buildJournalTable(),
             ),
@@ -186,7 +187,9 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.grey[200],
-        borderRadius: BorderRadius.circular(25),
+        borderRadius: BorderRadius.circular(
+          ResponsiveUtils.getFluidBorderRadius(context, mobile: 20, tablet: 22, desktop: 25),
+        ),
       ),
       child: Row(
         children: [
@@ -194,10 +197,17 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
             child: GestureDetector(
               onTap: () => setState(() => _selectedTabIndex = 0),
               child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 12),
+                padding: ResponsiveUtils.getFluidPadding(
+                  context,
+                  mobile: const EdgeInsets.symmetric(vertical: 10),
+                  tablet: const EdgeInsets.symmetric(vertical: 11),
+                  desktop: const EdgeInsets.symmetric(vertical: 12),
+                ),
                 decoration: BoxDecoration(
                   color: _selectedTabIndex == 0 ? const Color(0xFFDC2626) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(25),
+                  borderRadius: BorderRadius.circular(
+                    ResponsiveUtils.getFluidBorderRadius(context, mobile: 20, tablet: 22, desktop: 25),
+                  ),
                 ),
                 child: Center(
                   child: Text(
@@ -205,6 +215,7 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
                     style: TextStyle(
                       color: _selectedTabIndex == 0 ? Colors.white : Colors.grey[700],
                       fontWeight: FontWeight.bold,
+                      fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
                     ),
                   ),
                 ),
@@ -215,10 +226,17 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
             child: GestureDetector(
               onTap: () => setState(() => _selectedTabIndex = 1),
               child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 12),
+                padding: ResponsiveUtils.getFluidPadding(
+                  context,
+                  mobile: const EdgeInsets.symmetric(vertical: 10),
+                  tablet: const EdgeInsets.symmetric(vertical: 11),
+                  desktop: const EdgeInsets.symmetric(vertical: 12),
+                ),
                 decoration: BoxDecoration(
                   color: _selectedTabIndex == 1 ? const Color(0xFFDC2626) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(25),
+                  borderRadius: BorderRadius.circular(
+                    ResponsiveUtils.getFluidBorderRadius(context, mobile: 20, tablet: 22, desktop: 25),
+                  ),
                 ),
                 child: Center(
                   child: Text(
@@ -226,6 +244,7 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
                     style: TextStyle(
                       color: _selectedTabIndex == 1 ? Colors.white : Colors.grey[700],
                       fontWeight: FontWeight.bold,
+                      fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
                     ),
                   ),
                 ),
@@ -813,15 +832,24 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
 
     if (isMobile) {
       return Container(
-        padding: const EdgeInsets.all(12),
+        padding: ResponsiveUtils.getFluidPadding(
+          context,
+          mobile: const EdgeInsets.all(10),
+          tablet: const EdgeInsets.all(11),
+          desktop: const EdgeInsets.all(12),
+        ),
         decoration: BoxDecoration(
           color: Colors.grey[100],
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(
+              ResponsiveUtils.getFluidBorderRadius(context, mobile: 10, tablet: 11, desktop: 12),
+            ),
+          ),
         ),
         child: Text(
           'Mouvements de caisse',
           style: TextStyle(
-            fontSize: 14,
+            fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 13, tablet: 13.5, desktop: 14),
             fontWeight: FontWeight.bold,
             color: Colors.grey[700],
           ),
@@ -830,7 +858,12 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: ResponsiveUtils.getFluidPadding(
+        context,
+        mobile: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        tablet: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        desktop: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      ),
       color: Colors.grey[100],
       child: Row(
         children: [

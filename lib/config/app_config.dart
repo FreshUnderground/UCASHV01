@@ -88,7 +88,7 @@ class AppConfig {
   static const Duration syncTimeout = Duration(seconds: 30);
   
   /// Intervalle de synchronisation automatique
-  static const Duration autoSyncInterval = Duration(seconds: 30);
+  static const Duration autoSyncInterval = Duration(minutes: 3);
   
   /// Mode debug
   static bool get isDebugMode => kDebugMode;

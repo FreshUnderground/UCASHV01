@@ -106,13 +106,14 @@ try {
                 $type = _convertOperationType($entity['type'] ?? 0);
                 $modePaiement = _convertModePaiement($entity['mode_paiement'] ?? 0);
                 
-                // CRITIQUE: Logger le statut AVANT conversion pour débogage
-                $statutRaw = $entity['statut'] ?? 'MISSING';
-                error_log("⚠️ STATUT DEBUG: raw_value=" . print_r($statutRaw, true) . ", is_set=" . (isset($entity['statut']) ? 'YES' : 'NO'));
+                // CRITIQUE: Le statut est OBLIGATOIRE - rejeter si manquant
+                if (!isset($entity['statut']) && $entity['statut'] !== 0) {
+                    throw new Exception("Statut obligatoire manquant pour opération ID {$entity['id']}");
+                }
                 
-                // Convertir le statut avec fallback sur 'terminee' (index 2) au lieu de 'enAttente' (index 0)
-                $statutIndex = isset($entity['statut']) ? $entity['statut'] : 2;  // Défaut: terminee
+                $statutIndex = $entity['statut'];
                 $statut = _convertStatut($statutIndex);
+                error_log("✅ STATUT: index={$statutIndex} -> value={$statut}");
                 
                 // Logger les données converties
                 error_log("Conversion: type_index={$entity['type']} -> type={$type}, mode_index={$entity['mode_paiement']} -> mode={$modePaiement}, statut_index={$statutIndex} -> statut={$statut}");
@@ -150,31 +151,10 @@ try {
             if ($agentId === null && isset($entity['agent_id']) && $entity['agent_id'] <= 2147483647) {
                 $agentId = $entity['agent_id'];
             }
-            // Si toujours null, UTILISER UN AGENT PAR DÉFAUT au lieu de rejeter
+            // Si toujours null, REJETER l'opération avec message explicite
             if ($agentId === null) {
-                // Chercher ou créer un agent par défaut
-                $defaultAgentStmt = $db->prepare("SELECT id FROM agents WHERE username = 'system_default' LIMIT 1");
-                $defaultAgentStmt->execute();
-                $defaultAgent = $defaultAgentStmt->fetch(PDO::FETCH_ASSOC);
-                
-                if (!$defaultAgent && $shopSourceId !== null) {
-                    // Créer l'agent par défaut s'il n'existe pas
-                    $createAgentStmt = $db->prepare("
-                        INSERT INTO agents (shop_id, nom, username, password, is_active, created_at)
-                        VALUES (:shop_id, 'Système', 'system_default', :password, 1, NOW())
-                    ");
-                    $createAgentStmt->execute([
-                        ':shop_id' => $shopSourceId,
-                        ':password' => password_hash('system123', PASSWORD_DEFAULT)
-                    ]);
-                    $agentId = $db->lastInsertId();
-                    error_log("INFO: Agent par défaut créé avec ID = {$agentId}");
-                } else if ($defaultAgent) {
-                    $agentId = $defaultAgent['id'];
-                    error_log("INFO: Utilisation agent par défaut ID = {$agentId} pour username='{$entity['agent_username']}'");
-                } else {
-                    throw new Exception("Impossible de créer l'agent par défaut (shop source non trouvé). Opération ID {$entity['id']} rejetée.");
-                }
+                $agentInfo = isset($entity['agent_username']) ? "username='{$entity['agent_username']}'" : "agent_id={$entity['agent_id']}";
+                throw new Exception("Agent non trouvé pour {$agentInfo}. Opération ID {$entity['id']} rejetée. Veuillez créer l'agent avant de synchroniser les opérations.");
             }
             
             // Résoudre shop_source_id et shop_destination_id POUR TOUTES LES OPÉRATIONS
@@ -211,12 +191,16 @@ try {
                 }
             }
             
-            // Vérifier si l'opération existe déjà
+            // Vérifier si l'opération existe déjà (d'abord par code_ops, ensuite par id)
             $checkStmt = $db->prepare("
                 SELECT id FROM operations 
-                WHERE id = :id
+                WHERE code_ops = :code_ops OR id = :id
+                LIMIT 1
             ");
-            $checkStmt->execute([':id' => $entity['id'] ?? 0]);
+            $checkStmt->execute([
+                ':code_ops' => $entity['code_ops'] ?? '',
+                ':id' => $entity['id'] ?? 0
+            ]);
             $exists = $checkStmt->fetch(PDO::FETCH_ASSOC);
             
             if ($exists) {
@@ -239,6 +223,7 @@ try {
                         notes = :notes,
                         destinataire = :destinataire,
                         telephone_destinataire = :telephone_destinataire,
+                        code_ops = :code_ops,
                         last_modified_at = :last_modified_at,
                         last_modified_by = :last_modified_by
                     WHERE id = :id
@@ -262,13 +247,20 @@ try {
                     ':notes' => $entity['notes'] ?? '',
                     ':destinataire' => $entity['destinataire'] ?? null,
                     ':telephone_destinataire' => $entity['telephone_destinataire'] ?? null,
+                    ':code_ops' => $entity['code_ops'] ?? null,
                     ':last_modified_at' => $entity['last_modified_at'] ?? date('Y-m-d H:i:s'),
                     ':last_modified_by' => $userId
                 ]);
                 
                 // Marquer comme synchronisé après mise à jour réussie
-                $syncStmt = $db->prepare("UPDATE operations SET is_synced = 1, synced_at = NOW() WHERE id = :id");
-                $syncStmt->execute([':id' => $entity['id']]);
+                // Use the client's synced_at timestamp to maintain timezone consistency
+                $syncedAt = $entity['synced_at'] ?? date('c'); // Use ISO 8601 format
+                $syncStmt = $db->prepare("UPDATE operations SET is_synced = 1, synced_at = :synced_at WHERE code_ops = :code_ops OR id = :id");
+                $syncStmt->execute([
+                    ':code_ops' => $entity['code_ops'] ?? '',
+                    ':id' => $entity['id'],
+                    ':synced_at' => $syncedAt
+                ]);
                 
                 $updatedCount++;
             } else {
@@ -309,12 +301,12 @@ try {
                     INSERT INTO operations (
                         type, montant_brut, montant_net, commission, devise,
                         client_id, client_nom, shop_source_id, shop_source_designation, shop_destination_id, shop_destination_designation, agent_id, agent_username,
-                        mode_paiement, statut, reference, notes, destinataire, telephone_destinataire,
+                        mode_paiement, statut, reference, notes, destinataire, telephone_destinataire, code_ops,
                         last_modified_at, last_modified_by, created_at
                     ) VALUES (
                         :type, :montant_brut, :montant_net, :commission, :devise,
                         :client_id, :client_nom, :shop_source_id, :shop_source_designation, :shop_destination_id, :shop_destination_designation, :agent_id, :agent_username,
-                        :mode_paiement, :statut, :reference, :notes, :destinataire, :telephone_destinataire,
+                        :mode_paiement, :statut, :reference, :notes, :destinataire, :telephone_destinataire, :code_ops,
                         :last_modified_at, :last_modified_by, :created_at
                     )
                 ");
@@ -340,6 +332,7 @@ try {
                     ':notes' => $entity['notes'] ?? '',
                     ':destinataire' => $entity['destinataire'] ?? null,
                     ':telephone_destinataire' => $entity['telephone_destinataire'] ?? null,
+                    ':code_ops' => $entity['code_ops'] ?? null,
                     ':last_modified_at' => $entity['last_modified_at'] ?? date('Y-m-d H:i:s'),
                     ':last_modified_by' => $userId,
                     ':created_at' => $entity['date_op'] ?? date('Y-m-d H:i:s')
@@ -349,8 +342,14 @@ try {
                 $insertId = $db->lastInsertId();
                 if ($insertId > 0) {
                     // Marquer comme synchronisé après insertion réussie
-                    $syncStmt = $db->prepare("UPDATE operations SET is_synced = 1, synced_at = NOW() WHERE id = :id");
-                    $syncStmt->execute([':id' => $insertId]);
+                    // Use the client's synced_at timestamp to maintain timezone consistency
+                    $syncedAt = $entity['synced_at'] ?? date('c'); // Use ISO 8601 format
+                    $syncStmt = $db->prepare("UPDATE operations SET is_synced = 1, synced_at = :synced_at WHERE code_ops = :code_ops OR id = :id");
+                    $syncStmt->execute([
+                        ':code_ops' => $entity['code_ops'] ?? '',
+                        ':id' => $insertId,
+                        ':synced_at' => $syncedAt
+                    ]);
                     
                     $uploadedCount++;
                     error_log("SUCCESS: Opération insérée: ID={$insertId}, type={$type}, montant={$entity['montant_brut']}");

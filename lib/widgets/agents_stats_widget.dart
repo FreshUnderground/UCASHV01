@@ -21,11 +21,14 @@ class AgentsStatsWidget extends StatelessWidget {
         // Calculer les agents par shop
         final agentsByShop = <int, int>{};
         for (var agent in agents) {
-          agentsByShop[agent.shopId] = (agentsByShop[agent.shopId] ?? 0) + 1;
+          if (agent.shopId != null) {
+            agentsByShop[agent.shopId!] = (agentsByShop[agent.shopId!] ?? 0) + 1;
+          }
         }
         
         final shopsWithAgents = agentsByShop.keys.length;
-        final shopsWithoutAgents = shopService.shops.length - shopsWithAgents;
+        // Handle nullable shop.id
+        final shopsWithoutAgents = shopService.shops.where((shop) => shop.id != null).length - shopsWithAgents;
 
         return Card(
           elevation: 2,
@@ -75,16 +78,19 @@ class AgentsStatsWidget extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   
-                  Container(
-                    constraints: const BoxConstraints(maxHeight: 150),
+                  Expanded(
+                  child: Container(
+                    constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.3),
                     child: ListView.builder(
                       shrinkWrap: true,
+                      physics: const ClampingScrollPhysics(),
                       itemCount: shopService.shops.length,
                       itemBuilder: (context, index) {
                         final shop = shopService.shops[index];
-                        final agentCount = agentsByShop[shop.id] ?? 0;
+                        // Handle nullable shop.id
+                        final agentCount = shop.id != null ? agentsByShop[shop.id!] ?? 0 : 0;
                         final activeInShop = agents
-                            .where((a) => a.shopId == shop.id && a.isActive)
+                            .where((a) => a.shopId != null && a.shopId == shop.id && a.isActive)
                             .length;
                         
                         return Container(
@@ -123,7 +129,7 @@ class AgentsStatsWidget extends StatelessWidget {
                                       ),
                                     ),
                                     Text(
-                                      shop.localisation,
+                                      shop.localisation ?? 'Localisation inconnue',
                                       style: TextStyle(
                                         color: Colors.grey[600],
                                         fontSize: 12,
@@ -179,6 +185,7 @@ class AgentsStatsWidget extends StatelessWidget {
                       },
                     ),
                   ),
+                ),
                 ],
               ],
             ),
