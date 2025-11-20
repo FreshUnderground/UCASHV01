@@ -628,9 +628,19 @@ class LocalDB {
     return allClients.where((client) => client.shopId == shopId).toList();
   }
   // === CRUD OPERATIONS ===
+  /// Sauvegarde une opération localement
+  /// Utilise code_ops comme clé unique pour éviter les doublons
+  /// Si une opération avec le même code_ops existe, elle est écrasée
   Future<OperationModel> saveOperation(OperationModel operation) async {
     final prefs = await database;
-    final operationId = operation.id ?? DateTime.now().millisecondsSinceEpoch;
+    
+    // IMPORTANT: Vérifier si une opération avec le même code_ops existe déjà
+    final existingOp = await getOperationByCodeOps(operation.codeOps);
+    
+    // Si l'opération existe déjà, utiliser son ID et écraser les données
+    // Sinon, générer un nouvel ID
+    final operationId = existingOp?.id ?? operation.id ?? DateTime.now().millisecondsSinceEpoch;
+    
     final updatedOperation = operation.copyWith(
       id: operationId,
       lastModifiedAt: DateTime.now(),
@@ -644,11 +654,24 @@ class LocalDB {
       debugPrint('   Statut: ${operation.statut.name}');
     }
     
+    if (existingOp != null) {
+      // ÉCRASER l'opération existante avec les nouvelles données
+      debugPrint('🔄 Opération ${operation.codeOps} existe déjà (ID: $operationId) - ÉCRASEMENT des données');
+      
+      // Supprimer l'ancienne clé si elle existe
+      await prefs.remove('operation_${existingOp.id}');
+    }
+    
+    // Sauvegarder avec la clé operation_ID
     await prefs.setString('operation_$operationId', jsonEncode(updatedOperation.toJson()));
     
-    // Confirmation de sauvegarde pour les opérations de capital initial
+    // Confirmation de sauvegarde
     if (operation.destinataire == 'CAPITAL INITIAL') {
       debugPrint('✅ saveOperation: Opération de capital initial ID $operationId sauvegardée avec succès');
+    } else if (existingOp != null) {
+      debugPrint('✅ Opération ${operation.codeOps} mise à jour avec succès (ID: $operationId)');
+    } else {
+      debugPrint('✅ Opération ${operation.codeOps} créée avec succès (ID: $operationId)');
     }
     
     return updatedOperation;

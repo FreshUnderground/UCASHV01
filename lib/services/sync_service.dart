@@ -22,6 +22,7 @@ import '../models/taux_model.dart';
 import '../models/commission_model.dart';
 import '../models/document_header_model.dart';
 import '../models/cloture_caisse_model.dart';
+import '../models/flot_model.dart' as flot_model;
 import '../config/app_config.dart';
 
 /// Service de synchronisation bidirectionnelle avec gestion des conflits
@@ -174,7 +175,7 @@ class SyncService {
       
       // Phase 2: Upload des entités dépendantes (avec IDs serveur)
       debugPrint('📤 PHASE 2: Upload Entités Dépendantes → Serveur');
-      final dependentTables = ['agents', 'clients', 'taux', 'commissions', 'document_headers', 'cloture_caisse'];
+      final dependentTables = ['agents', 'clients', 'operations', 'taux', 'commissions', 'document_headers', 'cloture_caisse', 'flots'];
       for (String table in dependentTables) {
         try {
           await _uploadTableDataWithRetry(table, userIdToUse); // Utiliser version avec retry
@@ -275,8 +276,8 @@ class SyncService {
 
   /// Upload des changements locaux vers le serveur
   Future<void> _uploadLocalChanges(String userId) async {
-    // NOTE: 'operations' géré par TransferSyncService
-    final tables = ['shops', 'agents', 'clients', 'taux', 'commissions', 'document_headers', 'cloture_caisse'];
+    // NOTE: 'operations' est maintenant inclus dans la sync normale
+    final tables = ['shops', 'agents', 'clients', 'operations', 'taux', 'commissions', 'document_headers', 'cloture_caisse'];
     int successCount = 0;
     int errorCount = 0;
     
@@ -319,6 +320,22 @@ class SyncService {
         }
         if (data['shop_id'] == null || data['shop_id'] <= 0) {
           debugPrint('❌ Validation: shop_id manquant pour client ${data['id']}');
+          return false;
+        }
+        return true;
+      
+      case 'operations':
+        // Validation des champs obligatoires pour les opérations
+        if (data['type'] == null) {
+          debugPrint('❌ Validation: type manquant pour operation ${data['id']}');
+          return false;
+        }
+        if (data['montant_net'] == null || data['montant_net'] <= 0) {
+          debugPrint('❌ Validation: montant_net invalide pour operation ${data['id']}');
+          return false;
+        }
+        if (data['shop_source_id'] == null || data['shop_source_id'] <= 0) {
+          debugPrint('❌ Validation: shop_source_id manquant pour operation ${data['id']}');
           return false;
         }
         return true;
@@ -535,6 +552,11 @@ class SyncService {
               case 'commissions':
                 await RatesService.instance.loadRatesAndCommissions();
                 break;
+              case 'flots':
+                // Recharger les flots dans le service
+                debugPrint('🚚 Rechargement des FLOTs en mémoire...');
+                // Les FLOTs sont chargés par FlotService si nécessaire
+                break;
               case 'document_headers':
               case 'cloture_caisse':
                 // Ces données sont chargées à la demande, pas besoin de recharger
@@ -638,6 +660,10 @@ class SyncService {
       case 'taux':
       case 'commissions':
         await RatesService.instance.loadRatesAndCommissions();
+        break;
+      case 'flots':
+        // Les FLOTs sont rechargés par FlotService si nécessaire
+        debugPrint('🚚 FLOTs: Chargement à la demande par FlotService');
         break;
       case 'document_headers':
       case 'cloture_caisse':
@@ -855,6 +881,30 @@ class SyncService {
               .toList();
           break;
 
+        case 'operations':
+          // Récupérer toutes les opérations depuis LocalDB
+          final allOperations = await LocalDB.instance.getAllOperations();
+          debugPrint('📦 OPERATIONS: Total opérations en mémoire: ${allOperations.length}');
+          
+          // Filtrer uniquement les opérations non synchronisées
+          unsyncedData = allOperations
+              .where((op) => op.isSynced != true)
+              .map((op) {
+                final json = _addSyncMetadata(op.toJson(), 'operation');
+                debugPrint('📤 Opération ID ${op.id} à synchroniser: ${op.type.name} - ${op.montantNet} ${op.devise}');
+                return json;
+              })
+              .toList();
+          
+          debugPrint('📤 OPERATIONS: ${unsyncedData.length}/${allOperations.length} non synchronisées');
+          
+          // Si aucune opération non synchronisée mais qu'il y a des opérations, forcer l'upload en première sync
+          if (unsyncedData.isEmpty && allOperations.isNotEmpty && since == null) {
+            debugPrint('🔄 Première synchronisation: envoi de toutes les opérations');
+            unsyncedData = allOperations.map((op) => _addSyncMetadata(op.toJson(), 'operation')).toList();
+          }
+          break;
+
         case 'taux':
           final taux = RatesService.instance.taux;
           // Pour l'instant, envoyer tous les taux jusqu'à ce que le modèle soit mis à jour
@@ -888,17 +938,16 @@ class SyncService {
           break;
           
         case 'document_headers':
-          // Les headers sont chargés à la demande depuis LocalDB
+          // Les headers sont chargés depuis la clé active
           final prefs = await LocalDB.instance.database;
-          final headerKeys = prefs.getKeys().where((key) => key.startsWith('document_header_'));
+          const activeKey = 'document_header_active';
           unsyncedData = [];
-          for (var key in headerKeys) {
-            final headerData = prefs.getString(key);
-            if (headerData != null) {
-              final json = jsonDecode(headerData);
-              if (json['is_synced'] != true) {
-                unsyncedData.add(_addSyncMetadata(json, 'document_header'));
-              }
+          
+          final headerData = prefs.getString(activeKey);
+          if (headerData != null) {
+            final json = jsonDecode(headerData);
+            if (json['is_synced'] != true) {
+              unsyncedData.add(_addSyncMetadata(json, 'document_header'));
             }
           }
           break;
@@ -916,6 +965,30 @@ class SyncService {
                 unsyncedData.add(_addSyncMetadata(json, 'cloture_caisse'));
               }
             }
+          }
+          break;
+        
+        case 'flots':
+          // Récupérer tous les flots depuis LocalDB
+          final allFlots = await LocalDB.instance.getAllFlots();
+          debugPrint('🚚 FLOTS: Total flots en mémoire: ${allFlots.length}');
+          
+          // Filtrer uniquement les flots non synchronisés
+          unsyncedData = allFlots
+              .where((flot) => flot.isSynced != true)
+              .map((flot) {
+                final json = _addSyncMetadata(flot.toJson(), 'flot');
+                debugPrint('📤 Flot ID ${flot.id} à synchroniser: ${flot.shopSourceDesignation} → ${flot.shopDestinationDesignation} - ${flot.montant} ${flot.devise}');
+                return json;
+              })
+              .toList();
+          
+          debugPrint('📤 FLOTS: ${unsyncedData.length}/${allFlots.length} non synchronisés');
+          
+          // Si aucun flot non synchronisé mais qu'il y a des flots, forcer l'upload en première sync
+          if (unsyncedData.isEmpty && allFlots.isNotEmpty && since == null) {
+            debugPrint('🔄 Première synchronisation: envoi de tous les flots');
+            unsyncedData = allFlots.map((flot) => _addSyncMetadata(flot.toJson(), 'flot')).toList();
           }
           break;
           
@@ -1162,8 +1235,25 @@ class SyncService {
         case 'document_headers':
           final header = DocumentHeaderModel.fromJson(data);
           final prefs = await LocalDB.instance.database;
-          await prefs.setString('document_header_${header.id}', jsonEncode(header.toJson()));
-          debugPrint('✅ Document header ID ${header.id} sauvegardé');
+          
+          // IMPORTANT: Un seul header actif à la fois
+          // Toujours sauvegarder dans la clé 'document_header_active' pour cohérence
+          const activeKey = 'document_header_active';
+          
+          // Supprimer tous les anciens headers (nettoyage)
+          final allKeys = prefs.getKeys();
+          final oldHeaderKeys = allKeys.where((key) => key.startsWith('document_header_') && key != activeKey);
+          for (var key in oldHeaderKeys) {
+            await prefs.remove(key);
+            debugPrint('🗑️ Ancien header supprimé: $key');
+          }
+          
+          // Sauvegarder le header dans la clé active
+          await prefs.setString(activeKey, jsonEncode(header.toJson()));
+          debugPrint('✅ Document header ID ${header.id} sauvegardé dans $activeKey');
+          
+          // Notifier DocumentHeaderService du changement
+          // Le service rechargera automatiquement lors du prochain accès
           break;
           
         case 'cloture_caisse':
@@ -1180,6 +1270,21 @@ class SyncService {
           
           await prefs.setString(clotureKey, jsonEncode(cloture.toJson()));
           debugPrint('✅ Clôture caisse shop ${cloture.shopId} du ${cloture.dateCloture.toIso8601String().split('T')[0]} sauvegardée');
+          break;
+        
+        case 'flots':
+          final flot = flot_model.FlotModel.fromJson(data);
+          
+          // Vérifier si le flot existe déjà
+          final existingFlot = await LocalDB.instance.getFlotById(flot.id!);
+          if (existingFlot != null) {
+            debugPrint('⚠️ Doublon ignoré: flot ID ${flot.id} existe déjà');
+            return;
+          }
+          
+          // Sauvegarder le flot
+          await LocalDB.instance.saveFlot(flot);
+          debugPrint('✅ Flot ID ${flot.id} sauvegardé: ${flot.shopSourceDesignation} → ${flot.shopDestinationDesignation} - ${flot.montant} ${flot.devise}');
           break;
           
         default:
@@ -1294,8 +1399,14 @@ class SyncService {
         case 'document_headers':
           final header = DocumentHeaderModel.fromJson(data);
           final prefs = await LocalDB.instance.database;
-          await prefs.setString('document_header_${header.id}', jsonEncode(header.toJson()));
-          debugPrint('✅ Document header ID ${header.id} mis à jour');
+          
+          // IMPORTANT: Un seul header actif
+          // Toujours utiliser 'document_header_active' pour cohérence
+          const activeKey = 'document_header_active';
+          await prefs.setString(activeKey, jsonEncode(header.toJson()));
+          debugPrint('✅ Document header ID ${header.id} mis à jour dans $activeKey');
+          
+          // Notifier DocumentHeaderService du changement si nécessaire
           break;
           
         case 'cloture_caisse':
@@ -1304,6 +1415,12 @@ class SyncService {
           final clotureKey = 'cloture_caisse_${cloture.shopId}_${cloture.dateCloture.toIso8601String().split('T')[0]}';
           await prefs.setString(clotureKey, jsonEncode(cloture.toJson()));
           debugPrint('✅ Clôture caisse shop ${cloture.shopId} mis à jour');
+          break;
+        
+        case 'flots':
+          final flot = flot_model.FlotModel.fromJson(data);
+          await LocalDB.instance.saveFlot(flot);
+          debugPrint('✅ Flot ID ${flot.id} mis à jour');
           break;
           
         default:
@@ -1392,12 +1509,13 @@ class SyncService {
             
           case 'document_headers':
             final prefs = await LocalDB.instance.database;
-            final headerData = prefs.getString('document_header_$entityId');
+            const activeKey = 'document_header_active';
+            final headerData = prefs.getString(activeKey);
             if (headerData != null) {
               final headerJson = jsonDecode(headerData);
               headerJson['is_synced'] = true;
               headerJson['synced_at'] = now.toIso8601String();
-              await prefs.setString('document_header_$entityId', jsonEncode(headerJson));
+              await prefs.setString(activeKey, jsonEncode(headerJson));
             }
             break;
             
@@ -1413,6 +1531,17 @@ class SyncService {
                 clotureJson['synced_at'] = now.toIso8601String();
                 await prefs.setString(key, jsonEncode(clotureJson));
               }
+            }
+            break;
+          
+          case 'flots':
+            final prefs = await LocalDB.instance.database;
+            final flotData = prefs.getString('flot_$entityId');
+            if (flotData != null) {
+              final flotJson = jsonDecode(flotData);
+              flotJson['is_synced'] = true;
+              flotJson['synced_at'] = now.toIso8601String();
+              await prefs.setString('flot_$entityId', jsonEncode(flotJson));
             }
             break;
         }

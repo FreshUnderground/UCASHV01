@@ -23,13 +23,16 @@ class _DocumentHeaderManagementWidgetState extends State<DocumentHeaderManagemen
   final _idnatController = TextEditingController();
   final _taxNumberController = TextEditingController();
   
-  bool _isLoading = false;
+  bool _isLoading = true;
   bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
-    _loadHeader();
+    // Charger après le premier build pour éviter setState pendant build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadHeader();
+    });
   }
 
   @override

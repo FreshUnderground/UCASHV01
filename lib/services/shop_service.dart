@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import '../models/shop_model.dart';
 import '../models/caisse_model.dart';
@@ -189,6 +188,7 @@ class ShopService extends ChangeNotifier {
   Future<void> _createInitialCashDeposit(int shopId, double montant, String shopName) async {
     final operationId = DateTime.now().millisecondsSinceEpoch;
     final operation = OperationModel(
+      codeOps: '', // Sera généré automatiquement
       id: operationId,
       type: OperationType.depot,
       montantBrut: montant,
@@ -211,6 +211,21 @@ class ShopService extends ChangeNotifier {
     );
 
     await LocalDB.instance.saveOperation(operation);
+    
+    // Synchroniser l'opération de capital initial vers le serveur
+    try {
+      final syncService = SyncService();
+      if (syncService.isOnline) {
+        debugPrint('📤 Synchronisation opération capital initial vers le serveur...');
+        await syncService.syncAll(userId: 'system');
+        debugPrint('✅ Opération capital initial synchronisée');
+      } else {
+        await syncService.queueOperation(operation.toJson());
+        debugPrint('📋 Opération capital initial mise en file d\'attente (offline)');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Erreur sync capital initial: $e (sera retentée plus tard)');
+    }
     
     // Créer également une entrée dans le journal de caisse
     final journalEntry = JournalCaisseModel(

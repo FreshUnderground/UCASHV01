@@ -1,3 +1,5 @@
+// ignore_for_file: unnecessary_string_interpolations
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:printing/printing.dart';
@@ -127,16 +129,16 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
     }
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(1),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildClientInfo(),
-          const SizedBox(height: 24),
+          const SizedBox(height: 8),
           _buildSoldeActuel(),
-          const SizedBox(height: 24),
+          const SizedBox(height: 8),
           _buildStatistiques(),
-          const SizedBox(height: 24),
+          const SizedBox(height: 8),
           _buildTransactionsList(),
         ],
       ),
@@ -153,76 +155,6 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: const Color(0xFFDC2626),
-                  radius: 30,
-                  child: Text(
-                    client['nom'].toString().isNotEmpty 
-                        ? client['nom'].toString()[0].toUpperCase() 
-                        : 'C',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        client['nom'],
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFFDC2626),
-                        ),
-                      ),
-                      Text(
-                        'N° Compte: ${client['numeroCompte'] ?? client['id']}',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                      if (client['telephone'] != null)
-                        Text(
-                          'Téléphone: ${client['telephone']}',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      'UCASH',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                    Text(
-                      'Client ID: ${client['id']}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[500],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            
             if (periode['debut'] != null && periode['fin'] != null) ...[
               const SizedBox(height: 16),
               Text(
@@ -260,7 +192,7 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
             Icon(
               Icons.account_balance_wallet,
               color: Colors.white,
-              size: 48,
+              size: 38,
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -279,7 +211,7 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
                     '${soldeActuel.toStringAsFixed(2)} USD',
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 32,
+                      fontSize: 20,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -312,7 +244,7 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
       children: [
         Expanded(
           child: Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: Colors.green[50],
               borderRadius: BorderRadius.circular(8),
@@ -321,18 +253,18 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
             child: Column(
               children: [
                 const Text(
-                  'Dépôts USD',
+                  'Dépôts',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
                     color: Colors.green,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 4),
                 Text(
                   '${totaux['depots'].toStringAsFixed(2)} \$',
                   style: const TextStyle(
-                    fontSize: 16,
+                    fontSize: 9,
                     fontWeight: FontWeight.bold,
                     color: Colors.green,
                   ),
@@ -341,10 +273,10 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
             ),
           ),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 8),
         Expanded(
           child: Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: Colors.orange[50],
               borderRadius: BorderRadius.circular(8),
@@ -353,7 +285,7 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
             child: Column(
               children: [
                 const Text(
-                  'Retraits USD',
+                  'Retraits',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
@@ -364,7 +296,7 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
                 Text(
                   '${totaux['retraits'].toStringAsFixed(2)} \$',
                   style: const TextStyle(
-                    fontSize: 16,
+                    fontSize: 9,
                     fontWeight: FontWeight.bold,
                     color: Colors.orange,
                   ),
@@ -373,10 +305,10 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
             ),
           ),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 8),
         Expanded(
           child: Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: Colors.blue[50],
               borderRadius: BorderRadius.circular(8),
@@ -385,7 +317,7 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
             child: Column(
               children: [
                 const Text(
-                  'Solde USD',
+                  'Solde',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
@@ -396,7 +328,7 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
                 Text(
                   '${soldeActuel.toStringAsFixed(2)} \$',
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: 9,
                     fontWeight: FontWeight.bold,
                     color: soldeActuel >= 0 ? Colors.green : Colors.red,
                   ),
@@ -472,46 +404,91 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                const Text(
-                  'Historique des Transactions',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const Spacer(),
-                Text(
-                  '${transactions.length} transaction(s)',
-                  style: TextStyle(color: Colors.grey[600]),
-                ),
-                const SizedBox(width: 16),
-                IconButton(
-                  onPressed: _previewPdf,
-                  icon: const Icon(Icons.visibility),
-                  tooltip: 'Prévisualiser',
-                ),
-                IconButton(
-                  onPressed: _exportToPdf,
-                  icon: const Icon(Icons.download),
-                  tooltip: 'Télécharger PDF',
-                ),
-                IconButton(
-                  onPressed: _printReport,
-                  icon: const Icon(Icons.print),
-                  tooltip: 'Imprimer',
-                ),
-              ],
+            padding: const EdgeInsets.all(2),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isMobile = constraints.maxWidth < 600;
+                
+                if (isMobile) {
+                  // Mobile layout: Stack vertically
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Historique',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${transactions.length} transaction(s)',
+                              style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: _previewPdf,
+                            icon: const Icon(Icons.visibility, size: 20),
+                            tooltip: 'Prévisualiser',
+                            padding: const EdgeInsets.all(4),
+                            constraints: const BoxConstraints(),
+                          ),
+                          IconButton(
+                            onPressed: _exportToPdf,
+                            icon: const Icon(Icons.download, size: 20),
+                            tooltip: 'Télécharger PDF',
+                            padding: const EdgeInsets.all(4),
+                            constraints: const BoxConstraints(),
+                          ),
+                          IconButton(
+                            onPressed: _printReport,
+                            icon: const Icon(Icons.print, size: 20),
+                            tooltip: 'Imprimer',
+                            padding: const EdgeInsets.all(4),
+                            constraints: const BoxConstraints(),
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                } else {
+                  // Desktop layout: Single row
+                  return Row(
+                    children: [
+                      const Text(
+                        'Historique des Transactions',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '${transactions.length} transaction(s)',
+                        style: TextStyle(color: Colors.grey[600]),
+                      ),
+                      const SizedBox(width: 16),
+                      IconButton(
+                        onPressed: _previewPdf,
+                        icon: const Icon(Icons.visibility),
+                        tooltip: 'Prévisualiser',
+                      ),
+                      IconButton(
+                        onPressed: _exportToPdf,
+                        icon: const Icon(Icons.download),
+                        tooltip: 'Télécharger PDF',
+                      ),
+                      IconButton(
+                        onPressed: _printReport,
+                        icon: const Icon(Icons.print),
+                        tooltip: 'Imprimer',
+                      ),
+                    ],
+                  );
+                }
+              },
             ),
           ),
           
           // Historique des transactions
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Text(
-              'HISTORIQUE DES TRANSACTIONS',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-          ),
           
           // Table header
           Container(
@@ -541,7 +518,7 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
                 Expanded(
                   flex: 3,
                   child: Text(
-                    'Observation',
+                    'Obs.',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.grey[700],
@@ -573,7 +550,7 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
                 Expanded(
                   flex: 2,
                   child: Text(
-                    'Solde USD',
+                    'Solde',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.grey[700],
@@ -740,6 +717,7 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
         if (transaction is Map<String, dynamic>) {
           // Create a minimal OperationModel for PDF generation
           final operation = OperationModel(
+            codeOps: '', // Sera généré automatiquement si nécessaire
             id: transaction['id'] as int?,
             type: _mapStringToOperationType(transaction['type'] as String),
             montantBrut: transaction['montant'] as double? ?? 0.0,
@@ -832,6 +810,7 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
         if (transaction is Map<String, dynamic>) {
           // Create a minimal OperationModel for PDF generation
           final operation = OperationModel(
+            codeOps: '', // Sera généré automatiquement si nécessaire
             id: transaction['id'] as int?,
             type: _mapStringToOperationType(transaction['type'] as String),
             montantBrut: transaction['montant'] as double? ?? 0.0,
@@ -957,6 +936,7 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
         if (transaction is Map<String, dynamic>) {
           // Create a minimal OperationModel for PDF generation
           final operation = OperationModel(
+            codeOps: '', // Sera généré automatiquement si nécessaire
             id: transaction['id'] as int?,
             type: _mapStringToOperationType(transaction['type'] as String),
             montantBrut: transaction['montant'] as double? ?? 0.0,
@@ -1023,15 +1003,17 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
                     color: const Color(0xFFDC2626),
                     child: Row(
                       children: [
-                        const Text(
-                          'Prévisualisation Relevé de Compte',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                        const Expanded(
+                          child: Text(
+                            'Prévisualisation Relevé de Compte',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        const Spacer(),
                         IconButton(
                           icon: const Icon(Icons.close, color: Colors.white),
                           onPressed: () => Navigator.pop(context),
@@ -1116,11 +1098,11 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
           child: Row(
             children: [
               Expanded(
-                flex: 2,
+                flex: 3,
                 child: Text(
                   _formatDate(date),
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 10,
                     color: Colors.grey[700],
                   ),
                 ),
@@ -1149,9 +1131,9 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
               Expanded(
                 flex: 2,
                 child: Text(
-                  isCredit ? '${montant.toStringAsFixed(2)} \$' : '--',
+                  isCredit ? '${montant.toStringAsFixed(2)}' : '--',
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 10,
                     color: isCredit ? Colors.green : Colors.grey[700],
                     fontWeight: isCredit ? FontWeight.bold : FontWeight.normal,
                   ),
@@ -1161,9 +1143,9 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
               Expanded(
                 flex: 2,
                 child: Text(
-                  !isCredit ? '${montant.toStringAsFixed(2)} \$' : '--',
+                  !isCredit ? '${montant.toStringAsFixed(2)}' : '--',
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 10,
                     color: !isCredit ? Colors.red : Colors.grey[700],
                     fontWeight: !isCredit ? FontWeight.bold : FontWeight.normal,
                   ),
@@ -1173,9 +1155,9 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
               Expanded(
                 flex: 2,
                 child: Text(
-                  '${runningBalance.toStringAsFixed(2)} \$',
+                  '${runningBalance.toStringAsFixed(2)}',
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 10,
                     color: runningBalance >= 0 ? Colors.green : Colors.red,
                     fontWeight: FontWeight.bold,
                   ),

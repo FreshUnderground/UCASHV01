@@ -126,20 +126,20 @@ class _CommissionsReportState extends State<CommissionsReport> {
     }
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(2),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildHeader(),
-          const SizedBox(height: 24),
+          const SizedBox(height: 10),
           _buildSummaryCards(),
-          const SizedBox(height: 24),
+          const SizedBox(height: 10),
           _buildCommissionsParType(),
-          const SizedBox(height: 24),
+          const SizedBox(height: 10),
           _buildCommissionsParShop(),
-          const SizedBox(height: 24),
+          const SizedBox(height: 10),
           _buildOperationsList(),
-          const SizedBox(height: 24),
+          const SizedBox(height: 10),
           // Boutons PDF
           _buildPdfActions(),
         ],
@@ -163,7 +163,7 @@ class _CommissionsReportState extends State<CommissionsReport> {
                 Icon(Icons.monetization_on, color: Colors.green[700], size: isMobile ? 20 : 24),
                 SizedBox(width: isMobile ? 6 : 8),
                 Text(
-                  'Commissions Encaissées',
+                  'Commissions',
                   style: TextStyle(
                     fontSize: isMobile ? 16 : 20,
                     fontWeight: FontWeight.bold,
@@ -173,8 +173,8 @@ class _CommissionsReportState extends State<CommissionsReport> {
                 const Spacer(),
                 Container(
                   padding: EdgeInsets.symmetric(
-                    horizontal: isMobile ? 8 : 12,
-                    vertical: isMobile ? 4 : 6,
+                    horizontal: isMobile ? 5 : 12,
+                    vertical: isMobile ? 2 : 6,
                   ),
                   decoration: BoxDecoration(
                     color: Colors.green[100],
@@ -225,7 +225,7 @@ class _CommissionsReportState extends State<CommissionsReport> {
             Colors.green,
           ),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 2),
         Expanded(
           child: _buildSummaryCard(
             'Opérations Payantes',
@@ -234,7 +234,7 @@ class _CommissionsReportState extends State<CommissionsReport> {
             Colors.blue,
           ),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 3),
         Expanded(
           child: _buildSummaryCard(
             'Commission Moyenne',
@@ -243,7 +243,7 @@ class _CommissionsReportState extends State<CommissionsReport> {
             Colors.orange,
           ),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 3),
         Expanded(
           child: _buildSummaryCard(
             'Transferts Sortants',
@@ -261,15 +261,15 @@ class _CommissionsReportState extends State<CommissionsReport> {
     
     return Card(
       child: Padding(
-        padding: EdgeInsets.all(isMobile ? 10 : 16),
+        padding: EdgeInsets.all(isMobile ? 5 : 16),
         child: Column(
           children: [
-            Icon(icon, color: color, size: isMobile ? 24 : 32),
-            SizedBox(height: isMobile ? 6 : 8),
+            Icon(icon, color: color, size: isMobile ? 20 : 32),
+            SizedBox(height: isMobile ? 4 : 8),
             Text(
               value,
               style: TextStyle(
-                fontSize: isMobile ? 14 : 18,
+                fontSize: isMobile ? 10 : 18,
                 fontWeight: FontWeight.bold,
                 color: color,
               ),
@@ -277,7 +277,7 @@ class _CommissionsReportState extends State<CommissionsReport> {
             Text(
               title,
               style: TextStyle(
-                fontSize: isMobile ? 10 : 12,
+                fontSize: isMobile ? 9 : 12,
                 color: Colors.grey[600],
               ),
               textAlign: TextAlign.center,
@@ -393,9 +393,18 @@ class _CommissionsReportState extends State<CommissionsReport> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Commissions par Shop',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            Row(
+              children: [
+                const Text(
+                  'Commissions par Shop',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(width: 8),
+                Tooltip(
+                  message: 'Les commissions sont attribuées au shop de destination qui sert le transfert',
+                  child: Icon(Icons.info_outline, size: 18, color: Colors.grey[600]),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             
@@ -472,7 +481,7 @@ class _CommissionsReportState extends State<CommissionsReport> {
             child: Row(
               children: [
                 const Text(
-                  'Détail des Opérations avec Commission',
+                  'Détail des Opérations',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const Spacer(),

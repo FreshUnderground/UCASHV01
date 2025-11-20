@@ -166,7 +166,7 @@ class OperationService extends ChangeNotifier {
       
       // Générer le code d'opération unique
       final now = DateTime.now();
-      final codeOps = 'TRANSID-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}${enrichedOperation.agentId}${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
+      final codeOps = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}${enrichedOperation.agentId}${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
       
       // Ajouter le codeOps à l'opération
       final operationWithCode = enrichedOperation.copyWith(
@@ -198,6 +198,15 @@ class OperationService extends ChangeNotifier {
       if (!syncService.isOnline) {
         await syncService.queueOperation(savedOperation.toJson());
         debugPrint('📋 Opération mise en file d\'attente (mode offline)');
+      } else {
+        // En ligne : synchroniser immédiatement l'opération vers le serveur
+        try {
+          debugPrint('📤 Synchronisation de l\'opération vers le serveur...');
+          await syncService.syncAll(userId: savedOperation.lastModifiedBy ?? 'system');
+          debugPrint('✅ Opération synchronisée avec le serveur');
+        } catch (e) {
+          debugPrint('⚠️ Erreur synchronisation: $e (l\'opération sera synchronisée plus tard)');
+        }
       }
       
       // Recharger les opérations
@@ -259,7 +268,10 @@ class OperationService extends ChangeNotifier {
         );
         
         // Commission calculée sur le montantNet (ce que le destinataire reçoit)
-        commission = operation.montantNet * (commissionData.taux / 100);
+        // IMPORTANT: Arrondir à 2 décimales
+        commission = double.parse((operation.montantNet * (commissionData.taux / 100)).toStringAsFixed(2));
+        debugPrint('💰 Commission calculée: ${commission.toStringAsFixed(2)} ${operation.devise} (${commissionData.taux}% de ${operation.montantNet})');
+        debugPrint('📌 NOTE: Cette commission appartient au SHOP DESTINATION qui servira le transfert');
         break;
         
       case OperationType.transfertInternationalEntrant:
@@ -280,7 +292,9 @@ class OperationService extends ChangeNotifier {
     }
     
     // montantNet = ce que le destinataire reçoit
-    // montantBrut = montantNet + commission (ce que le client paie)
+    // montantBrut = montantNet + commission (ce que le client paie au shop source)
+    // LOGIQUE: Le shop source reçoit le montant BRUT et doit le montant BRUT au shop destination
+    //          Le shop destination garde la COMMISSION et sert le montant NET au bénéficiaire
     return operation.copyWith(
       commission: commission,
       montantBrut: operation.montantNet + commission,  // Client paie Net + Commission

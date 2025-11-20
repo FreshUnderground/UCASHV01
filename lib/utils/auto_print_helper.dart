@@ -27,6 +27,7 @@ class AutoPrintHelper {
     required AgentModel agent,
     String? clientName,
     bool showSuccessMessage = true,
+    bool isWithdrawalReceipt = false,  // Pour bon de retrait lors de validation transfert
   }) async {
     // Sur Web et Mobile: utiliser le même système PDF avec sélecteur d'imprimante
     return await _printWithPdfSelector(
@@ -36,6 +37,7 @@ class AutoPrintHelper {
       agent: agent,
       clientName: clientName,
       showSuccessMessage: showSuccessMessage,
+      isWithdrawalReceipt: isWithdrawalReceipt,
     );
   }
 
@@ -47,18 +49,26 @@ class AutoPrintHelper {
     required AgentModel agent,
     String? clientName,
     bool showSuccessMessage = true,
+    bool isWithdrawalReceipt = false,
   }) async {
     try {
       debugPrint('🖨️ [AutoPrintHelper] Génération PDF pour opération #${operation.id}');
       
       // Générer le PDF
       final pdfService = PdfService();
-      final pdfDoc = await pdfService.generateReceiptPdf(
-        operation: operation,
-        shop: shop,
-        agent: agent,
-        clientName: clientName,
-      );
+      final pdfDoc = isWithdrawalReceipt
+          ? await pdfService.generateWithdrawalReceipt(
+              operation: operation,
+              shop: shop,
+              agent: agent,
+              destinataireName: clientName ?? operation.observation ?? operation.destinataire,
+            )
+          : await pdfService.generateReceiptPdf(
+              operation: operation,
+              shop: shop,
+              agent: agent,
+              clientName: clientName,
+            );
       
       final pdfBytes = await pdfDoc.save();
       
@@ -110,6 +120,7 @@ class AutoPrintHelper {
     required AgentModel agent,
     String? clientName,
     bool showSuccessMessage = true,
+    bool isWithdrawalReceipt = false,
   }) async {
     // Utiliser le même système que autoPrint
     return await _printWithPdfSelector(
@@ -119,6 +130,7 @@ class AutoPrintHelper {
       agent: agent,
       clientName: clientName,
       showSuccessMessage: showSuccessMessage,
+      isWithdrawalReceipt: isWithdrawalReceipt,
     );
   }
 
@@ -130,6 +142,7 @@ class AutoPrintHelper {
     required ShopModel shop,
     required AgentModel agent,
     String? clientName,
+    bool isWithdrawalReceipt = false,  // Pour bon de retrait lors de validation transfert
   }) async {
     try {
 
@@ -212,12 +225,19 @@ class AutoPrintHelper {
                   
                   // Générer le PDF via PdfService
                   final pdfService = PdfService();
-                  final pdfDoc = await pdfService.generateReceiptPdf(
-                    operation: operation,
-                    shop: shop,
-                    agent: agent,
-                    clientName: clientName,
-                  );
+                  final pdfDoc = isWithdrawalReceipt
+                      ? await pdfService.generateWithdrawalReceipt(
+                          operation: operation,
+                          shop: shop,
+                          agent: agent,
+                          destinataireName: clientName ?? operation.observation ?? operation.destinataire,
+                        )
+                      : await pdfService.generateReceiptPdf(
+                          operation: operation,
+                          shop: shop,
+                          agent: agent,
+                          clientName: clientName,
+                        );
                   
                   final pdfBytes = await pdfDoc.save();
                   
@@ -290,6 +310,7 @@ class AutoPrintHelper {
       agent: agent,
       clientName: clientName,
       showSuccessMessage: true,
+      isWithdrawalReceipt: isWithdrawalReceipt,
     );
     } catch (e, stackTrace) {
       debugPrint('❌ [AutoPrintHelper] ERREUR CRITIQUE: $e');

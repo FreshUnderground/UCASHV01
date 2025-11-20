@@ -410,28 +410,32 @@ class RapportClotureService {
     debugPrint('📊 === CALCUL DETTES/CRÉANCES INTER-SHOPS (NOUVELLE LOGIQUE) ===');
     debugPrint('Shop actuel ID: $shopId');
     
-    // 1. TRANSFERTS SERVIS PAR NOUS (shop source nous doit directement)
+    // 1. TRANSFERTS SERVIS PAR NOUS (shop source nous doit le montant BRUT)
     for (final op in operations) {
       if ((op.type == OperationType.transfertNational || op.type == OperationType.transfertInternationalEntrant) &&
           op.shopDestinationId == shopId && // Nous servons le client
           op.devise == 'USD') {
         final autreShopId = op.shopSourceId; // Shop qui a reçu l'argent du client
         if (autreShopId != null && autreShopId != shopId) {
-          soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + op.montantNet;
-          debugPrint('   Transfert SERVI par nous: Shop $autreShopId nous doit +${op.montantNet} USD');
+          // IMPORTANT: Le shop source nous doit le MONTANT BRUT (montantNet + commission)
+          // Car nous gardons la commission et servons le montantNet
+          soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + op.montantBrut;
+          debugPrint('   Transfert SERVI par nous: Shop $autreShopId nous doit +${op.montantBrut.toStringAsFixed(2)} USD (Brut = Net ${op.montantNet} + Commission ${op.commission})');
         }
       }
     }
     
-    // 2. TRANSFERTS REÇUS/INITIÉS PAR NOUS (on doit à l'autre shop)
+    // 2. TRANSFERTS REÇUS/INITIÉS PAR NOUS (on doit le montant BRUT à l'autre shop)
     for (final op in operations) {
       if ((op.type == OperationType.transfertNational || op.type == OperationType.transfertInternationalSortant) &&
           op.shopSourceId == shopId && // Client nous a payé
           op.devise == 'USD') {
         final autreShopId = op.shopDestinationId; // Shop qui va servir
         if (autreShopId != null && autreShopId != shopId) {
-          soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - op.montantNet;
-          debugPrint('   Transfert INITIÉ par nous: On doit à Shop $autreShopId -${op.montantNet} USD');
+          // IMPORTANT: On doit le MONTANT BRUT au shop destination
+          // Le shop destination garde la commission et sert le montantNet
+          soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - op.montantBrut;
+          debugPrint('   Transfert INITIÉ par nous: On doit à Shop $autreShopId -${op.montantBrut.toStringAsFixed(2)} USD (Brut = Net ${op.montantNet} + Commission ${op.commission})');
         }
       }
     }

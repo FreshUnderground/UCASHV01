@@ -475,7 +475,7 @@ class _RetraitDialogState extends State<RetraitDialog> {
                         ),
                         Text(
                           // Generate a preview of what the CodeOps will look like
-                          'TRANSID-${DateTime.now().year}${DateTime.now().month.toString().padLeft(2, '0')}${DateTime.now().day.toString().padLeft(2, '0')}0001',
+                          '${DateTime.now().year}${DateTime.now().month.toString().padLeft(2, '0')}${DateTime.now().day.toString().padLeft(2, '0')}0001',
                           style: const TextStyle(
                             fontWeight: FontWeight.w600,
                             fontSize: 14,
@@ -538,6 +538,7 @@ class _RetraitDialogState extends State<RetraitDialog> {
       
       // Créer l'opération de retrait
       final operation = OperationModel(
+        codeOps: '', // Sera généré automatiquement par createOperation
         type: OperationType.retrait,
         montantBrut: montant,
         commission: 0.0,

@@ -5,7 +5,6 @@ import 'package:image_picker/image_picker.dart';
 import '../models/operation_model.dart';
 import '../models/agent_model.dart';
 import '../services/operation_service.dart';
-import '../services/transaction_service.dart';
 import '../services/auth_service.dart';
 import '../services/shop_service.dart';
 import '../services/rates_service.dart';
@@ -358,7 +357,7 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
                     ),
                     Text(
                       // Generate a preview of what the CodeOps will look like
-                      'TRANSID-${DateTime.now().year}${DateTime.now().month.toString().padLeft(2, '0')}${DateTime.now().day.toString().padLeft(2, '0')}0001',
+                      '${DateTime.now().year}${DateTime.now().month.toString().padLeft(2, '0')}${DateTime.now().day.toString().padLeft(2, '0')}0001',
                       style: const TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 14,
@@ -566,6 +565,7 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
       
       // Créer l'opération de transfert simple
       final operation = OperationModel(
+        codeOps: '', // Sera généré automatiquement par createOperation
         agentId: currentUser!.id!,
         agentUsername: currentUser.username,
         shopSourceId: currentUser.shopId!,

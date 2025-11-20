@@ -3,11 +3,13 @@ import 'package:provider/provider.dart';
 import '../../services/report_service.dart';
 
 class CreditsInterShopsReport extends StatefulWidget {
+  final int? shopId;
   final DateTime? startDate;
   final DateTime? endDate;
 
   const CreditsInterShopsReport({
     super.key,
+    this.shopId,
     this.startDate,
     this.endDate,
   });
@@ -30,7 +32,8 @@ class _CreditsInterShopsReportState extends State<CreditsInterShopsReport> {
   @override
   void didUpdateWidget(CreditsInterShopsReport oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.startDate != widget.startDate ||
+    if (oldWidget.shopId != widget.shopId ||
+        oldWidget.startDate != widget.startDate ||
         oldWidget.endDate != widget.endDate) {
       _loadReport();
     }
@@ -146,7 +149,7 @@ class _CreditsInterShopsReportState extends State<CreditsInterShopsReport> {
                 Icon(Icons.swap_horiz, color: Colors.purple[700]),
                 const SizedBox(width: 8),
                 Text(
-                  'Journal des Crédits Inter-Shops',
+                  'Crédits Inter-Shops',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,

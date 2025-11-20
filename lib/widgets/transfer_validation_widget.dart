@@ -5,7 +5,10 @@ import 'dart:async';
 import '../services/transfer_sync_service.dart';
 import '../services/auth_service.dart';
 import '../services/operation_service.dart';
+import '../services/shop_service.dart';
 import '../models/operation_model.dart';
+import '../models/agent_model.dart';
+import '../utils/auto_print_helper.dart';
 
 /// Widget de validation des transferts en attente
 class TransferValidationWidget extends StatefulWidget {
@@ -464,7 +467,7 @@ class _TransferValidationWidgetState extends State<TransferValidationWidget> {
     // Vérifier s'il y a une erreur sur la première utilisation (onglet "En attente" uniquement)
     if (_selectedTab == 0 && transfers.isEmpty && transferSync.error != null) {
       return Center(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -932,6 +935,11 @@ class _TransferValidationWidgetState extends State<TransferValidationWidget> {
       if (success) {
         debugPrint('✅ [VALIDATION] Validation réussie');
         
+        // Si validation réussie, imprimer automatiquement le reçu
+        if (newStatus == 'PAYE' && mounted) {
+          await _printValidatedTransferReceipt(transfer);
+        }
+        
         // Afficher le succès
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -981,6 +989,86 @@ class _TransferValidationWidgetState extends State<TransferValidationWidget> {
           ),
         );
       }
+    }
+  }
+
+  // Méthode pour imprimer automatiquement le reçu de transfert validé
+  Future<void> _printValidatedTransferReceipt(OperationModel transfer) async {
+    try {
+      debugPrint('🖨️ Impression automatique du reçu de transfert validé...');
+      
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final shopService = Provider.of<ShopService>(context, listen: false);
+      
+      final currentUser = authService.currentUser;
+      if (currentUser == null) {
+        debugPrint('⚠️ Utilisateur non connecté');
+        return;
+      }
+      
+      final shop = shopService.getShopById(currentUser.shopId ?? 0);
+      if (shop == null) {
+        debugPrint('⚠️ Shop introuvable');
+        return;
+      }
+      
+      // Créer l'agent model
+      final agent = AgentModel(
+        id: currentUser.id,
+        username: currentUser.username,
+        password: '',
+        shopId: currentUser.shopId!,
+        nom: currentUser.nom,
+        telephone: currentUser.telephone,
+      );
+      
+      // Créer une nouvelle opération pour le reçu avec toutes les données du transfert
+      // IMPORTANT: Ne pas utiliser l'opération existante, créer une nouvelle avec les bonnes données
+      final receiptOperation = OperationModel(
+        id: transfer.id,
+        type: transfer.type,
+        montantBrut: transfer.montantBrut,
+        commission: transfer.commission,
+        montantNet: transfer.montantNet,
+        devise: transfer.devise,
+        clientId: transfer.clientId,
+        clientNom: transfer.clientNom,
+        shopSourceId: transfer.shopSourceId,
+        shopSourceDesignation: transfer.shopSourceDesignation,
+        shopDestinationId: transfer.shopDestinationId,
+        shopDestinationDesignation: transfer.shopDestinationDesignation,
+        agentId: currentUser.id ?? transfer.agentId,
+        agentUsername: currentUser.username ?? transfer.agentUsername,
+        codeOps: transfer.codeOps,
+        destinataire: transfer.destinataire,
+        telephoneDestinataire: transfer.telephoneDestinataire,
+        reference: transfer.reference,
+        modePaiement: transfer.modePaiement,
+        statut: OperationStatus.validee,  // Statut validé
+        notes: transfer.notes,
+        observation: transfer.observation,
+        dateOp: transfer.dateOp,
+        createdAt: transfer.createdAt,
+        lastModifiedAt: DateTime.now(),
+        lastModifiedBy: currentUser.username,
+        isSynced: transfer.isSynced,
+        syncedAt: transfer.syncedAt,
+      );
+      
+      // Utiliser AutoPrintHelper pour imprimer automatiquement
+      await AutoPrintHelper.autoPrintWithDialog(
+        context: context,
+        operation: receiptOperation,
+        shop: shop,
+        agent: agent,
+        clientName: transfer.observation ?? transfer.destinataire,  // Nom du destinataire
+        isWithdrawalReceipt: true,  // BON DE RETRAIT pour validation de transfert
+      );
+      
+      debugPrint('✅ Reçu de transfert validé imprimé avec succès');
+    } catch (e) {
+      debugPrint('❌ Erreur lors de l\'impression du reçu: $e');
+      // Ne pas bloquer si l'impression échoue
     }
   }
 }

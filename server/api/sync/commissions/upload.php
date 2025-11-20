@@ -84,7 +84,7 @@ try {
             } else {
                 // Insertion d'une nouvelle commission
                 $insertStmt = $pdo->prepare("
-                    INSERT IGNORE INTO commissions (
+                    REPLACE IGNORE INTO commissions (
                         type, taux, description, is_active,
                         last_modified_at, last_modified_by, created_at
                     ) VALUES (

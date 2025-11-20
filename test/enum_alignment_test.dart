@@ -145,6 +145,7 @@ void main() {
     test('Operation with all enums can be serialized correctly', () {
       // Test qu'une opération complète peut être sérialisée avec tous les enums
       final operation = OperationModel(
+        codeOps: '', // Test operation
         id: 1,
         type: OperationType.transfertNational,
         modePaiement: ModePaiement.cash,
@@ -171,6 +172,7 @@ void main() {
     
     test('Different operation types have different indices', () {
       final depot = OperationModel(
+        codeOps: '', // Test depot
         type: OperationType.depot,
         modePaiement: ModePaiement.cash,
         statut: OperationStatus.terminee,
@@ -187,6 +189,7 @@ void main() {
       );
       
       final transfert = OperationModel(
+        codeOps: '', // Test transfert
         type: OperationType.transfertNational,
         modePaiement: ModePaiement.airtelMoney,
         statut: OperationStatus.validee,

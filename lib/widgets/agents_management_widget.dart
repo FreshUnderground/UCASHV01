@@ -34,54 +34,67 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: ResponsiveUtils.getFluidSpacing(context, mobile: 1, tablet: 1.5, desktop: 2),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header avec boutons d'action
-            Container(
-              padding: ResponsiveUtils.getFluidPadding(
-                context,
-                mobile: const EdgeInsets.all(16),
-                tablet: const EdgeInsets.all(18),
-                desktop: const EdgeInsets.all(20),
-              ),
-              decoration: const BoxDecoration(
-                color: Color(0xFFF8F9FA),
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(8),
-                  topRight: Radius.circular(8),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: constraints.maxHeight,
+            ),
+            child: IntrinsicHeight(
+              child: Card(
+                elevation: ResponsiveUtils.getFluidSpacing(context, mobile: 1, tablet: 1.5, desktop: 2),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header avec boutons d'action
+                    Container(
+                      padding: ResponsiveUtils.getFluidPadding(
+                        context,
+                        mobile: const EdgeInsets.all(16),
+                        tablet: const EdgeInsets.all(18),
+                        desktop: const EdgeInsets.all(20),
+                      ),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFF8F9FA),
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(8),
+                          topRight: Radius.circular(8),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Gestion des Agents',
+                            style: TextStyle(
+                              fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 16, tablet: 17, desktop: 18),
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFFDC2626),
+                            ),
+                          ),
+                          _buildActionButtons(),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    
+                    // Statistiques des agents
+                    _buildAgentStats(),
+                    
+                    const Divider(height: 1),
+                    
+                    // Liste des agents
+                    Expanded(
+                      child: _buildAgentsList(),
+                    ),
+                  ],
                 ),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Gestion des Agents',
-                    style: TextStyle(
-                      fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 16, tablet: 17, desktop: 18),
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFFDC2626),
-                    ),
-                  ),
-                  _buildActionButtons(),
-                ],
-              ),
             ),
-            const Divider(height: 1),
-            
-            // Statistiques des agents
-            _buildAgentStats(),
-            
-            const Divider(height: 1),
-            
-            // Liste des agents
-            _buildAgentsList(),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -487,24 +500,30 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
           fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
         ),
       ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Shop ID: ${agent.shopId} - ${shop.designation}',
-            style: TextStyle(
-              fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 12, tablet: 13, desktop: 14),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Shop ID: ${agent.shopId} - ${shop.designation}',
+              style: TextStyle(
+                fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 12, tablet: 13, desktop: 14),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            agent.isActive ? "✓ Actif" : "✗ Inactif",
-            style: TextStyle(
-              color: agent.isActive ? Colors.green : Colors.orange,
-              fontWeight: FontWeight.w500,
-              fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 12, tablet: 13, desktop: 14),
+            const SizedBox(height: 4),
+            Text(
+              agent.isActive ? "✓ Actif" : "✗ Inactif",
+              style: TextStyle(
+                color: agent.isActive ? Colors.green : Colors.orange,
+                fontWeight: FontWeight.w500,
+                fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 12, tablet: 13, desktop: 14),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
       trailing: PopupMenuButton<String>(
         icon: Icon(Icons.more_vert,

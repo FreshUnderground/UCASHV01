@@ -33,6 +33,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
   String _searchQuery = '';
   OperationType? _typeFilter;
   bool _showFiltersAndStats = false; // Contrôle l'affichage des stats et filtres (masqué par défaut)
+  String _categoryFilter = 'all'; // all, pending, my_transfers, my_withdrawals, my_served, my_deposits
 
   // Calculer les statistiques du shop (cash en caisse) DEPUIS DONNEES LOCALES MULTI-DEVISES
   Map<String, dynamic> _getShopStats(ShopService shopService, int shopId) {
@@ -155,15 +156,62 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
   }
 
   List<OperationModel> _getFilteredOperations(List<OperationModel> operations) {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final shopId = authService.currentUser?.shopId ?? 0;
+    
     return operations.where((operation) {
+      // 1. Filter by search query
       final matchesSearch = _searchQuery.isEmpty ||
           (operation.destinataire?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false) ||
           operation.id.toString().contains(_searchQuery) ||
           (operation.codeOps?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false);
       
+      // 2. Filter by operation type
       final matchesType = _typeFilter == null || operation.type == _typeFilter;
       
-      return matchesSearch && matchesType;
+      // 3. Filter by category
+      bool matchesCategory = true;
+      switch (_categoryFilter) {
+        case 'pending':
+          // Operations en attente (transfers waiting for validation)
+          matchesCategory = operation.statut == OperationStatus.enAttente &&
+              (operation.type == OperationType.transfertNational ||
+               operation.type == OperationType.transfertInternationalEntrant ||
+               operation.type == OperationType.transfertInternationalSortant) &&
+              operation.shopDestinationId == shopId; // Transfers I need to serve
+          break;
+        case 'my_transfers':
+          // My sent transfers (all statuses)
+          matchesCategory = (operation.type == OperationType.transfertNational ||
+               operation.type == OperationType.transfertInternationalEntrant ||
+               operation.type == OperationType.transfertInternationalSortant) &&
+              operation.shopSourceId == shopId; // Transfers I sent
+          break;
+        case 'my_withdrawals':
+          // My withdrawals
+          matchesCategory = operation.type == OperationType.retrait &&
+              operation.shopSourceId == shopId;
+          break;
+        case 'my_served':
+          // Transfers I validated/served
+          matchesCategory = (operation.type == OperationType.transfertNational ||
+               operation.type == OperationType.transfertInternationalEntrant ||
+               operation.type == OperationType.transfertInternationalSortant) &&
+              (operation.statut == OperationStatus.validee ||
+               operation.statut == OperationStatus.terminee) &&
+              operation.shopDestinationId == shopId; // Transfers I validated
+          break;
+        case 'my_deposits':
+          // My deposits
+          matchesCategory = operation.type == OperationType.depot &&
+              operation.shopSourceId == shopId;
+          break;
+        case 'all':
+        default:
+          matchesCategory = true;
+      }
+      
+      return matchesSearch && matchesType && matchesCategory;
     }).toList();
   }
 
@@ -182,6 +230,10 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
         children: [
           // Header avec boutons d'actions - Compact sur mobile
           _buildHeader(),
+          SizedBox(height: isMobile ? 6 : 12),
+          
+          // Category Filter Tabs (like En attente/Mes Validations)
+          _buildCategoryTabs(),
           SizedBox(height: isMobile ? 6 : 12),
           
           // Statistiques - Affichées uniquement si _showFiltersAndStats est true (Désactivé pour plus d'espace)
@@ -465,6 +517,117 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
               ], // Fin du if _showFiltersAndStats
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategoryTabs() {
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width <= 768;
+    
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: EdgeInsets.all(isMobile ? 6 : 10),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _buildCategoryTabButton(
+                label: 'Toutes',
+                icon: Icons.list,
+                value: 'all',
+                isMobile: isMobile,
+              ),
+              SizedBox(width: isMobile ? 6 : 8),
+              _buildCategoryTabButton(
+                label: 'En attente',
+                icon: Icons.pending_actions,
+                value: 'pending',
+                isMobile: isMobile,
+              ),
+              SizedBox(width: isMobile ? 6 : 8),
+              _buildCategoryTabButton(
+                label: 'Mes Transferts',
+                icon: Icons.send,
+                value: 'my_transfers',
+                isMobile: isMobile,
+              ),
+              SizedBox(width: isMobile ? 6 : 8),
+              _buildCategoryTabButton(
+                label: 'Mes Retraits',
+                icon: Icons.remove_circle,
+                value: 'my_withdrawals',
+                isMobile: isMobile,
+              ),
+              SizedBox(width: isMobile ? 6 : 8),
+              _buildCategoryTabButton(
+                label: 'Mes Servis',
+                icon: Icons.check_circle,
+                value: 'my_served',
+                isMobile: isMobile,
+              ),
+              SizedBox(width: isMobile ? 6 : 8),
+              _buildCategoryTabButton(
+                label: 'Mes Dépôts',
+                icon: Icons.add_circle,
+                value: 'my_deposits',
+                isMobile: isMobile,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategoryTabButton({
+    required String label,
+    required IconData icon,
+    required String value,
+    required bool isMobile,
+  }) {
+    final isSelected = _categoryFilter == value;
+    
+    return Flexible(
+      child: ElevatedButton.icon(
+        onPressed: () {
+          if (mounted) {
+            setState(() {
+              _categoryFilter = value;
+            });
+          }
+        },
+        icon: Icon(
+          icon,
+          size: isMobile ? 14 : 16,
+          color: isSelected ? Colors.white : const Color(0xFFDC2626),
+        ),
+        label: Text(
+          label,
+          style: TextStyle(
+            fontSize: isMobile ? 11 : 13,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected ? Colors.white : const Color(0xFFDC2626),
+          ),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: isSelected ? const Color(0xFFDC2626) : Colors.white,
+          foregroundColor: isSelected ? Colors.white : const Color(0xFFDC2626),
+          side: BorderSide(
+            color: const Color(0xFFDC2626),
+            width: isSelected ? 2 : 1,
+          ),
+          padding: EdgeInsets.symmetric(
+            horizontal: isMobile ? 8 : 12,
+            vertical: isMobile ? 8 : 10,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+          elevation: isSelected ? 4 : 0,
         ),
       ),
     );

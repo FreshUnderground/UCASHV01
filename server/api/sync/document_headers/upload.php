@@ -82,7 +82,7 @@ try {
                 $updated++;
             } else {
                 // INSERT
-                $sql = "INSERT INTO document_headers 
+                $sql = "REPLACE INTO document_headers 
                         (id, company_name, company_slogan, address, phone, email, website, 
                          logo_path, tax_number, registration_number, is_active, 
                          created_at, updated_at, last_modified_at, last_modified_by, is_synced, synced_at)

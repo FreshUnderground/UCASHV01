@@ -163,26 +163,28 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
         // NOUVELLE LOGIQUE: Calculer les dettes et créances inter-shop
         final Map<int, double> soldesParShop = {};
         
-        // 1. TRANSFERTS SERVIS PAR NOUS (shop source nous doit directement)
+        // 1. TRANSFERTS SERVIS PAR NOUS (shop source nous doit le montant BRUT)
         for (final op in operationService.operations) {
           if ((op.type == OperationType.transfertNational || op.type == OperationType.transfertInternationalEntrant) &&
               op.shopDestinationId == currentShopId && // Nous servons le client
               op.devise == 'USD') {
             final autreShopId = op.shopSourceId; // Shop qui a reçu l'argent du client
             if (autreShopId != null) {
-              soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + op.montantNet;
+              // IMPORTANT: Montant BRUT (montantNet + commission)
+              soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + op.montantBrut;
             }
           }
         }
         
-        // 2. TRANSFERTS REÇUS/INITIÉS PAR NOUS (on doit à l'autre shop)
+        // 2. TRANSFERTS REÇUS/INITIÉS PAR NOUS (on doit le montant BRUT à l'autre shop)
         for (final op in operationService.operations) {
           if ((op.type == OperationType.transfertNational || op.type == OperationType.transfertInternationalSortant) &&
               op.shopSourceId == currentShopId && // Client nous a payé
               op.devise == 'USD') {
             final autreShopId = op.shopDestinationId; // Shop qui va servir
             if (autreShopId != null) {
-              soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - op.montantNet;
+              // IMPORTANT: Montant BRUT (montantNet + commission)
+              soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - op.montantBrut;
             }
           }
         }

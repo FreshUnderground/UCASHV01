@@ -14,8 +14,13 @@ import '../services/operation_service.dart';
 /// Nom du fichier: rapportcloture.dart
 class RapportCloture extends StatefulWidget {
   final int? shopId;
+  final bool isAdminView; // Si true, masque le bouton de clôture (admin ne peut pas clôturer)
   
-  const RapportCloture({super.key, this.shopId});
+  const RapportCloture({
+    super.key,
+    this.shopId,
+    this.isAdminView = false,
+  });
 
   @override
   State<RapportCloture> createState() => _RapportClotureState();
@@ -513,19 +518,21 @@ class _RapportClotureState extends State<RapportCloture> {
                   ),
                 )
               else
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _cloturerJournee,
-                    icon: const Icon(Icons.lock),
-                    label: const Text('Clôturer la journée'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.all(16),
+                // Bouton "Clôturer la journée" (MASQUÉ pour l'admin)
+                if (!widget.isAdminView)
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _cloturerJournee,
+                      icon: const Icon(Icons.lock),
+                      label: const Text('Clôturer la journée'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.all(16),
+                      ),
                     ),
                   ),
-                ),
             ],
           ],
         ),

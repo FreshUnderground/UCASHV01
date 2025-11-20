@@ -19,11 +19,17 @@ import '../widgets/reports/mouvements_caisse_report.dart';
 class JournalCaisseWidget extends StatefulWidget {
   final int? shopId;
   final int? agentId;
+  final DateTime? initialStartDate;
+  final DateTime? initialEndDate;
+  final bool isAdminView; // Si true, désactive certaines actions (ajuster capital, clôture)
 
   const JournalCaisseWidget({
     super.key,
     this.shopId,
     this.agentId,
+    this.initialStartDate,
+    this.initialEndDate,
+    this.isAdminView = false,
   });
 
   @override
@@ -42,7 +48,21 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
   @override
   void initState() {
     super.initState();
+    _startDate = widget.initialStartDate;
+    _endDate = widget.initialEndDate;
     _loadJournalEntries();
+  }
+
+  @override
+  void didUpdateWidget(JournalCaisseWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.shopId != widget.shopId ||
+        oldWidget.initialStartDate != widget.initialStartDate ||
+        oldWidget.initialEndDate != widget.initialEndDate) {
+      _startDate = widget.initialStartDate;
+      _endDate = widget.initialEndDate;
+      _loadJournalEntries();
+    }
   }
 
   Future<void> _loadJournalEntries() async {
@@ -306,7 +326,8 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
               Wrap(
                 spacing: 8,
                 children: [
-                  if (widget.shopId != null)
+                  // IMPORTANT: Admin ne peut pas ajuster le capital
+                  if (widget.shopId != null && !widget.isAdminView)
                     IconButton(
                       onPressed: _showCapitalAdjustmentDialog,
                       icon: Icon(
@@ -382,7 +403,8 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (widget.shopId != null)
+                  // IMPORTANT: Admin ne peut pas ajuster le capital
+                  if (widget.shopId != null && !widget.isAdminView)
                     IconButton(
                       onPressed: _showCapitalAdjustmentDialog,
                       icon: Icon(

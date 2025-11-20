@@ -180,15 +180,29 @@ class PdfService {
                       
                       pw.SizedBox(height: 6),
                       
-                      // EXP.: Nom du client
-                      if (clientName != null && clientName.isNotEmpty)
-                        _buildTicketRow('EXP.:', clientName, fontSize: 9),
-                      if (clientName == null && operation.clientNom != null && operation.clientNom!.isNotEmpty)
-                        _buildTicketRow('EXP.:', operation.clientNom!, fontSize: 9),
+                      // Shop Source (agence) - centré et en gras
+                      if (operation.shopSourceDesignation != null && operation.shopSourceDesignation!.isNotEmpty)
+                        pw.Center(
+                          child: pw.Text(
+                            operation.shopSourceDesignation!,
+                            style: pw.TextStyle(
+                              fontSize: 9,
+                              fontWeight: pw.FontWeight.bold,
+                            ),
+                          ),
+                        ),
                       
-                      // DEST: Numéro du compte
+                      pw.SizedBox(height: 6),
+                      
+                      // PARTENAIRES: Nom du client
+                      if (clientName != null && clientName.isNotEmpty)
+                        _buildTicketRow('PARTENAIRES:', clientName, fontSize: 9),
+                      if (clientName == null && operation.clientNom != null && operation.clientNom!.isNotEmpty)
+                        _buildTicketRow('PARTENAIRES:', operation.clientNom!, fontSize: 9),
+                      
+                      // No Compte: Numéro du compte
                       if (operation.clientId != null)
-                        _buildTicketRow('DEST:', operation.clientId.toString().padLeft(6, '0'), fontSize: 9),
+                        _buildTicketRow('No Compte:', operation.clientId.toString().padLeft(6, '0'), fontSize: 9),
                       
                       // Montant
                       pw.SizedBox(height: 4),
@@ -239,19 +253,31 @@ class PdfService {
                       
                       // Expéditeur et Destinataire (aligné à gauche)
                       if (clientName != null && clientName.isNotEmpty)
-                        _buildTicketRow('EXP.:', clientName, fontSize: 9),
+                        _buildTicketRow('DEST.:', clientName, fontSize: 9),
                       // DEST: affiche l'observation (nom du destinataire)
                       if (operation.observation != null && operation.observation!.isNotEmpty)
-                        _buildTicketRow('DEST:', operation.observation!, fontSize: 9),
+                        _buildTicketRow('EXP.:', operation.observation!, fontSize: 9),
                       
-                      // Montant (sans "TOTAL")
+                      pw.SizedBox(height: 6),
+                      
+                      // Détails financiers pour transfert
+                      _buildTicketRow('Montant Brut:', '${operation.montantBrut.toStringAsFixed(2)} ${operation.devise}', fontSize: 9),
+                      if (operation.commission > 0)
+                        _buildTicketRow('Commission:', '${operation.commission.toStringAsFixed(2)} ${operation.devise}', fontSize: 9),
+                      
+                      pw.Container(
+                        width: double.infinity,
+                        height: 0.5,
+                        margin: const pw.EdgeInsets.symmetric(vertical: 4),
+                        color: PdfColors.grey700,
+                      ),
+                      
+                      // Montant Net (ce que le destinataire reçoit)
                       pw.SizedBox(height: 4),
-                      _buildTicketRow('MONTANT:', '${operation.montantNet.toStringAsFixed(2)} ${operation.devise}', fontSize: 11, bold: true),
+                      _buildTicketRow('MONTANT NET:', '${operation.montantNet.toStringAsFixed(2)} ${operation.devise}', fontSize: 11, bold: true),
                       
                       pw.SizedBox(height: 6),
                     ],
-                    
-                    // Montants (uniquement pour non-transferts)
                     if (operation.type != OperationType.transfertNational && 
                         operation.type != OperationType.transfertInternationalSortant &&
                         operation.type != OperationType.transfertInternationalEntrant) ...[
@@ -1162,5 +1188,190 @@ class PdfService {
         ],
       ),
     );
+  }
+
+  /// Génère un BON DE RETRAIT pour validation de transfert au shop de destination
+  Future<pw.Document> generateWithdrawalReceipt({
+    required OperationModel operation,
+    required ShopModel shop,
+    dynamic agent,
+    String? destinataireName,
+  }) async {
+    // Charger l'en-tête personnalisé depuis le cache local
+    final headerModel = await _loadHeaderFromCache();
+    
+    final companyName = headerModel.companyName;
+    final companyAddress = headerModel.address ?? '';
+    final companyPhone = headerModel.phone ?? '';
+    final rccm = headerModel.registrationNumber ?? '';
+    final idnat = headerModel.email ?? '';
+    final taxNumber = headerModel.taxNumber ?? '';
+    final footerMessage = headerModel.companySlogan ?? 'Merci pour votre confiance';
+    
+    final pdf = pw.Document();
+    
+    // Format ticket thermique 58mm
+    const double mmToPt = 2.83465;
+    final ticketFormat = PdfPageFormat(
+      58 * mmToPt,
+      double.infinity,
+      marginAll: 4 * mmToPt,
+    );
+    
+    pdf.addPage(
+      pw.Page(
+        pageFormat: ticketFormat,
+        build: (context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.center,
+            children: [
+              // En-tête
+              pw.Text(
+                companyName,
+                style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+              ),
+              if (rccm.isNotEmpty)
+                pw.Text('RCCM: $rccm', style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center),
+              if (idnat.isNotEmpty)
+                pw.Text('IDNAT: $idnat', style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center),
+              if (taxNumber.isNotEmpty)
+                pw.Text('N° Impôt: $taxNumber', style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center),
+              if (companyAddress.isNotEmpty)
+                pw.Text(companyAddress, style: const pw.TextStyle(fontSize: 7), textAlign: pw.TextAlign.center),
+              if (companyPhone.isNotEmpty)
+                pw.Text(companyPhone, style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center),
+              
+              pw.SizedBox(height: 8),
+              
+              // Titre: BON DE RETRAIT
+              pw.Text(
+                'BON DE RETRAIT',
+                style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                textAlign: pw.TextAlign.center,
+              ),
+              
+              pw.SizedBox(height: 6),
+              pw.Container(width: double.infinity, height: 1, color: PdfColors.black),
+              pw.SizedBox(height: 8),
+              
+              // Shop destination
+              if (shop.designation.isNotEmpty)
+                pw.Text(
+                  shop.designation,
+                  style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+                  textAlign: pw.TextAlign.center,
+                ),
+              
+              pw.SizedBox(height: 6),
+              
+              // Code d'opération
+              if (operation.codeOps != null && operation.codeOps!.isNotEmpty)
+                pw.Center(
+                  child: pw.Text(
+                    operation.codeOps!,
+                    style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
+                  ),
+                ),
+              
+              pw.SizedBox(height: 8),
+              
+              // Informations alignées à gauche
+              pw.Container(
+                width: double.infinity,
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    // RETIRÉ PAR: Nom du destinataire
+                    _buildTicketRow(
+                      'RETIRÉ PAR:',
+                      destinataireName ?? operation.destinataire ?? operation.observation ?? 'N/A',
+                      fontSize: 9,
+                      bold: true,
+                    ),
+                    
+                    pw.SizedBox(height: 6),
+                    
+                    // MONTANT NET
+                    _buildTicketRow(
+                      'MONTANT:',
+                      '${operation.montantNet.toStringAsFixed(2)} ${operation.devise}',
+                      fontSize: 12,
+                      bold: true,
+                    ),
+                  ],
+                ),
+              ),
+              
+              pw.SizedBox(height: 12),
+              pw.Container(width: double.infinity, height: 1, color: PdfColors.black),
+              pw.SizedBox(height: 10),
+              
+              // Signatures
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  // Signature du client
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.center,
+                      children: [
+                        pw.Text(
+                          'Signature Client',
+                          style: const pw.TextStyle(fontSize: 8),
+                        ),
+                        pw.SizedBox(height: 25),
+                        pw.Container(
+                          width: double.infinity,
+                          height: 0.5,
+                          color: PdfColors.black,
+                        ),
+                      ],
+                    ),
+                  ),
+                  pw.SizedBox(width: 8),
+                  // Signature de l'agent
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.center,
+                      children: [
+                        pw.Text(
+                          'Signature Agent',
+                          style: const pw.TextStyle(fontSize: 8),
+                        ),
+                        pw.SizedBox(height: 25),
+                        pw.Container(
+                          width: double.infinity,
+                          height: 0.5,
+                          color: PdfColors.black,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              
+              pw.SizedBox(height: 10),
+              pw.Container(width: double.infinity, height: 1, color: PdfColors.black),
+              pw.SizedBox(height: 6),
+              
+              // Pied de page
+              pw.Text(
+                footerMessage,
+                style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold),
+                textAlign: pw.TextAlign.center,
+              ),
+              pw.SizedBox(height: 4),
+              pw.Text(
+                'Imprimé le: ${DateFormat('dd/MM/yyyy à HH:mm:ss').format(DateTime.now())}',
+                style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700),
+                textAlign: pw.TextAlign.center,
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    
+    return pdf;
   }
 }

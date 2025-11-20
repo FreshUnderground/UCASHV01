@@ -165,8 +165,35 @@ class ResponsiveGrid extends StatelessWidget {
       columns = 1;
     }
 
+    // Si une seule colonne, utiliser Column pour éviter les problèmes de layout
+    if (columns == 1) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children.map((child) => 
+          Padding(
+            padding: EdgeInsets.only(bottom: runSpacing),
+            child: child,
+          )
+        ).toList(),
+      );
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
+        // Vérifier que les contraintes sont valides
+        if (!constraints.hasBoundedWidth || constraints.maxWidth == double.infinity) {
+          // Fallback: utiliser Column si pas de largeur bornée
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: children.map((child) => 
+              Padding(
+                padding: EdgeInsets.only(bottom: runSpacing),
+                child: child,
+              )
+            ).toList(),
+          );
+        }
+        
         final itemWidth = (constraints.maxWidth - (spacing * (columns - 1))) / columns;
         
         return Wrap(
@@ -174,7 +201,7 @@ class ResponsiveGrid extends StatelessWidget {
           runSpacing: runSpacing,
           children: children.map((child) => 
             SizedBox(
-              width: itemWidth,
+              width: itemWidth > 0 ? itemWidth : constraints.maxWidth,
               child: child,
             )
           ).toList(),

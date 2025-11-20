@@ -32,27 +32,35 @@ class _ShopsManagementState extends State<ShopsManagement> {
 
   @override
   Widget build(BuildContext context) {
-    return context.pageContainer(
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header responsive
-            _buildHeader(),
-            context.verticalSpace(mobile: 16, tablet: 20, desktop: 24),
-            
-            // Statistiques rapides
-            _buildStats(),
-            context.verticalSpace(mobile: 16, tablet: 20, desktop: 24),
-            
-            // Tableau des shops
-            SizedBox(
-              height: MediaQuery.of(context).size.height * 0.6,
-              child: _buildShopsTable(),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: constraints.maxHeight,
             ),
-          ],
-        ),
-      ),
+            child: IntrinsicHeight(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header responsive
+                  _buildHeader(),
+                  context.verticalSpace(mobile: 16, tablet: 20, desktop: 24),
+                  
+                  // Statistiques rapides
+                  _buildStats(),
+                  context.verticalSpace(mobile: 16, tablet: 20, desktop: 24),
+                  
+                  // Tableau des shops
+                  Expanded(
+                    child: _buildShopsTable(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -217,13 +225,10 @@ class _ShopsManagementState extends State<ShopsManagement> {
   }
 
   Widget _buildMobileShopsList(List<ShopModel> shops) {
-    return Column(
-      children: [
-        for (int i = 0; i < shops.length; i++) ...[
-          _buildMobileShopCard(shops[i]),
-          if (i < shops.length - 1) const Divider(),
-        ],
-      ],
+    return ListView.separated(
+      itemCount: shops.length,
+      separatorBuilder: (context, index) => const Divider(),
+      itemBuilder: (context, index) => _buildMobileShopCard(shops[index]),
     );
   }
 
@@ -355,66 +360,63 @@ class _ShopsManagementState extends State<ShopsManagement> {
 
   Widget _buildDesktopShopsTable(List<ShopModel> shops) {
     return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            minWidth: MediaQuery.of(context).size.width - 100,
-          ),
-          child: DataTable(
-            headingRowColor: MaterialStateProperty.all(Colors.grey[50]),
-            columns: const [
-              DataColumn(
-                label: Text(
-                  'Partenaire',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minWidth: MediaQuery.of(context).size.width - 100,
+        ),
+        child: DataTable(
+          headingRowColor: MaterialStateProperty.all(Colors.grey[50]),
+          columns: const [
+            DataColumn(
+              label: Text(
+                'Partenaire',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              DataColumn(
-                label: Text(
-                  'Localisation',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
+            ),
+            DataColumn(
+              label: Text(
+                'Localisation',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              DataColumn(
-                label: Text(
-                  'Capital Cash',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
+            ),
+            DataColumn(
+              label: Text(
+                'Capital Cash',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              DataColumn(
-                label: Text(
-                  'Airtel Money',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
+            ),
+            DataColumn(
+              label: Text(
+                'Airtel Money',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              DataColumn(
-                label: Text(
-                  'M-Pesa',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
+            ),
+            DataColumn(
+              label: Text(
+                'M-Pesa',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              DataColumn(
-                label: Text(
-                  'Orange Money',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
+            ),
+            DataColumn(
+              label: Text(
+                'Orange Money',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              DataColumn(
-                label: Text(
-                  'Total Capital',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
+            ),
+            DataColumn(
+              label: Text(
+                'Total Capital',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              DataColumn(
-                label: Text(
-                  'Actions',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
+            ),
+            DataColumn(
+              label: Text(
+                'Actions',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
-            ],
-            rows: shops.map((shop) => _buildShopRow(shop)).toList(),
-          ),
+            ),
+          ],
+          rows: shops.map((shop) => _buildShopRow(shop)).toList(),
         ),
       ),
     );

@@ -54,18 +54,20 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
     
     return Card(
       elevation: 2,
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Header avec filtres et actions responsive
-            _buildResponsiveHeader(isMobile),
-            const Divider(height: 1),
-            
-            // Tableau des agents
-            _buildAgentsTable(isMobile),
-          ],
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header avec filtres et actions responsive
+          _buildResponsiveHeader(isMobile),
+          const Divider(height: 1),
+          
+          // Tableau des agents
+          Expanded(
+            child: SingleChildScrollView(
+              child: _buildAgentsTable(isMobile),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -256,8 +258,10 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
         }
 
         if (agentService.errorMessage != null) {
-          return Center(
+          return Padding(
+            padding: const EdgeInsets.all(32),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Icon(Icons.error, color: Colors.red, size: 48),
@@ -280,8 +284,10 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
         final filteredAgents = _filterAgents(agentService.agents);
 
         if (filteredAgents.isEmpty) {
-          return Center(
+          return Padding(
+            padding: const EdgeInsets.all(32),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Icon(Icons.people_outline, color: Colors.grey, size: 64),
@@ -592,8 +598,11 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
   }
 
   Widget _buildMobileAgentsList(List<AgentModel> agents, ShopService shopService) {
-    return Column(
-      children: List.generate(agents.length, (index) {
+    return Padding(
+      padding: const EdgeInsets.all(8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(agents.length, (index) {
         final agent = agents[index];
         final shop = shopService.shops.firstWhere(
           (s) => s.id == agent.shopId,
@@ -720,6 +729,7 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
           ),
         );
       }),
+      ),
     );
   }
 

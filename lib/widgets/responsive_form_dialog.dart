@@ -134,6 +134,7 @@ class ResponsiveFormDialog extends StatelessWidget {
 
   Widget _buildActions(BuildContext context, bool isMobile) {
     return Container(
+      width: double.infinity,
       padding: EdgeInsets.all(isMobile ? 16 : 20),
       decoration: BoxDecoration(
         color: Colors.grey[50],
@@ -142,16 +143,7 @@ class ResponsiveFormDialog extends StatelessWidget {
           bottomRight: Radius.circular(16),
         ),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: actions!.map((action) {
-          if (action is! Widget) return const SizedBox.shrink();
-          return Padding(
-            padding: const EdgeInsets.only(left: 8),
-            child: action,
-          );
-        }).toList(),
-      ),
+      child: actions!.first,  // Utiliser directement le widget d'action
     );
   }
 }
@@ -345,44 +337,40 @@ class ResponsiveActionButtons extends StatelessWidget {
     if (isMobile) {
       // Layout vertical pour mobile
       return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: isLoading || !saveEnabled ? null : onSave,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFDC2626),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+          ElevatedButton(
+            onPressed: isLoading || !saveEnabled ? null : onSave,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
               ),
-              child: isLoading
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
-                : Text(saveText, style: const TextStyle(fontSize: 16)),
             ),
+            child: isLoading
+              ? const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                )
+              : Text(saveText, style: const TextStyle(fontSize: 16)),
           ),
           const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: isLoading ? null : onCancel,
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+          OutlinedButton(
+            onPressed: isLoading ? null : onCancel,
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
               ),
-              child: Text(cancelText, style: const TextStyle(fontSize: 16)),
             ),
+            child: Text(cancelText, style: const TextStyle(fontSize: 16)),
           ),
         ],
       );

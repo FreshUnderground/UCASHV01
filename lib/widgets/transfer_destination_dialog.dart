@@ -418,9 +418,9 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
             ),
             SizedBox(height: fieldSpacing),
             
-            // Capture d'écran
+            // Capture d'écran (optionnelle)
             Text(
-              '${_transferType == OperationType.transfertNational ? '7' : '6'}. Preuve de paiement *',
+              '${_transferType == OperationType.transfertNational ? '7' : '6'}. Preuve de paiement (optionnelle)',
               style: TextStyle(
                 fontSize: labelFontSize,
                 fontWeight: FontWeight.bold,
@@ -779,20 +779,8 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
     
-    if (_selectedImage == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Veuillez ajouter une preuve de paiement'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      });
-      return;
-    }
-
+    // Image is now optional, so we don't check for it
+    
     setState(() {
       _isLoading = true;
     });
@@ -817,11 +805,17 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
         notes += ' - Expéditeur: ${_expediteurController.text}';
       }
       
+      // Récupérer le shop source pour avoir sa désignation
+      final shopService = Provider.of<ShopService>(context, listen: false);
+      final shopSource = shopService.getShopById(currentUser!.shopId!);
+      
       // Créer l'opération
       final operation = OperationModel(
-        agentId: currentUser!.id!,
+        codeOps: '', // Sera généré automatiquement par createOperation
+        agentId: currentUser.id!,
         agentUsername: currentUser.username,
         shopSourceId: currentUser.shopId!,
+        shopSourceDesignation: shopSource?.designation,  // Ajouter la désignation du shop source
         shopDestinationId: _selectedShop?.id,
         shopDestinationDesignation: _selectedShop?.designation,
         type: _transferType,

@@ -4,8 +4,10 @@ import 'package:ucashv01/widgets/reports/releve_compte_client_report.dart';
 import '../services/client_service.dart';
 import '../services/operation_service.dart';
 import '../services/shop_service.dart';
+import '../services/auth_service.dart';
 import '../models/client_model.dart';
 import '../models/operation_model.dart';
+import 'create_client_dialog_responsive.dart';
 
 /// Widget pour que l'admin puisse voir tous les clients et leurs relevés
 class AdminClientsWidget extends StatefulWidget {
@@ -18,10 +20,11 @@ class AdminClientsWidget extends StatefulWidget {
 class _AdminClientsWidgetState extends State<AdminClientsWidget> {
   String _searchQuery = '';
   int? _filterShopId;
-  bool _showOnlyActive = true;
+  bool _showOnlyActive = false;
   ClientModel? _selectedClient;
   DateTime? _startDate;
   DateTime? _endDate;
+  bool _showFilters = false;  // Filtres masqués par défaut
   bool _showReport = false;
 
   @override
@@ -35,10 +38,12 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
   Future<void> _loadData() async {
     final clientService = Provider.of<ClientService>(context, listen: false);
     final shopService = Provider.of<ShopService>(context, listen: false);
+    final operationService = Provider.of<OperationService>(context, listen: false);
     
     await Future.wait([
       clientService.loadClients(),
       shopService.loadShops(),
+      operationService.loadOperations(),  // Charger les opérations pour calculer les soldes
     ]);
   }
 
@@ -58,7 +63,13 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
           // Afficher les filtres seulement si aucun client n'est sélectionné
           if (!_showReport) ...
           [
-            _buildFilters(isMobile),
+            // Bouton pour masquer/afficher les filtres
+            _buildFilterToggle(isMobile),
+            if (_showFilters) ...
+            [
+              const SizedBox(height: 12),
+              _buildFilters(isMobile),
+            ],
             const SizedBox(height: 20),
             Expanded(
               child: _buildClientsList(isMobile),
@@ -94,7 +105,7 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Gestion des Partenaires',
+                'Partenaires',
                 style: TextStyle(
                   fontSize: isMobile ? 20 : 28,
                   fontWeight: FontWeight.bold,
@@ -103,7 +114,7 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
               ),
               const SizedBox(height: 4),
               Text(
-                'Vue d\'ensemble de tous les partenaires',
+                'Vue d\'ensemble',
                 style: TextStyle(
                   fontSize: isMobile ? 13 : 14,
                   color: Colors.grey[600],
@@ -112,7 +123,58 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
             ],
           ),
         ),
+        const SizedBox(width: 16),
+        ElevatedButton.icon(
+          onPressed: _showCreateClientDialog,
+          icon: Icon(Icons.person_add, size: isMobile ? 18 : 20),
+          label: Text(isMobile ? 'Nouveau' : 'Nouveau Partenaire'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.purple,
+            foregroundColor: Colors.white,
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 12 : 20,
+              vertical: isMobile ? 10 : 12,
+            ),
+          ),
+        ),
       ],
+    );
+  }
+
+  Widget _buildFilterToggle(bool isMobile) {
+    return Card(
+      elevation: 2,
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _showFilters = !_showFilters;
+          });
+        },
+        child: Padding(
+          padding: EdgeInsets.all(isMobile ? 12 : 16),
+          child: Row(
+            children: [
+              Icon(
+                _showFilters ? Icons.filter_list_off : Icons.filter_list,
+                color: Colors.purple,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                _showFilters ? 'Masquer les filtres' : 'Afficher les filtres',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.purple,
+                ),
+              ),
+              const Spacer(),
+              Icon(
+                _showFilters ? Icons.expand_less : Icons.expand_more,
+                color: Colors.grey[600],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -146,18 +208,23 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
                     Expanded(
                       child: DropdownButtonFormField<int?>(
                         decoration: const InputDecoration(
-                          labelText: 'Filtrer par Shop',
+                          labelText: 'Shop',
                           border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                         ),
                         value: _filterShopId,
+                        isExpanded: true,  // Important pour éviter l'overflow
                         items: [
                           const DropdownMenuItem<int?>(
                             value: null,
-                            child: Text('Tous les shops'),
+                            child: Text('Tous'),
                           ),
                           ...shopService.shops.map((shop) => DropdownMenuItem<int?>(
                             value: shop.id,
-                            child: Text(shop.designation),
+                            child: Text(
+                              shop.designation,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           )),
                         ],
                         onChanged: (value) {
@@ -180,7 +247,7 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
                         });
                       },
                     ),
-                    const Text('Afficher uniquement les partenaires actifs'),
+                    const Text('Afficher Tout'),
                   ],
                 ),
               ],
@@ -191,9 +258,40 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
     );
   }
 
+  /// Calculer le solde d'un client depuis ses opérations
+  double _calculateClientBalance(int clientId, List<OperationModel> operations) {
+    double balance = 0.0;
+    
+    for (final op in operations.where((o) => o.clientId == clientId)) {
+      switch (op.type) {
+        case OperationType.depot:
+          // Dépôt augmente le solde du client
+          balance += op.montantNet;
+          break;
+        case OperationType.retrait:
+          // Retrait diminue le solde du client
+          balance -= op.montantNet;
+          break;
+        case OperationType.transfertNational:
+        case OperationType.transfertInternationalSortant:
+          // Transfert sortant diminue le solde (client paie)
+          balance -= op.montantBrut;
+          break;
+        case OperationType.transfertInternationalEntrant:
+          // Transfert entrant augmente le solde (client reçoit)
+          balance += op.montantNet;
+          break;
+        default:
+          break;
+      }
+    }
+    
+    return balance;
+  }
+
   Widget _buildClientsList(bool isMobile) {
-    return Consumer2<ClientService, ShopService>(
-      builder: (context, clientService, shopService, child) {
+    return Consumer3<ClientService, ShopService, OperationService>(
+      builder: (context, clientService, shopService, operationService, child) {
         if (clientService.isLoading) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -237,12 +335,18 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
               (s) => s.id == client.shopId,
               orElse: () => shopService.shops.first,
             );
+            
+            // Calculer le solde réel depuis les opérations
+            final calculatedBalance = _calculateClientBalance(
+              client.id!,
+              operationService.operations,
+            );
 
             return Card(
               margin: EdgeInsets.only(bottom: isMobile ? 8 : 12),
               child: ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: client.solde >= 0 ? Colors.green : Colors.red,
+                  backgroundColor: calculatedBalance >= 0 ? Colors.green : Colors.red,
                   child: Text(
                     client.nom[0].toUpperCase(),
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
@@ -286,11 +390,11 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
                           style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                         ),
                         Text(
-                          '${client.solde >= 0 ? "+" : ""}${client.solde.toStringAsFixed(2)} USD',
+                          '${calculatedBalance >= 0 ? "+" : ""}${calculatedBalance.toStringAsFixed(2)} USD',
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
-                            color: client.solde >= 0 ? Colors.green : Colors.red,
+                            color: calculatedBalance >= 0 ? Colors.green : Colors.red,
                           ),
                         ),
                       ],
@@ -318,6 +422,34 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
       _endDate = null;
     });
   }
+
+  void _showCreateClientDialog() {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentUser = authService.currentUser;
+    
+    if (currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Erreur: Utilisateur non connecté'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    
+    showDialog(
+      context: context,
+      builder: (context) => CreateClientDialogResponsive(
+        shopId: currentUser.shopId ?? 0,
+        agentId: currentUser.id ?? 0,
+      ),
+    ).then((result) {
+      if (result == true) {
+        // Recharger la liste des clients après création
+        _loadData();
+      }
+    });
+  }
   
   Widget _buildClientStatementSection(bool isMobile) {
     if (_selectedClient == null) return const SizedBox.shrink();
@@ -325,142 +457,344 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
     return Expanded(
       child: Column(
         children: [
-          // En-tête avec bouton retour
+          // Modern header with gradient background
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(isMobile ? 16 : 24),
             decoration: BoxDecoration(
-              color: Colors.purple.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.purple.withOpacity(0.3)),
-            ),
-            child: Row(
-              children: [
-                IconButton(
-                  onPressed: () {
-                    setState(() {
-                      _showReport = false;
-                      _selectedClient = null;
-                    });
-                  },
-                  icon: const Icon(Icons.arrow_back, color: Colors.purple),
-                  tooltip: 'Retour à la liste',
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Relevé de ${_selectedClient!.nom}',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.purple,
-                        ),
-                      ),
-                      Text(
-                        '📞 ${_selectedClient!.telephone}',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          
-          // Filtres de dates
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
+              gradient: const LinearGradient(
+                colors: [Color(0xFF7C3AED), Color(0xFF9333EA)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  spreadRadius: 1,
-                  blurRadius: 3,
-                  offset: const Offset(0, 1),
+                  color: Colors.purple.withOpacity(0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
-            child: Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: TextFormField(
-                    decoration: const InputDecoration(
-                      labelText: 'Date de début',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.calendar_today),
+                // Back button and title row
+                Row(
+                  children: [
+                    Material(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                      child: InkWell(
+                        onTap: () {
+                          setState(() {
+                            _showReport = false;
+                            _selectedClient = null;
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+                              if (!isMobile) ...[
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'Retour',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
-                    readOnly: true,
-                    onTap: () async {
-                      final date = await showDatePicker(
-                        context: context,
-                        initialDate: _startDate ?? DateTime.now().subtract(const Duration(days: 30)),
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime.now(),
-                      );
-                      if (date != null) {
-                        setState(() {
-                          _startDate = date;
-                        });
-                      }
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _selectedClient!.nom,
+                            style: TextStyle(
+                              fontSize: isMobile ? 20 : 24,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              const Icon(Icons.phone, color: Colors.white70, size: 16),
+                              const SizedBox(width: 6),
+                              Text(
+                                _selectedClient!.telephone,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.white70,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                
+                // Date filters - responsive layout (collapsible)
+                const SizedBox(height: 16),
+                Material(
+                  color: Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  child: InkWell(
+                    onTap: () {
+                      setState(() {
+                        _showFilters = !_showFilters;
+                      });
                     },
-                    controller: TextEditingController(
-                      text: _startDate != null 
-                        ? '${_startDate!.day}/${_startDate!.month}/${_startDate!.year}' 
-                        : '',
+                    borderRadius: BorderRadius.circular(10),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.filter_list, color: Colors.white, size: 18),
+                          const SizedBox(width: 10),
+                          const Expanded(
+                            child: Text(
+                              'Filtrer par période',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                          Icon(
+                            _showFilters ? Icons.expand_less : Icons.expand_more,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: TextFormField(
-                    decoration: const InputDecoration(
-                      labelText: 'Date de fin',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.calendar_today),
+                if (_showFilters) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.3),
+                        width: 1,
+                      ),
                     ),
-                    readOnly: true,
-                    onTap: () async {
-                      final date = await showDatePicker(
-                        context: context,
-                        initialDate: _endDate ?? DateTime.now(),
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime.now(),
-                      );
-                      if (date != null) {
-                        setState(() {
-                          _endDate = date;
-                        });
-                      }
-                    },
-                    controller: TextEditingController(
-                      text: _endDate != null 
-                        ? '${_endDate!.day}/${_endDate!.month}/${_endDate!.year}' 
-                        : '',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        isMobile
+                          ? Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _buildDateField(
+                                  label: 'Date de début',
+                                  date: _startDate,
+                                  onTap: () async {
+                                    final date = await showDatePicker(
+                                      context: context,
+                                      initialDate: _startDate ?? DateTime.now().subtract(const Duration(days: 30)),
+                                      firstDate: DateTime(2020),
+                                      lastDate: DateTime.now(),
+                                    );
+                                    if (date != null) {
+                                      setState(() {
+                                        _startDate = date;
+                                      });
+                                    }
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+                                _buildDateField(
+                                  label: 'Date de fin',
+                                  date: _endDate,
+                                  onTap: () async {
+                                    final date = await showDatePicker(
+                                      context: context,
+                                      initialDate: _endDate ?? DateTime.now(),
+                                      firstDate: DateTime(2020),
+                                      lastDate: DateTime.now(),
+                                    );
+                                    if (date != null) {
+                                      setState(() {
+                                        _endDate = date;
+                                      });
+                                    }
+                                  },
+                                ),
+                              ],
+                            )
+                          : Row(
+                              children: [
+                                Expanded(
+                                  child: _buildDateField(
+                                    label: 'Date de début',
+                                    date: _startDate,
+                                    onTap: () async {
+                                      final date = await showDatePicker(
+                                        context: context,
+                                        initialDate: _startDate ?? DateTime.now().subtract(const Duration(days: 30)),
+                                        firstDate: DateTime(2020),
+                                        lastDate: DateTime.now(),
+                                      );
+                                      if (date != null) {
+                                        setState(() {
+                                          _startDate = date;
+                                        });
+                                      }
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: _buildDateField(
+                                    label: 'Date de fin',
+                                    date: _endDate,
+                                    onTap: () async {
+                                      final date = await showDatePicker(
+                                        context: context,
+                                        initialDate: _endDate ?? DateTime.now(),
+                                        firstDate: DateTime(2020),
+                                        lastDate: DateTime.now(),
+                                      );
+                                      if (date != null) {
+                                        setState(() {
+                                          _endDate = date;
+                                        });
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                        if (_startDate != null || _endDate != null) ...[
+                          const SizedBox(height: 12),
+                          Material(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                            child: InkWell(
+                              onTap: () {
+                                setState(() {
+                                  _startDate = null;
+                                  _endDate = null;
+                                });
+                              },
+                              borderRadius: BorderRadius.circular(8),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.clear, color: Colors.white, size: 16),
+                                    const SizedBox(width: 6),
+                                    const Text(
+                                      'Réinitialiser',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
           const SizedBox(height: 16),
           
-          // Relevé de compte
+          // Statement report with smooth transition
           Expanded(
             child: ReleveCompteClientReport(
+              key: ValueKey('${_selectedClient!.id}_${_startDate}_${_endDate}'),
               clientId: _selectedClient!.id!,
               startDate: _startDate,
               endDate: _endDate,
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildDateField({
+    required String label,
+    required DateTime? date,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.white.withOpacity(0.2),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.3),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.calendar_today, color: Colors.white, size: 18),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.8),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      date != null
+                        ? '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}'
+                        : 'Sélectionner...',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

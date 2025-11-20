@@ -100,7 +100,7 @@ try {
                 $updated++;
             } else {
                 // INSERT
-                $sql = "INSERT INTO cloture_caisse 
+                $sql = "REPLACE INTO cloture_caisse 
                         (shop_id, date_cloture, 
                          solde_saisi_cash, solde_saisi_airtel_money, solde_saisi_mpesa, solde_saisi_orange_money, solde_saisi_total,
                          solde_calcule_cash, solde_calcule_airtel_money, solde_calcule_mpesa, solde_calcule_orange_money, solde_calcule_total,

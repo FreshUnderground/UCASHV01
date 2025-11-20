@@ -624,20 +624,37 @@ class PrinterService {
         linefeed: 1,
       ));
       
-      // EXP.: Nom du client
-      if (clientName != null && clientName.isNotEmpty) {
+      // Shop Source (agence)
+      if (operation.shopSourceDesignation != null && operation.shopSourceDesignation!.isNotEmpty) {
         lines.add(LineText(
           type: LineText.TYPE_TEXT,
-          content: 'EXP.: $clientName',
+          content: operation.shopSourceDesignation!,
+          weight: 1,
+          align: LineText.ALIGN_CENTER,
           linefeed: 1,
         ));
       }
       
-      // DEST: Numéro du compte
+      lines.add(LineText(
+        type: LineText.TYPE_TEXT,
+        content: '',
+        linefeed: 1,
+      ));
+      
+      // PARTENAIRES: Nom du client
+      if (clientName != null && clientName.isNotEmpty) {
+        lines.add(LineText(
+          type: LineText.TYPE_TEXT,
+          content: 'PARTENAIRES: $clientName',
+          linefeed: 1,
+        ));
+      }
+      
+      // No Compte: Numéro du compte
       if (operation.clientId != null) {
         lines.add(LineText(
           type: LineText.TYPE_TEXT,
-          content: 'DEST: ${operation.clientId.toString().padLeft(6, '0')}',
+          content: 'No Compte: ${operation.clientId.toString().padLeft(6, '0')}',
           linefeed: 1,
         ));
       }
@@ -693,7 +710,7 @@ class PrinterService {
       if (clientName != null && clientName.isNotEmpty) {
         lines.add(LineText(
           type: LineText.TYPE_TEXT,
-          content: 'EXP.: $clientName',
+          content: 'DEST.: $clientName',
           linefeed: 1,
         ));
       }
@@ -702,15 +719,43 @@ class PrinterService {
       if (operation.observation != null && operation.observation!.isNotEmpty) {
         lines.add(LineText(
           type: LineText.TYPE_TEXT,
-          content: 'DEST: ${operation.observation}',
+          content: 'EXP. : ${operation.observation}',
           linefeed: 1,
         ));
       }
       
-      // Montant (sans "TOTAL")
       lines.add(LineText(
         type: LineText.TYPE_TEXT,
-        content: 'MONTANT: ${operation.montantNet.toStringAsFixed(2)} ${operation.devise}',
+        content: '',
+        linefeed: 1,
+      ));
+      
+      // Détails financiers pour transfert
+      lines.add(LineText(
+        type: LineText.TYPE_TEXT,
+        content: 'Montant Brut: ${operation.montantBrut.toStringAsFixed(2)} ${operation.devise}',
+        weight: 0,
+        linefeed: 1,
+      ));
+      
+      if (operation.commission > 0) {
+        lines.add(LineText(
+          type: LineText.TYPE_TEXT,
+          content: 'Commission: ${operation.commission.toStringAsFixed(2)} ${operation.devise}',
+          linefeed: 1,
+        ));
+      }
+      
+      lines.add(LineText(
+        type: LineText.TYPE_TEXT,
+        content: '--------------------------------',
+        linefeed: 1,
+      ));
+      
+      // Montant Net (ce que le destinataire reçoit)
+      lines.add(LineText(
+        type: LineText.TYPE_TEXT,
+        content: 'MONTANT NET: ${operation.montantNet.toStringAsFixed(2)} ${operation.devise}',
         weight: 1,
         height: 1,
         linefeed: 1,
@@ -731,41 +776,43 @@ class PrinterService {
       linefeed: 1,
     ));
 
-    // Détails financiers
-    lines.add(LineText(
-      type: LineText.TYPE_TEXT,
-      content: 'Montant: ${operation.montantBrut.toStringAsFixed(2)} ${operation.devise}',
-      weight: 0,
-      linefeed: 1,
-    ));
-
-    if (operation.commission > 0) {
+    // Détails financiers (uniquement pour les transferts, pas pour dépôt/retrait)
+    if (!isDepotOrRetrait) {
       lines.add(LineText(
         type: LineText.TYPE_TEXT,
-        content: 'Commission: ${operation.commission.toStringAsFixed(2)} ${operation.devise}',
+        content: 'Montant: ${operation.montantBrut.toStringAsFixed(2)} ${operation.devise}',
+        weight: 0,
+        linefeed: 1,
+      ));
+
+      if (operation.commission > 0) {
+        lines.add(LineText(
+          type: LineText.TYPE_TEXT,
+          content: 'Commission: ${operation.commission.toStringAsFixed(2)} ${operation.devise}',
+          linefeed: 1,
+        ));
+      }
+
+      lines.add(LineText(
+        type: LineText.TYPE_TEXT,
+        content: '--------------------------------',
+        linefeed: 1,
+      ));
+      
+      lines.add(LineText(
+        type: LineText.TYPE_TEXT,
+        content: 'TOTAL: ${operation.montantNet.toStringAsFixed(2)} ${operation.devise}',
+        weight: 1,
+        height: 1,
+        linefeed: 1,
+      ));
+
+      lines.add(LineText(
+        type: LineText.TYPE_TEXT,
+        content: '--------------------------------',
         linefeed: 1,
       ));
     }
-
-    lines.add(LineText(
-      type: LineText.TYPE_TEXT,
-      content: '--------------------------------',
-      linefeed: 1,
-    ));
-    
-    lines.add(LineText(
-      type: LineText.TYPE_TEXT,
-      content: 'TOTAL: ${operation.montantNet.toStringAsFixed(2)} ${operation.devise}',
-      weight: 1,
-      height: 1,
-      linefeed: 1,
-    ));
-
-    lines.add(LineText(
-      type: LineText.TYPE_TEXT,
-      content: '--------------------------------',
-      linefeed: 1,
-    ));
 
     // Mode de paiement uniquement (pas de statut)
     final String modePaiement = _getModePaiement(operation.modePaiement);
@@ -882,15 +929,25 @@ class PrinterService {
       
       bytes += generator.emptyLines(1);
       
-      // EXP.: Nom du client
-      if (clientName != null && clientName.isNotEmpty) {
-        bytes += generator.text('EXP.: $clientName', styles: const PosStyles());
+      // Shop Source (agence)
+      if (operation.shopSourceDesignation != null && operation.shopSourceDesignation!.isNotEmpty) {
+        bytes += generator.text(
+          operation.shopSourceDesignation!,
+          styles: const PosStyles(align: PosAlign.center, bold: true),
+        );
       }
       
-      // DEST: Numéro du compte
+      bytes += generator.emptyLines(1);
+      
+      // PARTENAIRES: Nom du client
+      if (clientName != null && clientName.isNotEmpty) {
+        bytes += generator.text('PARTENAIRES: $clientName', styles: const PosStyles());
+      }
+      
+      // No Compte: Numéro du compte
       if (operation.clientId != null) {
         bytes += generator.text(
-          'DEST: ${operation.clientId.toString().padLeft(6, '0')}',
+          'No Compte: ${operation.clientId.toString().padLeft(6, '0')}',
           styles: const PosStyles(),
         );
       }
@@ -938,9 +995,29 @@ class PrinterService {
         bytes += generator.text('DEST: ${operation.observation}', styles: const PosStyles());
       }
       
-      // Montant (sans "TOTAL")
+      bytes += generator.emptyLines(1);
+      
+      // Détails financiers pour transfert
       bytes += generator.text(
-        'MONTANT: ${operation.montantNet.toStringAsFixed(2)} ${operation.devise}',
+        'Montant Brut: ${operation.montantBrut.toStringAsFixed(2)} ${operation.devise}',
+        styles: const PosStyles(),
+      );
+      
+      if (operation.commission > 0) {
+        bytes += generator.text(
+          'Commission: ${operation.commission.toStringAsFixed(2)} ${operation.devise}',
+          styles: const PosStyles(),
+        );
+      }
+      
+      bytes += generator.text(
+        '--------------------------------',
+        styles: const PosStyles(),
+      );
+      
+      // Montant Net (ce que le destinataire reçoit)
+      bytes += generator.text(
+        'MONTANT NET: ${operation.montantNet.toStringAsFixed(2)} ${operation.devise}',
         styles: const PosStyles(
           height: PosTextSize.size1,
           width: PosTextSize.size1,
@@ -953,37 +1030,39 @@ class PrinterService {
 
     bytes += generator.emptyLines(1);
 
-    // Détails financiers
-    bytes += generator.text(
-      'Montant: ${operation.montantBrut.toStringAsFixed(2)} ${operation.devise}',
-      styles: const PosStyles(),
-    );
-    
-    if (operation.commission > 0) {
+    // Détails financiers (uniquement pour les transferts, pas pour dépôt/retrait)
+    if (!isDepotOrRetrait) {
       bytes += generator.text(
-        'Commission: ${operation.commission.toStringAsFixed(2)} ${operation.devise}',
+        'Montant: ${operation.montantBrut.toStringAsFixed(2)} ${operation.devise}',
+        styles: const PosStyles(),
+      );
+      
+      if (operation.commission > 0) {
+        bytes += generator.text(
+          'Commission: ${operation.commission.toStringAsFixed(2)} ${operation.devise}',
+          styles: const PosStyles(),
+        );
+      }
+      
+      bytes += generator.text(
+        '--------------------------------',
+        styles: const PosStyles(),
+      );
+      
+      bytes += generator.text(
+        'TOTAL: ${operation.montantNet.toStringAsFixed(2)} ${operation.devise}',
+        styles: const PosStyles(
+          height: PosTextSize.size1,
+          width: PosTextSize.size1,
+          bold: true,
+        ),
+      );
+      
+      bytes += generator.text(
+        '--------------------------------',
         styles: const PosStyles(),
       );
     }
-    
-    bytes += generator.text(
-      '--------------------------------',
-      styles: const PosStyles(),
-    );
-    
-    bytes += generator.text(
-      'TOTAL: ${operation.montantNet.toStringAsFixed(2)} ${operation.devise}',
-      styles: const PosStyles(
-        height: PosTextSize.size1,
-        width: PosTextSize.size1,
-        bold: true,
-      ),
-    );
-    
-    bytes += generator.text(
-      '--------------------------------',
-      styles: const PosStyles(),
-    );
     
     // Mode de paiement uniquement (pas de statut)
     final String modePaiement = _getModePaiement(operation.modePaiement);

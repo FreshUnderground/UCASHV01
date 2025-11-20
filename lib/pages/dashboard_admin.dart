@@ -32,23 +32,21 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
 
   final List<String> _menuItems = [
     'Dashboard',
-    'CLIENT VIP',
+    'SHOP',
     'Agents',
     'Partenaires',
     'Taux & Commissions',
     'Rapports',
-    'Synchronisation',
     'Configuration',
   ];
 
   final List<IconData> _menuIcons = [
     Icons.dashboard,
-    Icons.people,
+    Icons.store,
     Icons.people,
     Icons.account_circle,
     Icons.currency_exchange,
     Icons.analytics,
-    Icons.sync,
     Icons.settings,
   ];
 
@@ -406,8 +404,6 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
       case 5:
         return _buildReportsContent();
       case 6:
-        return _buildSynchronisationContent();
-      case 7:
         return _buildConfigurationContent();
       default:
         return _buildDashboardContent();
@@ -555,33 +551,11 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
   }
 
   Widget _buildShopsContent() {
-    return const AdminClientsWidget();
+    return const ShopsManagement();
   }
 
   Widget _buildAgentsContent() {
-    final size = MediaQuery.of(context).size;
-    final isMobile = size.width <= 768;
-    
-    return Padding(
-      padding: EdgeInsets.all(isMobile ? 16 : 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Gestion des Agents',
-            style: TextStyle(
-              fontSize: isMobile ? 20 : 24,
-              fontWeight: FontWeight.bold,
-              color: const Color(0xFFDC2626),
-            ),
-          ),
-          SizedBox(height: isMobile ? 16 : 24),
-          const Expanded(
-            child: AgentsManagementComplete(),
-          ),
-        ],
-      ),
-    );
+    return const AgentsManagementComplete();
   }
 
   Widget _buildClientsContent() {
@@ -811,10 +785,10 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
               onTap: () => setState(() => _selectedIndex = 0),  // Index 0 = Dashboard
             ),
             _buildFluidActionCard(
-              title: 'CLIENT VIP',
-              icon: Icons.people,
+              title: 'SHOP',
+              icon: Icons.store,
               color: const Color(0xFF059669),
-              onTap: () => setState(() => _selectedIndex = 1),  // Index 1 = Gestion Clients
+              onTap: () => setState(() => _selectedIndex = 1),  // Index 1 = Gestion Shops
             ),
             _buildFluidActionCard(
               title: 'Agents',
@@ -841,16 +815,10 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
               onTap: () => setState(() => _selectedIndex = 5),  // Index 5 = Rapports
             ),
             _buildFluidActionCard(
-              title: 'Synchronisation',
-              icon: Icons.sync,
-              color: const Color(0xFF8B5CF6),
-              onTap: () => setState(() => _selectedIndex = 6),  // Index 6 = Synchronisation
-            ),
-            _buildFluidActionCard(
               title: 'Configuration',
               icon: Icons.settings,
               color: const Color(0xFF0891B2),
-              onTap: () => setState(() => _selectedIndex = 7),  // Index 7 = Configuration
+              onTap: () => setState(() => _selectedIndex = 6),  // Index 6 = Configuration
             ),
           ],
         );
@@ -877,29 +845,30 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
     );
   }
 
-  // Mapper l'index desktop (8 items) vers l'index mobile (5 items)
+  // Mapper l'index desktop (7 items) vers l'index mobile (5 items)
   int _getMobileNavIndex(int desktopIndex) {
-    // Desktop: 0=Dashboard, 1=Gestion Clients, 2=Agents, 3=Partenaires, 4=Taux, 5=Rapports, 6=Sync, 7=Config
-    // Mobile:  0=Dashboard, 1=Clients, 2=Agents, 3=Taux, 4=Rapports
+    // Desktop: 0=Dashboard, 1=SHOP, 2=Agents, 3=Partenaires, 4=Taux, 5=Rapports, 6=Config
+    // Mobile:  0=Dashboard, 1=Shops, 2=Partenaires, 3=Rapports, 4=Config
     if (desktopIndex == 0) return 0; // Dashboard
-    if (desktopIndex == 1) return 1; // Gestion Clients → Clients
-    if (desktopIndex == 2) return 2; // Agents
-    if (desktopIndex == 3) return 2; // Partenaires → Agents
-    if (desktopIndex == 4) return 3; // Taux → Taux
-    if (desktopIndex >= 5) return 4; // Rapports/Sync/Config → Rapports
+    if (desktopIndex == 1) return 1; // SHOP → Shops
+    if (desktopIndex == 2) return 2; // Agents → Partenaires
+    if (desktopIndex == 3) return 2; // Partenaires → Partenaires
+    if (desktopIndex == 4) return 3; // Taux → Rapports
+    if (desktopIndex == 5) return 3; // Rapports → Rapports
+    if (desktopIndex == 6) return 4; // Config → Config
     return 0;
   }
 
   // Mapper l'index mobile vers l'index desktop
   int _getDesktopIndexFromMobile(int mobileIndex) {
-    // Mobile:  0=Dashboard, 1=Clients, 2=Agents, 3=Taux, 4=Rapports
-    // Desktop: 0=Dashboard, 1=Gestion Clients, 2=Agents, 3=Partenaires, 4=Taux, 5=Rapports, 6=Sync, 7=Config
+    // Mobile:  0=Dashboard, 1=Shops, 2=Partenaires, 3=Rapports, 4=Config
+    // Desktop: 0=Dashboard, 1=SHOP, 2=Agents, 3=Partenaires, 4=Taux, 5=Rapports, 6=Config
     switch (mobileIndex) {
       case 0: return 0; // Dashboard
-      case 1: return 1; // Gestion Clients
-      case 2: return 2; // Agents
-      case 3: return 4; // Taux
-      case 4: return 5; // Rapports
+      case 1: return 1; // SHOP
+      case 2: return 3; // Partenaires
+      case 3: return 5; // Rapports
+      case 4: return 6; // Config
       default: return 0;
     }
   }
@@ -937,19 +906,19 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
           ),
           BottomNavigationBarItem(
             icon: Icon(_menuIcons[1]),
-            label: 'Clients',
+            label: 'Shops',
           ),
           BottomNavigationBarItem(
-            icon: Icon(_menuIcons[2]),
-            label: 'Agents',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(_menuIcons[4]),
-            label: 'Taux',
+            icon: Icon(_menuIcons[3]),
+            label: 'Partenaires',
           ),
           BottomNavigationBarItem(
             icon: Icon(_menuIcons[5]),
             label: 'Rapports',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(_menuIcons[6]),
+            label: 'Config',
           ),
         ],
       ),

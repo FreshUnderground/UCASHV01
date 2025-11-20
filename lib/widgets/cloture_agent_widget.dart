@@ -12,8 +12,13 @@ import 'rapportcloture.dart';
 /// Widget de gestion des clôtures de caisse pour l'agent
 class ClotureAgentWidget extends StatefulWidget {
   final int? shopId;
+  final bool isAdminView; // Si true, masque le bouton de clôture (admin ne peut pas clôturer)
   
-  const ClotureAgentWidget({super.key, this.shopId});
+  const ClotureAgentWidget({
+    super.key,
+    this.shopId,
+    this.isAdminView = false,
+  });
 
   @override
   State<ClotureAgentWidget> createState() => _ClotureAgentWidgetState();
@@ -90,7 +95,10 @@ class _ClotureAgentWidgetState extends State<ClotureAgentWidget> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => RapportCloture(shopId: shopId),
+        builder: (context) => RapportCloture(
+          shopId: shopId,
+          isAdminView: widget.isAdminView, // Transmettre le paramètre
+        ),
       ),
     );
     
@@ -107,7 +115,10 @@ class _ClotureAgentWidgetState extends State<ClotureAgentWidget> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => RapportCloture(shopId: shopId),
+        builder: (context) => RapportCloture(
+          shopId: shopId,
+          isAdminView: widget.isAdminView, // Transmettre le paramètre
+        ),
       ),
     );
   }
@@ -303,33 +314,34 @@ class _ClotureAgentWidgetState extends State<ClotureAgentWidget> {
             
             const SizedBox(height: 16),
             
-            // Bouton clôturer la journée
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _cloturerJournee,
-                icon: const Icon(Icons.lock_clock, size: 22),
-                label: Text(
-                  isMobile ? 'Clôturer' : 'Clôturer la Journée',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
+            // Bouton clôturer la journée (MASQUÉ pour l'admin)
+            if (!widget.isAdminView)
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _cloturerJournee,
+                  icon: const Icon(Icons.lock_clock, size: 22),
+                  label: Text(
+                    isMobile ? 'Clôturer' : 'Clôturer la Journée',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: const Color(0xFFDC2626),
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 14,
-                    horizontal: 22,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFFDC2626),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 14,
+                      horizontal: 22,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),

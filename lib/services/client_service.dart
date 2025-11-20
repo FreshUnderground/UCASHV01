@@ -106,7 +106,7 @@ class ClientService extends ChangeNotifier {
     final now = DateTime.now();
     final dateStr = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
     final randomDigits = (1000 + (DateTime.now().millisecondsSinceEpoch % 9000)).toString().substring(0, 4);
-    return 'TRANSID-${shopId.toString().padLeft(3, '0')}$dateStr$randomDigits';
+    return '${shopId.toString().padLeft(3, '0')}$dateStr$randomDigits';
   }
 
   // Mettre à jour un client

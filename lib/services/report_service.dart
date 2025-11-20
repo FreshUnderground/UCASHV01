@@ -2,8 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import '../models/operation_model.dart';
 import '../models/shop_model.dart';
-import '../models/client_model.dart';
-import '../models/agent_model.dart';
 import '../models/flot_model.dart' as flot_model;
 import 'local_db.dart';
 import 'agent_service.dart';
@@ -396,11 +394,18 @@ class ReportService extends ChangeNotifier {
         commissionsParType[type] = commissionsParType[type]! + commission;
       }
 
-      // Par shop
-      commissionsParShop[operation.shopSourceId!] = 
-        (commissionsParShop[operation.shopSourceId!] ?? 0) + commission;
+      // Par shop - IMPORTANT: La commission appartient au SHOP DESTINATION
+      // Car c'est le shop destination qui garde la commission et sert le montantNet
+      if (operation.shopDestinationId != null) {
+        commissionsParShop[operation.shopDestinationId!] = 
+          (commissionsParShop[operation.shopDestinationId!] ?? 0) + commission;
+      } else {
+        // Fallback: si pas de shop destination (cas très rare), compter pour le shop source
+        commissionsParShop[operation.shopSourceId!] = 
+          (commissionsParShop[operation.shopSourceId!] ?? 0) + commission;
+      }
 
-      // Par agent
+      // Par agent - L'agent qui a créé l'opération (shop source)
       final agent = agentService.getAgentById(operation.agentId);
       final agentName = agent?.nom ?? agent?.username ?? operation.lastModifiedBy ?? 'Agent inconnu';
       commissionsParAgent[agentName] = 
@@ -752,13 +757,35 @@ class ReportService extends ChangeNotifier {
       }
     }
 
+    // Calculer le solde réel à partir des opérations
+    double soldeActuel = 0;
+    for (final operation in clientOperations) {
+      switch (operation.type) {
+        case OperationType.depot:
+        case OperationType.transfertInternationalEntrant:
+          soldeActuel += operation.montantNet;
+          break;
+        case OperationType.retrait:
+          soldeActuel -= operation.montantNet;
+          break;
+        case OperationType.transfertNational:
+        case OperationType.transfertInternationalSortant:
+          // Pour les transferts sortants, le client paie le montant brut
+          soldeActuel -= operation.montantBrut;
+          break;
+        case OperationType.virement:
+          // Traiter les virements selon le contexte
+          break;
+      }
+    }
+
     return {
       'client': client.toJson(),
       'periode': {
         'debut': startDate?.toIso8601String(),
         'fin': endDate?.toIso8601String(),
       },
-      'soldeActuel': client.solde,
+      'soldeActuel': soldeActuel,  // Utiliser le solde calculé
       'totaux': {
         'depots': totalDepots,
         'retraits': totalRetraits,
@@ -879,6 +906,7 @@ class ReportService extends ChangeNotifier {
       final testShop = _shops.first;
       
       final depotTest = OperationModel(
+        codeOps: '', // Sera généré automatiquement
         id: DateTime.now().millisecondsSinceEpoch,
         type: OperationType.depot,
         montantBrut: 5000.0,
@@ -896,6 +924,7 @@ class ReportService extends ChangeNotifier {
       await LocalDB.instance.saveOperation(depotTest);
       
       final retraitTest = OperationModel(
+        codeOps: '', // Sera généré automatiquement
         id: DateTime.now().millisecondsSinceEpoch + 1,
         type: OperationType.retrait,
         montantBrut: 2000.0,

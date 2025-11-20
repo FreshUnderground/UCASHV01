@@ -43,8 +43,8 @@ class OperationModel {
   final int agentId;
   final String? agentUsername;
   
-  // Code d'opération unique
-  final String? codeOps;
+  // Code d'opération unique (OBLIGATOIRE)
+  final String codeOps;
   
   // Détails opération
   final String? destinataire;
@@ -85,8 +85,8 @@ class OperationModel {
     required this.agentId,
     this.agentUsername,
     
-    // Code d'opération
-    this.codeOps,
+    // Code d'opération (OBLIGATOIRE)
+    required this.codeOps,
     
     // Détails
     this.destinataire,
@@ -221,13 +221,13 @@ class OperationModel {
     if (id != null) {
       final now = DateTime.now();
       final timestamp = now.millisecondsSinceEpoch;
-      return 'TRANSID-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}${id}${timestamp.toString().substring(timestamp.toString().length - 4)}';
+      return '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}${id}${timestamp.toString().substring(timestamp.toString().length - 4)}';
     }
     
     // Sinon, générer un code aléatoire
     final now = DateTime.now();
     final random = (DateTime.now().millisecondsSinceEpoch % 10000).toString().padLeft(4, '0');
-    return 'TRANSID-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}${random}';
+    return '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}${random}';
   }
   
   /// Parse OperationStatus depuis String (MySQL) ou int (local)
