@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:printing/printing.dart';
+import 'package:pdf/pdf.dart' as pdf_lib;
+import 'package:pdf/widgets.dart' as pw;
+import 'package:intl/intl.dart';
 import '../services/client_service.dart';
 import '../services/auth_service.dart';
 import '../services/operation_service.dart';
+import '../services/shop_service.dart';
+import '../services/document_header_service.dart';
 import '../models/client_model.dart';
 import '../models/operation_model.dart';
 import '../widgets/simple_transfer_dialog.dart';
@@ -18,6 +24,7 @@ class AgentClientsWidget extends StatefulWidget {
 class _AgentClientsWidgetState extends State<AgentClientsWidget> {
   String _searchQuery = '';
   bool _showActiveOnly = false;
+  String _balanceFilter = 'all'; // all, debit (ils nous doivent), credit (nous leur devons)
 
   @override
   void initState() {
@@ -37,6 +44,8 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
   }
 
   List<ClientModel> _filterClients(List<ClientModel> clients) {
+    final operationService = Provider.of<OperationService>(context, listen: false);
+    
     return clients.where((client) {
       final matchesSearch = _searchQuery.isEmpty ||
           client.nom.toLowerCase().contains(_searchQuery.toLowerCase()) ||
@@ -44,7 +53,22 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
       
       final matchesStatus = !_showActiveOnly || client.isActive;
       
-      return matchesSearch && matchesStatus;
+      // Filter by balance
+      bool matchesBalance = true;
+      if (_balanceFilter != 'all') {
+        final balance = _calculateClientRealBalance(client.id!, operationService);
+        final totalBalanceUSD = balance['USD']!;
+        
+        if (_balanceFilter == 'debit') {
+          // Ils nous doivent (solde positif)
+          matchesBalance = totalBalanceUSD > 0;
+        } else if (_balanceFilter == 'credit') {
+          // Nous leur devons (solde négatif)
+          matchesBalance = totalBalanceUSD < 0;
+        }
+      }
+      
+      return matchesSearch && matchesStatus && matchesBalance;
     }).toList();
   }
   
@@ -83,6 +107,402 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
     };
   }
 
+  Future<void> _generateBalanceReport() async {
+    try {
+      final clientService = Provider.of<ClientService>(context, listen: false);
+      final operationService = Provider.of<OperationService>(context, listen: false);
+      final shopService = Provider.of<ShopService>(context, listen: false);
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final headerService = Provider.of<DocumentHeaderService>(context, listen: false);
+      
+      final currentUser = authService.currentUser;
+      if (currentUser?.shopId == null) return;
+      
+      final shop = shopService.getShopById(currentUser!.shopId!);
+      if (shop == null) return;
+      
+      // Get filtered clients with balance
+      final clients = _filterClients(clientService.clients);
+      
+      // Calculate balances for each client
+      final clientsWithBalance = clients.map((client) {
+        final balance = _calculateClientRealBalance(client.id!, operationService);
+        return {
+          'client': client,
+          'balanceUSD': balance['USD']!,
+          'balanceCDF': balance['CDF']!,
+          'balanceUGX': balance['UGX']!,
+        };
+      }).toList();
+      
+      // Generate PDF
+      final pdf = await _createBalancePdf(clientsWithBalance, shop, headerService);
+      
+      // Show print dialog
+      await Printing.layoutPdf(
+        onLayout: (pdf_lib.PdfPageFormat format) async => pdf.save(),
+        name: 'rapport_soldes_partenaires_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+      );
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Rapport généré avec succès'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Erreur: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<pw.Document> _createBalancePdf(
+    List<Map<String, dynamic>> clientsWithBalance,
+    shop,
+    DocumentHeaderService headerService,
+  ) async {
+    final pdf = pw.Document();
+    final header = headerService.getHeaderOrDefault();
+    
+    // Calculate totals
+    double totalDebitUSD = 0;
+    double totalCreditUSD = 0;
+    double totalDebitCDF = 0;
+    double totalCreditCDF = 0;
+    
+    final clientsDebit = <Map<String, dynamic>>[];
+    final clientsCredit = <Map<String, dynamic>>[];
+    
+    for (final item in clientsWithBalance) {
+      final balanceUSD = item['balanceUSD'] as double;
+      final balanceCDF = item['balanceCDF'] as double;
+      
+      if (_balanceFilter == 'debit' || _balanceFilter == 'all') {
+        if (balanceUSD > 0 || balanceCDF > 0) {
+          clientsDebit.add(item);
+          totalDebitUSD += balanceUSD > 0 ? balanceUSD : 0;
+          totalDebitCDF += balanceCDF > 0 ? balanceCDF : 0;
+        }
+      }
+      
+      if (_balanceFilter == 'credit' || _balanceFilter == 'all') {
+        if (balanceUSD < 0 || balanceCDF < 0) {
+          clientsCredit.add(item);
+          totalCreditUSD += balanceUSD < 0 ? balanceUSD.abs() : 0;
+          totalCreditCDF += balanceCDF < 0 ? balanceCDF.abs() : 0;
+        }
+      }
+    }
+    
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: pdf_lib.PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(20),
+        build: (context) => [
+          // Header
+          pw.Container(
+            padding: const pw.EdgeInsets.all(16),
+            decoration: pw.BoxDecoration(
+              color: pdf_lib.PdfColors.red700,
+              borderRadius: pw.BorderRadius.circular(8),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      header.companyName,
+                      style: pw.TextStyle(
+                        fontSize: 24,
+                        fontWeight: pw.FontWeight.bold,
+                        color: pdf_lib.PdfColors.white,
+                      ),
+                    ),
+                    if (header.address != null)
+                      pw.Text(
+                        header.address!,
+                        style: const pw.TextStyle(
+                          fontSize: 10,
+                          color: pdf_lib.PdfColors.white,
+                        ),
+                      ),
+                    if (header.phone != null)
+                      pw.Text(
+                        header.phone!,
+                        style: const pw.TextStyle(
+                          fontSize: 10,
+                          color: pdf_lib.PdfColors.white,
+                        ),
+                      ),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(
+                      'RAPPORT SOLDES',
+                      style: pw.TextStyle(
+                        fontSize: 16,
+                        fontWeight: pw.FontWeight.bold,
+                        color: pdf_lib.PdfColors.white,
+                      ),
+                    ),
+                    pw.Text(
+                      DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now()),
+                      style: const pw.TextStyle(
+                        fontSize: 10,
+                        color: pdf_lib.PdfColors.white,
+                      ),
+                    ),
+                    pw.Text(
+                      shop.designation,
+                      style: const pw.TextStyle(
+                        fontSize: 10,
+                        color: pdf_lib.PdfColors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          
+          pw.SizedBox(height: 20),
+          
+          // Summary boxes
+          pw.Row(
+            children: [
+              pw.Expanded(
+                child: pw.Container(
+                  padding: const pw.EdgeInsets.all(12),
+                  decoration: pw.BoxDecoration(
+                    color: pdf_lib.PdfColors.green50,
+                    border: pw.Border.all(color: pdf_lib.PdfColors.green700),
+                    borderRadius: pw.BorderRadius.circular(8),
+                  ),
+                  child: pw.Column(
+                    children: [
+                      pw.Text(
+                        'ILS NOUS DOIVENT',
+                        style: pw.TextStyle(
+                          fontSize: 12,
+                          fontWeight: pw.FontWeight.bold,
+                          color: pdf_lib.PdfColors.green700,
+                        ),
+                      ),
+                      pw.SizedBox(height: 8),
+                      pw.Text(
+                        '${totalDebitUSD.toStringAsFixed(2)} USD',
+                        style: pw.TextStyle(
+                          fontSize: 16,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                      if (totalDebitCDF > 0)
+                        pw.Text(
+                          '${totalDebitCDF.toStringAsFixed(2)} CDF',
+                          style: const pw.TextStyle(fontSize: 12),
+                        ),
+                      pw.Text(
+                        '${clientsDebit.length} client(s)',
+                        style: const pw.TextStyle(fontSize: 10),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              pw.SizedBox(width: 16),
+              pw.Expanded(
+                child: pw.Container(
+                  padding: const pw.EdgeInsets.all(12),
+                  decoration: pw.BoxDecoration(
+                    color: pdf_lib.PdfColors.red50,
+                    border: pw.Border.all(color: pdf_lib.PdfColors.red700),
+                    borderRadius: pw.BorderRadius.circular(8),
+                  ),
+                  child: pw.Column(
+                    children: [
+                      pw.Text(
+                        'NOUS LEUR DEVONS',
+                        style: pw.TextStyle(
+                          fontSize: 12,
+                          fontWeight: pw.FontWeight.bold,
+                          color: pdf_lib.PdfColors.red700,
+                        ),
+                      ),
+                      pw.SizedBox(height: 8),
+                      pw.Text(
+                        '${totalCreditUSD.toStringAsFixed(2)} USD',
+                        style: pw.TextStyle(
+                          fontSize: 16,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                      if (totalCreditCDF > 0)
+                        pw.Text(
+                          '${totalCreditCDF.toStringAsFixed(2)} CDF',
+                          style: const pw.TextStyle(fontSize: 12),
+                        ),
+                      pw.Text(
+                        '${clientsCredit.length} client(s)',
+                        style: const pw.TextStyle(fontSize: 10),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          
+          pw.SizedBox(height: 20),
+          
+          // Clients who owe us
+          if (clientsDebit.isNotEmpty) ...[
+            pw.Text(
+              'ILS NOUS DOIVENT (${clientsDebit.length})',
+              style: pw.TextStyle(
+                fontSize: 14,
+                fontWeight: pw.FontWeight.bold,
+                color: pdf_lib.PdfColors.green700,
+              ),
+            ),
+            pw.SizedBox(height: 10),
+            pw.Table(
+              border: pw.TableBorder.all(color: pdf_lib.PdfColors.grey300),
+              children: [
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(color: pdf_lib.PdfColors.grey200),
+                  children: [
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(8),
+                      child: pw.Text('Client', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(8),
+                      child: pw.Text('Téléphone', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(8),
+                      child: pw.Text('Solde USD', style: pw.TextStyle(fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(8),
+                      child: pw.Text('Solde CDF', style: pw.TextStyle(fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right),
+                    ),
+                  ],
+                ),
+                ...clientsDebit.map((item) {
+                  final client = item['client'] as ClientModel;
+                  final balanceUSD = item['balanceUSD'] as double;
+                  final balanceCDF = item['balanceCDF'] as double;
+                  return pw.TableRow(
+                    children: [
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(client.nom)),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(client.telephone)),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(8),
+                        child: pw.Text(
+                          balanceUSD > 0 ? balanceUSD.toStringAsFixed(2) : '-',
+                          textAlign: pw.TextAlign.right,
+                          style: pw.TextStyle(color: pdf_lib.PdfColors.green700, fontWeight: pw.FontWeight.bold),
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(8),
+                        child: pw.Text(
+                          balanceCDF > 0 ? balanceCDF.toStringAsFixed(2) : '-',
+                          textAlign: pw.TextAlign.right,
+                        ),
+                      ),
+                    ],
+                  );
+                }),
+              ],
+            ),
+            pw.SizedBox(height: 20),
+          ],
+          
+          // Clients we owe
+          if (clientsCredit.isNotEmpty) ...[
+            pw.Text(
+              'NOUS LEUR DEVONS (${clientsCredit.length})',
+              style: pw.TextStyle(
+                fontSize: 14,
+                fontWeight: pw.FontWeight.bold,
+                color: pdf_lib.PdfColors.red700,
+              ),
+            ),
+            pw.SizedBox(height: 10),
+            pw.Table(
+              border: pw.TableBorder.all(color: pdf_lib.PdfColors.grey300),
+              children: [
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(color: pdf_lib.PdfColors.grey200),
+                  children: [
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(8),
+                      child: pw.Text('Client', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(8),
+                      child: pw.Text('Téléphone', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(8),
+                      child: pw.Text('Solde USD', style: pw.TextStyle(fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(8),
+                      child: pw.Text('Solde CDF', style: pw.TextStyle(fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right),
+                    ),
+                  ],
+                ),
+                ...clientsCredit.map((item) {
+                  final client = item['client'] as ClientModel;
+                  final balanceUSD = item['balanceUSD'] as double;
+                  final balanceCDF = item['balanceCDF'] as double;
+                  return pw.TableRow(
+                    children: [
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(client.nom)),
+                      pw.Padding(padding: const pw.EdgeInsets.all(8), child: pw.Text(client.telephone)),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(8),
+                        child: pw.Text(
+                          balanceUSD < 0 ? balanceUSD.abs().toStringAsFixed(2) : '-',
+                          textAlign: pw.TextAlign.right,
+                          style: pw.TextStyle(color: pdf_lib.PdfColors.red700, fontWeight: pw.FontWeight.bold),
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(8),
+                        child: pw.Text(
+                          balanceCDF < 0 ? balanceCDF.abs().toStringAsFixed(2) : '-',
+                          textAlign: pw.TextAlign.right,
+                        ),
+                      ),
+                    ],
+                  );
+                }),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+    
+    return pdf;
+  }
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
@@ -96,6 +516,10 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
         children: [
           // Header avec recherche et filtres
           _buildHeader(),
+          const SizedBox(height: 16),
+          
+          // Balance Filter Tabs
+          _buildBalanceFilterTabs(),
           const SizedBox(height: 16),
           
           // Statistiques
@@ -219,6 +643,125 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildBalanceFilterTabs() {
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width <= 768;
+    
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(isMobile ? 10 : 12),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.filter_list, color: Color(0xFFDC2626), size: 20),
+                const SizedBox(width: 8),
+                const Text(
+                  'Filtre par Solde:',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                ),
+                const Spacer(),
+                ElevatedButton.icon(
+                  onPressed: _generateBalanceReport,
+                  icon: const Icon(Icons.print, size: 18),
+                  label: const Text('Rapport Imprimable'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFDC2626),
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isMobile ? 12 : 16,
+                      vertical: isMobile ? 8 : 10,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildBalanceTabButton(
+                    label: 'Tous',
+                    icon: Icons.list,
+                    value: 'all',
+                    isMobile: isMobile,
+                  ),
+                  SizedBox(width: isMobile ? 6 : 8),
+                  _buildBalanceTabButton(
+                    label: 'Ils nous doivent',
+                    icon: Icons.arrow_downward,
+                    value: 'debit',
+                    color: Colors.green,
+                    isMobile: isMobile,
+                  ),
+                  SizedBox(width: isMobile ? 6 : 8),
+                  _buildBalanceTabButton(
+                    label: 'Nous leur devons',
+                    icon: Icons.arrow_upward,
+                    value: 'credit',
+                    color: Colors.red,
+                    isMobile: isMobile,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBalanceTabButton({
+    required String label,
+    required IconData icon,
+    required String value,
+    required bool isMobile,
+    Color? color,
+  }) {
+    final isSelected = _balanceFilter == value;
+    final buttonColor = color ?? const Color(0xFFDC2626);
+    
+    return ElevatedButton.icon(
+      onPressed: () {
+        if (mounted) {
+          setState(() {
+            _balanceFilter = value;
+          });
+        }
+      },
+      icon: Icon(
+        icon,
+        size: isMobile ? 14 : 16,
+        color: isSelected ? Colors.white : buttonColor,
+      ),
+      label: Text(
+        label,
+        style: TextStyle(
+          fontSize: isMobile ? 11 : 13,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+          color: isSelected ? Colors.white : buttonColor,
+        ),
+      ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: isSelected ? buttonColor : Colors.white,
+        foregroundColor: isSelected ? Colors.white : buttonColor,
+        side: BorderSide(
+          color: buttonColor,
+          width: isSelected ? 2 : 1,
+        ),
+        padding: EdgeInsets.symmetric(
+          horizontal: isMobile ? 12 : 16,
+          vertical: isMobile ? 8 : 10,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        elevation: isSelected ? 4 : 0,
       ),
     );
   }
