@@ -117,6 +117,7 @@ class RapportClotureService {
         
         // NOUVEAU: Listes détaillées des FLOT
         flotsRecusDetails: flots['flotsRecusDetails'] as List<FlotResume>,
+        flotsRecusGroupes: flots['flotsRecusGroupes'] as Map<String, double>,
         flotsEnvoyes: flots['flotsEnvoyesDetails'] as List<FlotResume>,
         
         // NOUVEAU: Listes détaillées des opérations clients
@@ -222,6 +223,13 @@ class RapportClotureService {
       modePaiement: f.modePaiement.name,
     )).toList();
     
+    // GROUPER LES FLOTS REÇUS PAR SHOP EXPÉDITEUR
+    final flotsRecusGroupes = <String, double>{};
+    for (var flot in flotsRecus) {
+      final shopSource = flot.shopSourceDesignation;
+      flotsRecusGroupes[shopSource] = (flotsRecusGroupes[shopSource] ?? 0.0) + flot.montant;
+    }
+    
     final flotsEnvoyesDetails = flotsEnvoyes.map((f) => FlotResume(
       flotId: f.id!,
       shopSourceDesignation: f.shopSourceDesignation,
@@ -238,6 +246,7 @@ class RapportClotureService {
       'recu': flotsRecus.fold(0.0, (sum, f) => sum + f.montant),     // ENTRÉE (+)
       'envoye': flotsEnvoyes.fold(0.0, (sum, f) => sum + f.montant), // SORTIE (-)
       'flotsRecusDetails': flotsRecusDetails,
+      'flotsRecusGroupes': flotsRecusGroupes, // GROUPÉ PAR SHOP EXPÉDITEUR
       'flotsEnvoyesDetails': flotsEnvoyesDetails,
     };
   }
