@@ -14,6 +14,7 @@ import '../widgets/sync_indicator.dart';
 import '../widgets/offline_banner.dart';
 import '../widgets/flot_management_widget.dart';
 import '../widgets/comptes_speciaux_widget.dart';
+import '../widgets/sync_monitor_widget.dart';
 
 class DashboardAgentPage extends StatefulWidget {
   const DashboardAgentPage({super.key});
@@ -196,6 +197,22 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
       elevation: 4,
       shadowColor: Colors.black.withOpacity(0.3),
       actions: [
+        // Bouton Sync Monitor
+        IconButton(
+          icon: const Icon(Icons.sync_alt, color: Colors.white),
+          tooltip: 'Synchronisation',
+          onPressed: () {
+            showDialog(
+              context: context,
+              builder: (context) => Dialog(
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 600, maxHeight: 700),
+                  child: const SyncMonitorWidget(),
+                ),
+              ),
+            );
+          },
+        ),
         if (!isMobile) const ConnectivityIndicator(),
         if (!isMobile) const SizedBox(width: 4),
         // Bouton de synchronisation manuelle

@@ -16,6 +16,7 @@ import '../widgets/create_agent_dialog.dart';
 import '../widgets/admin_help_widget.dart';
 import '../widgets/sync_status_widget.dart';
 import '../widgets/comptes_speciaux_widget.dart';
+import '../widgets/sync_monitor_widget.dart';
 import '../utils/responsive_utils.dart';
 import '../theme/ucash_typography.dart';
 import '../theme/ucash_containers.dart';
@@ -156,6 +157,22 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
       elevation: 4,
       shadowColor: Colors.black.withOpacity(0.3),
       actions: [
+        // Bouton Sync Monitor
+        IconButton(
+          icon: const Icon(Icons.sync_alt, color: Colors.white),
+          tooltip: 'Synchronisation',
+          onPressed: () {
+            showDialog(
+              context: context,
+              builder: (context) => Dialog(
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 600, maxHeight: 700),
+                  child: const SyncMonitorWidget(),
+                ),
+              ),
+            );
+          },
+        ),
         const ConnectivityIndicator(),
         const SizedBox(width: 16),
         Consumer<AuthService>(
