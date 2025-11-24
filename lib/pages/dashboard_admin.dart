@@ -885,10 +885,10 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
 
   // Mapper l'index desktop (7 items) vers l'index mobile (5 items)
   int _getMobileNavIndex(int desktopIndex) {
-    // Desktop: 0=Dashboard, 1=SHOP, 2=Agents, 3=Partenaires, 4=Taux, 5=Rapports, 6=Config
-    // Mobile:  0=Dashboard, 1=Shops, 2=Partenaires, 3=Rapports, 4=Config
+    // Desktop: 0=Dashboard, 1=Dépenses, 2=Agents, 3=Partenaires, 4=Taux, 5=Rapports, 6=Config
+    // Mobile:  0=Dashboard, 1=Frais, 2=Partenaires, 3=Rapports, 4=Config
     if (desktopIndex == 0) return 0; // Dashboard
-    if (desktopIndex == 1) return 1; // SHOP → Shops
+    if (desktopIndex == 1) return 1; // Dépenses → Frais
     if (desktopIndex == 2) return 2; // Agents → Partenaires
     if (desktopIndex == 3) return 2; // Partenaires → Partenaires
     if (desktopIndex == 4) return 3; // Taux → Rapports
@@ -899,11 +899,11 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
 
   // Mapper l'index mobile vers l'index desktop
   int _getDesktopIndexFromMobile(int mobileIndex) {
-    // Mobile:  0=Dashboard, 1=Shops, 2=Partenaires, 3=Rapports, 4=Config
-    // Desktop: 0=Dashboard, 1=SHOP, 2=Agents, 3=Partenaires, 4=Taux, 5=Rapports, 6=Config
+    // Mobile:  0=Dashboard, 1=Frais, 2=Partenaires, 3=Rapports, 4=Config
+    // Desktop: 0=Dashboard, 1=Dépenses, 2=Agents, 3=Partenaires, 4=Taux, 5=Rapports, 6=Config
     switch (mobileIndex) {
       case 0: return 0; // Dashboard
-      case 1: return 1; // SHOP
+      case 1: return 1; // Frais → Dépenses
       case 2: return 3; // Partenaires
       case 3: return 5; // Rapports
       case 4: return 6; // Config
@@ -944,7 +944,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
           ),
           BottomNavigationBarItem(
             icon: Icon(_menuIcons[1]),
-            label: 'Shops',
+            label: 'Frais',
           ),
           BottomNavigationBarItem(
             icon: Icon(_menuIcons[3]),
