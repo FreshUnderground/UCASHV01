@@ -683,9 +683,13 @@ class _AdminFlotReportState extends State<AdminFlotReport> {
                   const SizedBox(width: 12),
                   const Icon(Icons.check, size: 14, color: Colors.green),
                   const SizedBox(width: 4),
-                  Text(
-                    'Reçu: ${_formatDate(flot.dateReception!)}',
-                    style: const TextStyle(fontSize: 12, color: Colors.green),
+                  Flexible(
+                    child: Text(
+                      'Reçu: ${_formatDate(flot.dateReception!)}',
+                      style: const TextStyle(fontSize: 12, color: Colors.green),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
                   ),
                 ],
               ],
