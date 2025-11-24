@@ -191,6 +191,10 @@ class RapportClotureService {
   Future<Map<String, dynamic>> _calculerFlots(int shopId, DateTime dateRapport) async {
     final flotService = FlotService.instance;
     await flotService.loadFlots(shopId: shopId);
+    
+    // Charger tous les shops pour avoir leurs noms
+    final shops = await LocalDB.instance.getAllShops();
+    final shopsMap = {for (var shop in shops) shop.id: shop.designation};
 
     // FLOT REÇUS = FLOTs vers nous (en cours + servis reçus aujourd'hui)
     final flotsRecusEnCours = flotService.getFlotsEnCours(shopId)
@@ -227,13 +231,12 @@ class RapportClotureService {
       modePaiement: f.modePaiement.name,
     )).toList();
     
-    // GROUPER LES FLOTS REÇUS PAR SHOP EXPÉDITEUR (SOURCE)
+    // GROUPER LES FLOTS REÇUS PAR SHOP EXPÉDITEUR (SOURCE ID)
     final flotsRecusGroupes = <String, double>{};
     for (var flot in flotsRecus) {
-      final shopSource = flot.shopSourceDesignation.isNotEmpty 
-          ? flot.shopSourceDesignation 
-          : 'Shop inconnu';
-      flotsRecusGroupes[shopSource] = (flotsRecusGroupes[shopSource] ?? 0.0) + flot.montant;
+      final shopSourceId = flot.shopSourceId;
+      final shopName = shopsMap[shopSourceId] ?? 'Shop inconnu (ID: $shopSourceId)';
+      flotsRecusGroupes[shopName] = (flotsRecusGroupes[shopName] ?? 0.0) + flot.montant;
     }
     
     debugPrint('📊 FLOTS REÇUS GROUPÉS PAR SHOP SOURCE:');
@@ -253,11 +256,12 @@ class RapportClotureService {
       modePaiement: f.modePaiement.name,
     )).toList();
     
-    // GROUPER LES FLOTS ENVOYÉS PAR SHOP DESTINATION
+    // GROUPER LES FLOTS ENVOYÉS PAR SHOP DESTINATION (DESTINATION ID)
     final flotsEnvoyesGroupes = <String, double>{};
     for (var flot in flotsEnvoyes) {
-      final shopDestination = flot.shopDestinationDesignation;
-      flotsEnvoyesGroupes[shopDestination] = (flotsEnvoyesGroupes[shopDestination] ?? 0.0) + flot.montant;
+      final shopDestinationId = flot.shopDestinationId;
+      final shopName = shopsMap[shopDestinationId] ?? 'Shop inconnu (ID: $shopDestinationId)';
+      flotsEnvoyesGroupes[shopName] = (flotsEnvoyesGroupes[shopName] ?? 0.0) + flot.montant;
     }
 
     return {
@@ -274,6 +278,10 @@ class RapportClotureService {
   Future<Map<String, dynamic>> _calculerTransferts(int shopId, DateTime dateRapport, List<OperationModel>? providedOperations) async {
     // Utiliser les opérations fournies (de "Mes Ops") ou charger depuis LocalDB
     final operations = providedOperations ?? await LocalDB.instance.getAllOperations();
+    
+    // Charger tous les shops pour avoir leurs noms
+    final shops = await LocalDB.instance.getAllShops();
+    final shopsMap = {for (var shop in shops) shop.id: shop.designation};
     
     // Transferts REÇUS = client nous paie (ENTRÉE d'argent)
     final transfertsRecus = operations.where((op) =>
@@ -314,25 +322,28 @@ class RapportClotureService {
       modePaiement: op.modePaiement.name,
     )).toList();
     
-    // GROUPER LES TRANSFERTS REÇUS PAR SHOP DESTINATION (vers nous)
+    // GROUPER LES TRANSFERTS REÇUS PAR SHOP DESTINATION ID (vers nous)
     final transfertsRecusGroupes = <String, double>{};
     for (var op in transfertsRecus) {
-      final shopDest = op.shopDestinationDesignation ?? 'Shop inconnu';
-      transfertsRecusGroupes[shopDest] = (transfertsRecusGroupes[shopDest] ?? 0.0) + op.montantBrut;
+      final shopDestId = op.shopDestinationId;
+      final shopName = shopsMap[shopDestId] ?? 'Shop inconnu (ID: $shopDestId)';
+      transfertsRecusGroupes[shopName] = (transfertsRecusGroupes[shopName] ?? 0.0) + op.montantBrut;
     }
     
-    // GROUPER LES TRANSFERTS SERVIS PAR SHOP SOURCE (de nous)
+    // GROUPER LES TRANSFERTS SERVIS PAR SHOP SOURCE ID (de nous)
     final transfertsServisGroupes = <String, double>{};
     for (var op in transfertsServis) {
-      final shopSrc = op.shopSourceDesignation ?? 'Shop inconnu';
-      transfertsServisGroupes[shopSrc] = (transfertsServisGroupes[shopSrc] ?? 0.0) + op.montantNet;
+      final shopSrcId = op.shopSourceId;
+      final shopName = shopsMap[shopSrcId] ?? 'Shop inconnu (ID: $shopSrcId)';
+      transfertsServisGroupes[shopName] = (transfertsServisGroupes[shopName] ?? 0.0) + op.montantNet;
     }
     
-    // GROUPER LES TRANSFERTS EN ATTENTE PAR SHOP SOURCE (de nous)
+    // GROUPER LES TRANSFERTS EN ATTENTE PAR SHOP SOURCE ID (de nous)
     final transfertsEnAttenteGroupes = <String, double>{};
     for (var op in transfertsEnAttente) {
-      final shopSrc = op.shopSourceDesignation ?? 'Shop inconnu';
-      transfertsEnAttenteGroupes[shopSrc] = (transfertsEnAttenteGroupes[shopSrc] ?? 0.0) + op.montantNet;
+      final shopSrcId = op.shopSourceId;
+      final shopName = shopsMap[shopSrcId] ?? 'Shop inconnu (ID: $shopSrcId)';
+      transfertsEnAttenteGroupes[shopName] = (transfertsEnAttenteGroupes[shopName] ?? 0.0) + op.montantNet;
     }
 
     return {
