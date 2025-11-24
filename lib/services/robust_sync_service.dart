@@ -6,6 +6,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
 import 'sync_service.dart';
 import 'transfer_sync_service.dart';
+import 'flot_service.dart';
 import 'compte_special_service.dart';
 import 'client_service.dart';
 import '../config/app_config.dart';
@@ -54,6 +55,7 @@ class RobustSyncService {
   // Services
   final SyncService _syncService = SyncService();
   final TransferSyncService _transferSync = TransferSyncService();
+  final FlotService _flotService = FlotService.instance;
 
   /// Initialise le service robuste
   Future<void> initialize() async {
@@ -137,6 +139,14 @@ class RobustSyncService {
     
     debugPrint('🚀 ${isInitial ? "[INITIAL]" : ""} FAST SYNC - Début');
     debugPrint('   Tables: operations, flots, comptes_speciaux, clients');
+    
+    // 0. RETRY des flots en attente (avant tout)
+    try {
+      debugPrint('  🔄 Retry flots en attente...');
+      await _flotService.retrySyncPendingFlots();
+    } catch (e) {
+      debugPrint('  ⚠️ Erreur retry flots: $e (non bloquant)');
+    }
     
     int successCount = 0;
     int errorCount = 0;

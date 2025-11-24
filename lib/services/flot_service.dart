@@ -3,6 +3,7 @@ import '../models/flot_model.dart' as flot_model;
 import '../models/journal_caisse_model.dart';
 import '../models/operation_model.dart';
 import 'local_db.dart';
+import 'sync_service.dart';
 
 /// Service pour gérer les FLOTS (approvisionnement de liquidité entre shops)
 class FlotService extends ChangeNotifier {
@@ -145,6 +146,9 @@ class FlotService extends ChangeNotifier {
       // Recharger avec les paramètres actuels
       await loadFlots(shopId: _currentShopId, isAdmin: _currentIsAdmin);
       
+      // IMPORTANT: Synchroniser en arrière-plan avec retry automatique
+      _syncFlotInBackground(newFlot);
+      
       debugPrint('✅ Flot créé: $montant $devise de $shopSourceDesignation vers $shopDestinationDesignation');
       _errorMessage = null;
       return true;
@@ -211,6 +215,9 @@ class FlotService extends ChangeNotifier {
       // Recharger avec les paramètres actuels
       await loadFlots(shopId: _currentShopId, isAdmin: _currentIsAdmin);
       
+      // IMPORTANT: Synchroniser en arrière-plan avec retry automatique
+      _syncFlotInBackground(updatedFlot);
+      
       debugPrint('✅ Flot marqué servi: ${updatedFlot.reference}');
       _errorMessage = null;
       return true;
@@ -255,5 +262,99 @@ class FlotService extends ChangeNotifier {
   void _setLoading(bool loading) {
     _isLoading = loading;
     notifyListeners();
+  }
+
+  /// Synchronise un flot en arrière-plan sans bloquer l'interface
+  /// Avec système de retry automatique (3 tentatives)
+  Future<void> _syncFlotInBackground(flot_model.FlotModel flot) async {
+    Future.microtask(() async {
+      int retryCount = 0;
+      const maxRetries = 3;
+      const retryDelay = Duration(seconds: 5);
+      
+      while (retryCount < maxRetries) {
+        try {
+          debugPrint('🔄 [BACKGROUND] Synchronisation flot ${flot.reference} (tentative ${retryCount + 1}/$maxRetries)...');
+          
+          final syncService = SyncService();
+          
+          // Uploader le flot
+          await syncService.uploadTableData('flots', 'background_sync');
+          
+          // Attendre un peu puis downloader pour vérifier
+          await Future.delayed(const Duration(milliseconds: 500));
+          await syncService.downloadTableData('flots', 'background_sync', 'system');
+          
+          debugPrint('✅ [BACKGROUND] Flot ${flot.reference} synchronisé avec succès');
+          await _markFlotAsSynced(flot.id!);
+          return; // Succès, sortir de la boucle
+        } catch (e) {
+          retryCount++;
+          debugPrint('⚠️ [BACKGROUND] Échec synchronisation flot ${flot.reference} (tentative $retryCount/$maxRetries): $e');
+          
+          if (retryCount < maxRetries) {
+            debugPrint('   ⏳ Nouvelle tentative dans ${retryDelay.inSeconds}s...');
+            await Future.delayed(retryDelay);
+          } else {
+            debugPrint('❌ [BACKGROUND] Échec définitif après $maxRetries tentatives');
+            debugPrint('   💡 Le flot restera en file d\'attente et sera retenté lors de la prochaine synchronisation');
+            await _addToPendingSyncQueue(flot);
+          }
+        }
+      }
+    });
+  }
+
+  /// Marque un flot comme synchronisé
+  Future<void> _markFlotAsSynced(int flotId) async {
+    try {
+      final flot = await LocalDB.instance.getFlotById(flotId);
+      if (flot != null) {
+        final updatedFlot = flot.copyWith(
+          isSynced: true,
+          syncedAt: DateTime.now(),
+        );
+        await LocalDB.instance.updateFlot(updatedFlot);
+        debugPrint('✅ Flot $flotId marqué comme synchronisé');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Erreur lors du marquage du flot comme synchronisé: $e');
+    }
+  }
+
+  /// Ajoute un flot à la file d'attente de synchronisation
+  Future<void> _addToPendingSyncQueue(flot_model.FlotModel flot) async {
+    try {
+      // Marquer comme non synchronisé
+      final updatedFlot = flot.copyWith(
+        isSynced: false,
+        syncedAt: null,
+      );
+      await LocalDB.instance.updateFlot(updatedFlot);
+      debugPrint('📝 Flot ${flot.reference} ajouté à la file d\'attente de sync');
+    } catch (e) {
+      debugPrint('❌ Erreur ajout file d\'attente: $e');
+    }
+  }
+
+  /// Retente la synchronisation de tous les flots en attente
+  Future<void> retrySyncPendingFlots() async {
+    try {
+      final allFlots = await LocalDB.instance.getAllFlots();
+      final unsyncedFlots = allFlots.where((f) => !(f.isSynced ?? false)).toList();
+      
+      if (unsyncedFlots.isEmpty) {
+        debugPrint('✅ Aucun flot en attente de synchronisation');
+        return;
+      }
+      
+      debugPrint('🔄 Retry de ${unsyncedFlots.length} flot(s) en attente...');
+      
+      for (var flot in unsyncedFlots) {
+        await _syncFlotInBackground(flot);
+      }
+    } catch (e) {
+      debugPrint('❌ Erreur retry sync flots: $e');
+    }
   }
 }
