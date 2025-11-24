@@ -31,14 +31,18 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
     });
   }
 
-  void _loadData() {
+  void _loadData() async {
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentUser = authService.currentUser;
     if (currentUser?.id != null && currentUser?.shopId != null) {
+      // IMPORTANT: Charger les shops EN PREMIER pour éviter "shop inconnu"
+      debugPrint('🏪 Chargement des shops...');
+      await Provider.of<ShopService>(context, listen: false).loadShops();
+      debugPrint('✅ Shops chargés');
+      
       // Charger TOUS les clients (globaux - accessible depuis tous les shops)
       Provider.of<ClientService>(context, listen: false).loadClients();
       Provider.of<OperationService>(context, listen: false).loadOperations(shopId: currentUser!.shopId!);
-      Provider.of<ShopService>(context, listen: false).loadShops();
     }
   }
 
