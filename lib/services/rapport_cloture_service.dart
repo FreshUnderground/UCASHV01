@@ -338,10 +338,11 @@ class RapportClotureService {
       transfertsServisGroupes[shopName] = (transfertsServisGroupes[shopName] ?? 0.0) + op.montantNet;
     }
     
-    // GROUPER LES TRANSFERTS EN ATTENTE PAR SHOP SOURCE ID (de nous)
+    // GROUPER LES TRANSFERTS EN ATTENTE PAR SHOP SOURCE ID (qui nous envoie)
+    // Note: shopDestinationId = nous, shopSourceId = shop expéditeur
     final transfertsEnAttenteGroupes = <String, double>{};
     for (var op in transfertsEnAttente) {
-      final shopSrcId = op.shopSourceId;
+      final shopSrcId = op.shopSourceId; // Le shop qui nous envoie
       final shopName = shopsMap[shopSrcId] ?? 'Shop inconnu (ID: $shopSrcId)';
       transfertsEnAttenteGroupes[shopName] = (transfertsEnAttenteGroupes[shopName] ?? 0.0) + op.montantNet;
     }
