@@ -509,9 +509,19 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
                   ),
                 ),
                 Expanded(
-                  flex: 3,
+                  flex: 2,
                   child: Text(
-                    'Obs.',
+                    'Bord. Réçu',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    'Bord. Payé',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.grey[700],
@@ -1101,7 +1111,7 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
           child: Row(
             children: [
               Expanded(
-                flex: 3,
+                flex: 2,
                 child: Text(
                   _formatDate(date),
                   style: TextStyle(
@@ -1111,11 +1121,22 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
                 ),
               ),
               Expanded(
-                flex: 3,
+                flex: 2,
                 child: Text(
-                  transaction['observation']?.toString() ?? transaction['destinataire']?.toString() ?? '-',
+                  isCredit ? (transaction['observation']?.toString() ?? transaction['destinataire']?.toString() ?? '--') : '--',
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 10,
+                    color: Colors.grey[700],
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Text(
+                  !isCredit ? (transaction['observation']?.toString() ?? transaction['destinataire']?.toString() ?? '--') : '--',
+                  style: TextStyle(
+                    fontSize: 10,
                     color: Colors.grey[700],
                   ),
                   overflow: TextOverflow.ellipsis,
