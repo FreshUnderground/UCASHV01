@@ -734,7 +734,7 @@ class _RapportClotureState extends State<RapportCloture> {
             // Détails des TRANSFERTS REÇUS GROUPÉS PAR SHOP DESTINATION
             if (rapport.transfertsRecusGroupes.isNotEmpty) ...[
               const SizedBox(height: 8),
-              const Text('Transferts Reçus Détails (Groupé par Shop):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              const Text('Transferts Reçus Détails :', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
               const Divider(),
               ...rapport.transfertsRecusGroupes.entries.map((entry) => _buildFlotDetailRow(
                 entry.key, // Nom du shop destination
@@ -747,7 +747,7 @@ class _RapportClotureState extends State<RapportCloture> {
             // Détails des TRANSFERTS SERVIS GROUPÉS PAR SHOP SOURCE
             if (rapport.transfertsServisGroupes.isNotEmpty) ...[
               const SizedBox(height: 8),
-              const Text('Transferts Servis Détails (Groupé par Shop):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              const Text('Transferts Servis Détails :', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
               const Divider(),
               ...rapport.transfertsServisGroupes.entries.map((entry) => _buildFlotDetailRow(
                 entry.key, // Nom du shop source
@@ -772,20 +772,6 @@ class _RapportClotureState extends State<RapportCloture> {
           ],
           Colors.blue,
         ),
-        
-        // Transferts Groupés par Route
-        if (rapport.transfertsGroupes.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          _buildSection(
-            '4️⃣ Transferts Groupés (Source → Destination)',
-            [
-              Text('${rapport.transfertsGroupes.length} route(s)', style: const TextStyle(fontWeight: FontWeight.bold)),
-              const Divider(),
-              ...rapport.transfertsGroupes.map((route) => _buildTransfertRouteRow(route)).toList(),
-            ],
-            Colors.indigo,
-          ),
-        ],
 
       ],
     );
