@@ -757,7 +757,53 @@ class _RapportClotureState extends State<RapportCloture> {
               )).toList(),
             ],
             
-            // Détails des TRANSFERTS EN ATTENTE GROUPÉS PAR SHOP SOURCE
+            // DÉTAILS INDIVIDUELS DES TRANSFERTS EN ATTENTE
+            if (rapport.transfertsEnAttenteDetails.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Text('Transferts En Attente Détails Individuels:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.orange)),
+              const Divider(),
+              ...rapport.transfertsEnAttenteDetails.map((op) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            op.destinataire ?? 'N/A',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (op.observation != null && op.observation!.isNotEmpty)
+                            Text(
+                              op.observation!,
+                              style: const TextStyle(fontSize: 10, color: Colors.grey),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        '${op.montant.toStringAsFixed(2)} ${op.devise}',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.orange),
+                        textAlign: TextAlign.right,
+                      ),
+                    ),
+                  ],
+                ),
+              )).toList(),
+              const Divider(),
+            ],
+            
+            // DÉTAILS DES TRANSFERTS EN ATTENTE GROUPÉS PAR SHOP SOURCE
             if (rapport.transfertsEnAttenteGroupes.isNotEmpty) ...[
               const SizedBox(height: 8),
               const Text('Transferts En Attente Détails (Groupé par Shop):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
