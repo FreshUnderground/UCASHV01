@@ -80,13 +80,21 @@ try {
             $entity['last_modified_at'] = $timestamp;
             $entity['last_modified_by'] = $userId;
             
-            // Vérifier si le flot existe déjà par sa référence unique (car les IDs peuvent différer)
-            $checkStmt = $pdo->prepare("SELECT id FROM flots WHERE reference = ?");
-            $checkStmt->execute([$entity['reference'] ?? null]);
+            // Vérifier si le flot existe déjà par reference ET date_envoi
+            // (car un flot peut être modifié localement de enRoute à servi)
+            $checkStmt = $pdo->prepare("
+                SELECT id, statut, date_reception 
+                FROM flots 
+                WHERE reference = ? AND date_envoi = ?
+            ");
+            $checkStmt->execute([
+                $entity['reference'] ?? null,
+                $entity['date_envoi']
+            ]);
             $exists = $checkStmt->fetch();
             
             if ($exists) {
-                // Mise à jour du flot existant par sa référence
+                // Mise à jour du flot existant (notamment changement enRoute → servi)
                 $stmt = $pdo->prepare("
                     UPDATE flots SET
                         shop_source_id = :shop_source_id,
@@ -102,7 +110,7 @@ try {
                         notes = :notes,
                         last_modified_at = :last_modified_at,
                         last_modified_by = :last_modified_by
-                    WHERE reference = :reference
+                    WHERE reference = :reference AND date_envoi = :date_envoi_where
                 ");
                 
                 $stmt->execute([
@@ -119,10 +127,13 @@ try {
                     ':notes' => $entity['notes'] ?? null,
                     ':last_modified_at' => $entity['last_modified_at'],
                     ':last_modified_by' => $entity['last_modified_by'],
-                    ':reference' => $entity['reference'] ?? null
+                    ':reference' => $entity['reference'] ?? null,
+                    ':date_envoi_where' => $entity['date_envoi']
                 ]);
                 
-                error_log("Flot mis à jour: REF " . $entity['reference'] . " -> Statut: " . $entity['statut']);
+                $oldStatut = $exists['statut'];
+                $newStatut = $entity['statut'];
+                error_log("Flot mis à jour: REF " . $entity['reference'] . " | Statut: $oldStatut → $newStatut | date_reception: " . ($entity['date_reception'] ?? 'NULL'));
             } else {
                 // Insertion
                 $stmt = $pdo->prepare("
