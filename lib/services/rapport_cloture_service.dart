@@ -346,6 +346,11 @@ class RapportClotureService {
       final shopName = shopsMap[shopSrcId] ?? 'Shop inconnu (ID: $shopSrcId)';
       transfertsEnAttenteGroupes[shopName] = (transfertsEnAttenteGroupes[shopName] ?? 0.0) + op.montantNet;
     }
+    
+    debugPrint('📊 TRANSFERTS EN ATTENTE (${transfertsEnAttente.length} transferts):');
+    transfertsEnAttenteGroupes.forEach((shop, montant) {
+      debugPrint('   - $shop: ${montant.toStringAsFixed(2)} USD');
+    });
 
     return {
       'recus': transfertsRecus.fold(0.0, (sum, op) => sum + op.montantBrut), // ENTRÉE: Client nous paie
