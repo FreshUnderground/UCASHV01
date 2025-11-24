@@ -86,18 +86,16 @@ class RapportClotureService {
       final totalShopsNousDevons = comptesShops['nousDevons']!
           .fold(0.0, (sum, shop) => sum + shop.montant);
       
-      // Récupérer les retraits FRAIS et sorties DÉPENSE du jour
+      // Récupérer les retraits FRAIS du jour
       final retraitsFrais = comptesSpeciaux['retraits_frais'] as double;
-      final sortiesDepense = comptesSpeciaux['sorties_depense'] as double;
       
-      // FORMULE COMPLÈTE avec comptes spéciaux
+      // FORMULE COMPLÈTE avec FRAIS uniquement
       final capitalNet = cashDisponible['total']! 
           + totalClientsNousDoivent 
           + totalShopsNousDoivent 
           - totalClientsNousDevons 
           - totalShopsNousDevons
-          - retraitsFrais      // NOUVEAU: Soustraire retraits FRAIS
-          - sortiesDepense;    // NOUVEAU: Soustraire sorties DÉPENSE
+          - retraitsFrais;      // NOUVEAU: Soustraire retraits FRAIS
 
       return RapportClotureModel(
         shopId: shopId,
@@ -134,13 +132,13 @@ class RapportClotureService {
         shopsNousDoivent: comptesShops['nousDoivent']!,
         shopsNousDevons: comptesShops['nousDevons']!,
         
-        // NOUVEAU: Comptes spéciaux
+        // NOUVEAU: Comptes spéciaux (FRAIS uniquement)
         retraitsFraisDuJour: comptesSpeciaux['retraits_frais'] as double,
         commissionsFraisDuJour: comptesSpeciaux['commissions_frais'] as double,
         soldeFraisTotal: comptesSpeciaux['solde_frais_total'] as double,
-        sortiesDepenseDuJour: comptesSpeciaux['sorties_depense'] as double,
-        depotsDepenseDuJour: comptesSpeciaux['depots_depense'] as double,
-        soldeDepenseTotal: comptesSpeciaux['solde_depense_total'] as double,
+        sortiesDepenseDuJour: 0.0,  // Non utilisé
+        depotsDepenseDuJour: 0.0,   // Non utilisé
+        soldeDepenseTotal: 0.0,     // Non utilisé
         
         // NOUVEAU: Listes détaillées des FLOT
         flotsRecusDetails: flots['flotsRecusDetails'] as List<FlotResume>,
