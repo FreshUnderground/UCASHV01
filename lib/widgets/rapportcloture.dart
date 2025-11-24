@@ -818,6 +818,33 @@ class _RapportClotureState extends State<RapportCloture> {
           ],
           Colors.blue,
         ),
+        const SizedBox(height: 16),
+
+        // NOUVEAU: Comptes Spéciaux
+        _buildSection(
+          '4️⃣ Comptes Spéciaux',
+          [
+            const Text('COMPTE FRAIS 💰', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.green)),
+            const SizedBox(height: 4),
+            _buildCashRow('Commissions du jour', rapport.commissionsFraisDuJour),
+            _buildCashRow('Retraits du jour', -rapport.retraitsFraisDuJour),  // Négatif car c'est une sortie
+            const Divider(),
+            _buildTotalRow('Solde FRAIS total', rapport.soldeFraisTotal, color: Colors.green),
+            
+            const SizedBox(height: 12),
+            const Text('COMPTE DÉPENSE 💸', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blue)),
+            const SizedBox(height: 4),
+            _buildCashRow('Dépôts du jour', rapport.depotsDepenseDuJour),
+            _buildCashRow('Sorties du jour', -rapport.sortiesDepenseDuJour),  // Négatif car c'est une sortie
+            const Divider(),
+            _buildTotalRow(
+              'Solde DÉPENSE total',
+              rapport.soldeDepenseTotal,
+              color: rapport.soldeDepenseTotal >= 0 ? Colors.blue : Colors.red,
+            ),
+          ],
+          Colors.teal,
+        ),
 
       ],
     );
@@ -922,8 +949,9 @@ class _RapportClotureState extends State<RapportCloture> {
             ),
             const SizedBox(height: 4),
             const Text(
-              'Formule: Cash Disponible + Ceux qui nous doivent - Ceux que nous devons',
-              style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey),
+              'Formule: Cash Disponible + Créances - Dettes - Retraits FRAIS - Sorties DÉPENSE',
+              style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
             Text(
@@ -941,6 +969,8 @@ class _RapportClotureState extends State<RapportCloture> {
             _buildCashRow('+ Shops Qui nous Doivent', rapport.totalShopsNousDoivent),
             _buildCashRow('- Dépôts Partenaires', rapport.totalClientsNousDevons),
             _buildCashRow('- DIFF. DETTES SHOPS', rapport.totalShopsNousDevons),
+            _buildCashRow('- Retraits FRAIS du jour', rapport.retraitsFraisDuJour),
+            _buildCashRow('- Sorties DÉPENSE du jour', rapport.sortiesDepenseDuJour),
             const Divider(thickness: 2, color: Colors.blue),
             _buildTotalRow('= CAPITAL NET', rapport.capitalNet, bold: true, color: rapport.capitalNet >= 0 ? Colors.blue : Colors.red),
           ],
