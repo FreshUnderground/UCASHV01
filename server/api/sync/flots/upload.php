@@ -80,13 +80,13 @@ try {
             $entity['last_modified_at'] = $timestamp;
             $entity['last_modified_by'] = $userId;
             
-            // Vérifier si le flot existe déjà
-            $checkStmt = $pdo->prepare("SELECT id FROM flots WHERE id = ?");
-            $checkStmt->execute([$entity['id'] ?? null]);
+            // Vérifier si le flot existe déjà par sa référence unique (car les IDs peuvent différer)
+            $checkStmt = $pdo->prepare("SELECT id FROM flots WHERE reference = ?");
+            $checkStmt->execute([$entity['reference'] ?? null]);
             $exists = $checkStmt->fetch();
             
             if ($exists) {
-                // Mise à jour
+                // Mise à jour du flot existant par sa référence
                 $stmt = $pdo->prepare("
                     UPDATE flots SET
                         shop_source_id = :shop_source_id,
@@ -99,15 +99,13 @@ try {
                         agent_recepteur_id = :agent_recepteur_id,
                         date_envoi = :date_envoi,
                         date_reception = :date_reception,
-                        reference = :reference,
                         notes = :notes,
                         last_modified_at = :last_modified_at,
                         last_modified_by = :last_modified_by
-                    WHERE id = :id
+                    WHERE reference = :reference
                 ");
                 
                 $stmt->execute([
-                    ':id' => $entity['id'],
                     ':shop_source_id' => $entity['shop_source_id'],
                     ':shop_destination_id' => $entity['shop_destination_id'],
                     ':montant' => $entity['montant'],
@@ -118,13 +116,13 @@ try {
                     ':agent_recepteur_id' => $entity['agent_recepteur_id'] ?? null,
                     ':date_envoi' => $entity['date_envoi'],
                     ':date_reception' => $entity['date_reception'],
-                    ':reference' => $entity['reference'] ?? null,
                     ':notes' => $entity['notes'] ?? null,
                     ':last_modified_at' => $entity['last_modified_at'],
-                    ':last_modified_by' => $entity['last_modified_by']
+                    ':last_modified_by' => $entity['last_modified_by'],
+                    ':reference' => $entity['reference'] ?? null
                 ]);
                 
-                error_log("Flot mis à jour: ID " . $entity['id']);
+                error_log("Flot mis à jour: REF " . $entity['reference'] . " -> Statut: " . $entity['statut']);
             } else {
                 // Insertion
                 $stmt = $pdo->prepare("
@@ -161,7 +159,7 @@ try {
                     ':last_modified_by' => $entity['last_modified_by']
                 ]);
                 
-                error_log("Flot inséré: ID " . $pdo->lastInsertId());
+                error_log("Flot inséré: REF " . $entity['reference'] . " -> ID " . $pdo->lastInsertId());
             }
             
             $uploaded++;
