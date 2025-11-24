@@ -12,6 +12,8 @@ import 'client_service.dart';
 import 'operation_service.dart';
 import 'rates_service.dart';
 import 'transfer_sync_service.dart';
+import 'compte_special_service.dart';
+import 'auth_service.dart'; // Add this import
 import 'local_db.dart';
 import '../models/shop_model.dart';
 import '../models/agent_model.dart';
@@ -20,6 +22,7 @@ import '../models/operation_model.dart';
 import '../models/journal_caisse_model.dart';
 import '../models/taux_model.dart';
 import '../models/commission_model.dart';
+import '../models/compte_special_model.dart';
 import '../models/document_header_model.dart';
 import '../models/cloture_caisse_model.dart';
 import '../models/flot_model.dart' as flot_model;
@@ -51,8 +54,10 @@ class SyncService {
   
   // Timer pour la synchronisation automatique périodique
   Timer? _autoSyncTimer;
+  Timer? _flotsOpsAutoSyncTimer; // Timer spécifique pour flots et opérations
   static Duration get _autoSyncInterval => const Duration(minutes: 2);
   DateTime? _lastSyncTime;
+  DateTime? _lastFlotsOpsSyncTime; // Dernière sync flots/ops
   
   // File d'attente pour les données en attente de synchronisation (mode offline)
   final List<Map<String, dynamic>> _pendingOperations = [];
@@ -147,9 +152,28 @@ class SyncService {
     _isSyncing = true;
     _updateStatus(SyncStatus.syncing);
     
-    // TEMPORAIRE: Forcer le mode admin pour les tests
-    final userIdToUse = userId ?? 'admin';  // Changed from 'unknown' to 'admin'
-    debugPrint('🚀 === DÉBUT SYNCHRONISATION BIDIRECTIONNELLE (User: $userIdToUse - Mode: ADMIN) ===');
+    // Get user info from AuthService if not provided
+    String userIdToUse;
+    String userRole = 'admin'; // Default to admin for testing
+    
+    if (userId != null) {
+      userIdToUse = userId;
+    } else {
+      // Try to get from AuthService
+      try {
+        final authService = AuthService();
+        if (authService.currentUser != null) {
+          userIdToUse = authService.currentUser!.username ?? 'unknown';
+          userRole = authService.currentUser!.role ?? 'agent';
+        } else {
+          userIdToUse = 'admin'; // Fallback
+        }
+      } catch (e) {
+        userIdToUse = 'admin'; // Fallback
+      }
+    }
+    
+    debugPrint('🚀 === DÉBUT SYNCHRONISATION BIDIRECTIONNELLE (User: $userIdToUse - Role: $userRole) ===');
     
     try {
       // Vérifier la connectivité
@@ -180,7 +204,7 @@ class SyncService {
       // Phase 1B: Download des shops pour obtenir les IDs serveur
       debugPrint('📥 PHASE 1B: Download Shops ← Serveur (pour obtenir IDs)');
       try {
-        await _downloadTableData('shops', userIdToUse);
+        await _downloadTableData('shops', userIdToUse, userRole);
         // Recharger les shops en mémoire après le download
         await ShopService.instance.loadShops();
         debugPrint('✅ Shops rechargés en mémoire après synchronisation');
@@ -190,10 +214,10 @@ class SyncService {
       
       // Phase 2: Upload des entités dépendantes (avec IDs serveur)
       debugPrint('📤 PHASE 2: Upload Entités Dépendantes → Serveur');
-      final dependentTables = ['agents', 'clients', 'operations', 'taux', 'commissions', 'document_headers', 'cloture_caisse', 'flots'];
+      final dependentTables = ['agents', 'clients', 'operations', 'taux', 'commissions', 'comptes_speciaux', 'document_headers', 'cloture_caisse', 'flots'];
       for (String table in dependentTables) {
         try {
-          await _uploadTableDataWithRetry(table, userIdToUse); // Utiliser version avec retry
+          await _uploadTableDataWithRetry(table, userIdToUse, userRole); // Pass user role
           // Recharger les entités en mémoire après l'upload
           if (table == 'agents') {
             await AgentService.instance.loadAgents();
@@ -201,69 +225,38 @@ class SyncService {
           } else if (table == 'clients') {
             await ClientService().loadClients();
             debugPrint('✅ Clients rechargés en mémoire après upload');
+          } else if (table == 'operations') {
+            await OperationService().loadOperations();
+            debugPrint('✅ Opérations rechargées en mémoire après upload');
           }
         } catch (e) {
           debugPrint('❌ Erreur upload $table: $e');
         }
       }
       
-      // Phase 3: Download des autres entités
-      debugPrint('📥 PHASE 3: Download Autres Entités ← Serveur');
-      for (String table in dependentTables) {
-        try {
-          await _downloadTableData(table, userIdToUse);
-        } catch (e) {
-          debugPrint('❌ Erreur download $table: $e');
-        }
-      }
-      
-      // CRITIQUE: Recharger TOUTES les entités en mémoire après le download
-      debugPrint('🔄 Rechargement de toutes les entités en mémoire...');
-      await ShopService.instance.loadShops();
-      await AgentService.instance.loadAgents();
-      await ClientService().loadClients();
-      // NOTE: Operations rechargées par TransferSyncService.syncTransfers()
-      await RatesService.instance.loadRatesAndCommissions();
-      debugPrint('✅ Toutes les entités rechargées en mémoire');
-      
-      // Phase 4: Synchronisation des opérations (transferts)
-      debugPrint('🔄 PHASE 4: Synchronisation des opérations (TransferSyncService)');
+      // Phase 3: Download des entités mises à jour
+      debugPrint('📥 PHASE 3: Download Entités ← Serveur');
       try {
-        final transferSyncService = TransferSyncService();
-        await transferSyncService.syncTransfers();
-        debugPrint('✅ Opérations synchronisées avec succès');
+        await _downloadRemoteChanges(userIdToUse, userRole);
       } catch (e) {
-        debugPrint('❌ Erreur synchronisation opérations: $e');
-        // Continuer même si la sync des ops échoue
+        debugPrint('❌ Erreur download entités: $e');
       }
       
-      // Marquer la dernière synchronisation
-      debugPrint('💾 Mise à jour du timestamp de synchronisation...');
-      await _updateLastSyncTimestamp();
+      // Marquer la synchronisation comme terminée
+      await prefs.setString('last_sync_global', DateTime.now().toIso8601String());
+      _lastSyncTime = DateTime.now();
       
       debugPrint('✅ === SYNCHRONISATION TERMINÉE AVEC SUCCÈS ===');
-      _updateStatus(SyncStatus.success);
+      _updateStatus(SyncStatus.idle);
+      return SyncResult(success: true, message: 'Synchronisation terminée avec succès');
       
-      return SyncResult(success: true, message: 'Synchronisation réussie');
-      
-    } catch (e) {
-      final errorMessage = e.toString();
-      debugPrint('❌ Erreur de synchronisation: $errorMessage');
-      
-      // Fournir des instructions de dépannage spécifiques
-      if (errorMessage.contains('XMLHttpRequest error') || 
-          errorMessage.contains('SocketException') || 
-          errorMessage.contains('Aucune connexion Internet')) {
-        debugPrint('💡 Conseil: Vérifiez que Laragon est démarré avec Apache et MySQL');
-        debugPrint('💡 Conseil: Vérifiez que le serveur est accessible à l\'URL configurée');
-        debugPrint('💡 Conseil: Vérifiez votre connexion Internet et les paramètres du pare-feu');
-      }
-      
+    } catch (e, stackTrace) {
+      debugPrint('❌ Erreur fatale synchronisation: $e');
+      debugPrint('📚 Stack trace: $stackTrace');
       _updateStatus(SyncStatus.error);
-      return SyncResult(success: false, message: errorMessage);
+      return SyncResult(success: false, message: 'Erreur: $e');
     } finally {
       _isSyncing = false;
-      debugPrint('🏁 Fin de la synchronisation');
     }
   }
 
@@ -292,7 +285,7 @@ class SyncService {
       
       // Forcer le re-téléchargement depuis le serveur
       debugPrint('📥 Téléchargement des commissions depuis MySQL...');
-      await _downloadTableData('commissions', 'admin');
+      await _downloadTableData('commissions', 'admin', 'admin');
       
       // Recharger les commissions en mémoire
       await RatesService.instance.loadRatesAndCommissions();
@@ -313,10 +306,10 @@ class SyncService {
   }
 
   /// Upload avec retry logic pour échecs temporaires
-  Future<void> _uploadTableDataWithRetry(String tableName, String userId, {int maxRetries = 3}) async {
+  Future<void> _uploadTableDataWithRetry(String tableName, String userId, String userRole, {int maxRetries = 3}) async {
     for (int attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        await _uploadTableData(tableName, userId);
+        await _uploadTableData(tableName, userId, userRole);
         return; // Succès - sortir
       } catch (e) {
         debugPrint('⚠️ Upload $tableName tentative $attempt/$maxRetries échouée: $e');
@@ -347,7 +340,7 @@ class SyncService {
     for (String table in tables) {
       try {
         debugPrint('📤 Upload $table...');
-        await _uploadTableDataWithRetry(table, userId); // Utiliser version avec retry
+        await _uploadTableDataWithRetry(table, userId, 'admin'); // Utiliser version avec retry
         successCount++;
       } catch (e) {
         debugPrint('❌ Erreur upload $table: $e');
@@ -406,6 +399,26 @@ class SyncService {
           return false;
         }
         return true;
+      
+      case 'flots':
+        // Validation des champs obligatoires pour les flots
+        if (data['shop_source_id'] == null || data['shop_source_id'] <= 0) {
+          debugPrint('❌ Validation: shop_source_id manquant pour flot ${data['id']}');
+          return false;
+        }
+        if (data['shop_destination_id'] == null || data['shop_destination_id'] <= 0) {
+          debugPrint('❌ Validation: shop_destination_id manquant pour flot ${data['id']}');
+          return false;
+        }
+        if (data['agent_envoyeur_id'] == null || data['agent_envoyeur_id'] <= 0) {
+          debugPrint('❌ Validation: agent_envoyeur_id manquant pour flot ${data['id']}');
+          return false;
+        }
+        if (data['montant'] == null || data['montant'] <= 0) {
+          debugPrint('❌ Validation: montant invalide pour flot ${data['id']}');
+          return false;
+        }
+        return true;
         
       default:
         // Autres tables: validation minimale (ID présent)
@@ -414,7 +427,7 @@ class SyncService {
   }
 
   /// Upload des données d'une table spécifique
-  Future<void> _uploadTableData(String tableName, String userId) async {
+  Future<void> _uploadTableData(String tableName, String userId, [String userRole = 'admin']) async {
     try {
       final lastSync = await _getLastSyncTimestamp(tableName);
       final localData = await _getLocalChanges(tableName, lastSync);
@@ -467,6 +480,7 @@ class SyncService {
         body: jsonEncode({
           'entities': validatedData,
           'user_id': userId,
+          'user_role': userRole, // Add user role parameter
           'timestamp': DateTime.now().toIso8601String(),
         }),
       ).timeout(_syncTimeout);
@@ -520,9 +534,9 @@ class SyncService {
   }
 
   /// Download des changements du serveur vers l'app
-  Future<void> _downloadRemoteChanges(String userId) async {
+  Future<void> _downloadRemoteChanges(String userId, String userRole) async {
     // NOTE: 'operations' géré par TransferSyncService
-    final tables = ['shops', 'agents', 'clients', 'taux', 'commissions', 'document_headers', 'cloture_caisse'];
+    final tables = ['shops', 'agents', 'clients', 'taux', 'commissions', 'document_headers', 'cloture_caisse', 'flots'];
     int successCount = 0;
     int errorCount = 0;
     
@@ -531,7 +545,7 @@ class SyncService {
     for (String table in tables) {
       try {
         debugPrint('📥 Download $table...');
-        await _downloadTableData(table, userId);
+        await _downloadTableData(table, userId, userRole);
         successCount++;
       } catch (e) {
         debugPrint('❌ Erreur download $table: $e');
@@ -544,7 +558,7 @@ class SyncService {
   }
 
   /// Download des données d'une table spécifique
-  Future<void> _downloadTableData(String tableName, String userId) async {
+  Future<void> _downloadTableData(String tableName, String userId, String userRole) async {
     try {
       final lastSync = await _getLastSyncTimestamp(tableName);
       
@@ -557,7 +571,6 @@ class SyncService {
       
       // Récupérer les informations de l'utilisateur connecté pour le filtrage
       final prefs = await SharedPreferences.getInstance();
-      final currentUserRole = prefs.getString('user_role') ?? 'admin';  // TEMPORAIRE: admin par défaut pour tests
       final currentShopId = prefs.getInt('current_shop_id');  // Shop de l'utilisateur connecté
       
       // Endpoint standard pour toutes les tables (sauf operations)
@@ -569,21 +582,35 @@ class SyncService {
         final queryParams = {
           'since': sinceParam,
           'user_id': userId,
-          'user_role': currentUserRole,
+          'user_role': userRole, // Add user role parameter
         };
         
         // Ajouter shop_id seulement pour les agents (pas pour admin)
-        if (currentUserRole != 'admin' && currentShopId != null) {
+        if (userRole != 'admin' && currentShopId != null) {
           queryParams['shop_id'] = currentShopId.toString();
         }
         
         uri = Uri.parse('$baseUrl/$tableName/$endpoint').replace(queryParameters: queryParams);
         
-        if (currentUserRole == 'admin') {
+        if (userRole == 'admin') {
           debugPrint('👑 Mode ADMIN: téléchargement de toutes les données $tableName');
         } else {
           debugPrint('👤 Mode AGENT: filtrage $tableName par shop_id=$currentShopId');
         }
+      } else if (tableName == 'operations') {
+        // Pour operations, ajouter les paramètres requis
+        final queryParams = {
+          'since': sinceParam,
+          'user_id': userId,
+          'user_role': userRole,
+        };
+        
+        if (userRole != 'admin' && currentShopId != null) {
+          queryParams['shop_id'] = currentShopId.toString();
+        }
+        
+        uri = Uri.parse('$baseUrl/$tableName/$endpoint').replace(queryParameters: queryParams);
+        debugPrint('📥 Requête download operations: $uri');
       }
       
       debugPrint('📥 Requête download: $uri');
@@ -621,6 +648,9 @@ class SyncService {
               case 'taux':
               case 'commissions':
                 await RatesService.instance.loadRatesAndCommissions();
+                break;
+              case 'comptes_speciaux':
+                await CompteSpecialService.instance.loadTransactions();
                 break;
               case 'flots':
                 // Recharger les flots dans le service
@@ -730,6 +760,9 @@ class SyncService {
       case 'taux':
       case 'commissions':
         await RatesService.instance.loadRatesAndCommissions();
+        break;
+      case 'comptes_speciaux':
+        await CompteSpecialService.instance.loadTransactions();
         break;
       case 'flots':
         // Les FLOTs sont rechargés par FlotService si nécessaire
@@ -937,7 +970,9 @@ class SyncService {
                   if (clientShop != null) {
                     json['shop_designation'] = clientShop.designation;
                   } else {
-                    debugPrint('⚠️ Client ${client.nom}: shop ID ${client.shopId} NON trouvé!');
+                    // Shop non trouvé - le serveur résoudra via shop_id
+                    // Pas critique car le serveur a la table shops complète
+                    debugPrint('ℹ️ Client ${client.nom}: shop_designation sera résolu côté serveur (shopId: ${client.shopId})');
                   }
                   
                   // Note: agent_username sera résolu côté serveur depuis agent_id
@@ -1000,8 +1035,6 @@ class SyncService {
               .map((c) {
                 final json = _addSyncMetadata(c.toJson(), 'commission');
                 if (json['is_synced'] != true) {
-                  debugPrint('📤 Commission ID ${c.id} à synchroniser: ${c.type} - ${c.description}');
-                  debugPrint('   shopId: ${c.shopId}, shopSourceId: ${c.shopSourceId}, shopDestinationId: ${c.shopDestinationId}');
                   return json;
                 }
                 return null;
@@ -1011,6 +1044,27 @@ class SyncService {
               .toList();
           
           debugPrint('📤 COMMISSIONS: ${unsyncedData.length}/${commissions.length} non synchronisées');
+          break;
+          
+        case 'comptes_speciaux':
+          final transactions = CompteSpecialService.instance.transactions;
+          debugPrint('💰 COMPTES_SPECIAUX: Total en mémoire: ${transactions.length}');
+          
+          // Filtrer uniquement les transactions non synchronisées
+          unsyncedData = transactions
+              .map((t) {
+                final json = _addSyncMetadata(t.toJson(), 'compte_special');
+                if (json['is_synced'] != true) {
+                  debugPrint('📤 Compte spécial ID ${t.id} à synchroniser: ${t.type.name} - ${t.typeTransaction.name}');
+                  return json;
+                }
+                return null;
+              })
+              .where((item) => item != null)
+              .cast<Map<String, dynamic>>()
+              .toList();
+          
+          debugPrint('📤 COMPTES_SPECIAUX: ${unsyncedData.length}/${transactions.length} non synchronisés');
           break;
           
         case 'document_headers':
@@ -1293,27 +1347,47 @@ class SyncService {
           
         case 'commissions':
           final commission = CommissionModel.fromJson(data);
-          // Vérifier doublon par type + shopId + shopSourceId + shopDestinationId
+          // Vérifier doublon par ID d'abord
           final commissions = RatesService.instance.commissions;
-          final existingCommission = commissions.where((c) => 
+          final existingById = commissions.where((c) => c.id == commission.id).firstOrNull;
+          if (existingById != null) {
+            debugPrint('⚠️ Doublon ignoré: commission ID ${commission.id} existe déjà');
+            return;
+          }
+          
+          // Vérifier doublon par type + shopId + shopSourceId + shopDestinationId
+          final existingByRoute = commissions.where((c) => 
             c.type == commission.type &&
             c.shopId == commission.shopId &&
             c.shopSourceId == commission.shopSourceId &&
             c.shopDestinationId == commission.shopDestinationId
           ).firstOrNull;
-          if (existingCommission != null) {
-            debugPrint('⚠️ Doublon ignoré: commission similaire existe déjà');
+          if (existingByRoute != null) {
+            debugPrint('⚠️ Doublon ignoré: commission similaire existe déjà (route identique)');
             return;
           }
           
-          await RatesService.instance.createCommission(
-            type: commission.type,
-            taux: commission.taux,
-            description: commission.description,
-            shopId: commission.shopId,
-            shopSourceId: commission.shopSourceId,
-            shopDestinationId: commission.shopDestinationId,
-          );
+          // Sauvegarder DIRECTEMENT avec l'ID du serveur
+          await LocalDB.instance.saveCommission(commission);
+          await RatesService.instance.loadRatesAndCommissions();
+          break;
+          
+        case 'comptes_speciaux':
+          final transaction = CompteSpecialModel.fromJson(data);
+          // Vérifier doublon par ID
+          final prefs = await SharedPreferences.getInstance();
+          final existingKey = 'compte_special_${transaction.id}';
+          if (prefs.containsKey(existingKey)) {
+            debugPrint('⚠️ Doublon ignoré: compte spécial ID ${transaction.id} existe déjà');
+            return;
+          }
+          
+          // Sauvegarder la transaction
+          await prefs.setString(existingKey, jsonEncode(transaction.toJson()));
+          debugPrint('✅ Compte spécial ID ${transaction.id} sauvegardé: ${transaction.type.name} - \$${transaction.montant}');
+          
+          // Recharger en mémoire
+          await CompteSpecialService.instance.loadTransactions();
           break;
           
         case 'document_headers':
@@ -1477,7 +1551,20 @@ class SyncService {
           
         case 'commissions':
           final commission = CommissionModel.fromJson(data);
-          await RatesService.instance.updateCommission(commission);
+          
+          // Sauvegarder DIRECTEMENT sans passer par updateCommission
+          await LocalDB.instance.saveCommission(commission);
+          await RatesService.instance.loadRatesAndCommissions();
+          break;
+          
+        case 'comptes_speciaux':
+          final transaction = CompteSpecialModel.fromJson(data);
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('compte_special_${transaction.id}', jsonEncode(transaction.toJson()));
+          debugPrint('✅ Compte spécial ID ${transaction.id} mis à jour');
+          
+          // Recharger en mémoire
+          await CompteSpecialService.instance.loadTransactions();
           break;
           
         case 'document_headers':
@@ -1589,6 +1676,19 @@ class SyncService {
             }
             // Recharger les commissions en mémoire
             await RatesService.instance.loadRatesAndCommissions();
+            break;
+            
+          case 'comptes_speciaux':
+            final prefs = await LocalDB.instance.database;
+            final transactionData = prefs.getString('compte_special_$entityId');
+            if (transactionData != null) {
+              final transactionJson = jsonDecode(transactionData);
+              transactionJson['is_synced'] = true;
+              transactionJson['synced_at'] = now.toIso8601String();
+              await prefs.setString('compte_special_$entityId', jsonEncode(transactionJson));
+            }
+            // Recharger les transactions en mémoire
+            await CompteSpecialService.instance.loadTransactions();
             break;
             
           case 'document_headers':
@@ -1778,6 +1878,7 @@ class SyncService {
   /// Nettoie les ressources
   void dispose() {
     _autoSyncTimer?.cancel();
+    _flotsOpsAutoSyncTimer?.cancel(); // Arrêter aussi le timer flots/ops
     _connectivitySubscription?.cancel();
     _syncStatusController.close();
   }
@@ -1849,7 +1950,7 @@ class SyncService {
         // 3. Download des nouveaux flots depuis le serveur
         try {
           debugPrint('📥 Download des flots...');
-          await _downloadTableData('flots', 'auto_sync');
+          await _downloadTableData('flots', 'auto_sync', 'admin');
           successCount++;
         } catch (e) {
           debugPrint('⚠️ Erreur download flots: $e');
@@ -1869,7 +1970,7 @@ class SyncService {
         // 5. Download des nouvelles clôtures depuis le serveur
         try {
           debugPrint('📥 Download des clôtures de caisse...');
-          await _downloadTableData('cloture_caisse', 'auto_sync');
+          await _downloadTableData('cloture_caisse', 'auto_sync', 'admin');
           successCount++;
         } catch (e) {
           debugPrint('⚠️ Erreur download clôtures: $e');
@@ -1889,7 +1990,7 @@ class SyncService {
         // 7. Download des nouvelles commissions depuis le serveur
         try {
           debugPrint('📥 Download des commissions...');
-          await _downloadTableData('commissions', 'auto_sync');
+          await _downloadTableData('commissions', 'auto_sync', 'admin');
           successCount++;
         } catch (e) {
           debugPrint('⚠️ Erreur download commissions: $e');
@@ -1914,6 +2015,101 @@ class SyncService {
       _autoSyncTimer = null;
     }
   }
+  
+  /// ========== SYNCHRONISATION SPÉCIALE FLOTS & OPÉRATIONS ==========
+  /// Démarre la synchronisation automatique UNIQUEMENT pour les FLOTS et OPÉRATIONS
+  /// Intervalle: toutes les 2 minutes
+  /// Plus légère que startAutoSync() qui synchronise TOUT
+  void startFlotsOpsAutoSync() {
+    stopFlotsOpsAutoSync(); // Arrêter tout timer existant
+    
+    debugPrint('🚀⏰ Démarrage synchronisation auto FLOTS & OPERATIONS (intervalle: ${_autoSyncInterval.inSeconds}s)');
+    debugPrint('🔍 État: isAutoSyncEnabled=$_isAutoSyncEnabled, isOnline=$_isOnline, isSyncing=$_isSyncing');
+    
+    _flotsOpsAutoSyncTimer = Timer.periodic(_autoSyncInterval, (timer) async {
+      debugPrint('⏰ [FLOTS/OPS] Timer déclenché...');
+      
+      if (_isAutoSyncEnabled && !_isSyncing && _isOnline) {
+        debugPrint('🔄 [🕒 ${DateTime.now().toIso8601String()}] Sync auto FLOTS & OPERATIONS');
+        
+        await syncFlotsAndOperations();
+        
+        _lastFlotsOpsSyncTime = DateTime.now();
+      } else {
+        debugPrint('⏸️ Sync FLOTS/OPS ignorée (conditions non remplies)');
+      }
+    });
+    
+    debugPrint('✅ Timer synchronisation FLOTS & OPERATIONS démarré');
+  }
+  
+  /// Arrête la synchronisation automatique des flots et opérations
+  void stopFlotsOpsAutoSync() {
+    if (_flotsOpsAutoSyncTimer != null) {
+      debugPrint('⏸️ Arrêt synchronisation auto FLOTS & OPERATIONS');
+      _flotsOpsAutoSyncTimer?.cancel();
+      _flotsOpsAutoSyncTimer = null;
+    }
+  }
+  
+  /// Synchronise UNIQUEMENT les FLOTS et OPÉRATIONS (méthode spécialisée)
+  /// Utile pour une sync rapide et ciblée toutes les 2 minutes
+  Future<void> syncFlotsAndOperations() async {
+    if (_isSyncing) {
+      debugPrint('⚠️ Synchronisation déjà en cours, ignoré');
+      return;
+    }
+    
+    _isSyncing = true;
+    int successCount = 0;
+    int errorCount = 0;
+    
+    try {
+      debugPrint('🚀 === SYNC FLOTS & OPERATIONS ===');
+      
+      // 1. Synchroniser les OPÉRATIONS (via TransferSyncService)
+      try {
+        debugPrint('📤📥 Sync OPERATIONS...');
+        final transferSyncService = TransferSyncService();
+        await transferSyncService.syncTransfers();
+        debugPrint('✅ Opérations synchronisées');
+        successCount++;
+      } catch (e) {
+        debugPrint('❌ Erreur sync opérations: $e');
+        errorCount++;
+      }
+      
+      // 2. Upload des FLOTS locaux non synchronisés
+      try {
+        debugPrint('📤 Upload FLOTS...');
+        await _uploadTableData('flots', 'auto_sync_flots_ops');
+        debugPrint('✅ Flots uploadés');
+        successCount++;
+      } catch (e) {
+        debugPrint('❌ Erreur upload flots: $e');
+        errorCount++;
+      }
+      
+      // 3. Download des FLOTS depuis le serveur
+      try {
+        debugPrint('📥 Download FLOTS...');
+        await _downloadTableData('flots', 'auto_sync_flots_ops', 'admin');
+        debugPrint('✅ Flots téléchargés');
+        successCount++;
+      } catch (e) {
+        debugPrint('❌ Erreur download flots: $e');
+        errorCount++;
+      }
+      
+      debugPrint('✅ === SYNC FLOTS & OPERATIONS TERMINÉE: $successCount OK, $errorCount erreurs ===');
+      
+    } catch (e) {
+      debugPrint('❌ Erreur globale sync flots/operations: $e');
+    } finally {
+      _isSyncing = false;
+    }
+  }
+  /// ========== FIN SYNCHRONISATION SPÉCIALE FLOTS & OPÉRATIONS ==========
   
   /// Synchronise uniquement les opérations (transferts, dépôts, retraits)
   /// DEPRECATED: Utiliser TransferSyncService.syncTransfers() à la place
