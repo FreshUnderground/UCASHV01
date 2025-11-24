@@ -591,8 +591,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
   }) {
     final isSelected = _categoryFilter == value;
     
-    return Flexible(
-      child: ElevatedButton.icon(
+    return ElevatedButton.icon(
         onPressed: () {
           if (mounted) {
             setState(() {
@@ -629,8 +628,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
           ),
           elevation: isSelected ? 4 : 0,
         ),
-      ),
-    );
+      );
   }
 
   // Helper pour créer un bouton d'action

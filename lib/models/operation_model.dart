@@ -50,6 +50,7 @@ class OperationModel {
   final String? destinataire;
   final String? telephoneDestinataire;
   final String? reference;
+  final String? simNumero; // Numéro de SIM pour les retraits
   final ModePaiement modePaiement;
   final OperationStatus statut;
   final String? notes;
@@ -57,6 +58,7 @@ class OperationModel {
   
   // Dates et tracking
   final DateTime dateOp;
+  final DateTime? dateValidation; // Date de validation du transfert
   final DateTime? createdAt;
   final DateTime? lastModifiedAt;
   final String? lastModifiedBy;
@@ -92,6 +94,7 @@ class OperationModel {
     this.destinataire,
     this.telephoneDestinataire,
     this.reference,
+    this.simNumero,
     required this.modePaiement,
     this.statut = OperationStatus.terminee,
     this.notes,
@@ -99,6 +102,7 @@ class OperationModel {
     
     // Dates
     required this.dateOp,
+    this.dateValidation,
     this.createdAt,
     this.lastModifiedAt,
     this.lastModifiedBy,
@@ -134,6 +138,7 @@ class OperationModel {
       destinataire: json['destinataire'],
       telephoneDestinataire: json['telephone_destinataire'],
       reference: json['reference'],
+      simNumero: json['sim_numero'],
       modePaiement: _parseModePaiement(json['mode_paiement']),
       statut: _parseOperationStatus(json['statut']),
       notes: json['notes'],
@@ -141,6 +146,7 @@ class OperationModel {
       
       // Dates
       dateOp: json['date_op'] != null ? DateTime.parse(json['date_op']) : (json['created_at'] != null ? DateTime.parse(json['created_at']) : DateTime.now()),
+      dateValidation: json['date_validation'] != null ? DateTime.parse(json['date_validation']) : null,
       createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
       lastModifiedAt: json['last_modified_at'] != null ? DateTime.parse(json['last_modified_at']) : null,
       lastModifiedBy: json['last_modified_by'],
@@ -289,6 +295,7 @@ class OperationModel {
       'destinataire': destinataire,
       'telephone_destinataire': telephoneDestinataire,
       'reference': reference,
+      'sim_numero': simNumero,
       'mode_paiement': modePaiement.index,
       'statut': statut.index,
       'notes': notes,
@@ -296,6 +303,7 @@ class OperationModel {
       
       // Dates
       'date_op': dateOp.toIso8601String(),
+      'date_validation': dateValidation?.toIso8601String(),
       'created_at': (createdAt ?? dateOp).toIso8601String(),
       'last_modified_at': (lastModifiedAt ?? DateTime.now()).toIso8601String(),
       'last_modified_by': lastModifiedBy,
@@ -374,6 +382,7 @@ class OperationModel {
     String? destinataire,
     String? telephoneDestinataire,
     String? reference,
+    String? simNumero,
     ModePaiement? modePaiement,
     OperationStatus? statut,
     String? notes,
@@ -381,6 +390,7 @@ class OperationModel {
     
     // Dates
     DateTime? dateOp,
+    DateTime? dateValidation,
     DateTime? createdAt,
     DateTime? lastModifiedAt,
     String? lastModifiedBy,
@@ -414,6 +424,7 @@ class OperationModel {
       destinataire: destinataire ?? this.destinataire,
       telephoneDestinataire: telephoneDestinataire ?? this.telephoneDestinataire,
       reference: reference ?? this.reference,
+      simNumero: simNumero ?? this.simNumero,
       modePaiement: modePaiement ?? this.modePaiement,
       statut: statut ?? this.statut,
       notes: notes ?? this.notes,
@@ -421,6 +432,7 @@ class OperationModel {
       
       // Dates
       dateOp: dateOp ?? this.dateOp,
+      dateValidation: dateValidation ?? this.dateValidation,
       createdAt: createdAt ?? this.createdAt,
       lastModifiedAt: lastModifiedAt ?? this.lastModifiedAt,
       lastModifiedBy: lastModifiedBy ?? this.lastModifiedBy,

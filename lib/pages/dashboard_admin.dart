@@ -551,11 +551,25 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
   }
 
   Widget _buildShopsContent() {
-    return const ShopsManagement();
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width <= 768;
+    final isTablet = size.width > 768 && size.width <= 1024;
+    
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(isMobile ? 16 : (isTablet ? 20 : 24)),
+      child: const ShopsManagement(),
+    );
   }
 
   Widget _buildAgentsContent() {
-    return const AgentsManagementComplete();
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width <= 768;
+    final isTablet = size.width > 768 && size.width <= 1024;
+    
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(isMobile ? 16 : (isTablet ? 20 : 24)),
+      child: const AgentsManagementComplete(),
+    );
   }
 
   Widget _buildClientsContent() {

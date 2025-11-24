@@ -42,31 +42,17 @@ class _AgentsManagementCompleteState extends State<AgentsManagementComplete>  {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              minHeight: constraints.maxHeight,
-            ),
-            child: IntrinsicHeight(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Statistiques des agents
-                  const AgentsStatsWidget(),
-                  context.verticalSpace(mobile: 16, tablet: 20, desktop: 24),
-                  
-                  // Tableau des agents
-                  Expanded(
-                    child: const AgentsTableWidget(),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Statistiques des agents
+        const AgentsStatsWidget(),
+        context.verticalSpace(mobile: 16, tablet: 20, desktop: 24),
+        
+        // Tableau des agents
+        const AgentsTableWidget(),
+      ],
     );
   }
 

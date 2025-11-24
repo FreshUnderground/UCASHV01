@@ -219,6 +219,7 @@ try {
                         agent_id = :agent_id,
                         mode_paiement = :mode_paiement,
                         statut = :statut,
+                        date_validation = :date_validation,
                         reference = :reference,
                         notes = :notes,
                         destinataire = :destinataire,
@@ -243,6 +244,7 @@ try {
                     ':agent_id' => $agentId,
                     ':mode_paiement' => $modePaiement,
                     ':statut' => $statut,
+                    ':date_validation' => $entity['date_validation'] ?? null,
                     ':reference' => $entity['reference'] ?? null,
                     ':notes' => $entity['notes'] ?? '',
                     ':destinataire' => $entity['destinataire'] ?? null,
@@ -301,12 +303,12 @@ try {
                     INSERT INTO operations (
                         type, montant_brut, montant_net, commission, devise,
                         client_id, client_nom, shop_source_id, shop_source_designation, shop_destination_id, shop_destination_designation, agent_id, agent_username,
-                        mode_paiement, statut, reference, notes, destinataire, telephone_destinataire, code_ops,
+                        mode_paiement, statut, date_validation, reference, notes, destinataire, telephone_destinataire, code_ops,
                         last_modified_at, last_modified_by, created_at
                     ) VALUES (
                         :type, :montant_brut, :montant_net, :commission, :devise,
                         :client_id, :client_nom, :shop_source_id, :shop_source_designation, :shop_destination_id, :shop_destination_designation, :agent_id, :agent_username,
-                        :mode_paiement, :statut, :reference, :notes, :destinataire, :telephone_destinataire, :code_ops,
+                        :mode_paiement, :statut, :date_validation, :reference, :notes, :destinataire, :telephone_destinataire, :code_ops,
                         :last_modified_at, :last_modified_by, :created_at
                     )
                 ");
@@ -328,6 +330,7 @@ try {
                     ':agent_username' => $entity['agent_username'] ?? null,
                     ':mode_paiement' => $modePaiement,
                     ':statut' => $statut,
+                    ':date_validation' => $entity['date_validation'] ?? null,
                     ':reference' => $entity['reference'] ?? null,
                     ':notes' => $entity['notes'] ?? '',
                     ':destinataire' => $entity['destinataire'] ?? null,

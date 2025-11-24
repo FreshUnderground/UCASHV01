@@ -40,6 +40,7 @@ class SyncManager {
      */
     private function insertShop($data) {
         $sql = "INSERT IGNORE INTO shops (
+            id,
             designation, localisation,
             capital_initial, 
             devise_principale, devise_secondaire,
@@ -47,10 +48,11 @@ class SyncManager {
             capital_actuel_devise2, capital_cash_devise2, capital_airtel_money_devise2, capital_mpesa_devise2, capital_orange_money_devise2,
             creances, dettes,
             last_modified_at, last_modified_by, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         
         $stmt = $this->pdo->prepare($sql);
         $result = $stmt->execute([
+            $data['id'] ?? null,  // Forcer l'utilisation de l'ID de l'app
             $data['designation'] ?? '',
             $data['localisation'] ?? '',
             $data['capital_initial'] ?? 0,
@@ -74,10 +76,10 @@ class SyncManager {
         ]);
         
         if ($result) {
-            $insertId = $this->pdo->lastInsertId();
+            $insertId = $data['id'] ?? $this->pdo->lastInsertId();  // Utiliser l'ID de l'app
             
             // Si INSERT IGNORE a ignoré la ligne (doublon), trouver l'ID existant
-            if ($insertId == 0) {
+            if ($insertId == 0 || $insertId === null) {
                 $findStmt = $this->pdo->prepare("SELECT id FROM shops WHERE designation = ? LIMIT 1");
                 $findStmt->execute([$data['designation'] ?? '']);
                 $existing = $findStmt->fetch(PDO::FETCH_ASSOC);

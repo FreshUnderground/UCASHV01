@@ -52,6 +52,13 @@ void main() async {
   final documentHeaderService = DocumentHeaderService();
   await documentHeaderService.initialize();
   
+  // Charger les données initiales (shops, agents, rates)
+  debugPrint('🚀 Chargement des données initiales...');
+  await ShopService.instance.loadShops();
+  await AgentService.instance.loadAgents();
+  await RatesService.instance.loadRatesAndCommissions();
+  debugPrint('✅ Données initiales chargées');
+  
   // Configuration de production
   AppConfig.logInfo('UCASH ${AppConfig.appVersion} - Démarrage en mode ${AppConfig.isProduction ? 'PRODUCTION' : 'DEBUG'}');
   AppConfig.logConfig();  // Afficher la configuration complète

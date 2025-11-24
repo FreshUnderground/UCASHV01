@@ -28,10 +28,12 @@ class RapportClotureModel {
   // Transferts USD
   final double transfertsRecus;
   final double transfertsServis;
+  final double transfertsEnAttente; // NOUVEAU: Transferts à servir (shop destination)
   
   // NOUVEAU: Transferts DEVISE LOCALE
   final double transfertsRecusDeviseLocale;
   final double transfertsServisDeviseLocale;
+  final double transfertsEnAttenteDeviseLocale;
   
   // Clients USD
   final double depotsClients;
@@ -56,6 +58,9 @@ class RapportClotureModel {
   // NOUVEAU: Listes détaillées des opérations clients (dépôts et retraits)
   final List<OperationResume> depotsClientsDetails;
   final List<OperationResume> retraitsClientsDetails;
+  
+  // NOUVEAU: Liste détaillée des transferts en attente
+  final List<OperationResume> transfertsEnAttenteDetails;
   
   // Cash disponible USD
   final double cashDisponibleCash;
@@ -100,8 +105,10 @@ class RapportClotureModel {
     this.flotEnvoyeDeviseLocale = 0.0,
     required this.transfertsRecus,
     required this.transfertsServis,
+    this.transfertsEnAttente = 0.0,
     this.transfertsRecusDeviseLocale = 0.0,
     this.transfertsServisDeviseLocale = 0.0,
+    this.transfertsEnAttenteDeviseLocale = 0.0,
     required this.depotsClients,
     required this.retraitsClients,
     this.depotsClientsDeviseLocale = 0.0,
@@ -114,6 +121,7 @@ class RapportClotureModel {
     this.flotsEnvoyes = const [],
     this.depotsClientsDetails = const [],
     this.retraitsClientsDetails = const [],
+    this.transfertsEnAttenteDetails = const [],
     required this.cashDisponibleCash,
     required this.cashDisponibleAirtelMoney,
     required this.cashDisponibleMPesa,
@@ -175,8 +183,10 @@ class RapportClotureModel {
       'flot_envoye_devise_locale': flotEnvoyeDeviseLocale,
       'transferts_recus': transfertsRecus,
       'transferts_servis': transfertsServis,
+      'transferts_en_attente': transfertsEnAttente,
       'transferts_recus_devise_locale': transfertsRecusDeviseLocale,
       'transferts_servis_devise_locale': transfertsServisDeviseLocale,
+      'transferts_en_attente_devise_locale': transfertsEnAttenteDeviseLocale,
       'depots_clients': depotsClients,
       'retraits_clients': retraitsClients,
       'depots_clients_devise_locale': depotsClientsDeviseLocale,
@@ -189,6 +199,7 @@ class RapportClotureModel {
       'flots_envoyes': flotsEnvoyes.map((f) => f.toJson()).toList(),
       'depots_clients_details': depotsClientsDetails.map((d) => d.toJson()).toList(),
       'retraits_clients_details': retraitsClientsDetails.map((r) => r.toJson()).toList(),
+      'transferts_en_attente_details': transfertsEnAttenteDetails.map((t) => t.toJson()).toList(),
       'cash_disponible_cash': cashDisponibleCash,
       'cash_disponible_airtel_money': cashDisponibleAirtelMoney,
       'cash_disponible_mpesa': cashDisponibleMPesa,

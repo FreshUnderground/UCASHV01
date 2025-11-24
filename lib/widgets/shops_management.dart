@@ -32,35 +32,21 @@ class _ShopsManagementState extends State<ShopsManagement> {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              minHeight: constraints.maxHeight,
-            ),
-            child: IntrinsicHeight(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header responsive
-                  _buildHeader(),
-                  context.verticalSpace(mobile: 16, tablet: 20, desktop: 24),
-                  
-                  // Statistiques rapides
-                  _buildStats(),
-                  context.verticalSpace(mobile: 16, tablet: 20, desktop: 24),
-                  
-                  // Tableau des shops
-                  Expanded(
-                    child: _buildShopsTable(),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Header responsive
+        _buildHeader(),
+        context.verticalSpace(mobile: 16, tablet: 20, desktop: 24),
+        
+        // Statistiques rapides
+        _buildStats(),
+        context.verticalSpace(mobile: 16, tablet: 20, desktop: 24),
+        
+        // Tableau des shops
+        _buildShopsTable(),
+      ],
     );
   }
 
@@ -114,7 +100,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
           mobileColumns: 2,
           tabletColumns: 4,
           desktopColumns: 4,
-          aspectRatio: context.isSmallScreen ? 1.3 : 1.1,
+          aspectRatio: context.isSmallScreen ? 1.4 : 1.1,
           children: [
             _buildStatCard(
               'Total Partenaires',
@@ -147,29 +133,57 @@ class _ShopsManagementState extends State<ShopsManagement> {
   }
 
   Widget _buildStatCard(String title, String value, IconData icon, Color color) {
-    return context.statContainer(
-      backgroundColor: color.withOpacity(0.1),
-      borderColor: color.withOpacity(0.3),
+    final isMobile = MediaQuery.of(context).size.width <= 600;
+    
+    return Container(
+      padding: EdgeInsets.all(isMobile ? 10 : 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.2)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            icon, 
-            color: color, 
-            size: context.fluidIcon(mobile: 20, tablet: 24, desktop: 28),
+          Container(
+            padding: EdgeInsets.all(isMobile ? 8 : 10),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              icon, 
+              color: color, 
+              size: isMobile ? 18 : 24,
+            ),
           ),
-          context.verticalSpace(mobile: 6, tablet: 8, desktop: 10),
+          SizedBox(height: isMobile ? 8 : 12),
           Text(
             value,
-            style: context.statValue.copyWith(color: color),
+            style: TextStyle(
+              fontSize: isMobile ? 14 : 20,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
             textAlign: TextAlign.center,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          context.verticalSpace(mobile: 4, tablet: 6, desktop: 8),
+          SizedBox(height: isMobile ? 4 : 6),
           Text(
             title,
-            style: context.statLabel,
+            style: TextStyle(
+              fontSize: isMobile ? 9 : 12,
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w500,
+            ),
             textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -192,7 +206,9 @@ class _ShopsManagementState extends State<ShopsManagement> {
         }
 
         return context.adaptiveCard(
-          child: context.isSmallScreen ? _buildMobileShopsList(shops) : _buildDesktopShopsTable(shops),
+          child: SingleChildScrollView(
+            child: context.isSmallScreen ? _buildMobileShopsList(shops) : _buildDesktopShopsTable(shops),
+          ),
         );
       },
     );
@@ -226,6 +242,8 @@ class _ShopsManagementState extends State<ShopsManagement> {
 
   Widget _buildMobileShopsList(List<ShopModel> shops) {
     return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       itemCount: shops.length,
       separatorBuilder: (context, index) => const Divider(),
       itemBuilder: (context, index) => _buildMobileShopCard(shops[index]),
@@ -311,7 +329,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       crossAxisCount: 2,
-      childAspectRatio: 2.5,
+      childAspectRatio: 2.8,
       mainAxisSpacing: 8,
       crossAxisSpacing: 8,
       children: [
@@ -325,7 +343,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
 
   Widget _buildCapitalItem(String label, double amount, Color color) {
     return Container(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
@@ -333,20 +351,21 @@ class _ShopsManagementState extends State<ShopsManagement> {
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             label,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 11,
               color: Colors.grey[600],
               fontWeight: FontWeight.w500,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             '${_formatCurrency(amount.round())} USD',
             style: TextStyle(
-              fontSize: 14,
+              fontSize: 13,
               color: color,
               fontWeight: FontWeight.bold,
             ),
@@ -359,14 +378,13 @@ class _ShopsManagementState extends State<ShopsManagement> {
   }
 
   Widget _buildDesktopShopsTable(List<ShopModel> shops) {
-    return SingleChildScrollView(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          minWidth: MediaQuery.of(context).size.width - 100,
-        ),
-        child: DataTable(
-          headingRowColor: MaterialStateProperty.all(Colors.grey[50]),
-          columns: const [
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        minWidth: MediaQuery.of(context).size.width - 100,
+      ),
+      child: DataTable(
+        headingRowColor: MaterialStateProperty.all(Colors.grey[50]),
+        columns: const [
             DataColumn(
               label: Text(
                 'Partenaire',
@@ -415,9 +433,8 @@ class _ShopsManagementState extends State<ShopsManagement> {
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
-          ],
-          rows: shops.map((shop) => _buildShopRow(shop)).toList(),
-        ),
+        ],
+        rows: shops.map((shop) => _buildShopRow(shop)).toList(),
       ),
     );
   }

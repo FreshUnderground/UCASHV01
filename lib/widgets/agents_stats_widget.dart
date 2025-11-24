@@ -9,8 +9,8 @@ class AgentsStatsWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    final isMobile = size.width <= 768;
-    final isTablet = size.width > 768 && size.width <= 1024;
+    final isMobile = size.width <= 600;
+    final isTablet = size.width > 600 && size.width <= 900;
     
     return Consumer2<AgentService, ShopService>(
       builder: (context, agentService, shopService, child) {
@@ -18,7 +18,6 @@ class AgentsStatsWidget extends StatelessWidget {
         final activeAgents = agents.where((a) => a.isActive).length;
         final inactiveAgents = agents.length - activeAgents;
         
-        // Calculer les agents par shop
         final agentsByShop = <int, int>{};
         for (var agent in agents) {
           if (agent.shopId != null) {
@@ -27,166 +26,64 @@ class AgentsStatsWidget extends StatelessWidget {
         }
         
         final shopsWithAgents = agentsByShop.keys.length;
-        // Handle nullable shop.id
         final shopsWithoutAgents = shopService.shops.where((shop) => shop.id != null).length - shopsWithAgents;
 
         return Card(
-          elevation: 2,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(isMobile ? 12 : 16),
+            side: BorderSide(color: Colors.grey.shade200),
+          ),
           child: Padding(
-            padding: EdgeInsets.all(isMobile ? 12 : 16),
+            padding: EdgeInsets.all(isMobile ? 16 : 20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Statistiques des Agents',
-                  style: TextStyle(
-                    fontSize: isMobile ? 16 : 18,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFFDC2626),
-                  ),
-                ),
-                SizedBox(height: isMobile ? 12 : 16),
-                
-                // Grille responsive de statistiques
-                _buildResponsiveStatsGrid(
-                  isMobile, 
-                  isTablet,
-                  agents.length,
-                  activeAgents,
-                  inactiveAgents,
-                  shopsWithAgents,
-                  shopsWithoutAgents,
-                  shopService.shops.isEmpty 
-                      ? '0%' 
-                      : '${((shopsWithAgents / shopService.shops.length) * 100).toStringAsFixed(0)}%',
-                ),
-                
-                // Détails par shop (si il y a des agents)
-                if (agents.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  const Divider(),
-                  const SizedBox(height: 12),
-                  
-                  const Text(
-                    'Répartition par Shop',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF374151),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFDC2626).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.analytics,
+                        color: Color(0xFFDC2626),
+                        size: 20,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  Expanded(
-                  child: Container(
-                    constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.3),
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      physics: const ClampingScrollPhysics(),
-                      itemCount: shopService.shops.length,
-                      itemBuilder: (context, index) {
-                        final shop = shopService.shops[index];
-                        // Handle nullable shop.id
-                        final agentCount = shop.id != null ? agentsByShop[shop.id!] ?? 0 : 0;
-                        final activeInShop = agents
-                            .where((a) => a.shopId != null && a.shopId == shop.id && a.isActive)
-                            .length;
-                        
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: agentCount > 0 
-                                ? const Color(0xFFDC2626).withOpacity(0.05)
-                                : Colors.grey.withOpacity(0.05),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: agentCount > 0 
-                                  ? const Color(0xFFDC2626).withOpacity(0.2)
-                                  : Colors.grey.withOpacity(0.2),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.store,
-                                color: agentCount > 0 
-                                    ? const Color(0xFFDC2626)
-                                    : Colors.grey,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      shop.designation,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    Text(
-                                      shop.localisation ?? 'Localisation inconnue',
-                                      style: TextStyle(
-                                        color: Colors.grey[600],
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: agentCount > 0 
-                                      ? const Color(0xFFDC2626)
-                                      : Colors.grey,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  '$agentCount agent${agentCount > 1 ? 's' : ''}',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                              if (agentCount > 0) ...[
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.green,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    '$activeInShop actif${activeInShop > 1 ? 's' : ''}',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        );
-                      },
+                    const SizedBox(width: 12),
+                    Text(
+                      'Statistiques des Agents',
+                      style: TextStyle(
+                        fontSize: isMobile ? 16 : 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[900],
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-                ],
+                SizedBox(height: isMobile ? 16 : 20),
+                
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    return _buildResponsiveStatsGrid(
+                      isMobile, 
+                      isTablet,
+                      agents.length,
+                      activeAgents,
+                      inactiveAgents,
+                      shopsWithAgents,
+                      shopsWithoutAgents,
+                      shopService.shops.isEmpty 
+                          ? '0%' 
+                          : '${((shopsWithAgents / shopService.shops.length) * 100).toStringAsFixed(0)}%',
+                      constraints.maxWidth,
+                    );
+                  },
+                ),
               ],
             ),
           ),
@@ -204,112 +101,109 @@ class AgentsStatsWidget extends StatelessWidget {
     int shopsWithAgents,
     int shopsWithoutAgents,
     String occupationRate,
+    double availableWidth,
   ) {
     final stats = [
-      {'title': 'Total Agents', 'value': '$totalAgents', 'icon': Icons.people, 'color': const Color(0xFF2563EB)},
-      {'title': 'Agents Actifs', 'value': '$activeAgents', 'icon': Icons.check_circle, 'color': const Color(0xFF059669)},
-      {'title': 'Agents Inactifs', 'value': '$inactiveAgents', 'icon': Icons.pause_circle, 'color': const Color(0xFFEA580C)},
-      {'title': 'Shops avec Agents', 'value': '$shopsWithAgents', 'icon': Icons.store_mall_directory, 'color': const Color(0xFF7C3AED)},
-      {'title': 'Shops sans Agents', 'value': '$shopsWithoutAgents', 'icon': Icons.store_outlined, 'color': const Color(0xFF9CA3AF)},
-      {'title': 'Taux d\'Occupation', 'value': occupationRate, 'icon': Icons.analytics, 'color': const Color(0xFFDC2626)},
+      {'title': 'Total', 'value': '$totalAgents', 'icon': Icons.people, 'color': const Color(0xFF2563EB)},
+      {'title': 'Actifs', 'value': '$activeAgents', 'icon': Icons.check_circle, 'color': const Color(0xFF059669)},
+      {'title': 'Inactifs', 'value': '$inactiveAgents', 'icon': Icons.pause_circle, 'color': const Color(0xFFEA580C)},
+      {'title': 'Avec Agents', 'value': '$shopsWithAgents', 'icon': Icons.store, 'color': const Color(0xFF7C3AED)},
+      {'title': 'Sans Agents', 'value': '$shopsWithoutAgents', 'icon': Icons.store_outlined, 'color': const Color(0xFF9CA3AF)},
+      {'title': 'Taux', 'value': occupationRate, 'icon': Icons.pie_chart, 'color': const Color(0xFFDC2626)},
     ];
 
     if (isMobile) {
-      return Column(
-        children: [
-          // Première ligne mobile (2 colonnes)
-          Row(
-            children: [
-              _buildStatCard(stats[0]['title'] as String, stats[0]['value'] as String, stats[0]['icon'] as IconData, stats[0]['color'] as Color, isMobile),
-              const SizedBox(width: 8),
-              _buildStatCard(stats[1]['title'] as String, stats[1]['value'] as String, stats[1]['icon'] as IconData, stats[1]['color'] as Color, isMobile),
-            ],
+      // 3 colonnes : largeur disponible / 3 - espacement
+      final spacing = 8.0;
+      final cardWidth = (availableWidth - (spacing * 2)) / 3;
+      
+      return Wrap(
+        spacing: spacing,
+        runSpacing: spacing,
+        children: stats.map((stat) => 
+          SizedBox(
+            width: cardWidth,
+            child: _buildStatCard(
+              stat['title'] as String,
+              stat['value'] as String,
+              stat['icon'] as IconData,
+              stat['color'] as Color,
+              isMobile,
+            ),
           ),
-          const SizedBox(height: 8),
-          // Deuxième ligne mobile
-          Row(
-            children: [
-              _buildStatCard(stats[2]['title'] as String, stats[2]['value'] as String, stats[2]['icon'] as IconData, stats[2]['color'] as Color, isMobile),
-              const SizedBox(width: 8),
-              _buildStatCard(stats[3]['title'] as String, stats[3]['value'] as String, stats[3]['icon'] as IconData, stats[3]['color'] as Color, isMobile),
-            ],
-          ),
-          const SizedBox(height: 8),
-          // Troisième ligne mobile
-          Row(
-            children: [
-              _buildStatCard(stats[4]['title'] as String, stats[4]['value'] as String, stats[4]['icon'] as IconData, stats[4]['color'] as Color, isMobile),
-              const SizedBox(width: 8),
-              _buildStatCard(stats[5]['title'] as String, stats[5]['value'] as String, stats[5]['icon'] as IconData, stats[5]['color'] as Color, isMobile),
-            ],
-          ),
-        ],
+        ).toList(),
       );
     }
 
-    return Column(
-      children: [
-        // Première ligne desktop/tablet
-        Row(
-          children: [
-            _buildStatCard(stats[0]['title'] as String, stats[0]['value'] as String, stats[0]['icon'] as IconData, stats[0]['color'] as Color, isMobile),
-            SizedBox(width: isTablet ? 12 : 16),
-            _buildStatCard(stats[1]['title'] as String, stats[1]['value'] as String, stats[1]['icon'] as IconData, stats[1]['color'] as Color, isMobile),
-            SizedBox(width: isTablet ? 12 : 16),
-            _buildStatCard(stats[2]['title'] as String, stats[2]['value'] as String, stats[2]['icon'] as IconData, stats[2]['color'] as Color, isMobile),
-          ],
+    return Wrap(
+      spacing: isTablet ? 10 : 12,
+      runSpacing: isTablet ? 10 : 12,
+      children: stats.map((stat) => 
+        SizedBox(
+          width: (availableWidth - (isTablet ? 20 : 24)) / 3,
+          child: _buildStatCard(
+            stat['title'] as String,
+            stat['value'] as String,
+            stat['icon'] as IconData,
+            stat['color'] as Color,
+            isMobile,
+          ),
         ),
-        SizedBox(height: isTablet ? 8 : 12),
-        // Deuxième ligne desktop/tablet
-        Row(
-          children: [
-            _buildStatCard(stats[3]['title'] as String, stats[3]['value'] as String, stats[3]['icon'] as IconData, stats[3]['color'] as Color, isMobile),
-            SizedBox(width: isTablet ? 12 : 16),
-            _buildStatCard(stats[4]['title'] as String, stats[4]['value'] as String, stats[4]['icon'] as IconData, stats[4]['color'] as Color, isMobile),
-            SizedBox(width: isTablet ? 12 : 16),
-            _buildStatCard(stats[5]['title'] as String, stats[5]['value'] as String, stats[5]['icon'] as IconData, stats[5]['color'] as Color, isMobile),
-          ],
-        ),
-      ],
+      ).toList(),
     );
   }
 
   Widget _buildStatCard(String title, String value, IconData icon, Color color, bool isMobile) {
-    return Expanded(
-      child: Container(
-        padding: EdgeInsets.all(isMobile ? 8 : 12),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(isMobile ? 8 : 12),
-          border: Border.all(color: color.withOpacity(0.3)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: isMobile ? 20 : 24),
-            SizedBox(height: isMobile ? 4 : 6),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: isMobile ? 16 : 20,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 6 : 12,
+        vertical: isMobile ? 8 : 12,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.2)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: EdgeInsets.all(isMobile ? 6 : 8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              shape: BoxShape.circle,
             ),
-            SizedBox(height: isMobile ? 2 : 2),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: isMobile ? 10 : 12,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w500,
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+            child: Icon(icon, color: color, size: isMobile ? 14 : 18),
+          ),
+          SizedBox(height: isMobile ? 6 : 8),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: isMobile ? 14 : 18,
+              fontWeight: FontWeight.bold,
+              color: color,
             ),
-          ],
-        ),
+          ),
+          SizedBox(height: isMobile ? 2 : 4),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: isMobile ? 9 : 11,
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w500,
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }

@@ -40,6 +40,9 @@ try {
     
     foreach ($entities as $entity) {
         try {
+            // Log pour débogage
+            error_log("[COMMISSION] ID={$entity['id']}, Type={$entity['type']}, Taux={$entity['taux']}, ShopId={$entity['shop_id']}");
+            
             // Vérifier si la commission existe déjà
             $checkStmt = $pdo->prepare("
                 SELECT id FROM commissions 
@@ -55,67 +58,69 @@ try {
                         type = :type,
                         taux = :taux,
                         description = :description,
+                        shop_id = :shop_id,
+                        shop_source_id = :shop_source_id,
+                        shop_destination_id = :shop_destination_id,
                         is_active = :is_active,
                         last_modified_at = :last_modified_at,
-                        last_modified_by = :last_modified_by
+                        last_modified_by = :last_modified_by,
+                        is_synced = 1,
+                        synced_at = :synced_at
                     WHERE id = :id
                 ");
                 
+                $syncedAt = $entity['synced_at'] ?? date('c');
                 $updateStmt->execute([
                     ':id' => $entity['id'],
                     ':type' => $entity['type'] ?? 'SORTANT',
                     ':taux' => $entity['taux'] ?? 0,
                     ':description' => $entity['description'] ?? '',
+                    ':shop_id' => $entity['shop_id'] ?? null,
+                    ':shop_source_id' => $entity['shop_source_id'] ?? null,
+                    ':shop_destination_id' => $entity['shop_destination_id'] ?? null,
                     ':is_active' => $entity['is_active'] ?? 1,
                     ':last_modified_at' => $entity['last_modified_at'] ?? date('Y-m-d H:i:s'),
-                    ':last_modified_by' => $userId
-                ]);
-                
-                // Marquer comme synchronisé après mise à jour réussie
-                // Use the client's synced_at timestamp to maintain timezone consistency
-                $syncedAt = $entity['synced_at'] ?? date('c'); // Use ISO 8601 format
-                $syncStmt = $pdo->prepare("UPDATE commissions SET is_synced = 1, synced_at = :synced_at WHERE id = :id");
-                $syncStmt->execute([
-                    ':id' => $entity['id'],
+                    ':last_modified_by' => $userId,
                     ':synced_at' => $syncedAt
                 ]);
                 
                 $updatedCount++;
+                error_log("✅ Commission ID {$entity['id']} mise à jour");
             } else {
-                // Insertion d'une nouvelle commission
+                // Insertion d'une nouvelle commission avec l'ID de l'app
                 $insertStmt = $pdo->prepare("
-                    REPLACE IGNORE INTO commissions (
-                        type, taux, description, is_active,
-                        last_modified_at, last_modified_by, created_at
+                    INSERT INTO commissions (
+                        id, type, taux, description, 
+                        shop_id, shop_source_id, shop_destination_id,
+                        is_active, last_modified_at, last_modified_by, created_at, is_synced, synced_at
                     ) VALUES (
-                        :type, :taux, :description, :is_active,
-                        :last_modified_at, :last_modified_by, :created_at
+                        :id, :type, :taux, :description,
+                        :shop_id, :shop_source_id, :shop_destination_id,
+                        :is_active, :last_modified_at, :last_modified_by, :created_at, 1, :synced_at
                     )
                 ");
                 
+                $syncedAt = $entity['synced_at'] ?? date('c');
                 $insertStmt->execute([
+                    ':id' => $entity['id'],  // Utiliser l'ID de l'app
                     ':type' => $entity['type'] ?? 'SORTANT',
                     ':taux' => $entity['taux'] ?? 0,
                     ':description' => $entity['description'] ?? '',
+                    ':shop_id' => $entity['shop_id'] ?? null,
+                    ':shop_source_id' => $entity['shop_source_id'] ?? null,
+                    ':shop_destination_id' => $entity['shop_destination_id'] ?? null,
                     ':is_active' => $entity['is_active'] ?? 1,
                     ':last_modified_at' => $entity['last_modified_at'] ?? date('Y-m-d H:i:s'),
                     ':last_modified_by' => $userId,
-                    ':created_at' => $entity['created_at'] ?? date('Y-m-d H:i:s')
-                ]);
-                
-                // Marquer comme synchronisé après insertion réussie
-                // Use the client's synced_at timestamp to maintain timezone consistency
-                $syncedAt = $entity['synced_at'] ?? date('c'); // Use ISO 8601 format
-                $insertId = $pdo->lastInsertId();
-                $syncStmt = $pdo->prepare("UPDATE commissions SET is_synced = 1, synced_at = :synced_at WHERE id = :id");
-                $syncStmt->execute([
-                    ':id' => $insertId,
+                    ':created_at' => $entity['created_at'] ?? date('Y-m-d H:i:s'),
                     ':synced_at' => $syncedAt
                 ]);
                 
                 $uploadedCount++;
+                error_log("✅ Commission ID {$entity['id']} insérée");
             }
         } catch (Exception $e) {
+            error_log("❌ Erreur commission ID {$entity['id']}: {$e->getMessage()}");
             $errors[] = [
                 'entity_id' => $entity['id'] ?? 'unknown',
                 'error' => $e->getMessage()
@@ -144,6 +149,7 @@ try {
         $pdo->rollBack();
     }
     
+    error_log("❌ Erreur globale: {$e->getMessage()}");
     http_response_code(500);
     echo json_encode([
         'success' => false,
@@ -151,4 +157,3 @@ try {
         'timestamp' => date('c')
     ]);
 }
-?>

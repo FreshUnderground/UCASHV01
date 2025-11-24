@@ -13,6 +13,8 @@ import '../models/operation_model.dart';
 import '../models/journal_caisse_model.dart';
 import '../models/flot_model.dart' as flot_model;
 import '../models/cloture_caisse_model.dart';
+import '../models/sim_model.dart';
+import '../models/sim_movement_model.dart';
 
 class LocalDB {
   static final LocalDB _instance = LocalDB._internal();
@@ -494,7 +496,22 @@ class LocalDB {
 
   Future<void> updateAgent(AgentModel agent) async {
     if (agent.id == null) throw Exception('Agent ID is required for update');
-    await saveAgent(agent);
+    
+    // Forcer la mise à jour en marquant lastModifiedAt
+    final updatedAgent = agent.copyWith(
+      lastModifiedAt: DateTime.now(),
+    );
+    
+    debugPrint('🔄 [LocalDB] Mise à jour agent ID: ${agent.id}, Username: ${agent.username}');
+    await saveAgent(updatedAgent);
+    
+    // Vérifier immédiatement que la mise à jour a été faite
+    final prefs = await database;
+    final saved = prefs.getString('agent_${agent.id}');
+    if (saved != null) {
+      final savedData = jsonDecode(saved);
+      debugPrint('✅ [LocalDB] Agent mis à jour - Username: ${savedData['username']}');
+    }
   }
 
   Future<void> deleteAgent(int agentId) async {
@@ -1445,6 +1462,117 @@ class LocalDB {
     return date1.year == date2.year &&
            date1.month == date2.month &&
            date1.day == date2.day;
+  }
+
+  // === CRUD SIMS ===
+  
+  /// Sauvegarder une SIM
+  Future<SimModel> saveSim(SimModel sim) async {
+    final prefs = await database;
+    final simId = sim.id ?? DateTime.now().millisecondsSinceEpoch;
+    final updatedSim = sim.copyWith(
+      id: simId,
+      lastModifiedAt: DateTime.now(),
+    );
+    await prefs.setString('sim_$simId', jsonEncode(updatedSim.toJson()));
+    debugPrint('📱 SIM sauvegardée: ID=$simId, Numéro=${updatedSim.numero}');
+    return updatedSim;
+  }
+
+  /// Mettre à jour une SIM
+  Future<void> updateSim(SimModel sim) async {
+    if (sim.id == null) throw Exception('SIM ID is required for update');
+    await saveSim(sim);
+  }
+
+  /// Récupérer toutes les SIMs
+  Future<List<SimModel>> getAllSims({int? shopId}) async {
+    final prefs = await database;
+    final sims = <SimModel>[];
+    
+    final keys = prefs.getKeys();
+    for (String key in keys) {
+      if (key.startsWith('sim_')) {
+        try {
+          final simData = prefs.getString(key);
+          if (simData != null) {
+            final sim = SimModel.fromJson(jsonDecode(simData));
+            // Filtrer par shopId si fourni
+            if (shopId == null || sim.shopId == shopId) {
+              sims.add(sim);
+            }
+          }
+        } catch (e) {
+          debugPrint('⚠️ Erreur chargement SIM $key: $e');
+        }
+      }
+    }
+    
+    return sims;
+  }
+
+  /// Récupérer une SIM par ID
+  Future<SimModel?> getSimById(int simId) async {
+    final prefs = await database;
+    final simData = prefs.getString('sim_$simId');
+    if (simData != null) {
+      return SimModel.fromJson(jsonDecode(simData));
+    }
+    return null;
+  }
+
+  /// Supprimer une SIM
+  Future<void> deleteSim(int simId) async {
+    final prefs = await database;
+    await prefs.remove('sim_$simId');
+    debugPrint('🗑️ SIM supprimée: ID=$simId');
+  }
+
+  // === CRUD SIM MOVEMENTS ===
+  
+  /// Sauvegarder un mouvement de SIM
+  Future<SimMovementModel> saveSimMovement(SimMovementModel movement) async {
+    final prefs = await database;
+    final movementId = movement.id ?? DateTime.now().millisecondsSinceEpoch;
+    final updatedMovement = movement.copyWith(id: movementId);
+    await prefs.setString('sim_movement_$movementId', jsonEncode(updatedMovement.toJson()));
+    debugPrint('📝 Mouvement SIM sauvegardé: ID=$movementId');
+    return updatedMovement;
+  }
+
+  /// Récupérer tous les mouvements de SIM
+  Future<List<SimMovementModel>> getAllSimMovements({int? simId}) async {
+    final prefs = await database;
+    final movements = <SimMovementModel>[];
+    
+    final keys = prefs.getKeys();
+    for (String key in keys) {
+      if (key.startsWith('sim_movement_')) {
+        try {
+          final movementData = prefs.getString(key);
+          if (movementData != null) {
+            final movement = SimMovementModel.fromJson(jsonDecode(movementData));
+            // Filtrer par simId si fourni
+            if (simId == null || movement.simId == simId) {
+              movements.add(movement);
+            }
+          }
+        } catch (e) {
+          debugPrint('⚠️ Erreur chargement mouvement SIM $key: $e');
+        }
+      }
+    }
+    
+    // Trier par date (plus récents en premier)
+    movements.sort((a, b) => b.dateMovement.compareTo(a.dateMovement));
+    return movements;
+  }
+
+  /// Supprimer un mouvement de SIM
+  Future<void> deleteSimMovement(int movementId) async {
+    final prefs = await database;
+    await prefs.remove('sim_movement_$movementId');
+    debugPrint('🗑️ Mouvement SIM supprimé: ID=$movementId');
   }
 
 }

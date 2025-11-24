@@ -20,9 +20,15 @@ class AgentService extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
 
   // Charger tous les agents
-  Future<void> loadAgents() async {
+  Future<void> loadAgents({bool forceRefresh = false}) async {
     _setLoading(true);
     try {
+      // Si forceRefresh, vider d'abord le cache
+      if (forceRefresh) {
+        _agents.clear();
+        debugPrint('🗑️ [AgentService] Cache vidé - Rechargement forcé');
+      }
+      
       // S'assurer que l'admin existe
       await LocalDB.instance.ensureAdminExists();
       
@@ -38,6 +44,7 @@ class AgentService extends ChangeNotifier {
         debugPrint('   - ${agent.username} (ID: ${agent.id}, Shop: ${agent.shopId}, Actif: ${agent.isActive})');
       }
       _errorMessage = null;
+      notifyListeners(); // Notifier les widgets après le chargement
     } catch (e) {
       _errorMessage = 'Erreur lors du chargement des agents: $e';
       debugPrint(_errorMessage);
@@ -115,8 +122,8 @@ class AgentService extends ChangeNotifier {
       await LocalDB.instance.updateAgent(agent);
       debugPrint('✅ Agent mis à jour avec succès');
       
-      // Recharger la liste
-      await loadAgents();      
+      // Recharger complètement avec cache vidé
+      await loadAgents(forceRefresh: true);
       
       // Synchronisation en arrière-plan
       _syncInBackground();

@@ -55,6 +55,7 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
     return Card(
       elevation: 2,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Header avec filtres et actions responsive
@@ -62,11 +63,7 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
           const Divider(height: 1),
           
           // Tableau des agents
-          Expanded(
-            child: SingleChildScrollView(
-              child: _buildAgentsTable(isMobile),
-            ),
-          ),
+          _buildAgentsTable(isMobile),
         ],
       ),
     );
@@ -328,13 +325,11 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
 
         return LayoutBuilder(
           builder: (context, constraints) {
-            return SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minWidth: constraints.maxWidth,
-                ),
-                child: DataTable(
+            return ConstrainedBox(
+              constraints: BoxConstraints(
+                minWidth: constraints.maxWidth,
+              ),
+              child: DataTable(
                   columnSpacing: 12,
                   dataRowMinHeight: 56,
                   dataRowMaxHeight: 56,
@@ -499,8 +494,7 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
                     );
                   }).toList(),
                 ),
-              ),
-            );
+              );
           }
         );
       },
@@ -576,7 +570,7 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Supprimer'),
+            child: const Text('Suppr.'),
           ),
         ],
       ),
@@ -715,7 +709,7 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
                       child: OutlinedButton.icon(
                         onPressed: () => _deleteAgent(agent),
                         icon: const Icon(Icons.delete, size: 16),
-                        label: const Text('Supprimer'),
+                        label: const Text('Suppr.'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.red,
                           side: const BorderSide(color: Colors.red),

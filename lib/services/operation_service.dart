@@ -229,6 +229,7 @@ class OperationService extends ChangeNotifier {
       final updatedOperation = operation.copyWith(
         statut: OperationStatus.validee,
         modePaiement: modePaiement,
+        dateValidation: DateTime.now(),
         lastModifiedAt: DateTime.now(),
       );
       
@@ -840,6 +841,7 @@ class OperationService extends ChangeNotifier {
       final updatedOperation = operation.copyWith(
         statut: OperationStatus.validee,
         modePaiement: modePaiement,
+        dateValidation: DateTime.now(),
         lastModifiedAt: DateTime.now(),
         isSynced: false,  // IMPORTANT: Marquer comme non synchronisé pour forcer l'upload
       );

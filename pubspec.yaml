@@ -15,6 +15,7 @@ dependencies:
   
   # Stockage local
   shared_preferences: ^2.2.2
+  path_provider: ^2.1.1
   
   # HTTP pour API REST future
   http: ^1.1.0
@@ -53,6 +54,11 @@ dependencies:
   
   # Formatage de dates
   intl: ^0.18.1
+  
+  # Notifications
+  flutter_local_notifications: ^16.3.0
+  audioplayers: ^5.2.1
+  vibration: ^1.8.4
 
 dev_dependencies:
   flutter_test:

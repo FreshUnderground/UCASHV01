@@ -33,6 +33,7 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
   double _commission = 0.0;
   double _montantNet = 0.0;
   double _tauxCommission = 0.0; // Taux réel de la commission en %
+  int? _selectedShopDestinationId; // Shop de destination pour le transfert
 
   @override
   void initState() {
@@ -53,18 +54,44 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
   void _calculateCommission() async {
     final montantNet = double.tryParse(_montantController.text) ?? 0.0;  // Montant que le destinataire REÇOIT
     
-    // Récupérer la VRAIE commission depuis RatesService
+    // Récupérer l'utilisateur connecté pour obtenir le shopSourceId
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentUser = authService.currentUser;
+    
+    if (currentUser?.shopId == null) {
+      debugPrint('⚠️ Shop source non défini');
+      _tauxCommission = 0.0;
+      _commission = 0.0;
+      if (mounted) setState(() {});
+      return;
+    }
+    
+    // Récupérer la commission shop-to-shop depuis RatesService
     final ratesService = RatesService.instance;
     await ratesService.loadRatesAndCommissions();
     
-    final commissionData = ratesService.getCommissionByType('SORTANT');
+    // Utiliser la méthode shop-to-shop qui gère les fallbacks
+    final commissionData = ratesService.getCommissionByShopsAndType(
+      currentUser!.shopId!,  // Shop source
+      _selectedShopDestinationId,  // Shop destination (peut être null)
+      'SORTANT',
+    );
+    
     if (commissionData != null) {
       _tauxCommission = commissionData.taux; // Stocker le taux réel
       _commission = montantNet * (commissionData.taux / 100);
-      debugPrint('✅ Commission récupérée: ${commissionData.taux}% sur $montantNet = $_commission');
+      
+      // Log pour débogage
+      String route = 'GENERAL';
+      if (commissionData.shopSourceId != null && commissionData.shopDestinationId != null) {
+        route = 'shop-to-shop (${commissionData.shopSourceId} → ${commissionData.shopDestinationId})';
+      } else if (commissionData.shopId != null) {
+        route = 'shop-specific (${commissionData.shopId})';
+      }
+      debugPrint('✅ Commission $route: ${commissionData.taux}% sur $montantNet = $_commission');
     } else {
       // PAS DE FALLBACK - Afficher erreur
-      debugPrint('❌ ERREUR: Commission SORTANT non trouvée dans la base de données!');
+      debugPrint('❌ ERREUR: Aucune commission trouvée pour cette route!');
       _tauxCommission = 0.0;
       _commission = 0.0;
     }
@@ -241,9 +268,66 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
             ),
             SizedBox(height: fieldSpacing),
             
-            // 3. Nom de l'expéditeur
+            // 3. Shop de destination
             Text(
-              '3. Nom de l\'expéditeur',
+              '3. Shop de destination *',
+              style: TextStyle(
+                fontSize: labelFontSize,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFFDC2626),
+              ),
+            ),
+            SizedBox(height: isMobile ? 8 : 12),
+            
+            Consumer<ShopService>(
+              builder: (context, shopService, child) {
+                final shops = shopService.shops;
+                final authService = Provider.of<AuthService>(context, listen: false);
+                final currentShopId = authService.currentUser?.shopId;
+                
+                // Filtrer pour exclure le shop source
+                final availableShops = shops.where((shop) => shop.id != currentShopId).toList();
+                
+                return DropdownButtonFormField<int>(
+                  value: _selectedShopDestinationId,
+                  decoration: InputDecoration(
+                    labelText: 'Sélectionner le shop de destination',
+                    border: const OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.store, size: ResponsiveDialogUtils.getIconSize(context)),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: isMobile ? 12 : 16,
+                      vertical: isMobile ? 12 : 16,
+                    ),
+                  ),
+                  items: availableShops.map((shop) {
+                    return DropdownMenuItem<int>(
+                      value: shop.id,
+                      child: Text(
+                        shop.designation,
+                        style: TextStyle(fontSize: isMobile ? 14 : 16),
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedShopDestinationId = value;
+                    });
+                    _calculateCommission(); // Recalculer la commission
+                  },
+                  validator: (value) {
+                    if (value == null) {
+                      return 'Veuillez sélectionner un shop de destination';
+                    }
+                    return null;
+                  },
+                );
+              },
+            ),
+            SizedBox(height: fieldSpacing),
+            
+            // 4. Nom de l'expéditeur
+            Text(
+              '4. Nom de l\'expéditeur',
               style: TextStyle(
                 fontSize: labelFontSize,
                 fontWeight: FontWeight.bold,
@@ -267,9 +351,9 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
             ),
             SizedBox(height: fieldSpacing),
             
-            // 4. Référence
+            // 5. Référence
             Text(
-              '4. Référence du transfert *',
+              '5. Référence du transfert *',
               style: TextStyle(
                 fontSize: labelFontSize,
                 fontWeight: FontWeight.bold,
@@ -299,9 +383,9 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
             ),
             SizedBox(height: fieldSpacing),
             
-            // 5. Montant
+            // 6. Montant
             Text(
-              '5. Montant du transfert *',
+              '6. Montant du transfert *',
               style: TextStyle(
                 fontSize: labelFontSize,
                 fontWeight: FontWeight.bold,
@@ -569,6 +653,7 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
         agentId: currentUser!.id!,
         agentUsername: currentUser.username,
         shopSourceId: currentUser.shopId!,
+        shopDestinationId: _selectedShopDestinationId, // Shop de destination pour commission spécifique
         type: OperationType.transfertNational, // Par défaut national
         montantNet: _montantNet,  // Ce que le destinataire REÇOIT
         montantBrut: _montantNet + _commission,  // Ce que le client PAIE

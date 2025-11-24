@@ -63,7 +63,24 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
   void _calculateCommission() async {
     final montantNet = double.tryParse(_montantController.text) ?? 0.0;  // Montant que le destinataire REÇOIT
     
-    // Récupérer la VRAIE commission depuis RatesService
+    debugPrint('🔄 [CALC] Début calcul commission - Montant: $montantNet, Shop dest: ${_selectedShop?.id}, Type: $_transferType');
+    
+    // Récupérer l'utilisateur connecté pour obtenir le shopSourceId
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentUser = authService.currentUser;
+    
+    if (currentUser?.shopId == null) {
+      debugPrint('⚠️ Shop source non défini');
+      _tauxCommission = 0.0;
+      _commission = 0.0;
+      _montantNet = montantNet;
+      if (mounted) setState(() {});
+      return;
+    }
+    
+    debugPrint('🏪 Shop source: ${currentUser!.shopId}, Shop destination: ${_selectedShop?.id}');
+    
+    // Récupérer la commission shop-to-shop depuis RatesService
     final ratesService = RatesService.instance;
     await ratesService.loadRatesAndCommissions();
     
@@ -71,12 +88,24 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
     switch (_transferType) {
       case OperationType.transfertNational:
       case OperationType.transfertInternationalSortant:
-        // Utiliser la VRAIE commission SORTANT
-        final commissionData = ratesService.getCommissionByType('SORTANT');
+        // Utiliser la méthode shop-to-shop qui gère les fallbacks
+        final commissionData = ratesService.getCommissionByShopsAndType(
+          currentUser.shopId!,  // Shop source (shop de l'utilisateur)
+          _selectedShop?.id,     // Shop destination (peut être null)
+          'SORTANT',
+        );
         if (commissionData != null) {
           _tauxCommission = commissionData.taux; // Stocker le taux réel
           _commission = montantNet * (commissionData.taux / 100);  // Commission sur montantNet
-          debugPrint('✅ Commission SORTANT récupérée: ${commissionData.taux}% sur $montantNet = $_commission');
+          
+          // Logs détaillés pour comprendre quelle commission est appliquée
+          if (commissionData.shopSourceId != null && commissionData.shopDestinationId != null) {
+            debugPrint('✅ Commission SHOP-TO-SHOP: ${commissionData.taux}% (${currentUser.shopId} → ${_selectedShop?.id}) = \$${_commission.toStringAsFixed(2)}');
+          } else if (commissionData.shopId != null) {
+            debugPrint('✅ Commission SHOP-SPECIFIC: ${commissionData.taux}% (shop ${commissionData.shopId}) = \$${_commission.toStringAsFixed(2)}');
+          } else {
+            debugPrint('✅ Commission GENERALE: ${commissionData.taux}% = \$${_commission.toStringAsFixed(2)}');
+          }
         } else {
           _tauxCommission = 0.0;
           _commission = 0.0;
@@ -84,8 +113,12 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
         }
         break;
       case OperationType.transfertInternationalEntrant:
-        // Utiliser la VRAIE commission ENTRANT (normalement 0%)
-        final commissionData = ratesService.getCommissionByType('ENTRANT');
+        // Utiliser la méthode shop-to-shop pour ENTRANT aussi
+        final commissionData = ratesService.getCommissionByShopsAndType(
+          currentUser.shopId!,  // Shop source
+          _selectedShop?.id,     // Shop destination
+          'ENTRANT',
+        );
         if (commissionData != null) {
           _tauxCommission = commissionData.taux; // Stocker le taux réel
           _commission = montantNet * (commissionData.taux / 100);  // Commission sur montantNet
@@ -98,14 +131,19 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
         break;
       default:
         _commission = 0.0;
+        _tauxCommission = 0.0;
     }
     
     // LE CLIENT PAIE: Montant Net + Commission
     _montantNet = montantNet;  // Ce que le destinataire reçoit
     // montantBrut sera = montantNet + commission (calculé lors de la création)
     
+    debugPrint('📊 [RESULT] Taux: ${_tauxCommission}%, Commission: \$${_commission.toStringAsFixed(2)}, MontantNet: \$${_montantNet.toStringAsFixed(2)}');
+    
+    // Force setState after calculations complete
     if (mounted) {
       setState(() {});
+      debugPrint('✅ setState() appelé pour mettre à jour l\'UI');
     }
   }
 
@@ -174,8 +212,8 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
               onChanged: (value) {
                 setState(() {
                   _transferType = value!;
-                  _calculateCommission();
                 });
+                _calculateCommission();
               },
               validator: (value) {
                 if (value == null) {
@@ -184,6 +222,47 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
                 return null;
               },
             ),
+
+            
+            SizedBox(height: fieldSpacing),
+            
+            // Montant
+            Text(
+              '${_transferType == OperationType.transfertNational ? '5' : '4'}. Montant du transfert *',
+              style: TextStyle(
+                fontSize: labelFontSize,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFFDC2626),
+              ),
+            ),
+            SizedBox(height: isMobile ? 8 : 12),
+            
+            TextFormField(
+              controller: _montantController,
+              decoration: InputDecoration(
+                labelText: 'Montant en USD',
+                border: const OutlineInputBorder(),
+                prefixIcon: Icon(Icons.attach_money, size: ResponsiveDialogUtils.getIconSize(context)),
+                suffixText: 'USD',
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: isMobile ? 12 : 16,
+                  vertical: isMobile ? 12 : 16,
+                ),
+              ),
+              keyboardType: TextInputType.number,
+              style: TextStyle(fontSize: isMobile ? 16 : 18),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Le montant est requis';
+                }
+                final montant = double.tryParse(value);
+                if (montant == null || montant <= 0) {
+                  return 'Montant invalide';
+                }
+                return null;
+              },
+            ),
+            
             SizedBox(height: fieldSpacing),
                       
             // Shop de destination (pour tous les transferts sortants)
@@ -234,6 +313,7 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
                       setState(() {
                         _selectedShop = value;
                       });
+                      _calculateCommission();
                     },
                     validator: (value) {
                       if (_transferType == OperationType.transfertNational && value == null) {
@@ -305,44 +385,7 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
               ),
               style: TextStyle(fontSize: isMobile ? 16 : 18),
             ),
-            SizedBox(height: fieldSpacing),
-            
-            // Montant
-            Text(
-              '${_transferType == OperationType.transfertNational ? '5' : '4'}. Montant du transfert *',
-              style: TextStyle(
-                fontSize: labelFontSize,
-                fontWeight: FontWeight.bold,
-                color: const Color(0xFFDC2626),
-              ),
-            ),
-            SizedBox(height: isMobile ? 8 : 12),
-            
-            TextFormField(
-              controller: _montantController,
-              decoration: InputDecoration(
-                labelText: 'Montant en USD',
-                border: const OutlineInputBorder(),
-                prefixIcon: Icon(Icons.attach_money, size: ResponsiveDialogUtils.getIconSize(context)),
-                suffixText: 'USD',
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: isMobile ? 12 : 16,
-                  vertical: isMobile ? 12 : 16,
-                ),
-              ),
-              keyboardType: TextInputType.number,
-              style: TextStyle(fontSize: isMobile ? 16 : 18),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Le montant est requis';
-                }
-                final montant = double.tryParse(value);
-                if (montant == null || montant <= 0) {
-                  return 'Montant invalide';
-                }
-                return null;
-              },
-            ),
+
             SizedBox(height: fieldSpacing),
             
             // Mode de paiement

@@ -34,6 +34,7 @@ class RatesService extends ChangeNotifier {
       debugPrint('Commissions chargées: ${_commissions.length}');
       
       _errorMessage = null;
+      notifyListeners(); // Notifier les widgets après le chargement
     } catch (e) {
       _errorMessage = 'Erreur lors du chargement: $e';
       debugPrint(_errorMessage);
@@ -117,6 +118,9 @@ class RatesService extends ChangeNotifier {
     required String type,
     required double taux,
     required String description,
+    int? shopId,
+    int? shopSourceId,
+    int? shopDestinationId,
   }) async {
     _setLoading(true);
     try {
@@ -128,6 +132,12 @@ class RatesService extends ChangeNotifier {
         type: type,
         taux: taux,
         description: description,
+        shopId: shopId,
+        shopSourceId: shopSourceId,
+        shopDestinationId: shopDestinationId,
+        isSynced: false,  // À synchroniser
+        lastModifiedAt: DateTime.now(),
+        lastModifiedBy: 'USER',
       );
 
       await LocalDB.instance.saveCommission(newCommission);
@@ -147,7 +157,14 @@ class RatesService extends ChangeNotifier {
   Future<bool> updateCommission(CommissionModel commission) async {
     _setLoading(true);
     try {
-      await LocalDB.instance.updateCommission(commission);
+      // Mettre à jour avec métadonnées de sync
+      final updatedCommission = commission.copyWith(
+        isSynced: false,  // À synchroniser
+        lastModifiedAt: DateTime.now(),
+        lastModifiedBy: 'USER',
+      );
+      
+      await LocalDB.instance.updateCommission(updatedCommission);
       await loadRatesAndCommissions();
       _errorMessage = null;
       return true;
@@ -200,6 +217,68 @@ class RatesService extends ChangeNotifier {
     }
   }
 
+  // Obtenir une commission par type et shop (pour les commissions spécifiques)
+  CommissionModel? getCommissionByTypeAndShop(String type, int? shopId) {
+    try {
+      // Si shopId est fourni, chercher d'abord une commission spécifique au shop
+      if (shopId != null) {
+        try {
+          return _commissions.firstWhere(
+            (commission) => commission.type == type && commission.shopId == shopId,
+          );
+        } catch (e) {
+          // Pas de commission spécifique, continuer vers la commission générale
+        }
+      }
+      
+      // Sinon, retourner la commission générale (sans shopId)
+      return _commissions.firstWhere(
+        (commission) => commission.type == type && commission.shopId == null,
+      );
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Obtenir une commission par route shop-to-shop (shop source et destination)
+  CommissionModel? getCommissionByShopsAndType(int? shopSourceId, int? shopDestinationId, String type) {
+    try {
+      // Chercher une commission spécifique à cette route
+      if (shopSourceId != null && shopDestinationId != null) {
+        try {
+          return _commissions.firstWhere(
+            (commission) => 
+              commission.type == type && 
+              commission.shopSourceId == shopSourceId && 
+              commission.shopDestinationId == shopDestinationId,
+          );
+        } catch (e) {
+          // Pas de commission spécifique pour cette route
+        }
+      }
+      
+      // Fallback: chercher commission par shop source uniquement
+      if (shopSourceId != null) {
+        try {
+          return _commissions.firstWhere(
+            (commission) => 
+              commission.type == type && 
+              commission.shopId == shopSourceId && 
+              commission.shopSourceId == null && 
+              commission.shopDestinationId == null,
+          );
+        } catch (e) {
+          // Pas de commission par shop source
+        }
+      }
+      
+      // Fallback final: commission générale
+      return getCommissionByType(type);
+    } catch (e) {
+      return null;
+    }
+  }
+
   // Obtenir un taux par ID
   TauxModel? getTauxById(int id) {
     try {
@@ -227,6 +306,36 @@ class RatesService extends ChangeNotifier {
     
     // SORTANT depuis RDC = commission unique
     final commission = getCommissionByType('SORTANT');
+    if (commission != null) {
+      return amount * (1 + commission.taux / 100);
+    }
+    return amount;
+  }
+
+  // Calculer le montant avec commission pour un shop spécifique
+  double calculateAmountWithCommissionForShop(double amount, String transactionType, int? shopId) {
+    // ENTRANT vers RDC = gratuit (0% commission)
+    if (transactionType == 'ENTRANT') {
+      return amount;
+    }
+    
+    // SORTANT depuis RDC = commission (spécifique au shop si disponible)
+    final commission = getCommissionByTypeAndShop('SORTANT', shopId);
+    if (commission != null) {
+      return amount * (1 + commission.taux / 100);
+    }
+    return amount;
+  }
+
+  // Calculer le montant avec commission pour une route shop-to-shop
+  double calculateAmountWithCommissionForShops(double amount, String transactionType, int? shopSourceId, int? shopDestinationId) {
+    // ENTRANT vers RDC = gratuit (0% commission)
+    if (transactionType == 'ENTRANT') {
+      return amount;
+    }
+    
+    // SORTANT = commission (spécifique à la route si disponible)
+    final commission = getCommissionByShopsAndType(shopSourceId, shopDestinationId, 'SORTANT');
     if (commission != null) {
       return amount * (1 + commission.taux / 100);
     }

@@ -57,7 +57,10 @@ class RapportClotureService {
           'recu': flots['recu'] as double,
           'envoye': flots['envoye'] as double,
         },
-        transferts: transferts,
+        transferts: {
+          'recus': transferts['recus'] as double,
+          'servis': transferts['servis'] as double,
+        },
         operationsClients: {
           'depots': operationsClients['depots'] as double,
           'retraits': operationsClients['retraits'] as double,
@@ -95,6 +98,7 @@ class RapportClotureService {
         // Transferts
         transfertsRecus: transferts['recus']!,
         transfertsServis: transferts['servis']!,
+        transfertsEnAttente: transferts['enAttente']!,
         
         // Clients
         depotsClients: operationsClients['depots']!,
@@ -115,6 +119,9 @@ class RapportClotureService {
         // NOUVEAU: Listes détaillées des opérations clients
         depotsClientsDetails: operationsClients['depotsDetails'] as List<OperationResume>,
         retraitsClientsDetails: operationsClients['retraitsDetails'] as List<OperationResume>,
+        
+        // NOUVEAU: Liste détaillée des transferts en attente
+        transfertsEnAttenteDetails: transferts['enAttenteDetails'] as List<OperationResume>,
         
         // Cash disponible
         cashDisponibleCash: cashDisponible['cash']!,
@@ -229,8 +236,8 @@ class RapportClotureService {
     };
   }
 
-  /// Calculer les transferts (reçus et servis)
-  Future<Map<String, double>> _calculerTransferts(int shopId, DateTime dateRapport, List<OperationModel>? providedOperations) async {
+  /// Calculer les transferts (reçus, servis et en attente)
+  Future<Map<String, dynamic>> _calculerTransferts(int shopId, DateTime dateRapport, List<OperationModel>? providedOperations) async {
     // Utiliser les opérations fournies (de "Mes Ops") ou charger depuis LocalDB
     final operations = providedOperations ?? await LocalDB.instance.getAllOperations();
     
@@ -240,7 +247,7 @@ class RapportClotureService {
         (op.type == OperationType.transfertNational ||
          op.type == OperationType.transfertInternationalSortant) &&
         _isSameDay(op.dateOp, dateRapport)
-    );
+    ).toList();
 
     // Transferts SERVIS = nous servons le client (SORTIE d'argent)
     final transfertsServis = operations.where((op) =>
@@ -249,11 +256,35 @@ class RapportClotureService {
          op.type == OperationType.transfertInternationalEntrant) &&
         op.statut == OperationStatus.validee &&
         _isSameDay(op.lastModifiedAt ?? op.dateOp, dateRapport)
-    );
+    ).toList();
+    
+    // Transferts EN ATTENTE = transferts à servir (shop destination, statut enAttente)
+    final transfertsEnAttente = operations.where((op) =>
+        op.shopDestinationId == shopId &&
+        (op.type == OperationType.transfertNational ||
+         op.type == OperationType.transfertInternationalEntrant ||
+         op.type == OperationType.transfertInternationalSortant) &&
+        op.statut == OperationStatus.enAttente
+    ).toList();
+    
+    // Créer la liste détaillée des transferts en attente
+    final transfertsEnAttenteDetails = transfertsEnAttente.map((op) => OperationResume(
+      operationId: op.id!,
+      type: 'transfert_en_attente',
+      montant: op.montantNet,
+      devise: op.devise,
+      date: op.dateOp,
+      destinataire: op.destinataire,
+      observation: op.observation,
+      notes: op.notes,
+      modePaiement: op.modePaiement.name,
+    )).toList();
 
     return {
       'recus': transfertsRecus.fold(0.0, (sum, op) => sum + op.montantBrut), // ENTRÉE: Client nous paie
       'servis': transfertsServis.fold(0.0, (sum, op) => sum + op.montantNet), // SORTIE: On sert le client
+      'enAttente': transfertsEnAttente.fold(0.0, (sum, op) => sum + op.montantNet), // À SERVIR: Transferts en attente
+      'enAttenteDetails': transfertsEnAttenteDetails,
     };
   }
 

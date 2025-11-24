@@ -1099,7 +1099,7 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
               children: [
                 Icon(Icons.delete, size: 16, color: Colors.red),
                 SizedBox(width: 8),
-                Text('Supprimer', style: TextStyle(color: Colors.red)),
+                Text('Suppr', style: TextStyle(color: Colors.red)),
               ],
             ),
           ),

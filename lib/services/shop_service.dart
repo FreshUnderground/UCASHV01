@@ -3,6 +3,7 @@ import '../models/shop_model.dart';
 import '../models/caisse_model.dart';
 import '../models/operation_model.dart';
 import '../models/journal_caisse_model.dart';
+import '../models/cloture_caisse_model.dart';
 import 'local_db.dart';
 import 'sync_service.dart';
 import '../utils/sync_diagnostics.dart';
@@ -22,11 +23,18 @@ class ShopService extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
 
   // Charger tous les shops
-  Future<void> loadShops() async {
+  Future<void> loadShops({bool forceRefresh = false}) async {
     _setLoading(true);
     try {
+      // Si forceRefresh, vider d'abord le cache
+      if (forceRefresh) {
+        _shops.clear();
+        debugPrint('🗑️ [ShopService] Cache vidé - Rechargement forcé');
+      }
+      
       _shops = await LocalDB.instance.getAllShops();
       _errorMessage = null;
+      notifyListeners(); // Notifier les widgets après le chargement
     } catch (e) {
       _errorMessage = 'Erreur lors du chargement des shops: $e';
       debugPrint(_errorMessage);
@@ -72,10 +80,8 @@ class ShopService extends ChangeNotifier {
       // Créer les caisses par défaut pour ce shop avec les capitaux spécifiés
       await _createDefaultCaisses(shopId, capitalCash, capitalAirtelMoney, capitalMPesa, capitalOrangeMoney);
       
-      // Créer une opération de dépôt pour le cash initial (entrée en caisse)
-      if (capitalCash > 0) {
-        await _createInitialCashDeposit(shopId, capitalCash, designation);
-      }
+      // Créer une clôture de la veille comme solde antérieur au lieu d'une opération de dépôt
+      await _createInitialClosureAsAnterieur(shopId, capitalCash, capitalAirtelMoney, capitalMPesa, capitalOrangeMoney, designation);
       
       // Recharger la liste
       await loadShops();
@@ -109,7 +115,7 @@ class ShopService extends ChangeNotifier {
       );
       
       await LocalDB.instance.updateShop(updatedShop);
-      await loadShops();
+      await loadShops(forceRefresh: true);
       
       // Synchronisation en arrière-plan
       _syncInBackground();
@@ -184,66 +190,77 @@ class ShopService extends ChangeNotifier {
     };
   }
 
-  // Créer une opération de dépôt pour le cash initial
-  Future<void> _createInitialCashDeposit(int shopId, double montant, String shopName) async {
-    final operationId = DateTime.now().millisecondsSinceEpoch;
-    final operation = OperationModel(
-      codeOps: '', // Sera généré automatiquement
-      id: operationId,
-      type: OperationType.depot,
-      montantBrut: montant,
-      montantNet: montant,
-      commission: 0.0, // Pas de commission pour le dépôt initial
-      shopSourceId: shopId,
-      shopSourceDesignation: shopName,
-      clientId: null, // Pas de client pour le dépôt initial
-      agentId: 1, // Agent système pour le dépôt initial
-      agentUsername: 'system',
-      modePaiement: ModePaiement.cash,
-      statut: OperationStatus.terminee, // Directement terminé
-      dateOp: DateTime.now(),
-      destinataire: 'CAPITAL INITIAL',
-      notes: 'Dépôt initial du capital cash lors de la création du shop $shopName',
-      lastModifiedBy: 'SYSTEM',
-      // Marquer comme non synchronisé pour forcer l'upload
-      isSynced: false,
-      lastModifiedAt: DateTime.now(),
-    );
-
-    await LocalDB.instance.saveOperation(operation);
-    
-    // Synchroniser l'opération de capital initial vers le serveur
+  // Créer une clôture de la veille comme solde antérieur
+  Future<void> _createInitialClosureAsAnterieur(int shopId, double capitalCash, double capitalAirtel, double capitalMPesa, double capitalOrange, String shopName) async {
     try {
-      final syncService = SyncService();
-      if (syncService.isOnline) {
-        debugPrint('📤 Synchronisation opération capital initial vers le serveur...');
-        await syncService.syncAll(userId: 'system');
-        debugPrint('✅ Opération capital initial synchronisée');
-      } else {
-        await syncService.queueOperation(operation.toJson());
-        debugPrint('📋 Opération capital initial mise en file d\'attente (offline)');
+      final totalCapital = capitalCash + capitalAirtel + capitalMPesa + capitalOrange;
+      
+      // Date de la veille (hier)
+      final dateVeille = DateTime.now().subtract(const Duration(days: 1));
+      final dateVeilleNormalisee = DateTime(dateVeille.year, dateVeille.month, dateVeille.day);
+      
+      // Générer un ID unique pour la clôture (timestamp)
+      final clotureId = DateTime.now().millisecondsSinceEpoch;
+      
+      // Créer une clôture de caisse pour la veille
+      final cloture = ClotureCaisseModel(
+        id: clotureId,  // Ajouter l'ID généré
+        shopId: shopId,
+        dateCloture: dateVeilleNormalisee,
+        
+        // Montants saisis (ce que l'agent a "compté")
+        soldeSaisiCash: capitalCash,
+        soldeSaisiAirtelMoney: capitalAirtel,
+        soldeSaisiMPesa: capitalMPesa,
+        soldeSaisiOrangeMoney: capitalOrange,
+        soldeSaisiTotal: totalCapital,
+        
+        // Montants calculés (identiques car c'est le capital initial)
+        soldeCalculeCash: capitalCash,
+        soldeCalculeAirtelMoney: capitalAirtel,
+        soldeCalculeMPesa: capitalMPesa,
+        soldeCalculeOrangeMoney: capitalOrange,
+        soldeCalculeTotal: totalCapital,
+        
+        // Écarts (zéro car saisi = calculé)
+        ecartCash: 0.0,
+        ecartAirtelMoney: 0.0,
+        ecartMPesa: 0.0,
+        ecartOrangeMoney: 0.0,
+        ecartTotal: 0.0,
+        
+        cloturePar: 'SYSTEM',
+        dateEnregistrement: DateTime.now(),
+        notes: 'Clôture initiale automatique lors de la création du shop $shopName - Servira de solde antérieur pour aujourd\'hui',
+      );
+      
+      await LocalDB.instance.saveClotureCaisse(cloture);
+      
+      debugPrint('✅ Clôture initiale créée pour la veille (${dateVeilleNormalisee.toIso8601String().split('T')[0]})');
+      debugPrint('   Solde Total: ${totalCapital.toStringAsFixed(2)} USD');
+      debugPrint('   - Cash: ${capitalCash.toStringAsFixed(2)} USD');
+      debugPrint('   - Airtel Money: ${capitalAirtel.toStringAsFixed(2)} USD');
+      debugPrint('   - M-Pesa: ${capitalMPesa.toStringAsFixed(2)} USD');
+      debugPrint('   - Orange Money: ${capitalOrange.toStringAsFixed(2)} USD');
+      debugPrint("   Cette clôture servira de solde antérieur pour commencer les transactions aujourd'hui");
+      
+      // Synchronisation de la clôture vers le serveur
+      try {
+        final syncService = SyncService();
+        if (syncService.isOnline) {
+          debugPrint('📤 Synchronisation clôture initiale vers le serveur...');
+          await syncService.syncAll(userId: 'system');
+          debugPrint('✅ Clôture initiale synchronisée');
+        } else {
+          debugPrint('📋 Clôture initiale sera synchronisée plus tard (offline)');
+        }
+      } catch (e) {
+        debugPrint('⚠️ Erreur sync clôture initiale: $e (sera retentée plus tard)');
       }
     } catch (e) {
-      debugPrint('⚠️ Erreur sync capital initial: $e (sera retentée plus tard)');
+      debugPrint('❌ Erreur création clôture initiale: $e');
+      rethrow;
     }
-    
-    // Créer également une entrée dans le journal de caisse
-    final journalEntry = JournalCaisseModel(
-      shopId: shopId,
-      agentId: 1, // Agent système
-      libelle: 'Dépôt initial - Capital Cash',
-      montant: montant,
-      type: TypeMouvement.entree,
-      mode: ModePaiement.cash,
-      dateAction: DateTime.now(),
-      operationId: operationId,
-      notes: 'Capital initial lors de la création du shop $shopName',
-      lastModifiedBy: 'SYSTEM',
-      lastModifiedAt: DateTime.now(),
-    );
-    
-    await LocalDB.instance.saveJournalEntry(journalEntry);
-    debugPrint('✅ Dépôt initial créé: opération ID $operationId + journal de caisse');
   }
 
   void _setLoading(bool loading) {
@@ -260,20 +277,24 @@ class ShopService extends ChangeNotifier {
     });
   }
 
-  // Méthode utilitaire pour créer les opérations de dépôt initial pour les shops existants
-  Future<void> createMissingInitialDeposits() async {
+  // Méthode utilitaire pour créer les clôtures initiales pour les shops existants sans clôture
+  Future<void> createMissingInitialClosures() async {
     for (final shop in _shops) {
-      if (shop.capitalCash > 0) {
-        // Vérifier si une opération de dépôt initial existe déjà
-        final existingOperations = await LocalDB.instance.getOperationsByShop(shop.id!);
-        final hasInitialDeposit = existingOperations.any((op) => 
-          op.type == OperationType.depot && 
-          op.destinataire == 'CAPITAL INITIAL'
-        );
+      if (shop.id != null) {
+        // Vérifier si une clôture existe déjà pour la veille
+        final dateVeille = DateTime.now().subtract(const Duration(days: 1));
+        final clotureExistante = await LocalDB.instance.getClotureCaisseByDate(shop.id!, dateVeille);
         
-        if (!hasInitialDeposit) {
-          await _createInitialCashDeposit(shop.id!, shop.capitalCash, shop.designation);
-          debugPrint('Dépôt initial créé pour le shop ${shop.designation}: ${shop.capitalCash} USD');
+        if (clotureExistante == null) {
+          await _createInitialClosureAsAnterieur(
+            shop.id!, 
+            shop.capitalCash, 
+            shop.capitalAirtelMoney, 
+            shop.capitalMPesa, 
+            shop.capitalOrangeMoney, 
+            shop.designation
+          );
+          debugPrint('Clôture initiale créée pour le shop ${shop.designation}');
         }
       }
     }

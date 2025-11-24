@@ -1,15 +1,15 @@
 import '../services/shop_service.dart';
 
-/// Utilitaire pour corriger les shops existants en créant les opérations
-/// de dépôt initial manquantes pour le cash initial.
+/// Utilitaire pour corriger les shops existants en créant les clôtures
+/// initiales manquantes pour servir de solde antérieur.
 /// 
-/// Cette correction est nécessaire car avant cette mise à jour,
-/// le cash initial n'était pas enregistré comme une entrée en caisse.
+/// Cette correction est nécessaire pour avoir un solde antérieur
+/// permettant aux agents de commencer les transactions.
 class FixInitialDeposits {
   
   /// Exécute la correction pour tous les shops existants
   static Future<void> execute() async {
-    print('🔧 Correction des dépôts initiaux manquants...');
+    print('🔧 Correction des clôtures initiales manquantes...');
     
     try {
       final shopService = ShopService.instance;
@@ -17,11 +17,11 @@ class FixInitialDeposits {
       // Charger tous les shops
       await shopService.loadShops();
       
-      // Créer les dépôts initiaux manquants
-      await shopService.createMissingInitialDeposits();
+      // Créer les clôtures initiales manquantes
+      await shopService.createMissingInitialClosures();
       
       print('✅ Correction terminée avec succès !');
-      print('📊 Les mouvements de caisse incluent maintenant le cash initial.');
+      print('📊 Les shops ont maintenant un solde antérieur (clôture de la veille).');
       
     } catch (e) {
       print('❌ Erreur lors de la correction: $e');
@@ -35,11 +35,10 @@ class FixInitialDeposits {
       final shopService = ShopService.instance;
       await shopService.loadShops();
       
-      // Vérifier s'il y a des shops avec du cash mais sans dépôt initial
+      // Vérifier s'il y a des shops sans clôture initiale
       for (final shop in shopService.shops) {
-        if (shop.capitalCash > 0) {
-          // Cette vérification nécessiterait d'accéder à LocalDB
-          // Pour simplifier, on retourne true si des shops ont du cash
+        if (shop.id != null) {
+          // Si des shops existent, on suppose qu'ils ont besoin d'une clôture initiale
           return true;
         }
       }

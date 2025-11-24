@@ -6,6 +6,7 @@ import '../services/rates_service.dart';
 import '../models/taux_model.dart';
 import '../models/commission_model.dart';
 import '../data/initial_rates_data.dart';
+import 'commission_dialog_modern.dart';
 
 class TauxCommissionsManagement extends StatefulWidget {
   const TauxCommissionsManagement({super.key});
@@ -783,14 +784,14 @@ class _TauxCommissionsManagementState extends State<TauxCommissionsManagement> {
   void _showCreateCommissionDialog() {
     showDialog(
       context: context,
-      builder: (context) => _CreateCommissionDialog(),
+      builder: (context) => const ModernCommissionDialog(),
     );
   }
 
   void _showEditCommissionDialog(CommissionModel commission) {
     showDialog(
       context: context,
-      builder: (context) => _EditCommissionDialog(commission: commission),
+      builder: (context) => ModernCommissionDialog(commission: commission),
     );
   }
 

@@ -29,7 +29,9 @@ try {
     // Construire la requête
     $sql = "
         SELECT 
-            id, type, taux, description, is_active,
+            id, type, taux, description, 
+            shop_id, shop_source_id, shop_destination_id,
+            is_active,
             last_modified_at, last_modified_by, created_at,
             is_synced, synced_at
         FROM commissions
@@ -69,6 +71,9 @@ try {
             'type' => $c['type'],
             'taux' => (float)$c['taux'],
             'description' => $c['description'],
+            'shop_id' => $c['shop_id'] ? (int)$c['shop_id'] : null,
+            'shop_source_id' => $c['shop_source_id'] ? (int)$c['shop_source_id'] : null,
+            'shop_destination_id' => $c['shop_destination_id'] ? (int)$c['shop_destination_id'] : null,
             'isActive' => (bool)$c['is_active'],
             'lastModifiedAt' => $c['last_modified_at'],
             'lastModifiedBy' => $c['last_modified_by'],

@@ -62,6 +62,21 @@ class SyncService {
   Future<void> initialize() async {
     debugPrint('🔄 Initialisation du service de synchronisation...');
 
+    // Vérifier si le cache des commissions doit être réinitialisé (une seule fois)
+    final prefs = await SharedPreferences.getInstance();
+    final needsCommissionReset = !prefs.containsKey('commissions_cache_reset_v1');
+    
+    if (needsCommissionReset) {
+      debugPrint('🆕 Première utilisation après mise à jour - reset cache commissions nécessaire');
+      try {
+        // Marquer comme fait AVANT le reset pour éviter les boucles en cas d'erreur
+        await prefs.setBool('commissions_cache_reset_v1', true);
+        await resetCommissionsCache();
+      } catch (e) {
+        debugPrint('⚠️ Erreur lors du reset initial du cache commissions: $e');
+        // Continuer quand même l'initialisation
+      }
+    }
     
     // Écouter les changements de connectivité
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen(_onConnectivityChanged);
@@ -252,6 +267,51 @@ class SyncService {
     }
   }
 
+  /// Réinitialise le cache local des commissions et force un re-téléchargement complet
+  Future<void> resetCommissionsCache() async {
+    try {
+      debugPrint('🗑️ Réinitialisation du cache des commissions...');
+      
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs.getKeys();
+      int deletedCount = 0;
+      
+      // Supprimer toutes les clés commission_*
+      for (String key in keys) {
+        if (key.startsWith('commission_')) {
+          await prefs.remove(key);
+          deletedCount++;
+        }
+      }
+      
+      debugPrint('🗑️ $deletedCount commissions supprimées du cache local');
+      
+      // Supprimer le timestamp de dernière sync pour forcer un full download
+      await prefs.remove('last_sync_commissions');
+      debugPrint('⏱️ Timestamp de sync commissions réinitialisé');
+      
+      // Forcer le re-téléchargement depuis le serveur
+      debugPrint('📥 Téléchargement des commissions depuis MySQL...');
+      await _downloadTableData('commissions', 'admin');
+      
+      // Recharger les commissions en mémoire
+      await RatesService.instance.loadRatesAndCommissions();
+      
+      final commissions = RatesService.instance.commissions;
+      debugPrint('✅ ${commissions.length} commissions rechargées depuis le serveur');
+      
+      // Afficher les détails des commissions pour vérification
+      for (var c in commissions) {
+        debugPrint('   📊 ${c.description}: ${c.taux}% (Source: ${c.shopSourceId}, Dest: ${c.shopDestinationId})');
+      }
+      
+      debugPrint('✅ Cache des commissions réinitialisé avec succès');
+    } catch (e) {
+      debugPrint('❌ Erreur lors de la réinitialisation du cache des commissions: $e');
+      rethrow;
+    }
+  }
+
   /// Upload avec retry logic pour échecs temporaires
   Future<void> _uploadTableDataWithRetry(String tableName, String userId, {int maxRetries = 3}) async {
     for (int attempt = 1; attempt <= maxRetries; attempt++) {
@@ -365,6 +425,15 @@ class SyncService {
       }
 
       debugPrint('📤 $tableName: ${localData.length} éléments à uploader');
+      
+      // LOGS DÉTAILLÉS pour commissions
+      if (tableName == 'commissions' && localData.isNotEmpty) {
+        debugPrint('🔍 Détail des commissions à uploader:');
+        for (var comm in localData) {
+          debugPrint('   ID: ${comm['id']}, Type: ${comm['type']}, Taux: ${comm['taux']}%, isSynced: ${comm['is_synced']}');
+          debugPrint('   ShopId: ${comm['shop_id']}, SourceId: ${comm['shop_source_id']}, DestId: ${comm['shop_destination_id']}');
+        }
+      }
       
       // VALIDATION: Vérifier les données AVANT upload
       final validatedData = <Map<String, dynamic>>[];
@@ -530,7 +599,8 @@ class SyncService {
       if (response.statusCode == 200) {
         final result = jsonDecode(response.body);
         if (result['success'] == true) {
-          final remoteData = result['entities'] as List;
+          // Gérer le cas où entities est null ou n'est pas une liste
+          final remoteData = (result['entities'] as List?) ?? [];
           debugPrint('📥 $tableName: ${remoteData.length} éléments reçus du serveur');
           
           if (remoteData.isNotEmpty) {
@@ -923,11 +993,15 @@ class SyncService {
           
         case 'commissions':
           final commissions = RatesService.instance.commissions;
-          // Pour l'instant, envoyer toutes les commissions jusqu'à ce que le modèle soit mis à jour
+          debugPrint('📊 COMMISSIONS: Total en mémoire: ${commissions.length}');
+          
+          // Filtrer uniquement les commissions non synchronisées
           unsyncedData = commissions
               .map((c) {
                 final json = _addSyncMetadata(c.toJson(), 'commission');
                 if (json['is_synced'] != true) {
+                  debugPrint('📤 Commission ID ${c.id} à synchroniser: ${c.type} - ${c.description}');
+                  debugPrint('   shopId: ${c.shopId}, shopSourceId: ${c.shopSourceId}, shopDestinationId: ${c.shopDestinationId}');
                   return json;
                 }
                 return null;
@@ -935,6 +1009,8 @@ class SyncService {
               .where((item) => item != null)
               .cast<Map<String, dynamic>>()
               .toList();
+          
+          debugPrint('📤 COMMISSIONS: ${unsyncedData.length}/${commissions.length} non synchronisées');
           break;
           
         case 'document_headers':
@@ -1217,11 +1293,16 @@ class SyncService {
           
         case 'commissions':
           final commission = CommissionModel.fromJson(data);
-          // Vérifier doublon par type
+          // Vérifier doublon par type + shopId + shopSourceId + shopDestinationId
           final commissions = RatesService.instance.commissions;
-          final existingCommission = commissions.where((c) => c.type == commission.type).firstOrNull;
+          final existingCommission = commissions.where((c) => 
+            c.type == commission.type &&
+            c.shopId == commission.shopId &&
+            c.shopSourceId == commission.shopSourceId &&
+            c.shopDestinationId == commission.shopDestinationId
+          ).firstOrNull;
           if (existingCommission != null) {
-            debugPrint('⚠️ Doublon ignoré: commission type "${commission.type}" existe déjà');
+            debugPrint('⚠️ Doublon ignoré: commission similaire existe déjà');
             return;
           }
           
@@ -1229,6 +1310,9 @@ class SyncService {
             type: commission.type,
             taux: commission.taux,
             description: commission.description,
+            shopId: commission.shopId,
+            shopSourceId: commission.shopSourceId,
+            shopDestinationId: commission.shopDestinationId,
           );
           break;
           
@@ -1721,7 +1805,7 @@ class SyncService {
     debugPrint('✅ Statut de synchronisation réinitialisé pour ${tables.length} tables');
   }
   
-  /// Démarre la synchronisation automatique périodique (toutes les 30 secondes)
+  /// Démarre la synchronisation automatique périodique (toutes les 2 minutes)
   void startAutoSync() {
     stopAutoSync(); // Arrêter tout timer existant
     
@@ -1735,17 +1819,85 @@ class SyncService {
       debugPrint('   ➢ isOnline: $_isOnline');
       
       if (_isAutoSyncEnabled && !_isSyncing) {
-        debugPrint('🔄 [🕒 ${DateTime.now().toIso8601String()}] Synchronisation automatique - OPERATIONS SEULEMENT');
+        debugPrint('🔄 [🕒 ${DateTime.now().toIso8601String()}] Synchronisation automatique - OPERATIONS, FLOTS, CLÔTURES & COMMISSIONS');
         
-        // Synchroniser UNIQUEMENT les opérations (plus rapide)
-        final result = await syncOperations();
+        int successCount = 0;
+        int errorCount = 0;
         
-        if (result) {
-          _lastSyncTime = DateTime.now();
-          debugPrint('✅ Synchronisation automatique des opérations terminée avec succès');
-        } else {
-          debugPrint('⚠️ Synchronisation automatique des opérations échouée');
+        // 1. Synchroniser les opérations (transferts)
+        try {
+          final transferSyncService = TransferSyncService();
+          await transferSyncService.syncTransfers();
+          debugPrint('✅ Opérations synchronisées');
+          successCount++;
+        } catch (e) {
+          debugPrint('⚠️ Erreur sync opérations: $e');
+          errorCount++;
+          // Continuer avec les autres sync
         }
+        
+        // 2. Upload des flots non synchronisés
+        try {
+          debugPrint('📤 Upload des flots...');
+          await _uploadTableData('flots', 'auto_sync');
+          successCount++;
+        } catch (e) {
+          debugPrint('⚠️ Erreur upload flots: $e');
+          errorCount++;
+        }
+        
+        // 3. Download des nouveaux flots depuis le serveur
+        try {
+          debugPrint('📥 Download des flots...');
+          await _downloadTableData('flots', 'auto_sync');
+          successCount++;
+        } catch (e) {
+          debugPrint('⚠️ Erreur download flots: $e');
+          errorCount++;
+        }
+        
+        // 4. Upload des clôtures de caisse non synchronisées
+        try {
+          debugPrint('📤 Upload des clôtures de caisse...');
+          await _uploadTableData('cloture_caisse', 'auto_sync');
+          successCount++;
+        } catch (e) {
+          debugPrint('⚠️ Erreur upload clôtures: $e');
+          errorCount++;
+        }
+        
+        // 5. Download des nouvelles clôtures depuis le serveur
+        try {
+          debugPrint('📥 Download des clôtures de caisse...');
+          await _downloadTableData('cloture_caisse', 'auto_sync');
+          successCount++;
+        } catch (e) {
+          debugPrint('⚠️ Erreur download clôtures: $e');
+          errorCount++;
+        }
+        
+        // 6. Upload des commissions non synchronisées
+        try {
+          debugPrint('📤 Upload des commissions...');
+          await _uploadTableData('commissions', 'auto_sync');
+          successCount++;
+        } catch (e) {
+          debugPrint('⚠️ Erreur upload commissions: $e');
+          errorCount++;
+        }
+        
+        // 7. Download des nouvelles commissions depuis le serveur
+        try {
+          debugPrint('📥 Download des commissions...');
+          await _downloadTableData('commissions', 'auto_sync');
+          successCount++;
+        } catch (e) {
+          debugPrint('⚠️ Erreur download commissions: $e');
+          errorCount++;
+        }
+        
+        _lastSyncTime = DateTime.now();
+        debugPrint('✅ Synchronisation automatique terminée: $successCount réussies, $errorCount échouées');
       } else {
         debugPrint('⏸️ Synchronisation automatique ignorée (conditions non remplies)');
       }
