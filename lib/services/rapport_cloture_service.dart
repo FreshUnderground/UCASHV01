@@ -227,12 +227,19 @@ class RapportClotureService {
       modePaiement: f.modePaiement.name,
     )).toList();
     
-    // GROUPER LES FLOTS REÇUS PAR SHOP EXPÉDITEUR
+    // GROUPER LES FLOTS REÇUS PAR SHOP EXPÉDITEUR (SOURCE)
     final flotsRecusGroupes = <String, double>{};
     for (var flot in flotsRecus) {
-      final shopSource = flot.shopSourceDesignation;
+      final shopSource = flot.shopSourceDesignation.isNotEmpty 
+          ? flot.shopSourceDesignation 
+          : 'Shop inconnu';
       flotsRecusGroupes[shopSource] = (flotsRecusGroupes[shopSource] ?? 0.0) + flot.montant;
     }
+    
+    debugPrint('📊 FLOTS REÇUS GROUPÉS PAR SHOP SOURCE:');
+    flotsRecusGroupes.forEach((shop, montant) {
+      debugPrint('   - $shop: ${montant.toStringAsFixed(2)} USD');
+    });
     
     final flotsEnvoyesDetails = flotsEnvoyes.map((f) => FlotResume(
       flotId: f.id!,
