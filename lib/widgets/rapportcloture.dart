@@ -696,11 +696,11 @@ class _RapportClotureState extends State<RapportCloture> {
             // Détails des FLOTs reçus GROUPÉS PAR SHOP EXPÉDITEUR
             if (rapport.flotsRecusGroupes.isNotEmpty) ...[
               const SizedBox(height: 8),
-              const Text('FLOTs Reçus Détails (Groupé par Shop):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              const Text('FLOTs Reçus Détails:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
               const Divider(),
               ...rapport.flotsRecusGroupes.entries.map((entry) => _buildFlotDetailRow(
                 entry.key, // Nom du shop expéditeur
-                'Total du jour',
+                '',
                 entry.value, // Somme des montants
                 Colors.green,
               )).toList(),
@@ -709,7 +709,7 @@ class _RapportClotureState extends State<RapportCloture> {
             // Détails des FLOTS envoyés GROUPÉS PAR SHOP DESTINATION
             if (rapport.flotsEnvoyesGroupes.isNotEmpty) ...[
               const SizedBox(height: 8),
-              const Text('FLOTs Envoyés Détails (Groupé par Shop):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              const Text('FLOTs Envoyés Détails :', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
               const Divider(),
               ...rapport.flotsEnvoyesGroupes.entries.map((entry) => _buildFlotDetailRow(
                 entry.key, // Nom du shop destination
@@ -730,15 +730,42 @@ class _RapportClotureState extends State<RapportCloture> {
             _buildMovementRow('Transferts', rapport.transfertsRecus, true),
             _buildMovementRow('Servis', rapport.transfertsServis, false),
             _buildMovementRow('En attente (Non Servie)', rapport.transfertsEnAttente, false),
-            // Détails des transferts en attente
-            if (rapport.transfertsEnAttenteDetails.isNotEmpty) ...[
+            
+            // Détails des TRANSFERTS REÇUS GROUPÉS PAR SHOP DESTINATION
+            if (rapport.transfertsRecusGroupes.isNotEmpty) ...[
               const SizedBox(height: 8),
-              const Text('Détails des transferts en attente:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              const Text('Transferts Reçus Détails (Groupé par Shop):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
               const Divider(),
-              ...rapport.transfertsEnAttenteDetails.map((transfert) => _buildTransfertDetailRow(
-                transfert.destinataire ?? 'N/A',
-                '${DateFormat('dd/MM HH:mm').format(transfert.date)} - ${transfert.modePaiement}',
-                transfert.montant,
+              ...rapport.transfertsRecusGroupes.entries.map((entry) => _buildFlotDetailRow(
+                entry.key, // Nom du shop destination
+                'Total du jour',
+                entry.value, // Somme des montants
+                Colors.green,
+              )).toList(),
+            ],
+            
+            // Détails des TRANSFERTS SERVIS GROUPÉS PAR SHOP SOURCE
+            if (rapport.transfertsServisGroupes.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Text('Transferts Servis Détails (Groupé par Shop):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              const Divider(),
+              ...rapport.transfertsServisGroupes.entries.map((entry) => _buildFlotDetailRow(
+                entry.key, // Nom du shop source
+                'Total du jour',
+                entry.value, // Somme des montants
+                Colors.red,
+              )).toList(),
+            ],
+            
+            // Détails des TRANSFERTS EN ATTENTE GROUPÉS PAR SHOP SOURCE
+            if (rapport.transfertsEnAttenteGroupes.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Text('Transferts En Attente Détails (Groupé par Shop):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              const Divider(),
+              ...rapport.transfertsEnAttenteGroupes.entries.map((entry) => _buildFlotDetailRow(
+                entry.key, // Nom du shop source
+                'Total du jour',
+                entry.value, // Somme des montants
                 Colors.orange,
               )).toList(),
             ],
@@ -1043,10 +1070,6 @@ class _RapportClotureState extends State<RapportCloture> {
                   shopName,
                   style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500),
                   overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  details,
-                  style: const TextStyle(fontSize: 9, color: Colors.grey),
                 ),
               ],
             ),

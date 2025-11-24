@@ -102,6 +102,9 @@ class RapportClotureService {
         transfertsRecus: transferts['recus']!,
         transfertsServis: transferts['servis']!,
         transfertsEnAttente: transferts['enAttente']!,
+        transfertsRecusGroupes: transferts['transfertsRecusGroupes'] as Map<String, double>,
+        transfertsServisGroupes: transferts['transfertsServisGroupes'] as Map<String, double>,
+        transfertsEnAttenteGroupes: transferts['transfertsEnAttenteGroupes'] as Map<String, double>,
         
         // Clients
         depotsClients: operationsClients['depots']!,
@@ -303,12 +306,36 @@ class RapportClotureService {
       notes: op.notes,
       modePaiement: op.modePaiement.name,
     )).toList();
+    
+    // GROUPER LES TRANSFERTS REÇUS PAR SHOP DESTINATION (vers nous)
+    final transfertsRecusGroupes = <String, double>{};
+    for (var op in transfertsRecus) {
+      final shopDest = op.shopDestinationDesignation ?? 'Shop inconnu';
+      transfertsRecusGroupes[shopDest] = (transfertsRecusGroupes[shopDest] ?? 0.0) + op.montantBrut;
+    }
+    
+    // GROUPER LES TRANSFERTS SERVIS PAR SHOP SOURCE (de nous)
+    final transfertsServisGroupes = <String, double>{};
+    for (var op in transfertsServis) {
+      final shopSrc = op.shopSourceDesignation ?? 'Shop inconnu';
+      transfertsServisGroupes[shopSrc] = (transfertsServisGroupes[shopSrc] ?? 0.0) + op.montantNet;
+    }
+    
+    // GROUPER LES TRANSFERTS EN ATTENTE PAR SHOP SOURCE (de nous)
+    final transfertsEnAttenteGroupes = <String, double>{};
+    for (var op in transfertsEnAttente) {
+      final shopSrc = op.shopSourceDesignation ?? 'Shop inconnu';
+      transfertsEnAttenteGroupes[shopSrc] = (transfertsEnAttenteGroupes[shopSrc] ?? 0.0) + op.montantNet;
+    }
 
     return {
       'recus': transfertsRecus.fold(0.0, (sum, op) => sum + op.montantBrut), // ENTRÉE: Client nous paie
       'servis': transfertsServis.fold(0.0, (sum, op) => sum + op.montantNet), // SORTIE: On sert le client
       'enAttente': transfertsEnAttente.fold(0.0, (sum, op) => sum + op.montantNet), // À SERVIR: Transferts en attente
       'enAttenteDetails': transfertsEnAttenteDetails,
+      'transfertsRecusGroupes': transfertsRecusGroupes, // GROUPÉ PAR SHOP DESTINATION
+      'transfertsServisGroupes': transfertsServisGroupes, // GROUPÉ PAR SHOP SOURCE
+      'transfertsEnAttenteGroupes': transfertsEnAttenteGroupes, // GROUPÉ PAR SHOP SOURCE
     };
   }
 

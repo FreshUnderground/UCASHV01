@@ -30,6 +30,11 @@ class RapportClotureModel {
   final double transfertsServis;
   final double transfertsEnAttente; // NOUVEAU: Transferts à servir (shop destination)
   
+  // NOUVEAU: Transferts groupés par shop
+  final Map<String, double> transfertsRecusGroupes; // Groupé par shop destination
+  final Map<String, double> transfertsServisGroupes; // Groupé par shop source
+  final Map<String, double> transfertsEnAttenteGroupes; // Groupé par shop source
+  
   // NOUVEAU: Transferts DEVISE LOCALE
   final double transfertsRecusDeviseLocale;
   final double transfertsServisDeviseLocale;
@@ -111,6 +116,9 @@ class RapportClotureModel {
     required this.transfertsRecus,
     required this.transfertsServis,
     this.transfertsEnAttente = 0.0,
+    required this.transfertsRecusGroupes,
+    required this.transfertsServisGroupes,
+    required this.transfertsEnAttenteGroupes,
     this.transfertsRecusDeviseLocale = 0.0,
     this.transfertsServisDeviseLocale = 0.0,
     this.transfertsEnAttenteDeviseLocale = 0.0,
@@ -192,6 +200,9 @@ class RapportClotureModel {
       'transferts_recus': transfertsRecus,
       'transferts_servis': transfertsServis,
       'transferts_en_attente': transfertsEnAttente,
+      'transferts_recus_groupes': transfertsRecusGroupes, // Map<String, double>
+      'transferts_servis_groupes': transfertsServisGroupes, // Map<String, double>
+      'transferts_en_attente_groupes': transfertsEnAttenteGroupes, // Map<String, double>
       'transferts_recus_devise_locale': transfertsRecusDeviseLocale,
       'transferts_servis_devise_locale': transfertsServisDeviseLocale,
       'transferts_en_attente_devise_locale': transfertsEnAttenteDeviseLocale,
