@@ -706,15 +706,15 @@ class _RapportClotureState extends State<RapportCloture> {
               )).toList(),
             ],
             
-            // Détails des FLOTС envoyés
-            if (rapport.flotsEnvoyes.isNotEmpty) ...[
+            // Détails des FLOTS envoyés GROUPÉS PAR SHOP DESTINATION
+            if (rapport.flotsEnvoyesGroupes.isNotEmpty) ...[
               const SizedBox(height: 8),
-              const Text('FLOTs Envoyés Détails:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              const Text('FLOTs Envoyés Détails (Groupé par Shop):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
               const Divider(),
-              ...rapport.flotsEnvoyes.map((flot) => _buildFlotDetailRow(
-                flot.shopDestinationDesignation,
-                '${DateFormat('dd/MM HH:mm').format(flot.dateEnvoi)} - ${flot.modePaiement} (${flot.statut})',
-                flot.montant,
+              ...rapport.flotsEnvoyesGroupes.entries.map((entry) => _buildFlotDetailRow(
+                entry.key, // Nom du shop destination
+                'Total du jour',
+                entry.value, // Somme des montants
                 Colors.red,
               )).toList(),
             ],

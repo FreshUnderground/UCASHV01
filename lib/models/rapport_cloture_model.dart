@@ -55,6 +55,7 @@ class RapportClotureModel {
   final List<FlotResume> flotsRecusDetails;
   final Map<String, double> flotsRecusGroupes; // Flots reçus groupés par shop expéditeur
   final List<FlotResume> flotsEnvoyes;
+  final Map<String, double> flotsEnvoyesGroupes; // Flots envoyés groupés par shop destination
   
   // NOUVEAU: Listes détaillées des opérations clients (dépôts et retraits)
   final List<OperationResume> depotsClientsDetails;
@@ -124,6 +125,7 @@ class RapportClotureModel {
     this.flotsRecusDetails = const [],
     required this.flotsRecusGroupes,
     this.flotsEnvoyes = const [],
+    required this.flotsEnvoyesGroupes,
     this.depotsClientsDetails = const [],
     this.retraitsClientsDetails = const [],
     this.transfertsEnAttenteDetails = const [],
@@ -204,6 +206,7 @@ class RapportClotureModel {
       'flots_recus_details': flotsRecusDetails.map((f) => f.toJson()).toList(),
       'flots_recus_groupes': flotsRecusGroupes, // Map<String, double>
       'flots_envoyes': flotsEnvoyes.map((f) => f.toJson()).toList(),
+      'flots_envoyes_groupes': flotsEnvoyesGroupes, // Map<String, double>
       'depots_clients_details': depotsClientsDetails.map((d) => d.toJson()).toList(),
       'retraits_clients_details': retraitsClientsDetails.map((r) => r.toJson()).toList(),
       'transferts_en_attente_details': transfertsEnAttenteDetails.map((t) => t.toJson()).toList(),
