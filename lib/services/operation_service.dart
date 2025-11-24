@@ -1283,32 +1283,82 @@ class OperationService extends ChangeNotifier {
   }
   
   /// Synchronise une opération en arrière-plan sans bloquer l'interface
+  /// Avec système de retry automatique en cas d'échec
   Future<void> _syncOperationInBackground(OperationModel operation) async {
     // Ne pas attendre la fin de la synchronisation
     // Cela permet de continuer l'exécution de l'application immédiatement
     Future.microtask(() async {
-      try {
-        debugPrint('🔄 [BACKGROUND] Démarrage synchronisation opération ${operation.id}...');
-        
-        // Convertir l'opération en Map pour la queue
-        final operationMap = operation.toJson();
-        
-        // Ajouter l'opération à la file d'attente de synchronisation
-        final syncService = SyncService();
-        await syncService.queueOperation(operationMap);
-        
-        // Attendre un court délai pour permettre à l'interface de se mettre à jour
-        await Future.delayed(const Duration(milliseconds: 100));
-        
-        // Synchroniser les données en attente en appelant syncAll qui gérera les opérations en attente
-        await syncService.syncAll(userId: operation.lastModifiedBy ?? 'system');
-        debugPrint('✅ [BACKGROUND] Opération ${operation.id} synchronisée avec succès');
-      } catch (e) {
-        debugPrint('⚠️ [BACKGROUND] Erreur synchronisation opération ${operation.id}: $e');
-        // L'erreur est capturée mais ne bloque pas l'application
-        // La synchronisation sera retentée automatiquement plus tard
+      int retryCount = 0;
+      const maxRetries = 3;
+      const retryDelay = Duration(seconds: 5);
+      
+      while (retryCount < maxRetries) {
+        try {
+          debugPrint('🔄 [BACKGROUND] Synchronisation opération ${operation.codeOps} (tentative ${retryCount + 1}/$maxRetries)...');
+          
+          // Convertir l'opération en Map pour la queue
+          final operationMap = operation.toJson();
+          
+          // Ajouter l'opération à la file d'attente de synchronisation
+          final syncService = SyncService();
+          await syncService.queueOperation(operationMap);
+          
+          // Attendre un court délai pour permettre à l'interface de se mettre à jour
+          await Future.delayed(const Duration(milliseconds: 100));
+          
+          // Synchroniser les données en attente
+          await syncService.syncAll(userId: operation.lastModifiedBy ?? 'system');
+          
+          debugPrint('✅ [BACKGROUND] Opération ${operation.codeOps} synchronisée avec succès');
+          
+          // Marquer l'opération comme synchronisée en local
+          await _markOperationAsSynced(operation.id!);
+          
+          return; // Succès, sortir de la boucle
+        } catch (e) {
+          retryCount++;
+          debugPrint('⚠️ [BACKGROUND] Échec synchronisation opération ${operation.codeOps} (tentative $retryCount/$maxRetries): $e');
+          
+          if (retryCount < maxRetries) {
+            debugPrint('   ⏳ Nouvelle tentative dans ${retryDelay.inSeconds}s...');
+            await Future.delayed(retryDelay);
+          } else {
+            debugPrint('❌ [BACKGROUND] Échec définitif après $maxRetries tentatives');
+            debugPrint('   💡 L\'opération restera en file d\'attente et sera retentée lors de la prochaine synchronisation');
+            
+            // Ajouter l'opération aux opérations en attente pour retry manuel/automatique
+            await _addToPendingSyncQueue(operation);
+          }
+        }
       }
     });
+  }
+  
+  /// Marquer une opération comme synchronisée
+  Future<void> _markOperationAsSynced(int operationId) async {
+    try {
+      final operation = await LocalDB.instance.getOperationById(operationId);
+      if (operation != null) {
+        final updatedOp = operation.copyWith(
+          lastModifiedAt: DateTime.now(),
+          // On pourrait ajouter un champ 'synced' si nécessaire
+        );
+        await LocalDB.instance.updateOperation(updatedOp);
+      }
+    } catch (e) {
+      debugPrint('⚠️ Erreur marquage opération synchronisée: $e');
+    }
+  }
+  
+  /// Ajouter une opération à la file d'attente de synchronisation persistante
+  Future<void> _addToPendingSyncQueue(OperationModel operation) async {
+    try {
+      final syncService = SyncService();
+      await syncService.queueOperation(operation.toJson());
+      debugPrint('📋 Opération ${operation.codeOps} ajoutée à la file de synchronisation persistante');
+    } catch (e) {
+      debugPrint('❌ Erreur ajout à la file de synchronisation: $e');
+    }
   }
 
 }
