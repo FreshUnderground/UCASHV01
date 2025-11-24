@@ -32,17 +32,11 @@ class AgentService extends ChangeNotifier {
       // S'assurer que l'admin existe
       await LocalDB.instance.ensureAdminExists();
       
-      // Debug: Lister ce qui est dans SharedPreferences
-      await LocalDB.instance.debugListAllAgents();
-      
       // Nettoyer les données corrompues avant le chargement
       await LocalDB.instance.cleanCorruptedAgentData();
       
       _agents = await LocalDB.instance.getAllAgents();
-      debugPrint('📋 Agents chargés dans le service: ${_agents.length}');
-      for (var agent in _agents) {
-        debugPrint('   - ${agent.username} (ID: ${agent.id}, Shop: ${agent.shopId}, Actif: ${agent.isActive})');
-      }
+      debugPrint('📋 Agents chargés: ${_agents.length}');
       _errorMessage = null;
       notifyListeners(); // Notifier les widgets après le chargement
     } catch (e) {
