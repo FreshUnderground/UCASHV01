@@ -62,6 +62,9 @@ class RapportClotureModel {
   // NOUVEAU: Liste détaillée des transferts en attente
   final List<OperationResume> transfertsEnAttenteDetails;
   
+  // NOUVEAU: Liste des transferts groupés par route (source → destination)
+  final List<TransfertRouteResume> transfertsGroupes;
+  
   // Cash disponible USD
   final double cashDisponibleCash;
   final double cashDisponibleAirtelMoney;
@@ -122,6 +125,7 @@ class RapportClotureModel {
     this.depotsClientsDetails = const [],
     this.retraitsClientsDetails = const [],
     this.transfertsEnAttenteDetails = const [],
+    this.transfertsGroupes = const [],
     required this.cashDisponibleCash,
     required this.cashDisponibleAirtelMoney,
     required this.cashDisponibleMPesa,
@@ -200,6 +204,7 @@ class RapportClotureModel {
       'depots_clients_details': depotsClientsDetails.map((d) => d.toJson()).toList(),
       'retraits_clients_details': retraitsClientsDetails.map((r) => r.toJson()).toList(),
       'transferts_en_attente_details': transfertsEnAttenteDetails.map((t) => t.toJson()).toList(),
+      'transferts_groupes': transfertsGroupes.map((t) => t.toJson()).toList(),
       'cash_disponible_cash': cashDisponibleCash,
       'cash_disponible_airtel_money': cashDisponibleAirtelMoney,
       'cash_disponible_mpesa': cashDisponibleMPesa,
@@ -343,6 +348,42 @@ class OperationResume {
       'observation': observation,
       'notes': notes,
       'mode_paiement': modePaiement,
+    };
+  }
+}
+
+/// Résumé des transferts groupés par route (source → destination)
+class TransfertRouteResume {
+  final String shopSourceDesignation;
+  final String shopDestinationDesignation;
+  final int transfertsCount;
+  final int servisCount;
+  final int enAttenteCount;
+  final double transfertsTotal;
+  final double servisTotal;
+  final double enAttenteTotal;
+
+  TransfertRouteResume({
+    required this.shopSourceDesignation,
+    required this.shopDestinationDesignation,
+    required this.transfertsCount,
+    required this.servisCount,
+    required this.enAttenteCount,
+    required this.transfertsTotal,
+    required this.servisTotal,
+    required this.enAttenteTotal,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'shop_source_designation': shopSourceDesignation,
+      'shop_destination_designation': shopDestinationDesignation,
+      'transferts_count': transfertsCount,
+      'servis_count': servisCount,
+      'en_attente_count': enAttenteCount,
+      'transferts_total': transfertsTotal,
+      'servis_total': servisTotal,
+      'en_attente_total': enAttenteTotal,
     };
   }
 }

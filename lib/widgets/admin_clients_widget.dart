@@ -8,6 +8,8 @@ import '../services/auth_service.dart';
 import '../models/client_model.dart';
 import '../models/operation_model.dart';
 import 'create_client_dialog_responsive.dart';
+import 'depot_dialog.dart';
+import 'retrait_dialog.dart';
 
 /// Widget pour que l'admin puisse voir tous les clients et leurs relevés
 class AdminClientsWidget extends StatefulWidget {
@@ -399,6 +401,39 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 8),
+                    // Boutons Dépôt et Retrait
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => _showDepotDialog(client),
+                            icon: const Icon(Icons.add_circle, size: 16),
+                            label: const Text('Dépôt', style: TextStyle(fontSize: 12)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                              minimumSize: const Size(0, 32),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => _showRetraitDialog(client),
+                            icon: const Icon(Icons.remove_circle, size: 16),
+                            label: const Text('Retrait', style: TextStyle(fontSize: 12)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                              minimumSize: const Size(0, 32),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
                 trailing: IconButton(
@@ -735,6 +770,7 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
               clientId: _selectedClient!.id!,
               startDate: _startDate,
               endDate: _endDate,
+              isAdmin: true,
             ),
           ),
         ],
@@ -797,6 +833,30 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
         ),
       ),
     );
+  }
+
+  void _showDepotDialog(ClientModel client) {
+    showDialog(
+      context: context,
+      builder: (context) => DepotDialog(preselectedClient: client),
+    ).then((_) {
+      // Rafraîchir l'affichage après la fermeture du dialogue
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  void _showRetraitDialog(ClientModel client) {
+    showDialog(
+      context: context,
+      builder: (context) => RetraitDialog(preselectedClient: client),
+    ).then((_) {
+      // Rafraîchir l'affichage après la fermeture du dialogue
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
 
 }

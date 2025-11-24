@@ -172,7 +172,7 @@ class PdfService {
                           child: pw.Text(
                             operation.codeOps!,
                             style: pw.TextStyle(
-                              fontSize: 10,
+                              fontSize: 8,
                               fontWeight: pw.FontWeight.bold,
                             ),
                           ),
@@ -196,9 +196,9 @@ class PdfService {
                       
                       // PARTENAIRES: Nom du client
                       if (clientName != null && clientName.isNotEmpty)
-                        _buildTicketRow('PARTENAIRES:', clientName, fontSize: 9),
+                        _buildTicketRow('PARTENAIRES:', clientName, fontSize: 8),
                       if (clientName == null && operation.clientNom != null && operation.clientNom!.isNotEmpty)
-                        _buildTicketRow('PARTENAIRES:', operation.clientNom!, fontSize: 9),
+                        _buildTicketRow('PARTENAIRES:', operation.clientNom!, fontSize: 8),
                       
                       // No Compte: Numéro du compte
                       if (operation.clientId != null)
@@ -243,7 +243,7 @@ class PdfService {
                           child: pw.Text(
                             operation.codeOps!,
                             style: pw.TextStyle(
-                              fontSize: 10,
+                              fontSize: 9,
                               fontWeight: pw.FontWeight.bold,
                             ),
                           ),
@@ -252,11 +252,18 @@ class PdfService {
                       pw.SizedBox(height: 6),
                       
                       // Expéditeur et Destinataire (aligné à gauche)
-                      if (clientName != null && clientName.isNotEmpty)
-                        _buildTicketRow('DEST.:', clientName, fontSize: 9),
-                      // DEST: affiche l'observation (nom du destinataire)
+                      // DEST: affiche le nom du destinataire
+                      // EXP: affiche l'observation (nom de l'expéditeur)
                       if (operation.observation != null && operation.observation!.isNotEmpty)
                         _buildTicketRow('EXP.:', operation.observation!, fontSize: 9),
+                      // EXP PHONE: extraire le téléphone de l'expéditeur des notes
+                      ..._buildExpediteurPhoneRow(operation.notes),
+                      if (operation.destinataire != null && operation.destinataire!.isNotEmpty)
+                        _buildTicketRow('DEST.:', operation.destinataire!, fontSize: 9),
+                      // DEST PHONE: affiche le téléphone du destinataire
+                      if (operation.telephoneDestinataire != null && operation.telephoneDestinataire!.isNotEmpty)
+                        _buildTicketRow('TEL. DEST.:', operation.telephoneDestinataire!, fontSize: 9),
+                      
                       
                       pw.SizedBox(height: 6),
                       
@@ -274,7 +281,7 @@ class PdfService {
                       
                       // Montant Net (ce que le destinataire reçoit)
                       pw.SizedBox(height: 4),
-                      _buildTicketRow('MONTANT NET:', '${operation.montantNet.toStringAsFixed(2)} ${operation.devise}', fontSize: 11, bold: true),
+                      _buildTicketRow('NET:', '${operation.montantNet.toStringAsFixed(2)} ${operation.devise}', fontSize: 11, bold: true),
                       
                       pw.SizedBox(height: 6),
                     ],
@@ -293,7 +300,7 @@ class PdfService {
                       
                       _buildTicketRow('Montant:', '${operation.montantNet.toStringAsFixed(2)} ${operation.devise}', fontSize: 10),
                       if (operation.commission > 0)
-                        _buildTicketRow('Frais/Commission:', '${operation.commission.toStringAsFixed(2)} ${operation.devise}'),
+                        _buildTicketRow('Frais :', '${operation.commission.toStringAsFixed(2)} ${operation.devise}'),
                       
                       pw.SizedBox(height: 6),
                       pw.Container(
@@ -1187,7 +1194,36 @@ class PdfService {
           pw.Divider(color: PdfColors.grey300),
         ],
       ),
-    );
+      );
+  }
+  
+  // Helper pour extraire le téléphone de l'expéditeur des notes
+  String? _extractExpediteurPhone(String? notes) {
+    // Si les notes contiennent seulement un numéro de téléphone, le retourner directement
+    if (notes != null && notes.isNotEmpty) {
+      // Vérifier si c'est un numéro de téléphone (commence par + ou chiffre)
+      final phoneRegex = RegExp(r'^[+\d\s\-()]+$');
+      if (phoneRegex.hasMatch(notes.trim())) {
+        return notes.trim();
+      }
+      
+      // Sinon, rechercher le pattern: Tel Expéditeur: +243 888 777 666
+      final expPhoneRegex = RegExp(r'Tel Expéditeur:\s*([+\d\s]+)');
+      final match = expPhoneRegex.firstMatch(notes);
+      return match?.group(1)?.trim();
+    }
+    return null;
+  }
+  
+  // Helper pour construire la ligne du téléphone de l'expéditeur
+  List<pw.Widget> _buildExpediteurPhoneRow(String? notes) {
+    if (notes == null || notes.isEmpty) return [];
+    
+    final expPhone = _extractExpediteurPhone(notes);
+    if (expPhone != null && expPhone.isNotEmpty) {
+      return [_buildTicketRow('TEL. EXP.:', expPhone, fontSize: 9)];
+    }
+    return [];
   }
 
   /// Génère un BON DE RETRAIT pour validation de transfert au shop de destination
@@ -1281,6 +1317,20 @@ class PdfService {
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
+                    // DEST: affiche le nom du destinataire
+                    if (operation.destinataire != null && operation.destinataire!.isNotEmpty)
+                      _buildTicketRow('DEST.:', operation.destinataire!, fontSize: 9),
+                    // DEST PHONE: affiche le téléphone du destinataire
+                    if (operation.telephoneDestinataire != null && operation.telephoneDestinataire!.isNotEmpty)
+                      _buildTicketRow('TEL. DEST.:', operation.telephoneDestinataire!, fontSize: 9),
+                    // EXP: affiche l'observation (nom de l'expéditeur)
+                    if (operation.observation != null && operation.observation!.isNotEmpty)
+                      _buildTicketRow('EXP.:', operation.observation!, fontSize: 9),
+                    // EXP PHONE: extraire le téléphone de l'expéditeur des notes
+                    ..._buildExpediteurPhoneRow(operation.notes),
+                    
+                    pw.SizedBox(height: 6),
+                    
                     // RETIRÉ PAR: Nom du destinataire
                     _buildTicketRow(
                       'RETIRÉ PAR:',

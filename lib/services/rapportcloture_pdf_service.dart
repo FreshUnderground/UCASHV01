@@ -135,7 +135,30 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                     _buildSection('3. Transferts', [
                       _buildRow('Recus', rapport.transfertsRecus, color: PdfColors.green700),
                       _buildRow('Servis', rapport.transfertsServis, color: PdfColors.red700, prefix: '-'),
+                      // Détails des transferts en attente
+                      if (rapport.transfertsEnAttenteDetails.isNotEmpty) ...[
+                        pw.SizedBox(height: 4),
+                        pw.Text('Transferts En Attente:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                        pw.Divider(),
+                        ...rapport.transfertsEnAttenteDetails.map((transfert) => _buildOperationDetailRow(
+                          transfert.destinataire ?? 'N/A',
+                          '${DateFormat('dd/MM HH:mm').format(transfert.date)} - ${transfert.modePaiement}',
+                          transfert.montant,
+                          PdfColors.orange700,
+                        )),
+                      ],
                     ], PdfColors.blue700),
+                    
+                    // Transferts Groupés par Route
+                    if (rapport.transfertsGroupes.isNotEmpty) ...[
+                      pw.SizedBox(height: 8),
+                      _buildSection('4. Transferts Groupés (Source → Destination)', [
+                        pw.Text('${rapport.transfertsGroupes.length} route(s)', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                        pw.Divider(),
+                        ...rapport.transfertsGroupes.map((route) => _buildTransfertRouteRowPDF(route)),
+                      ], PdfColors.indigo700),
+                    ],
+
                   ],
                 ),
               ),
@@ -336,6 +359,51 @@ pw.Widget _buildOperationDetailRow(String observation, String details, double mo
           ),
         ),
         pw.Text('${montant.toStringAsFixed(2)} USD', style: pw.TextStyle(fontSize: 6, color: color, fontWeight: pw.FontWeight.bold)),
+      ],
+    ),
+  );
+}
+
+pw.Widget _buildTransfertRouteRowPDF(TransfertRouteResume route) {
+  return pw.Padding(
+    padding: const pw.EdgeInsets.symmetric(vertical: 2),
+    child: pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Expanded(
+              child: pw.Text(
+                '${route.shopSourceDesignation} → ${route.shopDestinationDesignation}',
+                style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 1),
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text('Transferts: ${route.transfertsCount}', style: pw.TextStyle(fontSize: 6, color: PdfColors.blue700)),
+            pw.Text('${route.transfertsTotal.toStringAsFixed(2)} USD', style: pw.TextStyle(fontSize: 6, color: PdfColors.blue700)),
+          ],
+        ),
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text('Servis: ${route.servisCount}', style: pw.TextStyle(fontSize: 6, color: PdfColors.green700)),
+            pw.Text('${route.servisTotal.toStringAsFixed(2)} USD', style: pw.TextStyle(fontSize: 6, color: PdfColors.green700)),
+          ],
+        ),
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text('En attente: ${route.enAttenteCount}', style: pw.TextStyle(fontSize: 6, color: PdfColors.orange700)),
+            pw.Text('${route.enAttenteTotal.toStringAsFixed(2)} USD', style: pw.TextStyle(fontSize: 6, color: PdfColors.orange700)),
+          ],
+        ),
+        pw.Divider(height: 4, thickness: 0.5),
       ],
     ),
   );

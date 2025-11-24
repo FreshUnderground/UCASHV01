@@ -7,11 +7,14 @@ import '../services/shop_service.dart';
 import '../models/client_model.dart';
 import '../models/operation_model.dart';
 import '../models/agent_model.dart';
+import '../models/shop_model.dart';
 import '../utils/responsive_dialog_utils.dart';
 import '../utils/auto_print_helper.dart';
 
 class DepotDialog extends StatefulWidget {
-  const DepotDialog({super.key});
+  final ClientModel? preselectedClient;
+  
+  const DepotDialog({super.key, this.preselectedClient});
 
   @override
   State<DepotDialog> createState() => _DepotDialogState();
@@ -51,6 +54,13 @@ class _DepotDialogState extends State<DepotDialog> {
     if (mounted) {
       setState(() {
         _clients = clientService.clients;
+        // Re-synchroniser le client présélectionné avec la liste chargée
+        if (widget.preselectedClient != null && widget.preselectedClient!.id != null) {
+          _selectedClient = _clients.firstWhere(
+            (c) => c.id == widget.preselectedClient!.id,
+            orElse: () => widget.preselectedClient!,
+          );
+        }
       });
     }
   }
@@ -287,48 +297,7 @@ class _DepotDialogState extends State<DepotDialog> {
               style: TextStyle(fontSize: isMobile ? 14 : 16),
             ),
             SizedBox(height: fieldSpacing),
-            
-            // Solde actuel du client
-            if (_selectedClient != null) ...[
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.account_balance_wallet, color: Colors.blue),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Solde actuel du client',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.blue,
-                            ),
-                          ),
-                          Text(
-                            '${_selectedClient!.solde.toStringAsFixed(2)} USD',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: _selectedClient!.solde >= 0 ? Colors.green : Colors.red,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(height: fieldSpacing),
-            ],
-            
+
             // Résumé
             Container(
               padding: const EdgeInsets.all(16),
@@ -382,46 +351,8 @@ class _DepotDialogState extends State<DepotDialog> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Nouveau solde:'),
-                      Text(
-                        _selectedClient != null && _montantController.text.isNotEmpty
-                            ? '${(_selectedClient!.solde + (double.tryParse(_montantController.text) ?? 0)).toStringAsFixed(2)} USD'
-                            : '${_selectedClient?.solde.toStringAsFixed(2) ?? '0.00'} USD',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  const Divider(),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Type d\'opération:',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const Text(
-                        'DÉPÔT (0% commission)',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: Colors.green,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
+
+
                   // Add CodeOps preview
                   if (_selectedClient != null && _montantController.text.isNotEmpty)
                     Row(
@@ -523,7 +454,7 @@ class _DepotDialogState extends State<DepotDialog> {
         modePaiement: _modePaiement,
         agentId: authService.currentUser?.id ?? 1,
         agentUsername: authService.currentUser?.username,
-        shopSourceId: authService.currentUser?.shopId ?? 1,
+        shopSourceId: authService.currentUser?.shopId ?? _selectedClient!.shopId ?? 1,
         statut: OperationStatus.terminee,
         dateOp: DateTime.now(),
         notes: 'Dépôt dans le compte client',
@@ -541,29 +472,42 @@ class _DepotDialogState extends State<DepotDialog> {
         Navigator.of(context).pop(true);
         
         // Récupérer les données pour le reçu
-        final shop = shopService.shops.firstWhere(
-          (s) => s.id == authService.currentUser?.shopId,
-          orElse: () => shopService.shops.first,
-        );
+        final shopId = authService.currentUser?.shopId ?? _selectedClient!.shopId ?? 1;
+        ShopModel? shop;
+        try {
+          shop = shopService.shops.firstWhere((s) => s.id == shopId);
+        } catch (e) {
+          shop = shopService.shops.isNotEmpty ? shopService.shops.first : null;
+        }
         
         // Convertir UserModel en AgentModel pour le reçu
-        final agent = AgentModel(
-          id: authService.currentUser!.id,
-          username: authService.currentUser!.username,
-          password: '', // Pas besoin du mot de passe pour le reçu
-          shopId: authService.currentUser!.shopId!,
-          nom: authService.currentUser!.nom,
-          telephone: authService.currentUser!.telephone,
-        );
-        
-        // Imprimer automatiquement le reçu sur POS
-        await AutoPrintHelper.autoPrintWithDialog(
-          context: context,
-          operation: savedOperation,
-          shop: shop,
-          agent: agent,
-          clientName: _selectedClient!.nom,
-        );
+        if (shop != null && authService.currentUser != null) {
+          final agent = AgentModel(
+            id: authService.currentUser!.id,
+            username: authService.currentUser!.username,
+            password: '', // Pas besoin du mot de passe pour le reçu
+            shopId: shopId,
+            nom: authService.currentUser!.nom,
+            telephone: authService.currentUser!.telephone,
+          );
+          
+          // Imprimer automatiquement le reçu sur POS
+          await AutoPrintHelper.autoPrintWithDialog(
+            context: context,
+            operation: savedOperation,
+            shop: shop,
+            agent: agent,
+            clientName: _selectedClient!.nom,
+          );
+        } else {
+          // Pas de reçu si shop ou user manquant, mais afficher succès
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Dépôt enregistré avec succès'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
       } else if (mounted) {
         throw Exception(operationService.errorMessage ?? 'Erreur inconnue');
       }

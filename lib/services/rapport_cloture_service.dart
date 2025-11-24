@@ -49,7 +49,10 @@ class RapportClotureService {
       // 6. Calculer les dettes/créances inter-shops
       final comptesShops = await _getComptesShops(shopId);
 
-      // 7. Calculer le cash disponible par mode de paiement
+      // 7. Calculer les transferts groupés par route
+      final transfertsGroupes = await _calculerTransfertsGroupes(shopId, dateRapport, operations);
+
+      // 8. Calculer le cash disponible par mode de paiement
       final cashDisponible = _calculerCashDisponible(
         shop: shop,
         soldeAnterieur: soldeAnterieur,
@@ -122,6 +125,9 @@ class RapportClotureService {
         
         // NOUVEAU: Liste détaillée des transferts en attente
         transfertsEnAttenteDetails: transferts['enAttenteDetails'] as List<OperationResume>,
+        
+        // NOUVEAU: Liste des transferts groupés par route
+        transfertsGroupes: transfertsGroupes,
         
         // Cash disponible
         cashDisponibleCash: cashDisponible['cash']!,
@@ -563,6 +569,108 @@ class RapportClotureService {
       'nousDoivent': shopsNousDoivent,
       'nousDevons': shopsNousDevons,
     };
+  }
+
+  /// Calculer les transferts groupés par route
+  Future<List<TransfertRouteResume>> _calculerTransfertsGroupes(int shopId, DateTime dateRapport, List<OperationModel>? providedOperations) async {
+    // Utiliser les opérations fournies (de "Mes Ops") ou charger depuis LocalDB
+    final operations = providedOperations ?? await LocalDB.instance.getAllOperations();
+    
+    // Récupérer tous les shops pour obtenir leurs désignations
+    final allShops = await LocalDB.instance.getAllShops();
+    
+    // Filtrer les transferts reçus (validees) pour le shop courant
+    final transfertsRecus = operations.where((op) =>
+        op.shopDestinationId == shopId &&
+        (op.type == OperationType.transfertNational ||
+         op.type == OperationType.transfertInternationalEntrant ||
+         op.type == OperationType.transfertInternationalSortant) &&
+        op.statut == OperationStatus.validee &&
+        _isSameDay(op.lastModifiedAt ?? op.dateOp, dateRapport)
+    ).toList();
+
+    // Filtrer les transferts servis (validees) par le shop courant
+    final transfertsServis = operations.where((op) =>
+        op.shopSourceId == shopId &&
+        (op.type == OperationType.transfertNational ||
+         op.type == OperationType.transfertInternationalSortant ||
+         op.type == OperationType.transfertInternationalEntrant) &&
+        op.statut == OperationStatus.validee &&
+        _isSameDay(op.lastModifiedAt ?? op.dateOp, dateRapport)
+    ).toList();
+
+    // Filtrer les transferts en attente pour le shop courant
+    final transfertsEnAttente = operations.where((op) =>
+        (op.shopDestinationId == shopId || op.shopSourceId == shopId) &&
+        (op.type == OperationType.transfertNational ||
+         op.type == OperationType.transfertInternationalEntrant ||
+         op.type == OperationType.transfertInternationalSortant) &&
+        op.statut == OperationStatus.enAttente
+    ).toList();
+
+    // Grouper par route (source -> destination)
+    final Map<String, List<OperationModel>> transfertsParRoute = {};
+    
+    // Regrouper toutes les opérations par route
+    final allTransferts = [...transfertsRecus, ...transfertsServis, ...transfertsEnAttente];
+    for (final op in allTransferts) {
+      final sourceId = op.shopSourceId ?? 0;
+      final destId = op.shopDestinationId ?? 0;
+      final routeKey = '$sourceId->$destId';
+      
+      if (!transfertsParRoute.containsKey(routeKey)) {
+        transfertsParRoute[routeKey] = [];
+      }
+      transfertsParRoute[routeKey]!.add(op);
+    }
+
+    // Créer les résumés par route
+    final List<TransfertRouteResume> result = [];
+    
+    for (final entry in transfertsParRoute.entries) {
+      final routeParts = entry.key.split('->');
+      final sourceId = int.tryParse(routeParts[0]) ?? 0;
+      final destId = int.tryParse(routeParts[1]) ?? 0;
+      
+      final sourceShop = allShops.firstWhere((s) => s.id == sourceId, orElse: () => ShopModel(id: sourceId, designation: 'Shop $sourceId', localisation: ''));
+      final destShop = allShops.firstWhere((s) => s.id == destId, orElse: () => ShopModel(id: destId, designation: 'Shop $destId', localisation: ''));
+      
+      // Compter et totaliser par type
+      int transfertsCount = 0;
+      int servisCount = 0;
+      int enAttenteCount = 0;
+      double transfertsTotal = 0.0;
+      double servisTotal = 0.0;
+      double enAttenteTotal = 0.0;
+      
+      for (final op in entry.value) {
+        if (op.statut == OperationStatus.enAttente) {
+          enAttenteCount++;
+          enAttenteTotal += op.montantNet;
+        } else if (op.statut == OperationStatus.validee) {
+          if (op.shopSourceId == shopId) {
+            servisCount++;
+            servisTotal += op.montantNet;
+          } else if (op.shopDestinationId == shopId) {
+            transfertsCount++;
+            transfertsTotal += op.montantNet;
+          }
+        }
+      }
+      
+      result.add(TransfertRouteResume(
+        shopSourceDesignation: sourceShop.designation,
+        shopDestinationDesignation: destShop.designation,
+        transfertsCount: transfertsCount,
+        servisCount: servisCount,
+        enAttenteCount: enAttenteCount,
+        transfertsTotal: transfertsTotal,
+        servisTotal: servisTotal,
+        enAttenteTotal: enAttenteTotal,
+      ));
+    }
+    
+    return result;
   }
 
   /// Calculer le cash disponible par mode de paiement

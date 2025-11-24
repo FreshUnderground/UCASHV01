@@ -22,6 +22,7 @@ import '../widgets/rapportcloture.dart';
 import '../widgets/agent_transactions_widget.dart';
 import '../widgets/change_devise_widget.dart';
 import '../widgets/agent_stats_cards.dart';
+import '../widgets/comptes_speciaux_widget.dart';
 
 class AgentDashboardPage extends StatefulWidget {
   const AgentDashboardPage({super.key});
@@ -41,8 +42,9 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
     'Partenaires',
     'Journal de Caisse',
     'Rapports',
-    'Gestion FLOT',
+    'FLOT',
     'Clôture Journalière',
+    'Frais',
   ];
 
   final List<IconData> _menuIcons = [
@@ -55,6 +57,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
     Icons.assessment,
     Icons.local_shipping,
     Icons.receipt_long,
+    Icons.account_balance,
   ];
 
   @override
@@ -407,6 +410,8 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
         return const FlotManagementWidget();
       case 8:
         return _buildRapportClotureContent();
+      case 9:
+        return _buildFraisContent();
       default:
         return _buildDashboardContent();
     }
@@ -502,6 +507,16 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
 
   Widget _buildClotureReport(int shopId) {
     return RapportCloture(shopId: shopId);
+  }
+
+  Widget _buildFraisContent() {
+    final authService = Provider.of<AgentAuthService>(context, listen: false);
+    final shopId = authService.currentAgent?.shopId;
+    
+    return ComptesSpeciauxWidget(
+      shopId: shopId,
+      isAdmin: false,
+    );
   }
 
   Future<void> _syncData() async {

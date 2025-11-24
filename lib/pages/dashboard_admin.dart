@@ -15,6 +15,7 @@ import '../widgets/create_shop_dialog.dart';
 import '../widgets/create_agent_dialog.dart';
 import '../widgets/admin_help_widget.dart';
 import '../widgets/sync_status_widget.dart';
+import '../widgets/comptes_speciaux_widget.dart';
 import '../utils/responsive_utils.dart';
 import '../theme/ucash_typography.dart';
 import '../theme/ucash_containers.dart';
@@ -32,7 +33,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
 
   final List<String> _menuItems = [
     'Dashboard',
-    'SHOP',
+    'Dépenses',
     'Agents',
     'Partenaires',
     'Taux & Commissions',
@@ -42,7 +43,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
 
   final List<IconData> _menuIcons = [
     Icons.dashboard,
-    Icons.store,
+    Icons.account_balance_wallet,
     Icons.people,
     Icons.account_circle,
     Icons.currency_exchange,
@@ -394,7 +395,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
       case 0:
         return _buildDashboardContent();
       case 1:
-        return _buildShopsContent();
+        return _buildFraisDepensesContent();
       case 2:
         return _buildAgentsContent();
       case 3:
@@ -582,6 +583,12 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
 
   Widget _buildReportsContent() {
     return const AdminReportsWidget();
+  }
+
+  Widget _buildFraisDepensesContent() {
+    return const ComptesSpeciauxWidget(
+      isAdmin: true,
+    );
   }
 
   Widget _buildSynchronisationContent() {

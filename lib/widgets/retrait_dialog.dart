@@ -7,11 +7,14 @@ import '../services/shop_service.dart';
 import '../models/client_model.dart';
 import '../models/operation_model.dart';
 import '../models/agent_model.dart';
+import '../models/shop_model.dart';
 import '../utils/responsive_dialog_utils.dart';
 import '../utils/auto_print_helper.dart';
 
 class RetraitDialog extends StatefulWidget {
-  const RetraitDialog({super.key});
+  final ClientModel? preselectedClient;
+  
+  const RetraitDialog({super.key, this.preselectedClient});
 
   @override
   State<RetraitDialog> createState() => _RetraitDialogState();
@@ -51,6 +54,13 @@ class _RetraitDialogState extends State<RetraitDialog> {
     if (mounted) {
       setState(() {
         _clients = clientService.clients;
+        // Re-synchroniser le client présélectionné avec la liste chargée
+        if (widget.preselectedClient != null && widget.preselectedClient!.id != null) {
+          _selectedClient = _clients.firstWhere(
+            (c) => c.id == widget.preselectedClient!.id,
+            orElse: () => widget.preselectedClient!,
+          );
+        }
       });
     }
   }
@@ -287,87 +297,7 @@ class _RetraitDialogState extends State<RetraitDialog> {
               style: TextStyle(fontSize: isMobile ? 14 : 16),
             ),
             SizedBox(height: fieldSpacing),
-            
-            // Solde actuel du client
-            if (_selectedClient != null) ...[
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.account_balance_wallet, color: Colors.blue),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Solde actuel du client',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.blue,
-                            ),
-                          ),
-                          Text(
-                            '${_selectedClient!.solde.toStringAsFixed(2)} USD',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: _selectedClient!.solde >= 0 ? Colors.green : Colors.red,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              
-              // Validation du solde (DÉCOUVERT AUTORISÉ)
-              if (_montantController.text.isNotEmpty) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: _getNouveauSolde() >= 0 
-                        ? Colors.green.withOpacity(0.1) 
-                        : Colors.orange.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: _getNouveauSolde() >= 0 
-                          ? Colors.green.withOpacity(0.3) 
-                          : Colors.orange.withOpacity(0.3),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        _getNouveauSolde() >= 0 ? Icons.check_circle : Icons.warning,
-                        color: _getNouveauSolde() >= 0 ? Colors.green : Colors.orange,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _getNouveauSolde() >= 0
-                              ? 'Retrait validé - Solde restant positif'
-                              : 'DÉCOUVERT: Le client nous devra ${_getNouveauSolde().abs().toStringAsFixed(2)} USD après ce retrait',
-                          style: TextStyle(
-                            color: _getNouveauSolde() >= 0 ? Colors.green : Colors.orange,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-            ],
-            
+
             // Résumé
             Container(
               padding: const EdgeInsets.all(16),
@@ -421,46 +351,7 @@ class _RetraitDialogState extends State<RetraitDialog> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Nouveau solde:'),
-                      Text(
-                        _selectedClient != null && _montantController.text.isNotEmpty
-                            ? '${_getNouveauSolde().toStringAsFixed(2)} USD'
-                            : '${_selectedClient?.solde.toStringAsFixed(2) ?? '0.00'} USD',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: _getNouveauSolde() >= 0 ? Colors.green : Colors.orange,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  const Divider(),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: const [
-                      Text(
-                        'Type d\'opération:',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      Text(
-                        'RETRAIT (0% commission)',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: Colors.orange,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
+
                   // Add CodeOps preview
                   if (_selectedClient != null && _montantController.text.isNotEmpty)
                     Row(
@@ -550,7 +441,7 @@ class _RetraitDialogState extends State<RetraitDialog> {
         modePaiement: _modePaiement,
         agentId: authService.currentUser?.id ?? 1,
         agentUsername: authService.currentUser?.username,
-        shopSourceId: authService.currentUser?.shopId ?? 1,
+        shopSourceId: authService.currentUser?.shopId ?? _selectedClient!.shopId ?? 1,
         statut: OperationStatus.terminee,
         dateOp: DateTime.now(),
         notes: 'Retrait du compte client',
@@ -565,29 +456,42 @@ class _RetraitDialogState extends State<RetraitDialog> {
         Navigator.of(context).pop(true);
         
         // Récupérer les données pour le reçu
-        final shop = shopService.shops.firstWhere(
-          (s) => s.id == authService.currentUser?.shopId,
-          orElse: () => shopService.shops.first,
-        );
+        final shopId = authService.currentUser?.shopId ?? _selectedClient!.shopId ?? 1;
+        ShopModel? shop;
+        try {
+          shop = shopService.shops.firstWhere((s) => s.id == shopId);
+        } catch (e) {
+          shop = shopService.shops.isNotEmpty ? shopService.shops.first : null;
+        }
         
         // Convertir UserModel en AgentModel pour le reçu
-        final agent = AgentModel(
-          id: authService.currentUser!.id,
-          username: authService.currentUser!.username,
-          password: '',
-          shopId: authService.currentUser!.shopId!,
-          nom: authService.currentUser!.nom,
-          telephone: authService.currentUser!.telephone,
-        );
-        
-        // Imprimer automatiquement le reçu sur POS
-        await AutoPrintHelper.autoPrintWithDialog(
-          context: context,
-          operation: savedOperation,
-          shop: shop,
-          agent: agent,
-          clientName: _selectedClient!.nom,
-        );
+        if (shop != null && authService.currentUser != null) {
+          final agent = AgentModel(
+            id: authService.currentUser!.id,
+            username: authService.currentUser!.username,
+            password: '',
+            shopId: shopId,
+            nom: authService.currentUser!.nom,
+            telephone: authService.currentUser!.telephone,
+          );
+          
+          // Imprimer automatiquement le reçu sur POS
+          await AutoPrintHelper.autoPrintWithDialog(
+            context: context,
+            operation: savedOperation,
+            shop: shop,
+            agent: agent,
+            clientName: _selectedClient!.nom,
+          );
+        } else {
+          // Pas de reçu si shop ou user manquant, mais afficher succès
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Retrait enregistré avec succès'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
       } else if (mounted) {
         throw Exception(operationService.errorMessage ?? 'Erreur inconnue');
       }

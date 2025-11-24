@@ -33,6 +33,9 @@ class RatesService extends ChangeNotifier {
       debugPrint('Taux chargés: ${_taux.length}');
       debugPrint('Commissions chargées: ${_commissions.length}');
       
+      // Nettoyer automatiquement les commissions invalides
+      await cleanInvalidCommissions();
+      
       _errorMessage = null;
       notifyListeners(); // Notifier les widgets après le chargement
     } catch (e) {
@@ -124,6 +127,15 @@ class RatesService extends ChangeNotifier {
   }) async {
     _setLoading(true);
     try {
+      // VALIDATION: Pour une commission shop-to-shop, les deux IDs sont requis
+      if ((shopSourceId != null && shopDestinationId == null) || 
+          (shopSourceId == null && shopDestinationId != null)) {
+        _errorMessage = 'Une commission shop-to-shop nécessite à la fois un shop source ET un shop destination';
+        debugPrint('❌ $_errorMessage');
+        _setLoading(false);
+        return false;
+      }
+      
       // Générer un ID unique
       final commissionId = DateTime.now().millisecondsSinceEpoch + 1;
       
@@ -189,6 +201,35 @@ class RatesService extends ChangeNotifier {
       debugPrint(_errorMessage);
       _setLoading(false);
       return false;
+    }
+  }
+
+  // Nettoyer les commissions invalides (shop-to-shop incomplètes)
+  Future<int> cleanInvalidCommissions() async {
+    try {
+      int deletedCount = 0;
+      final invalidCommissions = _commissions.where((c) => 
+        (c.shopSourceId != null && c.shopDestinationId == null) ||
+        (c.shopSourceId == null && c.shopDestinationId != null)
+      ).toList();
+      
+      for (var commission in invalidCommissions) {
+        if (commission.id != null) {
+          debugPrint('🗑️ Suppression commission invalide ID ${commission.id}: sourceId=${commission.shopSourceId}, destId=${commission.shopDestinationId}');
+          await LocalDB.instance.deleteCommission(commission.id!);
+          deletedCount++;
+        }
+      }
+      
+      if (deletedCount > 0) {
+        await loadRatesAndCommissions();
+        debugPrint('✅ $deletedCount commission(s) invalide(s) supprimée(s)');
+      }
+      
+      return deletedCount;
+    } catch (e) {
+      debugPrint('❌ Erreur nettoyage commissions invalides: $e');
+      return 0;
     }
   }
 

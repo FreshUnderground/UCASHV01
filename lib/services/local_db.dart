@@ -29,10 +29,30 @@ class LocalDB {
     return _prefs!;
   }
 
+  // Générer un ID séquentiel au lieu d'un timestamp
+  Future<int> _generateSequentialId(String prefix) async {
+    final prefs = await database;
+    final keys = prefs.getKeys().where((key) => key.startsWith(prefix)).toList();
+    
+    if (keys.isEmpty) {
+      return 1; // Premier ID
+    }
+    
+    // Trouver le plus grand ID existant
+    int maxId = 0;
+    for (var key in keys) {
+      final idStr = key.replaceFirst(prefix, '');
+      final id = int.tryParse(idStr) ?? 0;
+      if (id > maxId) maxId = id;
+    }
+    
+    return maxId + 1; // Prochain ID
+  }
+
   // === CRUD SHOPS ===
   Future<void> saveShop(ShopModel shop) async {
     final prefs = await database;
-    final shopId = shop.id ?? DateTime.now().millisecondsSinceEpoch;
+    final shopId = shop.id ?? await _generateSequentialId('shop_');
     final updatedShop = shop.copyWith(id: shopId);
     final key = 'shop_$shopId';
     final jsonData = updatedShop.toJson();
@@ -64,7 +84,7 @@ class LocalDB {
   // === CRUD AGENTS (Legacy - UserModel) ===
   Future<void> saveAgentLegacy(UserModel agent) async {
     final prefs = await database;
-    final agentId = agent.id ?? DateTime.now().millisecondsSinceEpoch;
+    final agentId = agent.id ?? await _generateSequentialId('agent_legacy_');
     final updatedAgent = agent.copyWith(id: agentId);
     await prefs.setString('agent_legacy_$agentId', jsonEncode(updatedAgent.toJson()));
   }
@@ -148,8 +168,9 @@ class LocalDB {
   // === CRUD COMMISSIONS ===
   Future<void> saveCommission(CommissionModel commission) async {
     final prefs = await database;
-    final commissionId = commission.id ?? DateTime.now().millisecondsSinceEpoch;
+    final commissionId = commission.id ?? await _generateSequentialId('commission_');
     final updatedCommission = commission.copyWith(id: commissionId);
+    
     await prefs.setString('commission_$commissionId', jsonEncode(updatedCommission.toJson()));
   }
 
@@ -176,6 +197,7 @@ class LocalDB {
         }
       }
     }
+    
     return commissions;
   }
 

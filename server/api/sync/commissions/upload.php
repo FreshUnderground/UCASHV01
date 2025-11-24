@@ -40,8 +40,27 @@ try {
     
     foreach ($entities as $entity) {
         try {
-            // Log pour débogage
-            error_log("[COMMISSION] ID={$entity['id']}, Type={$entity['type']}, Taux={$entity['taux']}, ShopId={$entity['shop_id']}");
+            // Log pour débogage - DÉTAILLÉ
+            error_log("[COMMISSION UPLOAD] =====================================");
+            error_log("[COMMISSION] ID={$entity['id']}");
+            error_log("[COMMISSION] Type={$entity['type']}, Taux={$entity['taux']}");
+            error_log("[COMMISSION] ShopId=" . ($entity['shop_id'] ?? 'NULL'));
+            error_log("[COMMISSION] ShopSourceId=" . ($entity['shop_source_id'] ?? 'NULL'));
+            error_log("[COMMISSION] ShopDestinationId=" . ($entity['shop_destination_id'] ?? 'NULL'));
+            error_log("[COMMISSION] Description={$entity['description']}");
+            
+            // VALIDATION: Pour shop-to-shop, les deux IDs sont requis
+            $hasSourceId = !empty($entity['shop_source_id']);
+            $hasDestId = !empty($entity['shop_destination_id']);
+            
+            if ($hasSourceId && !$hasDestId) {
+                error_log("❌ Commission invalide: shop_source_id sans shop_destination_id");
+                throw new Exception("Une commission avec shop_source_id nécessite aussi shop_destination_id");
+            }
+            if (!$hasSourceId && $hasDestId) {
+                error_log("❌ Commission invalide: shop_destination_id sans shop_source_id");
+                throw new Exception("Une commission avec shop_destination_id nécessite aussi shop_source_id");
+            }
             
             // Vérifier si la commission existe déjà
             $checkStmt = $pdo->prepare("
@@ -85,7 +104,7 @@ try {
                 ]);
                 
                 $updatedCount++;
-                error_log("✅ Commission ID {$entity['id']} mise à jour");
+                error_log("✅ Commission ID {$entity['id']} mise à jour - shopId=" . ($entity['shop_id'] ?? 'NULL') . ", sourceId=" . ($entity['shop_source_id'] ?? 'NULL') . ", destId=" . ($entity['shop_destination_id'] ?? 'NULL'));
             } else {
                 // Insertion d'une nouvelle commission avec l'ID de l'app
                 $insertStmt = $pdo->prepare("
@@ -117,7 +136,7 @@ try {
                 ]);
                 
                 $uploadedCount++;
-                error_log("✅ Commission ID {$entity['id']} insérée");
+                error_log("✅ Commission ID {$entity['id']} insérée - shopId=" . ($entity['shop_id'] ?? 'NULL') . ", sourceId=" . ($entity['shop_source_id'] ?? 'NULL') . ", destId=" . ($entity['shop_destination_id'] ?? 'NULL'));
             }
         } catch (Exception $e) {
             error_log("❌ Erreur commission ID {$entity['id']}: {$e->getMessage()}");

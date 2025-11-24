@@ -272,25 +272,19 @@ try {
                 // Vérifier si une opération similaire existe déjà (doublon logique)
                 $checkDuplicateStmt = $db->prepare("
                     SELECT id FROM operations 
-                    WHERE montant_brut = :montant_brut 
-                    AND agent_id = :agent_id 
-                    AND DATE(created_at) = DATE(:created_at)
-                    AND type = :type
+                    WHERE code_ops = :code_ops
                     LIMIT 1
                 ");
                 
                 $checkDuplicateStmt->execute([
-                    ':montant_brut' => $entity['montant_brut'] ?? 0,
-                    ':agent_id' => $agentId,
-                    ':created_at' => $entity['date_op'] ?? date('Y-m-d H:i:s'),
-                    ':type' => $type
+                    ':code_ops' => $entity['code_ops'] ?? ''
                 ]);
                 
                 $duplicate = $checkDuplicateStmt->fetch(PDO::FETCH_ASSOC);
                 
                 if ($duplicate) {
                     // Doublon détecté - ignorer silencieusement
-                    error_log("WARNING: Doublon opération ignoré: montant={$entity['montant_brut']}, agent={$agentId}, type={$type}");
+                    error_log("WARNING: Doublon opération ignoré: code_ops={$entity['code_ops']}");
                     continue; // Passer à l'opération suivante
                 }
                 

@@ -6,6 +6,7 @@ import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import '../../services/report_service.dart';
 import '../../services/pdf_service.dart';
+import '../../services/operation_service.dart';
 import '../../models/client_model.dart';
 import '../../models/operation_model.dart';
 import '../../models/shop_model.dart';
@@ -16,12 +17,14 @@ class ReleveCompteClientReport extends StatefulWidget {
   final int clientId;
   final DateTime? startDate;
   final DateTime? endDate;
+  final bool isAdmin;
 
   const ReleveCompteClientReport({
     super.key,
     required this.clientId,
     this.startDate,
     this.endDate,
+    this.isAdmin = false,
   });
 
   @override
@@ -506,16 +509,6 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
                   ),
                 ),
                 Expanded(
-                  flex: 2,
-                  child: Text(
-                    'Type',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[700],
-                    ),
-                  ),
-                ),
-                Expanded(
                   flex: 3,
                   child: Text(
                     'Obs.',
@@ -558,6 +551,16 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
                     textAlign: TextAlign.right,
                   ),
                 ),
+                if (widget.isAdmin)
+                  const SizedBox(
+                    width: 40,
+                    child: Text(
+                      '',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -1108,16 +1111,6 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
                 ),
               ),
               Expanded(
-                flex: 2,
-                child: Text(
-                  _getTypeLabel(type),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[700],
-                  ),
-                ),
-              ),
-              Expanded(
                 flex: 3,
                 child: Text(
                   transaction['observation']?.toString() ?? transaction['destinataire']?.toString() ?? '-',
@@ -1164,10 +1157,84 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
                   textAlign: TextAlign.right,
                 ),
               ),
+              if (widget.isAdmin)
+                SizedBox(
+                  width: 40,
+                  child: IconButton(
+                    icon: const Icon(Icons.delete, size: 18, color: Colors.red),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: () => _deleteOperation(transaction),
+                    tooltip: 'Supprimer',
+                  ),
+                ),
             ],
           ),
         );
       },
     );
+  }
+
+  Future<void> _deleteOperation(Map<String, dynamic> transaction) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('⚠️ Confirmer la suppression'),
+        content: const Text(
+          'Voulez-vous vraiment supprimer cette opération? Cette action est irréversible.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      // Get operation ID from transaction
+      final operationId = transaction['id'] as int?;
+      if (operationId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Impossible de supprimer: ID d\'opération manquant'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      // Delete the operation
+      await OperationService().deleteOperation(operationId);
+
+      // Reload the report
+      await _loadReport();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Opération supprimée avec succès'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Erreur lors de la suppression: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }

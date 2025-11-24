@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/operation_model.dart';
 import '../config/app_config.dart';
 import 'local_db.dart';
+import 'operation_service.dart';
 
 /// Service de synchronisation bidirectionnelle des transferts
 /// Télécharge les transferts "en attente" du serveur et upload les nouveaux transferts locaux
@@ -308,6 +309,11 @@ class TransferSyncService extends ChangeNotifier {
               await LocalDB.instance.saveOperation(op);
             }
             debugPrint('✅ [SYNC] Toutes les opérations sauvegardées dans LocalDB');
+
+            // IMPORTANT: Recharger TOUTES les opérations en mémoire (pas juste les transferts en attente)
+            debugPrint('🔄 Rechargement de TOUTES les opérations en mémoire...');
+            await OperationService().loadOperations();
+            debugPrint('✅ Opérations rechargées en mémoire pour affichage');
 
             // Mettre à jour la liste des transferts en attente (pour validation)
             // CRITIQUE: Filtrer uniquement les transferts EN ATTENTE pour ce shop

@@ -567,6 +567,9 @@ class _ModernCommissionDialogState extends State<ModernCommissionDialog> {
                 if (_selectedShopSourceId != null && value == _selectedShopSourceId) {
                   return 'Le shop destination doit être différent du shop source';
                 }
+                if (_routeType == 'SHOP_TO_SHOP' && _selectedShopSourceId == null) {
+                  return 'Veuillez d\'abord sélectionner un shop source';
+                }
                 return null;
               },
             ),

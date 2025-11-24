@@ -13,6 +13,7 @@ import 'sync_service.dart';
 import 'taux_change_service.dart';
 import 'agent_service.dart';
 import 'auth_service.dart';
+import 'compte_special_service.dart';
 import '../config/app_config.dart';
 
 class OperationService extends ChangeNotifier {
@@ -166,7 +167,8 @@ class OperationService extends ChangeNotifier {
       
       // Générer le code d'opération unique
       final now = DateTime.now();
-      final codeOps = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}${enrichedOperation.agentId}${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
+      final milliseconds = now.millisecondsSinceEpoch % 1000;
+      final codeOps = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}${enrichedOperation.agentId}${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}${milliseconds.toString().padLeft(3, '0')}';
       
       // Ajouter le codeOps à l'opération
       final operationWithCode = enrichedOperation.copyWith(
@@ -187,32 +189,35 @@ class OperationService extends ChangeNotifier {
       // Mettre à jour les soldes selon le type d'opération
       await _updateBalances(operationWithCommission);
       
-      // Sauvegarder l'opération
+      // Sauvegarder l'opération en local en priorité (mode offline-first)
       final savedOperation = await LocalDB.instance.saveOperation(operationWithCommission);
       
       // Créer l'entrée dans le journal de caisse
       await _createJournalEntry(savedOperation);
       
-      // Si offline, mettre en file d'attente pour synchronisation
-      final syncService = SyncService();
-      if (!syncService.isOnline) {
-        await syncService.queueOperation(savedOperation.toJson());
-        debugPrint('📋 Opération mise en file d\'attente (mode offline)');
-      } else {
-        // En ligne : synchroniser immédiatement l'opération vers le serveur
-        try {
-          debugPrint('📤 Synchronisation de l\'opération vers le serveur...');
-          await syncService.syncAll(userId: savedOperation.lastModifiedBy ?? 'system');
-          debugPrint('✅ Opération synchronisée avec le serveur');
-        } catch (e) {
-          debugPrint('⚠️ Erreur synchronisation: $e (l\'opération sera synchronisée plus tard)');
-        }
+      // Enregistrer automatiquement les frais dans le compte FRAIS
+      if (savedOperation.commission > 0) {
+        await CompteSpecialService.instance.addFrais(
+          montant: savedOperation.commission,
+          description: 'Commission ${savedOperation.type.name} - ${savedOperation.codeOps}',
+          shopId: savedOperation.shopSourceId!,
+          operationId: savedOperation.id,
+          agentId: savedOperation.agentId,
+          agentUsername: savedOperation.agentUsername,
+        );
+        debugPrint('💰 FRAIS enregistrés: \$${savedOperation.commission.toStringAsFixed(2)}');
       }
+      
+      // Toujours sauvegarder en local d'abord, la synchronisation se fera en arrière-plan
+      debugPrint('💾 Opération sauvegardée localement avec succès (ID: ${savedOperation.id})');
+      
+      // Démarrer la synchronisation en arrière-plan (ne bloque pas l'interface)
+      _syncOperationInBackground(savedOperation);
       
       // Recharger les opérations
       await loadOperations();
       
-      debugPrint('✅ Opération créée avec mise à jour des soldes: ${savedOperation.id}');
+      debugPrint('✅ Opération créée et sauvegardée localement: ${savedOperation.id}');
       return savedOperation;
     } catch (e) {
       _errorMessage = 'Erreur lors de la création: $e';
@@ -235,7 +240,9 @@ class OperationService extends ChangeNotifier {
       
       await LocalDB.instance.updateOperation(updatedOperation);
 
-      
+      // Synchroniser la mise à jour vers le serveur en arrière-plan
+      _syncOperationInBackground(updatedOperation);
+
       // Recharger les données
       await loadOperations();
       
@@ -757,6 +764,64 @@ class OperationService extends ChangeNotifier {
     }
   }
 
+  /// Supprimer une opération (Admin uniquement)
+  /// Utilise codeOps pour identifier l'opération sur le serveur (car id est auto-increment)
+  Future<bool> deleteOperation(int operationId) async {
+    try {
+      debugPrint('🗑️ Suppression de l\'opération $operationId...');
+      
+      // Récupérer l'opération pour obtenir son codeOps
+      final operation = getOperationById(operationId);
+      if (operation == null) {
+        _errorMessage = 'Opération non trouvée';
+        debugPrint(_errorMessage);
+        return false;
+      }
+      
+      // 1. Supprimer sur le serveur d'abord en utilisant codeOps
+      try {
+        final url = '${AppConfig.apiBaseUrl}/sync/operations/delete.php';
+        final response = await http.post(
+          Uri.parse(url),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'codeOps': operation.codeOps}),
+        );
+        
+        if (response.statusCode == 200) {
+          final result = jsonDecode(response.body);
+          if (result['success'] == true) {
+            debugPrint('✅ Opération supprimée du serveur (codeOps: ${operation.codeOps})');
+          } else {
+            debugPrint('⚠️ Erreur serveur: ${result['error']}');
+            // Continue quand même avec la suppression locale
+          }
+        } else {
+          debugPrint('⚠️ Erreur HTTP ${response.statusCode}: ${response.body}');
+          // Continue quand même avec la suppression locale
+        }
+      } catch (e) {
+        debugPrint('⚠️ Erreur de connexion au serveur: $e');
+        debugPrint('   Suppression locale uniquement (sera re-téléchargée lors de la sync)');
+        // Continue avec la suppression locale même si le serveur est inaccessible
+      }
+      
+      // 2. Supprimer de la base de données locale
+      await LocalDB.instance.deleteOperation(operationId);
+      
+      // 3. Supprimer de la mémoire
+      _operations.removeWhere((op) => op.id == operationId);
+      
+      notifyListeners();
+      debugPrint('✅ Opération $operationId supprimée avec succès');
+      return true;
+    } catch (e) {
+      _errorMessage = 'Erreur lors de la suppression: $e';
+      debugPrint(_errorMessage);
+      notifyListeners();
+      return false;
+    }
+  }
+
   // Charger les opérations d'un client spécifique
   Future<void> loadClientOperations(int clientId) async {
     _isLoading = true;
@@ -854,12 +919,12 @@ class OperationService extends ChangeNotifier {
       // Recharger les opérations
       await loadOperations();
       
-      // SYNCHRONISATION IMMEDIATE: Upload le changement de statut vers le serveur
-      debugPrint('🔄 Synchronisation immédiate du transfert validé...');
+      // SYNCHRONISATION EN ARRIÈRE-PLAN: Upload le changement de statut vers le serveur
+      debugPrint('🔄 Synchronisation en arrière-plan du transfert validé...');
       try {
-        final syncService = SyncService();
-        await syncService.syncAll(); // Sync complète pour garantir la propagation
-        debugPrint('✅ Transfert ${operationId} synchronisé avec le serveur');
+        // Utiliser la synchronisation en arrière-plan
+        _syncOperationInBackground(updatedOperation);
+        debugPrint('✅ Transfert ${operationId} synchronisation lancée en arrière-plan');
       } catch (e) {
         debugPrint('⚠️ Erreur de synchronisation (transfert validé localement): $e');
         // L'opération est validée localement, la sync se fera plus tard
@@ -1216,4 +1281,34 @@ class OperationService extends ChangeNotifier {
       // Ne pas bloquer le processus en cas d'erreur
     }
   }
+  
+  /// Synchronise une opération en arrière-plan sans bloquer l'interface
+  Future<void> _syncOperationInBackground(OperationModel operation) async {
+    // Ne pas attendre la fin de la synchronisation
+    // Cela permet de continuer l'exécution de l'application immédiatement
+    Future.microtask(() async {
+      try {
+        debugPrint('🔄 [BACKGROUND] Démarrage synchronisation opération ${operation.id}...');
+        
+        // Convertir l'opération en Map pour la queue
+        final operationMap = operation.toJson();
+        
+        // Ajouter l'opération à la file d'attente de synchronisation
+        final syncService = SyncService();
+        await syncService.queueOperation(operationMap);
+        
+        // Attendre un court délai pour permettre à l'interface de se mettre à jour
+        await Future.delayed(const Duration(milliseconds: 100));
+        
+        // Synchroniser les données en attente en appelant syncAll qui gérera les opérations en attente
+        await syncService.syncAll(userId: operation.lastModifiedBy ?? 'system');
+        debugPrint('✅ [BACKGROUND] Opération ${operation.id} synchronisée avec succès');
+      } catch (e) {
+        debugPrint('⚠️ [BACKGROUND] Erreur synchronisation opération ${operation.id}: $e');
+        // L'erreur est capturée mais ne bloque pas l'application
+        // La synchronisation sera retentée automatiquement plus tard
+      }
+    });
+  }
+
 }

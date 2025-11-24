@@ -4,6 +4,7 @@ import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import '../models/rapport_cloture_model.dart';
+import '../models/operation_model.dart';
 import '../services/rapport_cloture_service.dart';
 import '../services/auth_service.dart';
 import '../services/rapportcloture_pdf_service.dart';
@@ -691,6 +692,7 @@ class _RapportClotureState extends State<RapportCloture> {
             _buildMovementRow('Reçus', rapport.flotRecu, true),
             _buildMovementRow('Envoyés', rapport.flotEnvoye, false),
             
+            
             // Détails des FLOTs reçus
             if (rapport.flotsRecusDetails.isNotEmpty) ...[
               const SizedBox(height: 8),
@@ -725,11 +727,39 @@ class _RapportClotureState extends State<RapportCloture> {
         _buildSection(
           '3️⃣ Transferts',
           [
-            _buildMovementRow('Transferts Reçus', rapport.transfertsRecus, true),
-            _buildMovementRow('Transferts Servis', rapport.transfertsServis, false),
+            _buildMovementRow('Transferts', rapport.transfertsRecus, true),
+            _buildMovementRow('Servis', rapport.transfertsServis, false),
+            _buildMovementRow('En attente (Non Servie)', rapport.transfertsEnAttente, false),
+            // Détails des transferts en attente
+            if (rapport.transfertsEnAttenteDetails.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Text('Détails des transferts en attente:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              const Divider(),
+              ...rapport.transfertsEnAttenteDetails.map((transfert) => _buildTransfertDetailRow(
+                transfert.destinataire ?? 'N/A',
+                '${DateFormat('dd/MM HH:mm').format(transfert.date)} - ${transfert.modePaiement}',
+                transfert.montant,
+                Colors.orange,
+              )).toList(),
+            ],
           ],
           Colors.blue,
         ),
+        
+        // Transferts Groupés par Route
+        if (rapport.transfertsGroupes.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          _buildSection(
+            '4️⃣ Transferts Groupés (Source → Destination)',
+            [
+              Text('${rapport.transfertsGroupes.length} route(s)', style: const TextStyle(fontWeight: FontWeight.bold)),
+              const Divider(),
+              ...rapport.transfertsGroupes.map((route) => _buildTransfertRouteRow(route)).toList(),
+            ],
+            Colors.indigo,
+          ),
+        ],
+
       ],
     );
   }
@@ -775,9 +805,9 @@ class _RapportClotureState extends State<RapportCloture> {
         ),
         const SizedBox(height: 16),
 
-        // Shops Nous Doivent
+        // Shops Qui nous Doivent
         _buildSection(
-          '7️⃣ Shops Nous Doivent',
+          '7️⃣ Shops Qui nous Doivent',
           [
             Text('${rapport.shopsNousDoivent.length} shop(s)', style: const TextStyle(fontWeight: FontWeight.bold)),
             const Divider(),
@@ -796,7 +826,7 @@ class _RapportClotureState extends State<RapportCloture> {
 
         // Shops Nous Devons
         _buildSection(
-          '8️⃣ Shops Nous Devons',
+          '8️⃣ DIFF. DETTES SHOPS',
           [
             Text('${rapport.shopsNousDevons.length} shop(s)', style: const TextStyle(fontWeight: FontWeight.bold)),
             const Divider(),
@@ -849,9 +879,9 @@ class _RapportClotureState extends State<RapportCloture> {
             const SizedBox(height: 8),
             _buildCashRow('Cash Disponible', rapport.cashDisponibleTotal),
             _buildCashRow('+ Partenaires Servis', rapport.totalClientsNousDoivent),
-            _buildCashRow('+ Shops Nous Doivent', rapport.totalShopsNousDoivent),
+            _buildCashRow('+ Shops Qui nous Doivent', rapport.totalShopsNousDoivent),
             _buildCashRow('- Dépôts Partenaires', rapport.totalClientsNousDevons),
-            _buildCashRow('- Shops Nous Devons', rapport.totalShopsNousDevons),
+            _buildCashRow('- DIFF. DETTES SHOPS', rapport.totalShopsNousDevons),
             const Divider(thickness: 2, color: Colors.blue),
             _buildTotalRow('= CAPITAL NET', rapport.capitalNet, bold: true, color: rapport.capitalNet >= 0 ? Colors.blue : Colors.red),
           ],
@@ -1029,6 +1059,88 @@ class _RapportClotureState extends State<RapportCloture> {
               fontWeight: FontWeight.bold,
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTransfertDetailRow(String shopName, String details, double amount, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            flex: 2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  shopName,
+                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  details,
+                  style: const TextStyle(fontSize: 9, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            '${amount.toStringAsFixed(2)} USD',
+            style: TextStyle(
+              fontSize: 10,
+              color: color,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTransfertRouteRow(TransfertRouteResume route) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  '${route.shopSourceDesignation} → ${route.shopDestinationDesignation}',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Transferts: ${route.transfertsCount}', style: const TextStyle(fontSize: 10, color: Colors.blue)),
+              Text('${route.transfertsTotal.toStringAsFixed(2)} USD', style: const TextStyle(fontSize: 10, color: Colors.blue)),
+            ],
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Servis: ${route.servisCount}', style: const TextStyle(fontSize: 10, color: Colors.green)),
+              Text('${route.servisTotal.toStringAsFixed(2)} USD', style: const TextStyle(fontSize: 10, color: Colors.green)),
+            ],
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('En attente: ${route.enAttenteCount}', style: const TextStyle(fontSize: 10, color: Colors.orange)),
+              Text('${route.enAttenteTotal.toStringAsFixed(2)} USD', style: const TextStyle(fontSize: 10, color: Colors.orange)),
+            ],
+          ),
+          const Divider(height: 8, thickness: 1),
         ],
       ),
     );

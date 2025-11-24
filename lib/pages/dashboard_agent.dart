@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/operation_model.dart';
 import '../services/auth_service.dart';
 import '../services/sync_service.dart';
 import '../services/operation_service.dart';
@@ -8,19 +7,13 @@ import '../services/transfer_notification_service.dart';
 import '../services/transfer_sync_service.dart';
 import '../widgets/connectivity_indicator.dart';
 import '../widgets/footer_widget.dart';
-import '../widgets/agent_clients_widget.dart';
-import '../widgets/agent_transfers_widget.dart';
 import '../widgets/reports/agent_reports_widget.dart' as reports;
-import '../widgets/agent_dashboard_widget.dart';
 import '../widgets/agent_operations_widget.dart';
 import '../widgets/transfer_validation_widget.dart';
-import '../widgets/sync_status_widget.dart';
-import '../widgets/journal_caisse_widget.dart';
 import '../widgets/sync_indicator.dart';
 import '../widgets/offline_banner.dart';
 import '../widgets/flot_management_widget.dart';
-import '../utils/responsive_utils.dart';
-import '../theme/ucash_containers.dart';
+import '../widgets/comptes_speciaux_widget.dart';
 
 class DashboardAgentPage extends StatefulWidget {
   const DashboardAgentPage({super.key});
@@ -33,19 +26,19 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
   int _selectedIndex = 0;
 
   final List<String> _menuItems = [
-    'Accueil',
     'Opérations',
     'Validations',
     'Rapports',
-    'Gestion FLOT',
+    'FLOT',
+    'Frais',
   ];
 
   final List<IconData> _menuIcons = [
-    Icons.dashboard,
     Icons.account_balance_wallet,
     Icons.check_circle,
     Icons.receipt_long,
     Icons.local_shipping,
+    Icons.account_balance,
   ];
 
   @override
@@ -100,7 +93,7 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
                 onPressed: () {
                   // Naviguer vers l'onglet Validations
                   setState(() {
-                    _selectedIndex = 2; // Index 2 = Validations (Accueil=0, Opérations=1, Validations=2, Rapports=3)
+                    _selectedIndex = 1; // Index 1 = Validations (Opérations=0, Validations=1, Rapports=2)
                   });
                 },
               ),
@@ -180,20 +173,7 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
     );
   }
 
-  Widget _buildResponsiveLayout(bool isDesktop, bool isMobile) {
-    if (isDesktop) {
-      return Row(
-        children: [
-          _buildSidebar(),
-          Expanded(
-            child: _buildMainContent(),
-          ),
-        ],
-      );
-    } else {
-      return _buildMainContent();
-    }
-  }
+
 
   PreferredSizeWidget _buildAppBar() {
     final size = MediaQuery.of(context).size;
@@ -288,6 +268,21 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
     );
   }
 
+  Widget _buildResponsiveLayout(bool isDesktop, bool isMobile) {
+    if (isDesktop) {
+      return Row(
+        children: [
+          _buildSidebar(),
+          Expanded(
+            child: _buildMainContent(),
+          ),
+        ],
+      );
+    } else {
+      return _buildMainContent();
+    }
+  }
+
   Widget _buildDrawer() {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 480;
@@ -327,7 +322,7 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
               itemCount: _menuItems.length,
               itemBuilder: (context, index) {
                 return ListTile(
-                  leading: Icon(_menuIcons[index], size: isMobile ? 20 : 24),
+                  leading: Icon(_menuIcons[index]),
                   title: Row(
                     children: [
                       Flexible(
@@ -337,7 +332,7 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (index == 2) // Index 2 = Validations
+                      if (index == 1) // Index 1 = Validations
                         _buildValidationBadge(),
                     ],
                   ),
@@ -359,70 +354,81 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
   }
 
   Widget _buildSidebar() {
-    final size = MediaQuery.of(context).size;
-    final isTablet = size.width > 768 && size.width <= 1024;
-    
     return Container(
-      width: isTablet ? 230 : 250,
-      color: Colors.white,
+      width: 260,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(2, 0),
+          ),
+        ],
+      ),
       child: Column(
         children: [
           Container(
-            padding: EdgeInsets.all(isTablet ? 20 : 24),
+            padding: const EdgeInsets.all(24),
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 colors: [Color(0xFF48bb78), Color(0xFF38a169)],
               ),
             ),
-            child: Center(
-              child: Column(
-                children: [
-                  Text(
-                    '💸',
-                    style: TextStyle(fontSize: isTablet ? 36 : 40),
+            child: const Column(
+              children: [
+                Text('💸', style: TextStyle(fontSize: 48)),
+                SizedBox(height: 12),
+                Text(
+                  'UCASH Agent',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
                   ),
-                  SizedBox(height: isTablet ? 6 : 8),
-                  Text(
-                    'UCASH Agent',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: isTablet ? 16 : 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
           Expanded(
             child: ListView.builder(
               itemCount: _menuItems.length,
+              padding: const EdgeInsets.symmetric(vertical: 16),
               itemBuilder: (context, index) {
-                return ListTile(
-                  leading: Icon(
-                    _menuIcons[index],
-                    size: isTablet ? 20 : 24,
+                final isSelected = _selectedIndex == index;
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isSelected ? const Color(0xFF48bb78).withOpacity(0.1) : null,
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  title: Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          _menuItems[index],
-                          style: TextStyle(fontSize: isTablet ? 13 : 14),
-                          overflow: TextOverflow.ellipsis,
+                  child: ListTile(
+                    leading: Icon(
+                      _menuIcons[index],
+                      color: isSelected ? const Color(0xFF38a169) : Colors.grey[600],
+                    ),
+                    title: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            _menuItems[index],
+                            style: TextStyle(
+                              color: isSelected ? const Color(0xFF38a169) : Colors.grey[800],
+                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      ),
-                      if (index == 2) // Index 2 = Validations
-                        _buildValidationBadge(),
-                    ],
+                        if (index == 1) // Index 1 = Validations
+                          _buildValidationBadge(),
+                      ],
+                    ),
+                    onTap: () {
+                      setState(() {
+                        _selectedIndex = index;
+                      });
+                    },
                   ),
-                  selected: _selectedIndex == index,
-                  selectedTileColor: Colors.green[50],
-                  onTap: () {
-                    setState(() {
-                      _selectedIndex = index;
-                    });
-                  },
                 );
               },
             ),
@@ -432,122 +438,38 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
     );
   }
 
-Widget _buildMainContent() {
-  final size = MediaQuery.of(context).size;
-  final isMobile = size.width <= 768;
-
-  // Widgets qui gèrent leur propre layout (ne pas les mettre dans SingleChildScrollView)
-  final widgetsWithOwnLayout = [1, 2, 3, 4]; // Opérations, Validations, Rapports, FLOT
-
-  Widget content = switch (_selectedIndex) {
-    0 => _buildDashboardContent(),    // Accueil
-    1 => _buildOperationsContent(),   // Opérations
-    2 => _buildValidationsContent(),  // Validations
-    3 => _buildReportsContent(),      // Rapports
-    4 => _buildFlotContent(),         // Gestion FLOT
-    _ => _buildDashboardContent(),
-  };
-
-  // Ne pas mettre de SingleChildScrollView pour les widgets qui gèrent leur propre scroll
-  if (widgetsWithOwnLayout.contains(_selectedIndex)) {
-    return Padding(
-      padding: EdgeInsets.all(isMobile ? 16 : 24),
-      child: content,
-    );
-  }
-  
-  // Pour le Dashboard, garder le SingleChildScrollView
-  return Padding(
-    padding: EdgeInsets.all(isMobile ? 16 : 24),
-    child: SingleChildScrollView(
-      child: content,
-    ),
-  );
-}
-
-
-
-
-  Widget _buildDashboardContent() {
-    return AgentDashboardWidget(
-      onTabChanged: (index) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          setState(() {
-            _selectedIndex = index;
-          });
+  Widget _buildBottomNavigation() {
+    return BottomNavigationBar(
+      currentIndex: _selectedIndex,
+      onTap: (index) {
+        setState(() {
+          _selectedIndex = index;
         });
       },
-    );
-  }
-
-
-  Widget _buildClientsContent() {
-    return const AgentClientsWidget();
-  }
-
-  Widget _buildOperationsContent() {
-    return const AgentOperationsWidget();
-  }
-
-  Widget _buildValidationsContent() {
-    return const TransferValidationWidget();
-  }
-
-  Widget _buildTransfersContent() {
-    return const AgentTransfersWidget();
-  }
-
-  Widget _buildReportsContent() {
-    return const reports.AgentReportsWidget();
-  }
-
-  Widget _buildFlotContent() {
-    return const FlotManagementWidget();
-  }
-
-  Widget _buildSynchronisationContent() {
-    return Consumer<AuthService>(
-      builder: (context, authService, child) {
-        return Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      type: BottomNavigationBarType.fixed,
+      selectedItemColor: const Color(0xFF48bb78),
+      unselectedItemColor: Colors.grey,
+      selectedFontSize: 12,
+      unselectedFontSize: 11,
+      items: _menuItems.asMap().entries.map((entry) {
+        final index = entry.key;
+        final label = entry.value;
+        return BottomNavigationBarItem(
+          icon: Stack(
+            clipBehavior: Clip.none,
             children: [
-              // Header avec statut de synchronisation
-              Row(
-                children: [
-                  Icon(
-                    Icons.sync,
-                    color: const Color(0xFFDC2626),
-                    size: context.fluidIcon(mobile: 24, tablet: 28, desktop: 32),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Synchronisation des Données',
-                      style: TextStyle(
-                        fontSize: context.fluidFont(mobile: 20, tablet: 24, desktop: 28),
-                        fontWeight: FontWeight.bold,
-                        color: const Color(0xFFDC2626),
-                      ),
-                    ),
-                  ),
-                  SyncStatusWidget(
-                    userId: authService.currentUser?.username ?? 'agent',
-                  ),
-                ],
-              ),
-              
-              const SizedBox(height: 24),
-              
-              // Widget de synchronisation principal
-              DashboardSyncWidget(
-                userId: authService.currentUser?.username ?? 'agent',
-              ),
+              Icon(_menuIcons[index]),
+              if (index == 1) // Index 1 = Validations
+                Positioned(
+                  right: -8,
+                  top: -4,
+                  child: _buildValidationBadge(),
+                ),
             ],
           ),
+          label: label,
         );
-      },
+      }).toList(),
     );
   }
 
@@ -574,7 +496,7 @@ Widget _buildMainContent() {
             '$pendingCount',
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 12,
+              fontSize: 10,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -583,127 +505,53 @@ Widget _buildMainContent() {
     );
   }
 
-  Widget _buildBottomNavigation() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.2),
-            spreadRadius: 1,
-            blurRadius: 3,
-            offset: const Offset(0, -1),
-          ),
-        ],
-      ),
-      child: BottomNavigationBar(
-        currentIndex: _getMobileNavIndex(_selectedIndex),
-        onTap: (mobileIndex) {
-          // Mapper l'index mobile vers l'index desktop
-          final desktopIndex = _getDesktopIndexFromMobile(mobileIndex);
-          setState(() => _selectedIndex = desktopIndex);
-        },
-        backgroundColor: Colors.white,
-        selectedItemColor: const Color(0xFFDC2626),
-        unselectedItemColor: Colors.grey,
-        type: BottomNavigationBarType.fixed,
-        elevation: 0,
-        selectedFontSize: 12,
-        unselectedFontSize: 11,
-        items: [
-          BottomNavigationBarItem(
-            icon: Stack(
-              children: [
-                Icon(_menuIcons[0]),
-                if (_selectedIndex == 0)
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    child: Container(
-                      width: 6,
-                      height: 6,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFDC2626),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            label: 'Accueil',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(_menuIcons[1]),
-            label: 'Opérations',
-          ),
-          BottomNavigationBarItem(
-            icon: Stack(
-              children: [
-                Icon(_menuIcons[2]),
-                Consumer<TransferSyncService>(
-                  builder: (context, transferSync, child) {
-                    final authService = Provider.of<AuthService>(context, listen: false);
-                    final currentShopId = authService.currentUser?.shopId;
-                    
-                    if (currentShopId == null) return const SizedBox.shrink();
-                    
-                    final pendingCount = transferSync.getPendingTransfersForShop(currentShopId).length;
-                    
-                    if (pendingCount == 0) return const SizedBox.shrink();
-                    
-                    return Positioned(
-                      right: 0,
-                      top: 0,
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: const BoxDecoration(
-                          color: Colors.orange,
-                          shape: BoxShape.circle,
-                        ),
-                        constraints: const BoxConstraints(
-                          minWidth: 16,
-                          minHeight: 16,
-                        ),
-                        child: Text(
-                          '$pendingCount',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-            label: 'Validations',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(_menuIcons[3]), // Index 3 = Rapports
-            label: 'Rapports',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(_menuIcons[4]), // Index 4 = FLOT
-            label: 'FLOT',
-          ),
-        ],
-      ),
+Widget _buildMainContent() {
+  final size = MediaQuery.of(context).size;
+  final isMobile = size.width <= 768;
+
+  // Widgets qui gèrent leur propre layout (ne pas les mettre dans SingleChildScrollView)
+  final widgetsWithOwnLayout = [0, 1, 2, 3, 4]; // Opérations, Validations, Rapports, FLOT, Frais
+
+  Widget content = switch (_selectedIndex) {
+    0 => _buildOperationsContent(),   // Opérations
+    1 => _buildValidationsContent(),  // Validations
+    2 => _buildReportsContent(),      // Rapports
+    3 => _buildFlotContent(),         // Gestion FLOT
+    4 => _buildFraisContent(),        // Frais
+    _ => _buildOperationsContent(),
+  };
+
+  // Tous les widgets gèrent leur propre scroll
+  return Padding(
+    padding: EdgeInsets.all(isMobile ? 16 : 24),
+    child: content,
+  );
+}
+
+  Widget _buildOperationsContent() {
+    return const AgentOperationsWidget();
+  }
+
+  Widget _buildValidationsContent() {
+    return const TransferValidationWidget();
+  }
+
+  Widget _buildReportsContent() {
+    return const reports.AgentReportsWidget();
+  }
+
+  Widget _buildFlotContent() {
+    return const FlotManagementWidget();
+  }
+
+  Widget _buildFraisContent() {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final shopId = authService.currentUser?.shopId;
+    
+    return ComptesSpeciauxWidget(
+      shopId: shopId,
+      isAdmin: false,
     );
-  }
-
-  // Mapper l'index (0-4)
-  int _getMobileNavIndex(int desktopIndex) {
-    // Index: 0=Accueil, 1=Opérations, 2=Validations, 3=Rapports, 4=FLOT
-    return desktopIndex;
-  }
-
-  // Mapper l'index mobile vers desktop
-  int _getDesktopIndexFromMobile(int mobileIndex) {
-    // Mobile -> Desktop mapping (identique)
-    return mobileIndex;
   }
 
   Future<void> _handleLogout() async {

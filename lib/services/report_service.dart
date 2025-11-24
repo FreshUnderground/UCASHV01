@@ -793,6 +793,7 @@ class ReportService extends ChangeNotifier {
         'recus': totalRecus,
       },
       'transactions': clientOperations.map((op) => {
+        'id': op.id,
         'date': op.dateOp,
         'type': op.type.name,
         'montant': op.montantNet,

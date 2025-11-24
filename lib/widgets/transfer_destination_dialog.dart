@@ -23,7 +23,9 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
   final _formKey = GlobalKey<FormState>();
   final _montantController = TextEditingController();
   final _destinataireController = TextEditingController();
+  final _destinatairePhoneController = TextEditingController(); // Add phone controller
   final _expediteurController = TextEditingController(); // Add expediteur controller
+  final _expediteurPhoneController = TextEditingController(); // Add expediteur phone controller
   
   XFile? _selectedImage;
   Uint8List? _imageBytes;
@@ -52,7 +54,9 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
     _montantController.removeListener(_calculateCommission);
     _montantController.dispose();
     _destinataireController.dispose();
+    _destinatairePhoneController.dispose(); // Dispose phone controller
     _expediteurController.dispose(); // Dispose expediteur controller
+    _expediteurPhoneController.dispose(); // Dispose expediteur phone controller
     super.dispose();
   }
   
@@ -168,64 +172,6 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Type de transfert
-            Text(
-              '1. Type de transfert *',
-              style: TextStyle(
-                fontSize: labelFontSize,
-                fontWeight: FontWeight.bold,
-                color: const Color(0xFFDC2626),
-              ),
-            ),
-            SizedBox(height: isMobile ? 8 : 12),
-                      
-            DropdownButtonFormField<OperationType>(
-              value: _transferType,
-              isExpanded: true,
-              decoration: InputDecoration(
-                labelText: 'Type de transfert',
-                border: const OutlineInputBorder(),
-                prefixIcon: Icon(Icons.swap_horiz, size: ResponsiveDialogUtils.getIconSize(context)),
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: isMobile ? 12 : 16,
-                  vertical: isMobile ? 12 : 16,
-                ),
-              ),
-              items: [
-                DropdownMenuItem(
-                  value: OperationType.transfertNational,
-                  child: Text(
-                    'Transfert Sortant (National + International)',
-                    style: TextStyle(fontSize: isMobile ? 14 : 16),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: OperationType.transfertInternationalEntrant,
-                  child: Text(
-                    'Transfert International Entrant',
-                    style: TextStyle(fontSize: isMobile ? 14 : 16),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-              onChanged: (value) {
-                setState(() {
-                  _transferType = value!;
-                });
-                _calculateCommission();
-              },
-              validator: (value) {
-                if (value == null) {
-                  return 'Sélectionnez le type de transfert';
-                }
-                return null;
-              },
-            ),
-
-            
-            SizedBox(height: fieldSpacing),
-            
             // Montant
             Text(
               '${_transferType == OperationType.transfertNational ? '5' : '4'}. Montant du transfert *',
@@ -287,8 +233,8 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
                       .where((shop) => shop.id != currentUser?.shopId)
                       .toList();
                   
-                  return DropdownButtonFormField<ShopModel>(
-                    value: _selectedShop,
+                  return DropdownButtonFormField<int>( // Spécifier le type
+                    value: _selectedShop?.id, // Utiliser l'ID du shop sélectionné
                     isExpanded: true,
                     decoration: InputDecoration(
                       labelText: 'Shop de destination',
@@ -300,8 +246,8 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
                       ),
                     ),
                     items: availableShops.map((shop) {
-                      return DropdownMenuItem(
-                        value: shop,
+                      return DropdownMenuItem<int>(
+                        value: shop.id, // Utiliser l'ID
                         child: Text(
                           '${shop.designation} - ${shop.localisation}',
                           style: TextStyle(fontSize: isMobile ? 14 : 16),
@@ -310,10 +256,14 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
                       );
                     }).toList(),
                     onChanged: (value) {
-                      setState(() {
-                        _selectedShop = value;
-                      });
-                      _calculateCommission();
+                      if (value != null) {
+                        // Trouver le shop correspondant
+                        final selected = availableShops.firstWhere((shop) => shop.id == value);
+                        setState(() {
+                          _selectedShop = selected;
+                        });
+                        _calculateCommission();
+                      }
                     },
                     validator: (value) {
                       if (_transferType == OperationType.transfertNational && value == null) {
@@ -327,6 +277,50 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
               SizedBox(height: fieldSpacing),
             ],
                       
+                        
+            // Nom de l'expéditeur
+            Text(
+              '${_transferType == OperationType.transfertNational ? '4' : '3'}. Nom de l\'expéditeur',
+              style: TextStyle(
+                fontSize: labelFontSize,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFFDC2626),
+              ),
+            ),
+            SizedBox(height: isMobile ? 8 : 12),
+            
+            TextFormField(
+              controller: _expediteurController,
+              decoration: InputDecoration(
+                labelText: 'Nom de l\'expéditeur',
+                border: const OutlineInputBorder(),
+                prefixIcon: Icon(Icons.person_outline, size: ResponsiveDialogUtils.getIconSize(context)),
+                hintText: 'Ex: Marie Dupont',
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: isMobile ? 12 : 16,
+                  vertical: isMobile ? 12 : 16,
+                ),
+              ),
+              style: TextStyle(fontSize: isMobile ? 16 : 18),
+            ),
+
+            // Téléphone de l'expéditeur
+            TextFormField(
+              controller: _expediteurPhoneController,
+              decoration: InputDecoration(
+                labelText: 'Téléphone de l\'expéditeur',
+                border: const OutlineInputBorder(),
+                prefixIcon: Icon(Icons.phone_android, size: ResponsiveDialogUtils.getIconSize(context)),
+                hintText: 'Ex: +243 888 777 666',
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: isMobile ? 12 : 16,
+                  vertical: isMobile ? 12 : 16,
+                ),
+              ),
+              style: TextStyle(fontSize: isMobile ? 16 : 18),
+              keyboardType: TextInputType.phone,
+            ),
+            SizedBox(height: fieldSpacing),
             // Informations du destinataire
             Text(
               '${OperationType.transfertNational == OperationType.transfertNational ? '3' : '2'}. Personne qui sera servie *',
@@ -336,7 +330,7 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
                 color: const Color(0xFFDC2626),
               ),
             ),
-            SizedBox(height: isMobile ? 8 : 12),
+            SizedBox(height: isMobile ? 8 : 12),            
             
             TextFormField(
               controller: _destinataireController,
@@ -360,35 +354,24 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
             ),
             SizedBox(height: fieldSpacing),
             
-            // Nom de l'expéditeur
-            Text(
-              '${_transferType == OperationType.transfertNational ? '4' : '3'}. Nom de l\'expéditeur',
-              style: TextStyle(
-                fontSize: labelFontSize,
-                fontWeight: FontWeight.bold,
-                color: const Color(0xFFDC2626),
-              ),
-            ),
-            SizedBox(height: isMobile ? 8 : 12),
-            
+            // Téléphone du destinataire
             TextFormField(
-              controller: _expediteurController,
+              controller: _destinatairePhoneController,
               decoration: InputDecoration(
-                labelText: 'Nom de l\'expéditeur (optionnel)',
+                labelText: 'Téléphone de la personne (optionnel)',
                 border: const OutlineInputBorder(),
-                prefixIcon: Icon(Icons.person_outline, size: ResponsiveDialogUtils.getIconSize(context)),
-                hintText: 'Ex: Marie Dupont',
+                prefixIcon: Icon(Icons.phone, size: ResponsiveDialogUtils.getIconSize(context)),
+                hintText: 'Ex: +243 999 888 777',
                 contentPadding: EdgeInsets.symmetric(
                   horizontal: isMobile ? 12 : 16,
                   vertical: isMobile ? 12 : 16,
                 ),
               ),
               style: TextStyle(fontSize: isMobile ? 16 : 18),
+              keyboardType: TextInputType.phone,
             ),
-
             SizedBox(height: fieldSpacing),
             
-            // Mode de paiement
             Text(
               '${_transferType == OperationType.transfertNational ? '6' : '5'}. Mode de paiement *',
               style: TextStyle(
@@ -605,6 +588,8 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
                       ),
                     ],
                   ),
+
+                  
                   SizedBox(height: isMobile ? 6 : 8),
                   
                   if (_selectedShop != null) ...[
@@ -623,6 +608,25 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
                     ),
                     SizedBox(height: isMobile ? 6 : 8),
                   ],
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Expeditaire :', style: TextStyle(fontSize: isMobile ? 12 : 14)),
+                      Flexible(
+                        child: Text(
+                          _expediteurController.text.isEmpty ? 'Non renseigné' : _expediteurController.text,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: isMobile ? 12 : 14,
+                          ),
+                          textAlign: TextAlign.right,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: isMobile ? 6 : 8),
                   
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -840,13 +844,16 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
       final montant = double.parse(_montantController.text);
       
       // Create notes with image info and expediteur if provided
-      String notes = 'Transfert avec destination - ${_getTransferTypeLabel()}';
+      String notes = '';
       if (_selectedImage != null) {
         notes += ' - Photo: ${_selectedImage!.path}';
       }
       if (_expediteurController.text.isNotEmpty) {
         notes += ' - Expéditeur: ${_expediteurController.text}';
       }
+      
+      // Store only the phone number in notes if provided (as per specification)
+      String? telephoneExpediteur = _expediteurPhoneController.text.isNotEmpty ? _expediteurPhoneController.text : null;
       
       // Récupérer le shop source pour avoir sa désignation
       final shopService = Provider.of<ShopService>(context, listen: false);
@@ -868,8 +875,9 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
         devise: 'USD',
         modePaiement: _modePaiement,
         destinataire: _destinataireController.text,
-        notes: notes,
-        observation: _expediteurController.text.isNotEmpty ? _expediteurController.text : null, // Store expediteur in observation field
+        telephoneDestinataire: _destinatairePhoneController.text.isNotEmpty ? _destinatairePhoneController.text : null,
+        notes: telephoneExpediteur, // Store only phone number or null
+        observation: _expediteurController.text.isNotEmpty ? _expediteurController.text : null, // Store expediteur name
         statut: OperationStatus.enAttente,
         dateOp: DateTime.now(),
         lastModifiedAt: DateTime.now(),

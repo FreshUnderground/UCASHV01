@@ -63,6 +63,9 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
           // Activité récente
           _buildRecentActivity(),
           
+          // Transferts, Servis et En Attente
+          _buildTransfersSection(),
+          
           // Espace en bas pour éviter le collé au bord
           SizedBox(height: padding),
         ],
@@ -371,6 +374,12 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
               Icons.analytics,
               const Color(0xFF4B7BEC),
               () => _safeNavigateToTab(6), // Index 6 = Rapports
+            ),
+            _buildActionCard(
+              'Frais',
+              Icons.account_balance,
+              const Color(0xFF8B5CF6),
+              () => _safeNavigateToTab(9), // Index 9 = Frais
             ),
           ],
         ),
@@ -1002,5 +1011,301 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
       'capitalTotalDevise2': capitalTotalDevise2,
       'hasDeviseSecondaire': currentShop.hasDeviseSecondaire,
     };
+  }
+
+  Widget _buildTransfersSection() {
+    return Consumer3<OperationService, ShopService, AuthService>(
+      builder: (context, operationService, shopService, authService, child) {
+        final currentShopId = authService.currentUser?.shopId;
+        if (currentShopId == null) return const SizedBox.shrink();
+        
+        // Filtrer les opérations pour le shop courant
+        final operations = operationService.operations
+            .where((op) => 
+                op.shopSourceId == currentShopId || 
+                op.shopDestinationId == currentShopId)
+            .toList();
+        
+        // Grouper par source et destination
+        final Map<String, List<OperationModel>> transfersByRoute = {};
+        
+        for (final op in operations) {
+          if (op.type == OperationType.transfertNational || 
+              op.type == OperationType.transfertInternationalSortant ||
+              op.type == OperationType.transfertInternationalEntrant) {
+            
+            final sourceShop = shopService.getShopById(op.shopSourceId ?? 0);
+            final destShop = shopService.getShopById(op.shopDestinationId ?? 0);
+            
+            final sourceName = sourceShop?.designation ?? 'Shop ${op.shopSourceId}';
+            final destName = destShop?.designation ?? 'Shop ${op.shopDestinationId}';
+            final routeKey = '$sourceName → $destName';
+            
+            if (!transfersByRoute.containsKey(routeKey)) {
+              transfersByRoute[routeKey] = [];
+            }
+            transfersByRoute[routeKey]!.add(op);
+          }
+        }
+        
+        if (transfersByRoute.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        
+        final isMobile = MediaQuery.of(context).size.width < 600;
+        
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Transferts par Route',
+              style: context.h3.copyWith(
+                color: const Color(0xFF374151),
+              ),
+            ),
+            context.verticalSpace(mobile: 16, tablet: 20, desktop: 24),
+            
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: transfersByRoute.length,
+              itemBuilder: (context, index) {
+                final routeKey = transfersByRoute.keys.elementAt(index);
+                final operations = transfersByRoute[routeKey]!;
+                
+                // Calculer les stats pour cette route
+                int servedCount = 0;
+                int pendingCount = 0;
+                double totalAmount = 0.0;
+                
+                for (final op in operations) {
+                  if (op.statut == OperationStatus.validee) {
+                    servedCount++;
+                  } else if (op.statut == OperationStatus.enAttente) {
+                    pendingCount++;
+                  }
+                  totalAmount += op.montantNet;
+                }
+                
+                return Card(
+                  margin: EdgeInsets.only(bottom: isMobile ? 12 : 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      color: Colors.white,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withOpacity(0.1),
+                          blurRadius: isMobile ? 8 : 12,
+                          offset: Offset(0, isMobile ? 2 : 4),
+                        ),
+                      ],
+                    ),
+                    child: Padding(
+                      padding: EdgeInsets.all(isMobile ? 16 : 20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Route header
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFDC2626).withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(
+                                  Icons.swap_horiz,
+                                  color: Color(0xFFDC2626),
+                                  size: 20,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  routeKey,
+                                  style: TextStyle(
+                                    fontSize: isMobile ? 14 : 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          
+                          const SizedBox(height: 16),
+                          
+                          // Stats row
+                          Row(
+                            children: [
+                              _buildTransferStatCard(
+                                'Servis',
+                                servedCount.toString(),
+                                Icons.check_circle,
+                                Colors.green,
+                                isMobile,
+                              ),
+                              const SizedBox(width: 12),
+                              _buildTransferStatCard(
+                                'En Attente',
+                                pendingCount.toString(),
+                                Icons.hourglass_empty,
+                                Colors.orange,
+                                isMobile,
+                              ),
+                              const SizedBox(width: 12),
+                              _buildTransferStatCard(
+                                'Total',
+                                '${totalAmount.toStringAsFixed(2)} \$',
+                                Icons.attach_money,
+                                const Color(0xFFDC2626),
+                                isMobile,
+                              ),
+                            ],
+                          ),
+                          
+                          const SizedBox(height: 12),
+                          
+                          // Operations list
+                          if (operations.isNotEmpty) ...[
+                            const Divider(),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Détails (${operations.length} transferts)',
+                              style: TextStyle(
+                                fontSize: isMobile ? 12 : 14,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.grey,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            SizedBox(
+                              height: isMobile ? 120 : 150,
+                              child: ListView.builder(
+                                shrinkWrap: true,
+                                physics: const ClampingScrollPhysics(),
+                                itemCount: operations.length > 3 ? 3 : operations.length,
+                                itemBuilder: (context, i) {
+                                  final op = operations[i];
+                                  return Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 4),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(6),
+                                          decoration: BoxDecoration(
+                                            color: _getStatusColor(op.statut).withOpacity(0.1),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Icon(
+                                            _getStatusIcon(op.statut),
+                                            color: _getStatusColor(op.statut),
+                                            size: 16,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            '${op.typeLabel} - ${op.destinataire ?? 'N/A'}',
+                                            style: TextStyle(
+                                              fontSize: isMobile ? 11 : 12,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          '${op.montantNet.toStringAsFixed(2)} \$',
+                                          style: TextStyle(
+                                            fontSize: isMobile ? 11 : 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+  
+  Widget _buildTransferStatCard(String title, String value, IconData icon, Color color, bool isMobile) {
+    return Expanded(
+      child: Container(
+        padding: EdgeInsets.all(isMobile ? 8 : 12),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.1)),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: isMobile ? 16 : 20),
+            const SizedBox(height: 4),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: isMobile ? 10 : 11,
+                color: Colors.grey,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: isMobile ? 12 : 14,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Color _getStatusColor(OperationStatus status) {
+    switch (status) {
+      case OperationStatus.enAttente:
+        return Colors.orange;
+      case OperationStatus.validee:
+        return Colors.green;
+      case OperationStatus.terminee:
+        return Colors.blue;
+      case OperationStatus.annulee:
+        return Colors.red;
+    }
+  }
+  
+  IconData _getStatusIcon(OperationStatus status) {
+    switch (status) {
+      case OperationStatus.enAttente:
+        return Icons.hourglass_empty;
+      case OperationStatus.validee:
+        return Icons.check_circle;
+      case OperationStatus.terminee:
+        return Icons.check_circle_outline;
+      case OperationStatus.annulee:
+        return Icons.cancel;
+    }
   }
 }
