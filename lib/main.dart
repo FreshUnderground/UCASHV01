@@ -16,6 +16,7 @@ import 'services/flot_service.dart';
 import 'services/document_header_service.dart';
 import 'services/transfer_sync_service.dart';
 import 'services/compte_special_service.dart';
+import 'services/robust_sync_service.dart';
 import 'pages/login_page.dart';
 import 'pages/agent_login_page.dart';
 import 'pages/client_login_page.dart';
@@ -48,6 +49,10 @@ void main() async {
   // Initialize the sync service
   final syncService = SyncService();
   await syncService.initialize();
+  
+  // Initialize the robust sync service
+  final robustSyncService = RobustSyncService();
+  await robustSyncService.initialize();
   
   // Initialize the document header service
   final documentHeaderService = DocumentHeaderService();
