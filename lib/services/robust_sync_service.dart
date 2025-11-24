@@ -217,7 +217,7 @@ class RobustSyncService {
     }
   }
 
-  /// Exécute SLOW SYNC: commissions, cloture_caisse, shops, agents
+  /// Exécute SLOW SYNC: commissions, cloture_caisse, shops, agents, document_headers
   Future<void> _performSlowSync({bool isInitial = false}) async {
     if (_isSlowSyncing) {
       debugPrint('⏸️ SLOW SYNC déjà en cours, ignoré');
@@ -228,7 +228,7 @@ class RobustSyncService {
     final startTime = DateTime.now();
     
     debugPrint('🐢 ${isInitial ? "[INITIAL]" : ""} SLOW SYNC - Début');
-    debugPrint('   Tables: commissions, cloture_caisse, shops, agents');
+    debugPrint('   Tables: commissions, cloture_caisse, shops, agents, document_headers');
     
     int successCount = 0;
     int errorCount = 0;
@@ -285,6 +285,19 @@ class RobustSyncService {
       } else {
         errorCount++;
         errors.add('cloture_caisse');
+      }
+      
+      // 5. DOCUMENT HEADERS (EN-TÊTES)
+      if (await _syncWithRetry('document_headers', () async {
+        debugPrint('  📤 Upload DOCUMENT HEADERS...');
+        await _syncService.uploadTableData('document_headers', 'auto_slow_sync');
+        debugPrint('  📥 Download DOCUMENT HEADERS...');
+        await _syncService.downloadTableData('document_headers', 'auto_slow_sync', 'admin');
+      })) {
+        successCount++;
+      } else {
+        errorCount++;
+        errors.add('document_headers');
       }
       
       _lastSlowSync = DateTime.now();
