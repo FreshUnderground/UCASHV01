@@ -56,6 +56,14 @@ class RapportClotureModel {
   final List<CompteShopResume> shopsNousDoivent;
   final List<CompteShopResume> shopsNousDevons;
   
+  // NOUVEAU: Comptes spéciaux (FRAIS et DÉPENSE)
+  final double retraitsFraisDuJour;      // Retraits FRAIS du jour
+  final double commissionsFraisDuJour;   // Commissions FRAIS du jour
+  final double soldeFraisTotal;          // Solde total du compte FRAIS
+  final double sortiesDepenseDuJour;     // Sorties DÉPENSE du jour
+  final double depotsDepenseDuJour;      // Dépôts DÉPENSE du jour
+  final double soldeDepenseTotal;        // Solde total du compte DÉPENSE
+  
   // Listes détaillées des FLOT
   final List<FlotResume> flotsRecusDetails;
   final Map<String, double> flotsRecusGroupes; // Flots reçus groupés par shop expéditeur
@@ -130,6 +138,12 @@ class RapportClotureModel {
     required this.clientsNousDevons,
     required this.shopsNousDoivent,
     required this.shopsNousDevons,
+    this.retraitsFraisDuJour = 0.0,
+    this.commissionsFraisDuJour = 0.0,
+    this.soldeFraisTotal = 0.0,
+    this.sortiesDepenseDuJour = 0.0,
+    this.depotsDepenseDuJour = 0.0,
+    this.soldeDepenseTotal = 0.0,
     this.flotsRecusDetails = const [],
     required this.flotsRecusGroupes,
     this.flotsEnvoyes = const [],

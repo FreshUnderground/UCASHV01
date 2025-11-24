@@ -4,8 +4,10 @@ import '../models/operation_model.dart';
 import '../models/shop_model.dart';
 import '../models/flot_model.dart' as flot_model;
 import '../models/cloture_caisse_model.dart';
+import '../models/compte_special_model.dart';
 import 'local_db.dart';
 import 'flot_service.dart';
+import 'compte_special_service.dart';
 
 /// Service pour générer le Rapport de Clôture Journalière
 class RapportClotureService {
@@ -48,6 +50,9 @@ class RapportClotureService {
       
       // 6. Calculer les dettes/créances inter-shops
       final comptesShops = await _getComptesShops(shopId);
+      
+      // 6.5. Calculer les comptes spéciaux (FRAIS et DÉPENSE)
+      final comptesSpeciaux = await _calculerComptesSpeciaux(shopId, dateRapport);
 
       // 7. Calculer les transferts groupés par route
       final transfertsGroupes = await _calculerTransfertsGroupes(shopId, dateRapport, operations);
@@ -71,7 +76,7 @@ class RapportClotureService {
       );
 
       // Calculate capital net according to the formula:
-      // CAPITAL NET = CASH DISPONIBLE + PERSONNE QUI NOUS DOIVENT - CEUX QUE NOUS DEVONS
+      // CAPITAL NET = CASH DISPONIBLE + PERSONNE QUI NOUS DOIVENT - CEUX QUE NOUS DEVONS - RETRAITS FRAIS - SORTIES DÉPENSE
       final totalClientsNousDoivent = comptesClients['nousDoivent']!
           .fold(0.0, (sum, client) => sum + client.solde.abs());
       final totalClientsNousDevons = comptesClients['nousDevons']!
@@ -81,7 +86,18 @@ class RapportClotureService {
       final totalShopsNousDevons = comptesShops['nousDevons']!
           .fold(0.0, (sum, shop) => sum + shop.montant);
       
-      final capitalNet = cashDisponible['total']! + totalClientsNousDoivent + totalShopsNousDoivent - totalClientsNousDevons - totalShopsNousDevons;
+      // Récupérer les retraits FRAIS et sorties DÉPENSE du jour
+      final retraitsFrais = comptesSpeciaux['retraits_frais'] as double;
+      final sortiesDepense = comptesSpeciaux['sorties_depense'] as double;
+      
+      // FORMULE COMPLÈTE avec comptes spéciaux
+      final capitalNet = cashDisponible['total']! 
+          + totalClientsNousDoivent 
+          + totalShopsNousDoivent 
+          - totalClientsNousDevons 
+          - totalShopsNousDevons
+          - retraitsFrais      // NOUVEAU: Soustraire retraits FRAIS
+          - sortiesDepense;    // NOUVEAU: Soustraire sorties DÉPENSE
 
       return RapportClotureModel(
         shopId: shopId,
@@ -117,6 +133,14 @@ class RapportClotureService {
         // Comptes inter-shops
         shopsNousDoivent: comptesShops['nousDoivent']!,
         shopsNousDevons: comptesShops['nousDevons']!,
+        
+        // NOUVEAU: Comptes spéciaux
+        retraitsFraisDuJour: comptesSpeciaux['retraits_frais'] as double,
+        commissionsFraisDuJour: comptesSpeciaux['commissions_frais'] as double,
+        soldeFraisTotal: comptesSpeciaux['solde_frais_total'] as double,
+        sortiesDepenseDuJour: comptesSpeciaux['sorties_depense'] as double,
+        depotsDepenseDuJour: comptesSpeciaux['depots_depense'] as double,
+        soldeDepenseTotal: comptesSpeciaux['solde_depense_total'] as double,
         
         // NOUVEAU: Listes détaillées des FLOT
         flotsRecusDetails: flots['flotsRecusDetails'] as List<FlotResume>,
@@ -637,6 +661,70 @@ class RapportClotureService {
     return {
       'nousDoivent': shopsNousDoivent,
       'nousDevons': shopsNousDevons,
+    };
+  }
+
+  /// Calculer les comptes spéciaux (FRAIS et DÉPENSE)
+  Future<Map<String, dynamic>> _calculerComptesSpeciaux(int shopId, DateTime dateRapport) async {
+    final service = CompteSpecialService.instance;
+    await service.loadTransactions(shopId: shopId);
+    
+    // Début de la journée
+    final startOfDay = DateTime(dateRapport.year, dateRapport.month, dateRapport.day);
+    final endOfDay = startOfDay.add(const Duration(days: 1));
+    
+    // Récupérer les transactions du jour
+    final fraisDuJour = service.getFrais(
+      shopId: shopId,
+      startDate: startOfDay,
+      endDate: endOfDay,
+    );
+    
+    final depensesDuJour = service.getDepenses(
+      shopId: shopId,
+      startDate: startOfDay,
+      endDate: endOfDay,
+    );
+    
+    // Calculer les RETRAITS FRAIS du jour (montants négatifs)
+    final retraitsFrais = fraisDuJour
+        .where((t) => t.typeTransaction == TypeTransactionCompte.RETRAIT)
+        .fold(0.0, (sum, t) => sum + t.montant.abs());
+    
+    // Calculer les COMMISSIONS FRAIS du jour (montants positifs)
+    final commissionsFrais = fraisDuJour
+        .where((t) => t.typeTransaction == TypeTransactionCompte.COMMISSION_AUTO)
+        .fold(0.0, (sum, t) => sum + t.montant);
+    
+    // Calculer les SORTIES DÉPENSE du jour (montants négatifs)
+    final sortiesDepense = depensesDuJour
+        .where((t) => t.typeTransaction == TypeTransactionCompte.SORTIE)
+        .fold(0.0, (sum, t) => sum + t.montant.abs());
+    
+    // Calculer les DÉPÔTS DÉPENSE du jour (montants positifs)
+    final depotsDepense = depensesDuJour
+        .where((t) => t.typeTransaction == TypeTransactionCompte.DEPOT)
+        .fold(0.0, (sum, t) => sum + t.montant);
+    
+    // Soldes globaux (tout l'historique)
+    final soldeFraisTotal = service.getSoldeFrais(shopId: shopId);
+    final soldeDepenseTotal = service.getSoldeDepense(shopId: shopId);
+    
+    debugPrint('📊 COMPTES SPÉCIAUX - ${dateRapport.toIso8601String().split('T')[0]}:');
+    debugPrint('   FRAIS: Commissions du jour = ${commissionsFrais.toStringAsFixed(2)} USD');
+    debugPrint('   FRAIS: Retraits du jour = ${retraitsFrais.toStringAsFixed(2)} USD');
+    debugPrint('   FRAIS: Solde total = ${soldeFraisTotal.toStringAsFixed(2)} USD');
+    debugPrint('   DÉPENSE: Dépôts du jour = ${depotsDepense.toStringAsFixed(2)} USD');
+    debugPrint('   DÉPENSE: Sorties du jour = ${sortiesDepense.toStringAsFixed(2)} USD');
+    debugPrint('   DÉPENSE: Solde total = ${soldeDepenseTotal.toStringAsFixed(2)} USD');
+    
+    return {
+      'retraits_frais': retraitsFrais,
+      'commissions_frais': commissionsFrais,
+      'solde_frais_total': soldeFraisTotal,
+      'sorties_depense': sortiesDepense,
+      'depots_depense': depotsDepense,
+      'solde_depense_total': soldeDepenseTotal,
     };
   }
 
