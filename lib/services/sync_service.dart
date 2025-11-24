@@ -440,6 +440,16 @@ class SyncService {
     }
   }
 
+  /// Upload des données d'une table spécifique (version publique pour RobustSyncService)
+  Future<void> uploadTableData(String tableName, String userId, [String userRole = 'admin']) async {
+    return await _uploadTableData(tableName, userId, userRole);
+  }
+  
+  /// Download des données d'une table spécifique (version publique pour RobustSyncService)
+  Future<void> downloadTableData(String tableName, String userId, String userRole) async {
+    return await _downloadTableData(tableName, userId, userRole);
+  }
+  
   /// Upload des données d'une table spécifique
   Future<void> _uploadTableData(String tableName, String userId, [String userRole = 'admin']) async {
     try {
