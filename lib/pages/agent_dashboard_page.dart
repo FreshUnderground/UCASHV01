@@ -5,7 +5,9 @@ import '../services/operation_service.dart';
 import '../services/shop_service.dart';
 import '../services/agent_service.dart';
 import '../services/flot_service.dart';
+import '../services/flot_notification_service.dart';
 import '../services/sync_service.dart';
+import '../models/flot_model.dart' as flot_model;
 import '../widgets/connectivity_indicator.dart';
 import '../widgets/agent_clients_widget.dart';
 import '../widgets/agent_transfers_widget.dart';
@@ -64,6 +66,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
   void initState() {
     super.initState();
     _loadData();
+    _setupFlotNotifications();
   }
 
   void _loadData() {
@@ -86,6 +89,65 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
       debugPrint('   Opérations pour agent ${authService.currentAgent!.id}: ${operationService.operations.length}');
       debugPrint('   FLOTs pour shop ${authService.currentAgent!.shopId}: ${flotService.flots.length}');
     }
+  }
+
+  /// Configure les notifications pour les flots entrants
+  void _setupFlotNotifications() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final authService = Provider.of<AgentAuthService>(context, listen: false);
+      final flotService = Provider.of<FlotService>(context, listen: false);
+      final flotNotificationService = FlotNotificationService();
+      
+      flotNotificationService.startMonitoring(
+        authService: authService,
+        getFlots: () => flotService.flots,
+      );
+      
+      // Définir le callback pour les nouvelles notifications de flots
+      flotNotificationService.onNewFlotDetected = (title, message, flotId) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.local_shipping, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(message),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: const Color(0xFF2563EB), // Bleu pour différencier des transferts
+              duration: const Duration(seconds: 8),
+              action: SnackBarAction(
+                label: 'VOIR',
+                textColor: Colors.white,
+                onPressed: () {
+                  // Naviguer vers l'onglet FLOT
+                  setState(() {
+                    _selectedIndex = 7; // Index 7 = FLOT
+                  });
+                },
+              ),
+            ),
+          );
+        }
+      };
+    });
   }
 
   @override
@@ -354,11 +416,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
                       horizontal: isTablet ? 14 : 16,
                       vertical: isTablet ? 3 : 4,
                     ),
-                    leading: Icon(
-                      _menuIcons[index],
-                      color: isSelected ? Colors.white : Colors.grey[600],
-                      size: isTablet ? 20 : 22,
-                    ),
+                    leading: _buildMenuIcon(index, isSelected, isTablet),
                     title: Text(
                       _menuItems[index],
                       style: TextStyle(
@@ -377,6 +435,44 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
           ),
         ],
       ),
+    );
+  }
+
+  /// Construit l'icône du menu avec badge de notification pour FLOT (index 7)
+  Widget _buildMenuIcon(int index, bool isSelected, bool isTablet) {
+    // Index 7 = FLOT
+    if (index == 7) {
+      return Consumer<FlotService>(builder: (context, flotService, child) {
+        // Compter les flots en route pour le shop de destination
+        final authService = Provider.of<AgentAuthService>(context, listen: false);
+        final currentShopId = authService.currentAgent?.shopId;
+        
+        final pendingFlotsCount = currentShopId != null 
+            ? flotService.flots.where((f) => 
+                f.statut == flot_model.StatutFlot.enRoute && 
+                f.shopDestinationId == currentShopId
+              ).length 
+            : 0;
+        
+        return Badge(
+          label: Text(pendingFlotsCount.toString()),
+          isLabelVisible: pendingFlotsCount > 0,
+          backgroundColor: isSelected ? Colors.white : const Color(0xFF2563EB),
+          textColor: isSelected ? const Color(0xFF2563EB) : Colors.white,
+          child: Icon(
+            _menuIcons[index],
+            color: isSelected ? Colors.white : Colors.grey[600],
+            size: isTablet ? 20 : 22,
+          ),
+        );
+      });
+    }
+    
+    // Icône normale pour les autres items
+    return Icon(
+      _menuIcons[index],
+      color: isSelected ? Colors.white : Colors.grey[600],
+      size: isTablet ? 20 : 22,
     );
   }
 
