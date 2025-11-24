@@ -94,6 +94,10 @@ class SyncService {
     if (_isAutoSyncEnabled) {
       startAutoSync();
       debugPrint('⏰ Synchronisation automatique activée (intervalle: ${_autoSyncInterval.inSeconds}s)');
+      
+      // Démarrer aussi la sync spécialisée FLOTS & OPERATIONS
+      startFlotsOpsAutoSync();
+      debugPrint('🚀⏰ Synchronisation auto FLOTS & OPERATIONS activée (intervalle: ${_autoSyncInterval.inSeconds}s)');
     }
     
     debugPrint('✅ Service de synchronisation initialisé (auto-sync: ${_isAutoSyncEnabled ? "ON" : "OFF"})');
@@ -116,6 +120,12 @@ class SyncService {
       if (_isAutoSyncEnabled && _autoSyncTimer == null) {
         startAutoSync();
         debugPrint('⏰ Redémarrage de la synchronisation automatique');
+        
+        // Redémarrer aussi la sync FLOTS & OPERATIONS
+        if (_flotsOpsAutoSyncTimer == null) {
+          startFlotsOpsAutoSync();
+          debugPrint('🚀⏰ Redémarrage synchronisation FLOTS & OPERATIONS');
+        }
       }
     }
     
@@ -131,6 +141,10 @@ class SyncService {
       if (_autoSyncTimer != null) {
         stopAutoSync();
         debugPrint('⏸️ Auto-sync arrêté (mode offline)');
+      }
+      if (_flotsOpsAutoSyncTimer != null) {
+        stopFlotsOpsAutoSync();
+        debugPrint('⏸️ Auto-sync FLOTS/OPS arrêté (mode offline)');
       }
       _updateStatus(SyncStatus.offline);
     }
