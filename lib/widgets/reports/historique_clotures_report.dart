@@ -3,7 +3,9 @@ import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../services/local_db.dart';
+import '../../services/auth_service.dart';
 import '../../models/cloture_caisse_model.dart';
 
 class HistoriqueCloturesReport extends StatefulWidget {
@@ -117,6 +119,60 @@ class _HistoriqueCloturesReportState extends State<HistoriqueCloturesReport> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('❌ Erreur: $e')),
         );
+      }
+    }
+  }
+
+  /// Supprimer une clôture (réservé aux admins)
+  Future<void> _supprimerCloture(ClotureCaisseModel cloture) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('⚠️ Supprimer la clôture'),
+        content: Text(
+          'Voulez-vous vraiment supprimer la clôture du ${DateFormat('dd/MM/yyyy').format(cloture.dateCloture)} ?\n'
+          'Shop: ${cloture.shopId}\n'
+          'Clôturé par: ${cloture.cloturePar}\n\n'
+          'Cette action est irréversible.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await LocalDB.instance.deleteClotureCaisse(cloture.id!);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Clôture supprimée avec succès'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          _loadClotures();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ Erreur lors de la suppression: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }
@@ -296,19 +352,24 @@ class _HistoriqueCloturesReportState extends State<HistoriqueCloturesReport> {
       );
     }
 
+    // Vérifier si l'utilisateur est admin
+    final authService = Provider.of<AuthService>(context);
+    final isAdmin = authService.currentUser?.role.toLowerCase() == 'admin';
+
     return Card(
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: DataTable(
           headingRowColor: MaterialStateProperty.all(Colors.grey[100]),
-          columns: const [
-            DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('Shop', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('Solde Saisi', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('Solde Calculé', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('Écart', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('Validé', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('Agent', style: TextStyle(fontWeight: FontWeight.bold))),
+          columns: [
+            const DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.bold))),
+            const DataColumn(label: Text('Shop', style: TextStyle(fontWeight: FontWeight.bold))),
+            const DataColumn(label: Text('Solde Saisi', style: TextStyle(fontWeight: FontWeight.bold))),
+            const DataColumn(label: Text('Solde Calculé', style: TextStyle(fontWeight: FontWeight.bold))),
+            const DataColumn(label: Text('Écart', style: TextStyle(fontWeight: FontWeight.bold))),
+            const DataColumn(label: Text('Validé', style: TextStyle(fontWeight: FontWeight.bold))),
+            const DataColumn(label: Text('Agent', style: TextStyle(fontWeight: FontWeight.bold))),
+            if (isAdmin) const DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
           ],
           rows: _clotures.map((cloture) {
             final ecart = cloture.soldeSaisiTotal - cloture.soldeCalculeTotal;
@@ -343,6 +404,14 @@ class _HistoriqueCloturesReportState extends State<HistoriqueCloturesReport> {
                   ),
                 ),
                 DataCell(Text(cloture.cloturePar)),
+                if (isAdmin)
+                  DataCell(
+                    IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                      tooltip: 'Supprimer la clôture',
+                      onPressed: () => _supprimerCloture(cloture),
+                    ),
+                  ),
               ],
             );
           }).toList(),
