@@ -80,12 +80,12 @@ try {
             $entity['last_modified_at'] = $timestamp;
             $entity['last_modified_by'] = $userId;
             
-            // Vérifier si le flot existe déjà par reference ET date_envoi
-            // (car un flot peut être modifié localement de enRoute à servi)
+            // Vérifier si le flot existe déjà en statut enRoute avec même reference ET date_envoi
+            // (pour permettre la mise à jour enRoute → servi)
             $checkStmt = $pdo->prepare("
                 SELECT id, statut, date_reception 
                 FROM flots 
-                WHERE reference = ? AND date_envoi = ?
+                WHERE reference = ? AND date_envoi = ? AND statut = 'enRoute'
             ");
             $checkStmt->execute([
                 $entity['reference'] ?? null,
@@ -110,7 +110,7 @@ try {
                         notes = :notes,
                         last_modified_at = :last_modified_at,
                         last_modified_by = :last_modified_by
-                    WHERE reference = :reference AND date_envoi = :date_envoi_where
+                    WHERE reference = :reference AND date_envoi = :date_envoi_where AND statut = 'enRoute'
                 ");
                 
                 $stmt->execute([
