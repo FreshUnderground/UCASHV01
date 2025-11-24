@@ -48,16 +48,38 @@ try {
     $sql = "SELECT * FROM flots WHERE 1=1";
     $params = [];
     
-    // Filtrer par date de modification (synchronisation incrémentale)
-    if ($since) {
-        $sql .= " AND last_modified_at > :since";
-        $params[':since'] = date('Y-m-d H:i:s', strtotime($since));
-    }
-    
-    // Filtrer par shop (soit source soit destination)
+    // Filtrer par shop et date selon le contexte
     if ($shopId && $shopId !== 'null' && $shopId !== '') {
-        $sql .= " AND (shop_source_id = :shop_id OR shop_destination_id = :shop_id)";
-        $params[':shop_id'] = (int)$shopId;
+        $shopIdInt = (int)$shopId;
+        
+        if ($since) {
+            // Convertir le timestamp en format MySQL
+            $sinceDate = date('Y-m-d H:i:s', strtotime($since));
+            
+            // Logique de synchronisation incrémentale :
+            // 1. Flots REÇUS (enRoute) : envoyés par d'autres VERS vous → shop_destination_id = vous → filtrer par date_envoi
+            // 2. Flots SERVIS : envoyés PAR vous et reçus par d'autres → shop_source_id = vous → filtrer par date_reception
+            $sql .= " AND (";
+            $sql .= "(shop_destination_id = :shop_id AND date_envoi >= :since_envoi)";
+            $sql .= " OR ";
+            $sql .= "(shop_source_id = :shop_id2 AND date_reception IS NOT NULL AND date_reception >= :since_reception)";
+            $sql .= ")";
+            
+            $params[':shop_id'] = $shopIdInt;
+            $params[':shop_id2'] = $shopIdInt;
+            $params[':since_envoi'] = $sinceDate;
+            $params[':since_reception'] = $sinceDate;
+        } else {
+            // Sans filtre de date, récupérer tous les flots liés au shop
+            $sql .= " AND (shop_source_id = :shop_id OR shop_destination_id = :shop_id)";
+            $params[':shop_id'] = $shopIdInt;
+        }
+    } else if ($since) {
+        // Si pas de shop_id mais filtre de date (cas admin)
+        $sinceDate = date('Y-m-d H:i:s', strtotime($since));
+        $sql .= " AND (date_envoi >= :since OR (date_reception IS NOT NULL AND date_reception >= :since2))";
+        $params[':since'] = $sinceDate;
+        $params[':since2'] = $sinceDate;
     }
     
     // Ordre et limite
@@ -130,7 +152,7 @@ try {
     
     $response = [
         'success' => true,
-        'flots' => $flots,
+        'entities' => $flots,  // Utiliser 'entities' au lieu de 'flots' pour correspondre au code Dart
         'count' => count($flots),
         'timestamp' => date('c'),
         'filters' => [
