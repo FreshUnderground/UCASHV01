@@ -117,17 +117,21 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                     _buildSection('2. Flots', [
                       _buildRow('Recus', rapport.flotRecu, color: PdfColors.green700),
                       _buildRow('Envoyes', rapport.flotEnvoye, color: PdfColors.red700, prefix: '-'),
-                      if (rapport.flotsRecusDetails.isNotEmpty) ...[
+                      
+                      // FLOTs Reçus Groupés par Shop Source
+                      if (rapport.flotsRecusGroupes.isNotEmpty) ...[
                         pw.SizedBox(height: 4),
-                        pw.Text('FLOTs Recus Details:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                        pw.Text('FLOTs Reçus Détails (Groupé par Shop):', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
                         pw.Divider(),
-                        ...rapport.flotsRecusDetails.map((flot) => _buildDetailRow(flot.shopSourceDesignation, '${DateFormat('dd/MM').format(flot.dateEnvoi)}', flot.montant, PdfColors.green700)),
+                        ...rapport.flotsRecusGroupes.entries.map((entry) => _buildDetailRow(entry.key, 'Total du jour', entry.value, PdfColors.green700)),
                       ],
-                      if (rapport.flotsEnvoyes.isNotEmpty) ...[
+                      
+                      // FLOTs Envoyés Groupés par Shop Destination
+                      if (rapport.flotsEnvoyesGroupes.isNotEmpty) ...[
                         pw.SizedBox(height: 4),
-                        pw.Text('FLOTs Envoyés Details:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                        pw.Text('FLOTs Envoyés Détails (Groupé par Shop):', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
                         pw.Divider(),
-                        ...rapport.flotsEnvoyes.map((flot) => _buildDetailRow(flot.shopDestinationDesignation, '${DateFormat('dd/MM').format(flot.dateEnvoi)}', flot.montant, PdfColors.red700)),
+                        ...rapport.flotsEnvoyesGroupes.entries.map((entry) => _buildDetailRow(entry.key, 'Total du jour', entry.value, PdfColors.red700)),
                       ],
                     ], PdfColors.purple700),
                     pw.SizedBox(height: 8),
@@ -135,10 +139,28 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                     _buildSection('3. Transferts', [
                       _buildRow('Recus', rapport.transfertsRecus, color: PdfColors.green700),
                       _buildRow('Servis', rapport.transfertsServis, color: PdfColors.red700, prefix: '-'),
-                      // Détails des transferts en attente
+                      _buildRow('En attente', rapport.transfertsEnAttente, color: PdfColors.orange700),
+                      
+                      // Transferts Reçus Groupés
+                      if (rapport.transfertsRecusGroupes.isNotEmpty) ...[
+                        pw.SizedBox(height: 4),
+                        pw.Text('Transferts Reçus Détails:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                        pw.Divider(),
+                        ...rapport.transfertsRecusGroupes.entries.map((entry) => _buildDetailRow(entry.key, 'Total du jour', entry.value, PdfColors.green700)),
+                      ],
+                      
+                      // Transferts Servis Groupés
+                      if (rapport.transfertsServisGroupes.isNotEmpty) ...[
+                        pw.SizedBox(height: 4),
+                        pw.Text('Transferts Servis Détails:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                        pw.Divider(),
+                        ...rapport.transfertsServisGroupes.entries.map((entry) => _buildDetailRow(entry.key, 'Total du jour', entry.value, PdfColors.red700)),
+                      ],
+                      
+                      // Transferts En Attente - Détails individuels puis groupés
                       if (rapport.transfertsEnAttenteDetails.isNotEmpty) ...[
                         pw.SizedBox(height: 4),
-                        pw.Text('Transferts En Attente:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                        pw.Text('Transferts En Attente Détails Individuels:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: PdfColors.orange700)),
                         pw.Divider(),
                         ...rapport.transfertsEnAttenteDetails.map((transfert) => _buildOperationDetailRow(
                           transfert.destinataire ?? 'N/A',
@@ -147,17 +169,24 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                           PdfColors.orange700,
                         )),
                       ],
-                    ], PdfColors.blue700),
-                    
-                    // Transferts Groupés par Route
-                    if (rapport.transfertsGroupes.isNotEmpty) ...[
-                      pw.SizedBox(height: 8),
-                      _buildSection('4. Transferts Groupés (Source → Destination)', [
-                        pw.Text('${rapport.transfertsGroupes.length} route(s)', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                      
+                      // Transferts En Attente Groupés par Shop
+                      if (rapport.transfertsEnAttenteGroupes.isNotEmpty) ...[
+                        pw.SizedBox(height: 4),
+                        pw.Text('Transferts En Attente (Groupé par Shop):', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
                         pw.Divider(),
-                        ...rapport.transfertsGroupes.map((route) => _buildTransfertRouteRowPDF(route)),
-                      ], PdfColors.indigo700),
-                    ],
+                        ...rapport.transfertsEnAttenteGroupes.entries.map((entry) => _buildDetailRow(entry.key, 'Total du jour', entry.value, PdfColors.orange700)),
+                      ],
+                    ], PdfColors.blue700),
+                    pw.SizedBox(height: 8),
+                    
+                    // NOUVEAU: Compte FRAIS
+                    _buildSection('4. Compte FRAIS', [
+                      _buildRow('Commissions du jour', rapport.commissionsFraisDuJour, color: PdfColors.green700),
+                      _buildRow('Retraits du jour', rapport.retraitsFraisDuJour, color: PdfColors.red700, prefix: '-'),
+                      pw.Divider(),
+                      _buildRow('Solde FRAIS total', rapport.soldeFraisTotal, color: PdfColors.green700, bold: true),
+                    ], PdfColors.green700),
 
                   ],
                 ),
@@ -254,7 +283,7 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
               children: [
                 pw.Text('CAPITAL NET FINAL', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800)),
                 pw.SizedBox(height: 4),
-                pw.Text('Formule: Cash Disponible + Ceux qui nous doivent - Ceux que nous devons', style: pw.TextStyle(fontSize: 6, fontStyle: pw.FontStyle.italic)),
+                pw.Text('Formule: Cash Disponible (incluant -Retraits FRAIS) + Créances - Dettes', style: pw.TextStyle(fontSize: 6, fontStyle: pw.FontStyle.italic)),
                 pw.SizedBox(height: 6),
                 pw.Text('${rapport.capitalNet.toStringAsFixed(2)} USD', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: rapport.capitalNet >= 0 ? PdfColors.blue900 : PdfColors.red900)),
                 pw.Divider(),
