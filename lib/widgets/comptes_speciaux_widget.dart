@@ -609,14 +609,14 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
     final pdfButtons = [
       // PDF FRAIS
       {
-        'label': 'PDF FRAIS',
+        'label': 'Rapp. Frais',
         'icon': Icons.picture_as_pdf,
         'gradient': const LinearGradient(colors: [Color(0xFF8B5CF6), Color(0xFF7C3AED)]),
         'onPressed': () => _generatePdfFrais(context),
       },
       // PDF DÉPENSES
       {
-        'label': 'PDF DÉPENSES',
+        'label': 'Rapp. Dépemses',
         'icon': Icons.picture_as_pdf,
         'gradient': const LinearGradient(colors: [Color(0xFFEC4899), Color(0xFFDB2777)]),
         'onPressed': () => _generatePdfDepenses(context),

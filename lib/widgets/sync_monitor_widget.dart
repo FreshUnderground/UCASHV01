@@ -71,9 +71,9 @@ class _SyncMonitorWidgetState extends State<SyncMonitorWidget> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Synchronisation Automatique',
+                        'Synchronisation',
                         style: TextStyle(
-                          fontSize: 18,
+                          fontSize: 14,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -112,7 +112,7 @@ class _SyncMonitorWidgetState extends State<SyncMonitorWidget> {
             
             // État FAST SYNC
             _buildStatusRow(
-              'FAST SYNC (2 min)',
+              'FAST (2 min)',
               isFastSyncing ? 'En cours...' : 'En attente',
               isFastSyncing ? Colors.blue : Colors.grey,
               isFastSyncing ? Icons.sync : Icons.schedule,
@@ -122,7 +122,7 @@ class _SyncMonitorWidgetState extends State<SyncMonitorWidget> {
             
             // État SLOW SYNC
             _buildStatusRow(
-              'SLOW SYNC (10 min)',
+              'SLOW (10 min)',
               isSlowSyncing ? 'En cours...' : 'En attente',
               isSlowSyncing ? Colors.blue : Colors.grey,
               isSlowSyncing ? Icons.sync : Icons.schedule,
@@ -138,13 +138,13 @@ class _SyncMonitorWidgetState extends State<SyncMonitorWidget> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             
             Row(
               children: [
                 Expanded(
                   child: _buildStatCard(
-                    'FAST SYNC',
+                    'FAST',
                     _stats['fastSyncSuccess'] ?? 0,
                     _stats['fastSyncErrors'] ?? 0,
                     Colors.blue,
@@ -153,7 +153,7 @@ class _SyncMonitorWidgetState extends State<SyncMonitorWidget> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: _buildStatCard(
-                    'SLOW SYNC',
+                    'SLOW',
                     _stats['slowSyncSuccess'] ?? 0,
                     _stats['slowSyncErrors'] ?? 0,
                     Colors.purple,
@@ -204,7 +204,7 @@ class _SyncMonitorWidgetState extends State<SyncMonitorWidget> {
                 ),
             ],
             
-            const Divider(height: 24),
+            const Divider(height: 10),
             
             // Bouton sync manuelle
             SizedBox(
@@ -231,9 +231,9 @@ class _SyncMonitorWidgetState extends State<SyncMonitorWidget> {
                       }
                     : null,
                 icon: const Icon(Icons.refresh),
-                label: const Text('Synchroniser maintenant'),
+                label: const Text('Synchroniser'),
                 style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(7),
                 ),
               ),
             ),
@@ -246,13 +246,13 @@ class _SyncMonitorWidgetState extends State<SyncMonitorWidget> {
   Widget _buildStatusRow(String label, String value, Color color, IconData icon) {
     return Row(
       children: [
-        Icon(icon, color: color, size: 20),
-        const SizedBox(width: 8),
+        Icon(icon, color: color, size: 10),
+        const SizedBox(width: 3),
         Text(
           '$label:',
           style: const TextStyle(fontWeight: FontWeight.w500),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 3),
         Text(
           value,
           style: TextStyle(
@@ -266,7 +266,7 @@ class _SyncMonitorWidgetState extends State<SyncMonitorWidget> {
 
   Widget _buildStatCard(String title, int success, int errors, Color color) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),

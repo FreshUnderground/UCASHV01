@@ -823,10 +823,10 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
               onTap: () => setState(() => _selectedIndex = 0),  // Index 0 = Dashboard
             ),
             _buildFluidActionCard(
-              title: 'SHOP',
-              icon: Icons.store,
+              title: 'Dépenses',
+              icon: Icons.account_balance_wallet,
               color: const Color(0xFF059669),
-              onTap: () => setState(() => _selectedIndex = 1),  // Index 1 = Gestion Shops
+              onTap: () => setState(() => _selectedIndex = 1),  // Index 1 = Dépenses
             ),
             _buildFluidActionCard(
               title: 'Agents',

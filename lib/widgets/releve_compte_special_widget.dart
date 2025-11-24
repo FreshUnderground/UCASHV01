@@ -153,7 +153,7 @@ class ReleveCompteSpecialWidget extends StatelessWidget {
                             : Colors.red.withOpacity(0.2),
                         child: Text(
                           transaction.typeTransaction.icon,
-                          style: const TextStyle(fontSize: 20),
+                          style: const TextStyle(fontSize: 12),
                         ),
                       ),
                       title: Text(transaction.description),
@@ -162,7 +162,7 @@ class ReleveCompteSpecialWidget extends StatelessWidget {
                         children: [
                           Text(
                             DateFormat('dd/MM/yyyy HH:mm').format(transaction.dateTransaction),
-                            style: const TextStyle(fontSize: 12),
+                            style: const TextStyle(fontSize: 10),
                           ),
                           Text(
                             transaction.typeTransaction.label,
@@ -181,7 +181,7 @@ class ReleveCompteSpecialWidget extends StatelessWidget {
                             '${transaction.montant >= 0 ? '+' : ''}\$${numberFormat.format(transaction.montant)}',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              fontSize: 16,
+                              fontSize: 12,
                               color: transaction.montant >= 0
                                   ? Colors.green
                                   : Colors.red,
@@ -209,14 +209,14 @@ class ReleveCompteSpecialWidget extends StatelessWidget {
             label,
             style: TextStyle(
               fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
-              fontSize: isTotal ? 16 : 14,
+              fontSize: isTotal ? 10 : 14,
             ),
           ),
           Text(
             value,
             style: TextStyle(
               fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
-              fontSize: isTotal ? 18 : 14,
+              fontSize: isTotal ? 10 : 14,
               color: color,
             ),
           ),
