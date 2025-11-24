@@ -680,9 +680,9 @@ class PdfService {
             border: pw.TableBorder.all(color: PdfColors.grey300),
             columnWidths: {
               0: const pw.FlexColumnWidth(1.5),  // Date
-              1: const pw.FlexColumnWidth(1.5),  // Type
-              2: const pw.FlexColumnWidth(2.5),  // Observation
-              3: const pw.FlexColumnWidth(1.5),  // Reçu
+              1: const pw.FlexColumnWidth(2),    // Bord. Réçu
+              2: const pw.FlexColumnWidth(2),    // Bord. Payé
+              3: const pw.FlexColumnWidth(1.5),  // Réçu
               4: const pw.FlexColumnWidth(1.5),  // Payé
               5: const pw.FlexColumnWidth(1.5),  // Solde
             },
@@ -692,9 +692,9 @@ class PdfService {
                 decoration: const pw.BoxDecoration(color: PdfColors.grey200),
                 children: [
                   _buildTableHeader('Date'),
-                  _buildTableHeader('Type'),
-                  _buildTableHeader('Observation'),
-                  _buildTableHeader('Reçu'),
+                  _buildTableHeader('Bord. Réçu'),
+                  _buildTableHeader('Bord. Payé'),
+                  _buildTableHeader('Réçu'),
                   _buildTableHeader('Payé'),
                   _buildTableHeader('Solde'),
                 ],
@@ -707,12 +707,13 @@ class PdfService {
                 final isDepo = op.type == OperationType.depot;
                 final devise = op.devise == 'USD' ? '\$' : 'FC';
                 final soldeActuel = op.devise == 'USD' ? soldeU : soldeC;
+                final observation = op.observation ?? op.notes ?? op.destinataire ?? '--';
                 
                 return pw.TableRow(
                   children: [
                     _buildTableCell(DateFormat('dd/MM/yyyy').format(op.dateOp)),
-                    _buildTableCell(op.type == OperationType.depot ? 'Dépôt' : 'Retrait'),
-                    _buildTableCell(op.observation ?? op.notes ?? op.destinataire ?? '-'),
+                    _buildTableCell(isDepo ? observation : '--'),
+                    _buildTableCell(!isDepo ? observation : '--'),
                     _buildTableCell(isDepo ? '${op.montantNet.toStringAsFixed(2)} $devise' : '--'),
                     _buildTableCell(!isDepo ? '${op.montantNet.toStringAsFixed(2)} $devise' : '--'),
                     _buildTableCell('${soldeActuel.toStringAsFixed(2)} $devise'),
