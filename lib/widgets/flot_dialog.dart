@@ -494,16 +494,23 @@ class _FlotDialogState extends State<FlotDialog> {
         throw Exception('Utilisateur non authentifié');
       }
       
+      // IMPORTANT: Charger les shops si pas encore chargés
+      if (shopService.shops.isEmpty) {
+        debugPrint('⚠️ Shops non chargés, chargement en cours...');
+        await shopService.loadShops();
+        debugPrint('✅ ${shopService.shops.length} shops chargés');
+      }
+      
       final montant = double.parse(_montantController.text);
       final shopDestination = shopService.getShopById(_selectedShopDestinationId!);
       
       if (shopDestination == null) {
-        throw Exception('Shop de destination introuvable');
+        throw Exception('Shop de destination introuvable (ID: $_selectedShopDestinationId)');
       }
       
       final currentShop = shopService.getShopById(currentShopId);
       if (currentShop == null) {
-        throw Exception('Shop source introuvable');
+        throw Exception('Shop source introuvable (ID: $currentShopId). ${shopService.shops.length} shops disponibles.');
       }
       
       if (widget.flot == null) {
