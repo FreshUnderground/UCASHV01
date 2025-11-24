@@ -935,8 +935,8 @@ class _RapportClotureState extends State<RapportCloture> {
             ),
             const SizedBox(height: 4),
             const Text(
-              'Formule: Cash Disponible + Créances - Dettes - Retraits FRAIS',
-              style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey),
+              'Formule: Cash Disponible (incluant -Retraits FRAIS) + Créances - Dettes',
+              style: TextStyle(fontSize: 10, fontStyle: FontStyle.italic, color: Colors.grey),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
@@ -955,7 +955,6 @@ class _RapportClotureState extends State<RapportCloture> {
             _buildCashRow('+ Shops Qui nous Doivent', rapport.totalShopsNousDoivent),
             _buildCashRow('- Dépôts Partenaires', rapport.totalClientsNousDevons),
             _buildCashRow('- DIFF. DETTES SHOPS', rapport.totalShopsNousDevons),
-            _buildCashRow('- Retraits FRAIS du jour', rapport.retraitsFraisDuJour),
             const Divider(thickness: 2, color: Colors.blue),
             _buildTotalRow('= CAPITAL NET', rapport.capitalNet, bold: true, color: rapport.capitalNet >= 0 ? Colors.blue : Colors.red),
           ],

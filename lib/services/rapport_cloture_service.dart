@@ -73,10 +73,11 @@ class RapportClotureService {
           'depots': operationsClients['depots'] as double,
           'retraits': operationsClients['retraits'] as double,
         },
+        retraitsFrais: comptesSpeciaux['retraits_frais'] as double, // NOUVEAU: Soustraire retraits FRAIS
       );
 
       // Calculate capital net according to the formula:
-      // CAPITAL NET = CASH DISPONIBLE + PERSONNE QUI NOUS DOIVENT - CEUX QUE NOUS DEVONS - RETRAITS FRAIS - SORTIES DÉPENSE
+      // CAPITAL NET = CASH DISPONIBLE (déjà diminué des retraits FRAIS) + CRÉANCES - DETTES
       final totalClientsNousDoivent = comptesClients['nousDoivent']!
           .fold(0.0, (sum, client) => sum + client.solde.abs());
       final totalClientsNousDevons = comptesClients['nousDevons']!
@@ -86,16 +87,12 @@ class RapportClotureService {
       final totalShopsNousDevons = comptesShops['nousDevons']!
           .fold(0.0, (sum, shop) => sum + shop.montant);
       
-      // Récupérer les retraits FRAIS du jour
-      final retraitsFrais = comptesSpeciaux['retraits_frais'] as double;
-      
-      // FORMULE COMPLÈTE avec FRAIS uniquement
+      // Le cash disponible a déjà les retraits FRAIS soustraits, donc on ne les soustrait PAS ici
       final capitalNet = cashDisponible['total']! 
           + totalClientsNousDoivent 
           + totalShopsNousDoivent 
           - totalClientsNousDevons 
-          - totalShopsNousDevons
-          - retraitsFrais;      // NOUVEAU: Soustraire retraits FRAIS
+          - totalShopsNousDevons;
 
       return RapportClotureModel(
         shopId: shopId,
@@ -829,16 +826,17 @@ class RapportClotureService {
   }
 
   /// Calculer le cash disponible par mode de paiement
-  /// FORMULE: Cash Disponible = (Solde Antérieur + Dépôts + FLOT Reçu + Transfert Reçu) - (Retraits + FLOT Envoyé + Transfert Servi)
+  /// FORMULE: Cash Disponible = (Solde Antérieur + Dépôts + FLOT Reçu + Transfert Reçu) - (Retraits + FLOT Envoyé + Transfert Servi + Retraits FRAIS)
   Map<String, double> _calculerCashDisponible({
     required ShopModel shop,
     required Map<String, double> soldeAnterieur,
     required Map<String, double> flots,
     required Map<String, double> transferts,
     required Map<String, double> operationsClients,
+    double retraitsFrais = 0.0, // NOUVEAU: Retraits FRAIS du jour
   }) {
     // CALCUL RÉEL avec la formule exacte:
-    // Cash Disponible = (Solde Antérieur + Dépôts + FLOT Reçu + Transfert Reçu) - (Retraits + FLOT Envoyé + Transfert Servi)
+    // Cash Disponible = (Solde Antérieur + Dépôts + FLOT Reçu + Transfert Reçu) - (Retraits + FLOT Envoyé + Transfert Servi + Retraits FRAIS)
     
     // ATTENTION: Pour le moment, nous ne pouvons pas séparer par mode de paiement car les flots et transferts
     // ne sont pas détaillés par mode de paiement. Nous calculons donc le TOTAL uniquement.
@@ -855,9 +853,9 @@ class RapportClotureService {
     final transfertRecu = transferts['recus']!;   // Client nous paie (ENTRÉE)
     final transfertServi = transferts['servis']!; // On sert le client (SORTIE)
     
-    // Appliquer la formule
+    // Appliquer la formule AVEC retraits FRAIS
     final totalDisponible = (soldeAnterieurTotal + depots + flotRecu + transfertRecu) 
-                          - (retraits + flotEnvoye + transfertServi);
+                          - (retraits + flotEnvoye + transfertServi + retraitsFrais); // NOUVEAU: - retraitsFrais
     
     // Répartition proportionnelle du total calculé selon les capitaux actuels du shop
     // Cela nous permet d'avoir une estimation par mode de paiement
@@ -892,6 +890,7 @@ class RapportClotureService {
     debugPrint('   - Retraits: ${retraits.toStringAsFixed(2)} USD');
     debugPrint('   - FLOT Envoyé: ${flotEnvoye.toStringAsFixed(2)} USD');
     debugPrint('   - Transfert Servi: ${transfertServi.toStringAsFixed(2)} USD');
+    debugPrint('   - Retraits FRAIS: ${retraitsFrais.toStringAsFixed(2)} USD');  // NOUVEAU
     debugPrint('   = TOTAL CALCULÉ: ${totalDisponible.toStringAsFixed(2)} USD');
     debugPrint('   ');
     debugPrint('   Répartition par mode (proportionnelle):');
