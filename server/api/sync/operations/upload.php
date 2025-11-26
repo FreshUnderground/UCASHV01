@@ -41,9 +41,9 @@ require_once __DIR__ . '/../../../classes/Database.php';
 
 // Fonctions de conversion des index d'enum Flutter vers valeurs SQL
 function _convertOperationType($index) {
-    // Flutter enum: transfertNational=0, transfertInternationalSortant=1, transfertInternationalEntrant=2, depot=3, retrait=4, virement=5
-    // MySQL ENUM: 'depot', 'retrait', 'transfertNational', 'transfertInternationalSortant', 'transfertInternationalEntrant', 'virement'
-    $types = ['transfertNational', 'transfertInternationalSortant', 'transfertInternationalEntrant', 'depot', 'retrait', 'virement'];
+    // Flutter enum: transfertNational=0, transfertInternationalSortant=1, transfertInternationalEntrant=2, depot=3, retrait=4, virement=5, retraitMobileMoney=6
+    // MySQL ENUM: 'depot', 'retrait', 'transfertNational', 'transfertInternationalSortant', 'transfertInternationalEntrant', 'virement', 'retraitMobileMoney'
+    $types = ['transfertNational', 'transfertInternationalSortant', 'transfertInternationalEntrant', 'depot', 'retrait', 'virement', 'retraitMobileMoney'];
     return $types[$index] ?? 'depot';
 }
 
@@ -100,7 +100,14 @@ try {
     foreach ($entities as $entity) {
         try {
                 // Logger les données brutes reçues pour débogage
-                error_log("[SYNC OP] ID={$entity['id']}, agent_id={$entity['agent_id']}, agent_username=" . (isset($entity['agent_username']) ? "'{$entity['agent_username']}'" : 'NULL') . ", shop_source_designation=" . (isset($entity['shop_source_designation']) ? "'{$entity['shop_source_designation']}'" : 'NULL') . ", client_nom=" . (isset($entity['client_nom']) ? "'{$entity['client_nom']}'" : 'NULL'));
+                error_log("========================================");
+                error_log("[SYNC OP] NOUVELLE OPERATION RECUE");
+                error_log("[SYNC OP] code_ops={$entity['code_ops']}");
+                error_log("[SYNC OP] ID={$entity['id']}, type_index={$entity['type']}");
+                error_log("[SYNC OP] agent_id={$entity['agent_id']}, agent_username=" . (isset($entity['agent_username']) ? "'{$entity['agent_username']}'" : 'NULL'));
+                error_log("[SYNC OP] shop_source_id={$entity['shop_source_id']}, shop_source_designation=" . (isset($entity['shop_source_designation']) ? "'{$entity['shop_source_designation']}'" : 'NULL'));
+                error_log("[SYNC OP] client_nom=" . (isset($entity['client_nom']) ? "'{$entity['client_nom']}'" : 'NULL'));
+                error_log("[SYNC OP] montant_brut={$entity['montant_brut']}, montant_net={$entity['montant_net']}");
                 
                 // Convertir les index d'enum Flutter en valeurs SQL
                 $type = _convertOperationType($entity['type'] ?? 0);
@@ -203,6 +210,8 @@ try {
             ]);
             $exists = $checkStmt->fetch(PDO::FETCH_ASSOC);
             
+            error_log("[CHECK] code_ops={$entity['code_ops']}, id={$entity['id']} -> EXISTS=" . ($exists ? 'YES (ID=' . $exists['id'] . ')' : 'NO'));
+            
             if ($exists) {
                 // Mise à jour de l'opération existante
                 $updateStmt = $db->prepare("
@@ -222,6 +231,7 @@ try {
                         date_validation = :date_validation,
                         reference = :reference,
                         notes = :notes,
+                        observation = :observation,
                         destinataire = :destinataire,
                         telephone_destinataire = :telephone_destinataire,
                         code_ops = :code_ops,
@@ -247,6 +257,7 @@ try {
                     ':date_validation' => $entity['date_validation'] ?? null,
                     ':reference' => $entity['reference'] ?? null,
                     ':notes' => $entity['notes'] ?? '',
+                    ':observation' => $entity['observation'] ?? null,
                     ':destinataire' => $entity['destinataire'] ?? null,
                     ':telephone_destinataire' => $entity['telephone_destinataire'] ?? null,
                     ':code_ops' => $entity['code_ops'] ?? null,
@@ -291,18 +302,19 @@ try {
                 // shopSourceId, shopDestinationId, agentId déjà résolus plus haut
                 
                 // Logger toutes les données avant insertion
-                error_log("Preparation INSERT: type={$type}, montant={$entity['montant_brut']}, shop_id={$shopSourceId}, shop_designation={$entity['shop_source_designation']}, agent_id={$agentId}, agent_username={$entity['agent_username']}, mode={$modePaiement}, statut={$statut}");
+                error_log("[INSERT] Preparation INSERT: type={$type}, montant={$entity['montant_brut']}, shop_id={$shopSourceId}, shop_designation={$entity['shop_source_designation']}, agent_id={$agentId}, agent_username={$entity['agent_username']}, mode={$modePaiement}, statut={$statut}");
+                error_log("[INSERT] Valeurs: client_id={$clientId}, client_nom={$entity['client_nom']}, code_ops={$entity['code_ops']}");
                 
                 $insertStmt = $db->prepare("
                     INSERT INTO operations (
                         type, montant_brut, montant_net, commission, devise,
                         client_id, client_nom, shop_source_id, shop_source_designation, shop_destination_id, shop_destination_designation, agent_id, agent_username,
-                        mode_paiement, statut, date_validation, reference, notes, destinataire, telephone_destinataire, code_ops,
+                        mode_paiement, statut, date_validation, reference, notes, observation, destinataire, telephone_destinataire, code_ops,
                         last_modified_at, last_modified_by, created_at
                     ) VALUES (
                         :type, :montant_brut, :montant_net, :commission, :devise,
                         :client_id, :client_nom, :shop_source_id, :shop_source_designation, :shop_destination_id, :shop_destination_designation, :agent_id, :agent_username,
-                        :mode_paiement, :statut, :date_validation, :reference, :notes, :destinataire, :telephone_destinataire, :code_ops,
+                        :mode_paiement, :statut, :date_validation, :reference, :notes, :observation, :destinataire, :telephone_destinataire, :code_ops,
                         :last_modified_at, :last_modified_by, :created_at
                     )
                 ");
@@ -327,6 +339,7 @@ try {
                     ':date_validation' => $entity['date_validation'] ?? null,
                     ':reference' => $entity['reference'] ?? null,
                     ':notes' => $entity['notes'] ?? '',
+                    ':observation' => $entity['observation'] ?? null,
                     ':destinataire' => $entity['destinataire'] ?? null,
                     ':telephone_destinataire' => $entity['telephone_destinataire'] ?? null,
                     ':code_ops' => $entity['code_ops'] ?? null,
@@ -368,8 +381,11 @@ try {
                 }
             } // Fermer le else (nouvelle opération)
         } catch (Exception $e) {
+            error_log("[ERROR] Exception pour operation code_ops={$entity['code_ops']}: {$e->getMessage()}");
+            error_log("[ERROR] Stack trace: {$e->getTraceAsString()}");
             $errors[] = [
                 'entity_id' => $entity['id'] ?? 'unknown',
+                'code_ops' => $entity['code_ops'] ?? 'unknown',
                 'error' => $e->getMessage()
             ];
         }

@@ -47,9 +47,24 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
     super.initState();
     // SyncService is now initialized in main.dart, so we don't need to initialize it here
     
-    // Démarrer la surveillance des transferts entrants
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // Initialize TransferSyncService with shop ID
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final authService = Provider.of<AuthService>(context, listen: false);
+      final shopId = authService.currentUser?.shopId;
+      
+      if (shopId != null && shopId > 0) {
+        try {
+          final transferSyncService = TransferSyncService();
+          await transferSyncService.initialize(shopId);
+          debugPrint('✅ TransferSyncService initialisé pour shop: $shopId');
+        } catch (e) {
+          debugPrint('⚠️ Erreur initialisation TransferSyncService: $e');
+        }
+      } else {
+        debugPrint('⚠️ Shop ID non disponible pour initialisation TransferSyncService');
+      }
+      
+      // Démarrer la surveillance des transferts entrants
       final operationService = Provider.of<OperationService>(context, listen: false);
       final transferNotificationService = TransferNotificationService();
       
@@ -111,22 +126,29 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
   // Function to trigger synchronization of operation data
   void _triggerOperationSync() async {
     try {
-      final transferSyncService = TransferSyncService();
-      debugPrint('🔄 Déclenchement de la synchronisation des opérations...');
+      final authService = Provider.of<AuthService>(context, listen: false);
       
-      // Force a refresh from API to get latest operation data
-      await transferSyncService.forceRefreshFromAPI();
-      
-      debugPrint('✅ Synchronisation des opérations terminée');
-      
-      // Show a snackbar to inform user
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Données des opérations synchronisées'),
-            duration: Duration(seconds: 2),
-          ),
-        );
+      // Only proceed if user is an agent with a shop ID
+      if (authService.currentUser?.role == 'AGENT' && authService.currentUser?.shopId != null) {
+        final transferSyncService = TransferSyncService();
+        debugPrint('🔄 Déclenchement de la synchronisation des opérations...');
+        
+        // Force a refresh from API to get latest operation data
+        await transferSyncService.forceRefreshFromAPI();
+        
+        debugPrint('✅ Synchronisation des opérations terminée');
+        
+        // Show a snackbar to inform user
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Données des opérations synchronisées'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } else {
+        debugPrint('ℹ️ Synchronisation des opérations ignorée (shop ID non disponible)');
       }
     } catch (e) {
       debugPrint('❌ Erreur lors de la synchronisation des opérations: $e');

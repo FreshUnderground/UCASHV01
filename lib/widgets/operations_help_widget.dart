@@ -20,12 +20,14 @@ class OperationsHelpWidget extends StatelessWidget {
                   size: 28,
                 ),
                 const SizedBox(width: 12),
-                const Text(
-                  'Guide d\'utilisation - Opérations UCASH',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFFDC2626),
+                Expanded(
+                  child: const Text(
+                    'Guide d\'utilisation - Opérations UCASH',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFDC2626),
+                    ),
                   ),
                 ),
               ],

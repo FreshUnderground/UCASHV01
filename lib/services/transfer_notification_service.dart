@@ -116,7 +116,7 @@ class TransferNotificationService extends ChangeNotifier {
           if (onNewTransferDetected != null) {
             final sourceShopName = transfer.shopSourceDesignation ?? 'Shop Inconnu';
             onNewTransferDetected!(
-              '💰 Nouveau Transfert Reçu',
+              '💰 Nouveau Transferts',
               '${transfer.montantNet} ${transfer.devise} de $sourceShopName\nDestinataire: ${transfer.destinataire ?? "Non spécifié"}',
               transfer.id!,
             );

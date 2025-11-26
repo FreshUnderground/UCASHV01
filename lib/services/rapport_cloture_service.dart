@@ -215,27 +215,19 @@ class RapportClotureService {
     final shops = await LocalDB.instance.getAllShops();
     final shopsMap = {for (var shop in shops) shop.id: shop.designation};
 
-    // FLOT REÇUS = FLOTs vers nous (en cours + servis reçus aujourd'hui)
-    final flotsRecusEnCours = flotService.getFlotsEnCours(shopId)
-        .where((f) => f.shopDestinationId == shopId); // En cours vers nous
+    // FLOT REÇUS = FLOTs vers nous (reçus aujourd'hui - utilisent date_reception, fallback sur created_at si null)
     final flotsRecusServis = flotService.flots.where((f) =>
         f.shopDestinationId == shopId &&
         f.statut == flot_model.StatutFlot.servi &&
-        f.dateReception != null &&
-        _isSameDay(f.dateReception!, dateRapport)
-    );
-    final flotsRecus = [...flotsRecusEnCours, ...flotsRecusServis];
+        _isSameDay(f.dateReception ?? f.createdAt ?? f.dateEnvoi, dateRapport)
+    ).toList();
+    final flotsRecus = flotsRecusServis;
     
-    // FLOT ENVOYÉS = FLOTs par nous (en cours + servis envoyés aujourd'hui)
-    final flotsEnvoyesEnCours = flotService.getFlotsEnCours(shopId)
-        .where((f) => f.shopSourceId == shopId); // En cours de nous
-    final flotsEnvoyesServis = flotService.flots.where((f) =>
+    // FLOT ENVOYÉS = FLOTs par nous (envoyés aujourd'hui - utilisent created_at)
+    final flotsEnvoyes = flotService.flots.where((f) =>
         f.shopSourceId == shopId &&
-        f.statut == flot_model.StatutFlot.servi &&
-        f.dateReception != null &&
-        _isSameDay(f.dateReception!, dateRapport)
-    );
-    final flotsEnvoyes = [...flotsEnvoyesEnCours, ...flotsEnvoyesServis];
+        _isSameDay(f.createdAt ?? f.dateEnvoi, dateRapport)
+    ).toList();
     
     // Créer les listes détaillées pour affichage dans le rapport
     final flotsRecusDetails = flotsRecus.map((f) => FlotResume(
@@ -302,30 +294,32 @@ class RapportClotureService {
     final shops = await LocalDB.instance.getAllShops();
     final shopsMap = {for (var shop in shops) shop.id: shop.designation};
     
-    // Transferts REÇUS = client nous paie (ENTRÉE d'argent)
+    // Transferts REÇUS = client nous paie (ENTRÉE d'argent) - utilisent created_at
     final transfertsRecus = operations.where((op) =>
         op.shopSourceId == shopId &&
         (op.type == OperationType.transfertNational ||
          op.type == OperationType.transfertInternationalSortant) &&
-        _isSameDay(op.dateOp, dateRapport)
+        _isSameDay(op.createdAt ?? op.dateOp, dateRapport)
     ).toList();
 
-    // Transferts SERVIS = nous servons le client (SORTIE d'argent)
+    // Transferts SERVIS = nous servons le client (SORTIE d'argent) - utilisent date_validation, fallback sur created_at si null
     final transfertsServis = operations.where((op) =>
         op.shopDestinationId == shopId &&
         (op.type == OperationType.transfertNational ||
          op.type == OperationType.transfertInternationalEntrant) &&
         op.statut == OperationStatus.validee &&
-        _isSameDay(op.lastModifiedAt ?? op.dateOp, dateRapport)
+        _isSameDay(op.dateValidation ?? op.createdAt ?? op.dateOp, dateRapport)
     ).toList();
     
     // Transferts EN ATTENTE = transferts à servir (shop destination, statut enAttente)
+    // OU transferts servis sans date_validation (affichés comme en attente)
     final transfertsEnAttente = operations.where((op) =>
         op.shopDestinationId == shopId &&
         (op.type == OperationType.transfertNational ||
          op.type == OperationType.transfertInternationalEntrant ||
          op.type == OperationType.transfertInternationalSortant) &&
-        op.statut == OperationStatus.enAttente
+        (op.statut == OperationStatus.enAttente || 
+         (op.statut == OperationStatus.validee && op.dateValidation == null))
     ).toList();
     
     // Créer la liste détaillée des transferts en attente
@@ -395,7 +389,7 @@ class RapportClotureService {
 
     final retraitsAujourdhui = operations.where((op) =>
         op.shopSourceId == shopId &&
-        op.type == OperationType.retrait &&
+        (op.type == OperationType.retrait || op.type == OperationType.retraitMobileMoney) &&
         _isSameDay(op.dateOp, dateRapport)
     ).toList();
     
@@ -454,7 +448,7 @@ class RapportClotureService {
     // Récupérer les opérations de type RETRAIT avec clientId (partenaire retire de son compte)
     final retraitsCompte = operations.where((op) =>
         op.shopSourceId == shopId &&
-        op.type == OperationType.retrait &&
+        (op.type == OperationType.retrait || op.type == OperationType.retraitMobileMoney) &&
         op.clientId != null && // Retrait d'un compte client
         _isSameDay(op.dateOp, dateRapport)
     );
@@ -886,7 +880,7 @@ class RapportClotureService {
     debugPrint('   Solde Antérieur: ${soldeAnterieurTotal.toStringAsFixed(2)} USD');
     debugPrint('   + Dépôts: ${depots.toStringAsFixed(2)} USD');
     debugPrint('   + FLOT Reçu: ${flotRecu.toStringAsFixed(2)} USD');
-    debugPrint('   + Transfert Reçu: ${transfertRecu.toStringAsFixed(2)} USD');
+    debugPrint('   + Transferts: ${transfertRecu.toStringAsFixed(2)} USD');
     debugPrint('   - Retraits: ${retraits.toStringAsFixed(2)} USD');
     debugPrint('   - FLOT Envoyé: ${flotEnvoye.toStringAsFixed(2)} USD');
     debugPrint('   - Transfert Servi: ${transfertServi.toStringAsFixed(2)} USD');

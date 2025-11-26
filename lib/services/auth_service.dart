@@ -6,6 +6,7 @@ import '../models/user_model.dart';
 import '../models/shop_model.dart';
 import '../models/client_model.dart';
 import 'local_db.dart';
+import 'transfer_sync_service.dart'; // Add this import
 
 class AuthService extends ChangeNotifier {
   UserModel? _currentUser;
@@ -47,6 +48,17 @@ class AuthService extends ChangeNotifier {
           }).catchError((e) {
             debugPrint('Erreur chargement shop: $e');
           });
+        }
+        
+        // Initialize TransferSyncService for agents with saved sessions
+        if (user.role == 'AGENT' && user.shopId != null) {
+          try {
+            final transferSyncService = TransferSyncService();
+            await transferSyncService.initialize(user.shopId!);
+            debugPrint('✅ TransferSyncService initialisé pour shop: ${user.shopId}');
+          } catch (e) {
+            debugPrint('⚠️ Erreur initialisation TransferSyncService: $e');
+          }
         }
       }
     } catch (e) {
@@ -90,6 +102,17 @@ class AuthService extends ChangeNotifier {
         // Sauvegarder la session
         await LocalDB.instance.saveUserSession(user);
         await _saveLoginPreferences(rememberMe: rememberMe);
+        
+        // Initialize TransferSyncService for agents
+        if (user.role == 'AGENT' && user.shopId != null) {
+          try {
+            final transferSyncService = TransferSyncService();
+            await transferSyncService.initialize(user.shopId!);
+            debugPrint('✅ TransferSyncService initialisé pour shop: ${user.shopId}');
+          } catch (e) {
+            debugPrint('⚠️ Erreur initialisation TransferSyncService: $e');
+          }
+        }
         
         _setLoading(false);
         return true;
@@ -396,11 +419,11 @@ class AuthService extends ChangeNotifier {
 
       // Mettre à jour le mot de passe dans la base locale
       await LocalDB.instance.updateAgentPassword(
-        _currentUser!.id!,
+        user.id!,
         newPassword,
       );
 
-      debugPrint('✅ Mot de passe modifié pour: ${_currentUser!.username}');
+      debugPrint('✅ Mot de passe mis à jour pour: ${user.username}');
       return true;
     } catch (e) {
       _errorMessage = 'Erreur lors du changement de mot de passe: $e';

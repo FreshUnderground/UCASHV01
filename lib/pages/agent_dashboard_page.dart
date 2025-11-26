@@ -8,23 +8,20 @@ import '../services/flot_service.dart';
 import '../services/flot_notification_service.dart';
 import '../services/sync_service.dart';
 import '../models/flot_model.dart' as flot_model;
-import '../widgets/connectivity_indicator.dart';
-import '../widgets/agent_clients_widget.dart';
-import '../widgets/agent_transfers_widget.dart';
 import '../widgets/agent_operations_list.dart';
 import '../widgets/agent_capital_overview.dart';
 import '../widgets/journal_caisse_widget.dart';
 import '../widgets/flot_management_widget.dart';
-import '../widgets/rapport_cloture_widget.dart';
 import 'agent_login_page.dart';
 import '../widgets/reports/agent_reports_widget.dart';
-import '../widgets/agent_dashboard_widget.dart';
-import '../widgets/agent_operations_widget.dart';
 import '../widgets/rapportcloture.dart';
 import '../widgets/agent_transactions_widget.dart';
 import '../widgets/change_devise_widget.dart';
 import '../widgets/agent_stats_cards.dart';
 import '../widgets/comptes_speciaux_widget.dart';
+import '../widgets/audit_history_widget.dart';
+import '../widgets/reconciliation_report_widget.dart';
+import '../widgets/retrait_mobile_money_widget.dart';
 
 class AgentDashboardPage extends StatefulWidget {
   const AgentDashboardPage({super.key});
@@ -47,6 +44,8 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
     'FLOT',
     'Clôture Journalière',
     'Frais',
+    'Configuration',
+    'Retrait Mobile Money',
   ];
 
   final List<IconData> _menuIcons = [
@@ -60,6 +59,8 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
     Icons.local_shipping,
     Icons.receipt_long,
     Icons.account_balance,
+    Icons.settings,
+    Icons.mobile_friendly,
   ];
 
   @override
@@ -508,6 +509,10 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
         return _buildRapportClotureContent();
       case 9:
         return _buildFraisContent();
+      case 10:
+        return _buildConfigurationContent();
+      case 11:
+        return _buildRetraitMobileMoneyContent();
       default:
         return _buildDashboardContent();
     }
@@ -613,6 +618,62 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
       shopId: shopId,
       isAdmin: false,
     );
+  }
+
+  Widget _buildConfigurationContent() {
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          Container(
+            color: Colors.white,
+            child: const TabBar(
+              labelColor: Color(0xFFDC2626),
+              unselectedLabelColor: Colors.grey,
+              indicatorColor: Color(0xFFDC2626),
+              tabs: [
+                Tab(
+                  icon: Icon(Icons.history),
+                  text: 'Audit Trail',
+                ),
+                Tab(
+                  icon: Icon(Icons.account_balance_wallet),
+                  text: 'Réconciliation',
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                _buildAuditTrailContent(),
+                _buildReconciliationContent(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAuditTrailContent() {
+    return const AuditHistoryWidget(
+      showFilters: true,
+    );
+  }
+
+  Widget _buildReconciliationContent() {
+    final authService = Provider.of<AgentAuthService>(context, listen: false);
+    final shopId = authService.currentAgent?.shopId;
+    
+    return ReconciliationReportWidget(
+      shopId: shopId,
+      showOnlyGaps: false,
+    );
+  }
+
+  Widget _buildRetraitMobileMoneyContent() {
+    return const RetraitMobileMoneyWidget();
   }
 
   Future<void> _syncData() async {

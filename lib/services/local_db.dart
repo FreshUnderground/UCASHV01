@@ -1312,12 +1312,40 @@ class LocalDB {
   // === CRUD FLOTS ===
   
   /// Sauvegarder un flot
+  /// Utilise reference comme clé unique pour éviter les doublons
+  /// Si un flot avec la même reference existe, il est écrasé
   Future<flot_model.FlotModel> saveFlot(flot_model.FlotModel flot) async {
     final prefs = await database;
-    final flotId = flot.id ?? DateTime.now().millisecondsSinceEpoch;
+    
+    // IMPORTANT: Vérifier si un flot avec la même reference existe déjà
+    flot_model.FlotModel? existingFlot;
+    if (flot.reference != null && flot.reference!.isNotEmpty) {
+      existingFlot = await getFlotByReference(flot.reference!);
+    }
+    
+    // Si le flot existe déjà, utiliser son ID et écraser les données
+    // Sinon, générer un nouvel ID
+    final flotId = existingFlot?.id ?? flot.id ?? DateTime.now().millisecondsSinceEpoch;
+    
     final updatedFlot = flot.copyWith(id: flotId);
+    
+    if (existingFlot != null) {
+      // ÉCRASER le flot existant avec les nouvelles données
+      debugPrint('🔄 Flot ${flot.reference} existe déjà (ID: $flotId) - ÉCRASEMENT des données');
+      
+      // Supprimer l'ancienne clé si elle existe
+      await prefs.remove('flot_${existingFlot.id}');
+    }
+    
+    // Sauvegarder avec la clé flot_ID
     await prefs.setString('flot_$flotId', jsonEncode(updatedFlot.toJson()));
-    debugPrint('💸 Flot sauvegardé: ID=$flotId, montant=${updatedFlot.montant} ${updatedFlot.devise}');
+    
+    // Confirmation de sauvegarde
+    if (existingFlot != null) {
+      debugPrint('✅ Flot ${flot.reference} mis à jour avec succès (ID: $flotId)');
+    } else {
+      debugPrint('💸 Flot sauvegardé: reference=${flot.reference}, ID=$flotId, montant=${updatedFlot.montant} ${updatedFlot.devise}');
+    }
     
     // Créer une entrée de journal pour le flot
     await _createJournalEntryForFlot(updatedFlot);
@@ -1370,6 +1398,16 @@ class LocalDB {
       return flot_model.FlotModel.fromJson(jsonDecode(flotData));
     }
     return null;
+  }
+
+  /// Récupérer un flot par reference (CLÉ UNIQUE)
+  Future<flot_model.FlotModel?> getFlotByReference(String reference) async {
+    final allFlots = await getAllFlots();
+    try {
+      return allFlots.firstWhere((flot) => flot.reference == reference);
+    } catch (e) {
+      return null; // Not found
+    }
   }
 
   /// Récupérer les flots par shop (source ou destination)

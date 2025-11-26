@@ -265,42 +265,22 @@ class FlotService extends ChangeNotifier {
   }
 
   /// Synchronise un flot en arrière-plan sans bloquer l'interface
-  /// Avec système de retry automatique (3 tentatives)
+  /// SIMPLIFIÉ: Ajoute juste à la queue, RobustSyncService s'occupe du reste
   Future<void> _syncFlotInBackground(flot_model.FlotModel flot) async {
     Future.microtask(() async {
-      int retryCount = 0;
-      const maxRetries = 3;
-      const retryDelay = Duration(seconds: 5);
-      
-      while (retryCount < maxRetries) {
-        try {
-          debugPrint('🔄 [BACKGROUND] Synchronisation flot ${flot.reference} (tentative ${retryCount + 1}/$maxRetries)...');
-          
-          final syncService = SyncService();
-          
-          // Uploader le flot
-          await syncService.uploadTableData('flots', 'background_sync');
-          
-          // Attendre un peu puis downloader pour vérifier
-          await Future.delayed(const Duration(milliseconds: 500));
-          await syncService.downloadTableData('flots', 'background_sync', 'system');
-          
-          debugPrint('✅ [BACKGROUND] Flot ${flot.reference} synchronisé avec succès');
-          await _markFlotAsSynced(flot.id!);
-          return; // Succès, sortir de la boucle
-        } catch (e) {
-          retryCount++;
-          debugPrint('⚠️ [BACKGROUND] Échec synchronisation flot ${flot.reference} (tentative $retryCount/$maxRetries): $e');
-          
-          if (retryCount < maxRetries) {
-            debugPrint('   ⏳ Nouvelle tentative dans ${retryDelay.inSeconds}s...');
-            await Future.delayed(retryDelay);
-          } else {
-            debugPrint('❌ [BACKGROUND] Échec définitif après $maxRetries tentatives');
-            debugPrint('   💡 Le flot restera en file d\'attente et sera retenté lors de la prochaine synchronisation');
-            await _addToPendingSyncQueue(flot);
-          }
-        }
+      try {
+        debugPrint('📋 [QUEUE] Ajout flot ${flot.reference} à la queue de sync...');
+        
+        // Convertir le flot en Map pour la queue
+        final flotMap = flot.toJson();
+        
+        // Ajouter le flot à la file d'attente de synchronisation
+        final syncService = SyncService();
+        await syncService.queueFlot(flotMap);
+        
+        debugPrint('✅ [QUEUE] Flot ${flot.reference} en file d\'attente - RobustSyncService le synchronisera');
+      } catch (e) {
+        debugPrint('❌ [QUEUE] Erreur ajout flot: $e');
       }
     });
   }
@@ -325,15 +305,11 @@ class FlotService extends ChangeNotifier {
   /// Ajoute un flot à la file d'attente de synchronisation
   Future<void> _addToPendingSyncQueue(flot_model.FlotModel flot) async {
     try {
-      // Marquer comme non synchronisé
-      final updatedFlot = flot.copyWith(
-        isSynced: false,
-        syncedAt: null,
-      );
-      await LocalDB.instance.updateFlot(updatedFlot);
-      debugPrint('📝 Flot ${flot.reference} ajouté à la file d\'attente de sync');
+      final syncService = SyncService();
+      await syncService.queueFlot(flot.toJson());
+      debugPrint('📫 Flot ${flot.reference} ajouté à la file de synchronisation persistante');
     } catch (e) {
-      debugPrint('❌ Erreur ajout file d\'attente: $e');
+      debugPrint('❌ Erreur ajout à la file de synchronisation: $e');
     }
   }
 

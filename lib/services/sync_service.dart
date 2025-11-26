@@ -61,11 +61,19 @@ class SyncService {
   
   // File d'attente pour les données en attente de synchronisation (mode offline)
   final List<Map<String, dynamic>> _pendingOperations = [];
+  final List<Map<String, dynamic>> _pendingFlots = [];  // File d'attente pour les flots
   int _pendingSyncCount = 0;
+  int _pendingFlotsCount = 0;  // Compteur pour les flots
 
   /// Initialise le service de synchronisation
   Future<void> initialize() async {
     debugPrint('🔄 Initialisation du service de synchronisation...');
+
+    // Charger les opérations en attente depuis le stockage persistant
+    await _loadPendingOperations();
+    
+    // Charger les flots en attente depuis le stockage persistant
+    await _loadPendingFlots();
 
     // Vérifier si le cache des commissions doit être réinitialisé (une seule fois)
     final prefs = await SharedPreferences.getInstance();
@@ -114,7 +122,7 @@ class SyncService {
     if (_isOnline && wasOffline) {
       // Passage de offline à online - synchroniser les données en attente
       debugPrint('🔄 Retour en ligne détecté - synchronisation des données en attente...');
-      await _syncPendingData();
+      await syncPendingData();
       
       // Redémarrer l'auto-sync si activé
       if (_isAutoSyncEnabled && _autoSyncTimer == null) {
@@ -203,8 +211,7 @@ class SyncService {
       final hasEverSynced = prefs.containsKey('last_sync_global');
       
       if (!hasEverSynced) {
-        debugPrint('🆕 Première synchronisation détectée - réinitialisation du statut...');
-        await resetSyncStatus();
+        debugPrint('🆕 Première synchronisation détectée');
       }
 
       // Phase 1: Upload des shops (entités maîtres)
@@ -228,6 +235,13 @@ class SyncService {
       
       // Phase 2: Upload des entités dépendantes (avec IDs serveur)
       debugPrint('📤 PHASE 2: Upload Entités Dépendantes → Serveur');
+      
+      // IMPORTANT: Synchroniser d'abord les opérations en attente depuis la queue
+      debugPrint('🔄 Synchronisation des opérations en file d\'attente...');
+      await syncPendingData();
+      debugPrint('🔄 Synchronisation des flots en file d\'attente...');
+      await syncPendingFlots();
+      
       final dependentTables = ['agents', 'clients', 'operations', 'taux', 'commissions', 'comptes_speciaux', 'document_headers', 'cloture_caisse', 'flots'];
       for (String table in dependentTables) {
         try {
@@ -1144,6 +1158,39 @@ class SyncService {
             debugPrint('🔄 Première synchronisation: envoi de tous les flots');
             unsyncedData = allFlots.map((flot) => _addSyncMetadata(flot.toJson(), 'flot')).toList();
           }
+          break;
+          
+        case 'audit_log':
+          // Récupérer les audits depuis SharedPreferences
+          final prefs = await SharedPreferences.getInstance();
+          final auditKeys = prefs.getKeys().where((key) => key.startsWith('audit_'));
+          unsyncedData = [];
+          for (var key in auditKeys) {
+            final auditData = prefs.getString(key);
+            if (auditData != null) {
+              final json = jsonDecode(auditData);
+              // Les audits sont toujours envoyés (pas de flag is_synced)
+              unsyncedData.add(_addSyncMetadata(json, 'audit_log'));
+            }
+          }
+          debugPrint('📤 AUDIT_LOG: ${unsyncedData.length} audits à synchroniser');
+          break;
+          
+        case 'reconciliations':
+          // Récupérer les réconciliations depuis SharedPreferences
+          final prefs = await SharedPreferences.getInstance();
+          final reconKeys = prefs.getKeys().where((key) => key.startsWith('reconciliation_'));
+          unsyncedData = [];
+          for (var key in reconKeys) {
+            final reconData = prefs.getString(key);
+            if (reconData != null) {
+              final json = jsonDecode(reconData);
+              if (json['is_synced'] != true) {
+                unsyncedData.add(_addSyncMetadata(json, 'reconciliation'));
+              }
+            }
+          }
+          debugPrint('📤 RECONCILIATIONS: ${unsyncedData.length} réconciliations à synchroniser');
           break;
           
         default:
@@ -2091,6 +2138,28 @@ class SyncService {
     try {
       debugPrint('🚀 === SYNC FLOTS & OPERATIONS ===');
       
+      // 0. SYNC QUEUE: Synchroniser les opérations en file d'attente (transferts, etc.)
+      try {
+        debugPrint('📋 Sync QUEUE OPERATIONS (transferts, etc.)...');
+        await syncPendingData();
+        debugPrint('✅ Queue opérations synchronisée');
+        successCount++;
+      } catch (e) {
+        debugPrint('❌ Erreur sync queue opérations: $e');
+        errorCount++;
+      }
+      
+      // 0b. SYNC QUEUE FLOTS: Synchroniser les flots en file d'attente
+      try {
+        debugPrint('📋 Sync QUEUE FLOTS...');
+        await syncPendingFlots();
+        debugPrint('✅ Queue flots synchronisée');
+        successCount++;
+      } catch (e) {
+        debugPrint('❌ Erreur sync queue flots: $e');
+        errorCount++;
+      }
+      
       // 1. Synchroniser les OPÉRATIONS (via TransferSyncService)
       try {
         debugPrint('📤📥 Sync OPERATIONS...');
@@ -2183,8 +2252,66 @@ class SyncService {
     debugPrint('📋 Opération mise en file d\'attente (total: $_pendingSyncCount)');
   }
   
-  /// Synchronise les données en attente (appelé lors du retour en ligne)
-  Future<void> _syncPendingData() async {
+  /// Ajoute un flot à la file d'attente (mode offline)
+  Future<void> queueFlot(Map<String, dynamic> flot) async {
+    _pendingFlots.add(flot);
+    _pendingFlotsCount = _pendingFlots.length;
+    
+    // Sauvegarder dans shared_preferences pour persistance
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('pending_flots', jsonEncode(_pendingFlots));
+    
+    debugPrint('📪 Flot mis en file d\'attente (total: $_pendingFlotsCount)');
+  }
+  
+  /// Charge les opérations en attente depuis le stockage persistant
+  Future<void> _loadPendingOperations() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final pendingData = prefs.getString('pending_operations');
+      
+      if (pendingData != null && pendingData.isNotEmpty) {
+        final List<dynamic> decoded = jsonDecode(pendingData);
+        _pendingOperations.clear();
+        _pendingOperations.addAll(decoded.cast<Map<String, dynamic>>());
+        _pendingSyncCount = _pendingOperations.length;
+        
+        debugPrint('📋 ${_pendingOperations.length} opération(s) en attente chargée(s) depuis le stockage');
+      } else {
+        debugPrint('✅ Aucune opération en attente dans le stockage');
+      }
+    } catch (e) {
+      debugPrint('❌ Erreur chargement opérations en attente: $e');
+      _pendingOperations.clear();
+      _pendingSyncCount = 0;
+    }
+  }
+  
+  /// Charge les flots en attente depuis le stockage persistant
+  Future<void> _loadPendingFlots() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final pendingData = prefs.getString('pending_flots');
+      
+      if (pendingData != null && pendingData.isNotEmpty) {
+        final List<dynamic> decoded = jsonDecode(pendingData);
+        _pendingFlots.clear();
+        _pendingFlots.addAll(decoded.cast<Map<String, dynamic>>());
+        _pendingFlotsCount = _pendingFlots.length;
+        
+        debugPrint('📪 ${_pendingFlots.length} flot(s) en attente chargé(s) depuis le stockage');
+      } else {
+        debugPrint('✅ Aucun flot en attente dans le stockage');
+      }
+    } catch (e) {
+      debugPrint('❌ Erreur chargement flots en attente: $e');
+      _pendingFlots.clear();
+      _pendingFlotsCount = 0;
+    }
+  }
+  
+  /// Synchronise les opérations en attente (appelé lors du retour en ligne ou manuellement depuis RobustSyncService)
+  Future<void> syncPendingData() async {
     if (_pendingOperations.isEmpty) {
       debugPrint('✅ Aucune donnée en attente à synchroniser');
       return;
@@ -2195,32 +2322,72 @@ class SyncService {
     int synced = 0;
     final List<Map<String, dynamic>> failedOperations = [];
     
-    for (final operation in List.from(_pendingOperations)) {
+    // Créer une copie des opérations à synchroniser
+    final operationsToSync = List<Map<String, dynamic>>.from(_pendingOperations);
+    
+    for (final operation in operationsToSync) {
       try {
+        // Log détaillé de l'opération avant upload
+        debugPrint('📤 Upload opération: code_ops=${operation['code_ops']}, type=${operation['type']}, montant=${operation['montant_brut']}');
+        debugPrint('   Détails: agent_id=${operation['agent_id']}, shop_source_id=${operation['shop_source_id']}, client_id=${operation['client_id']}');
+        debugPrint('   Statut: ${operation['statut']}, Mode: ${operation['mode_paiement']}');
+        
+        // Récupérer l'URL de base (IMPORTANT: _baseUrl est async)
+        final baseUrl = await _baseUrl;
+        
         // Uploader l'opération
         final response = await http.post(
-          Uri.parse('$_baseUrl/operations/upload.php'),
+          Uri.parse('$baseUrl/operations/upload.php'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'entities': [operation],
-            'user_id': operation['lastModifiedBy'] ?? 'offline_user',
+            'user_id': operation['lastModifiedBy'] ?? operation['last_modified_by'] ?? 'offline_user',
             'timestamp': DateTime.now().toIso8601String(),
           }),
         ).timeout(_syncTimeout);
         
+        debugPrint('📡 Réponse serveur: HTTP ${response.statusCode}');
+        
         if (response.statusCode == 200) {
           final result = jsonDecode(response.body);
+          debugPrint('📄 Contenu réponse: $result');
+          
           if (result['success'] == true) {
             synced++;
             _pendingOperations.remove(operation);
+            debugPrint('✅ Opération ${operation['code_ops']} synchronisée avec succès');
+            
+            // IMPORTANT: Marquer l'opération comme synchronisée dans LocalDB
+            // CLÉ UNIQUE: code_ops
+            try {
+              final codeOps = operation['code_ops'];
+              if (codeOps != null && codeOps.isNotEmpty) {
+                final localOp = await LocalDB.instance.getOperationByCodeOps(codeOps);
+                if (localOp != null) {
+                  final syncedOp = localOp.copyWith(
+                    isSynced: true,
+                    syncedAt: DateTime.now(),
+                  );
+                  await LocalDB.instance.updateOperation(syncedOp);
+                  debugPrint('💾 Opération code_ops=$codeOps marquée comme synchronisée dans LocalDB');
+                } else {
+                  debugPrint('⚠️ Opération code_ops=$codeOps non trouvée dans LocalDB');
+                }
+              }
+            } catch (e) {
+              debugPrint('⚠️ Erreur marquage sync LocalDB: $e');
+            }
           } else {
+            debugPrint('❌ Échec sync opération ${operation['code_ops']}: ${result['message']}');
             failedOperations.add(operation);
           }
         } else {
+          debugPrint('❌ Erreur HTTP ${response.statusCode} pour opération ${operation['code_ops']}');
+          debugPrint('   Body: ${response.body}');
           failedOperations.add(operation);
         }
       } catch (e) {
-        debugPrint('❌ Erreur sync opération: $e');
+        debugPrint('❌ Erreur sync opération ${operation['code_ops']}: $e');
         failedOperations.add(operation);
       }
     }
@@ -2238,10 +2405,95 @@ class SyncService {
     
     debugPrint('✅ Synchronisation terminée: $synced réussies, ${failedOperations.length} échouées');
     
-    if (synced > 0) {
-      // Synchroniser le reste des données
-      await syncAll();
+    // IMPORTANT: NE PAS appeler syncAll() ici pour éviter les boucles infinies
+    // La synchronisation complète sera gérée par RobustSyncService ou manuellement
+  }
+  
+  /// Synchronise les flots en attente (appelé lors du retour en ligne ou manuellement depuis RobustSyncService)
+  Future<void> syncPendingFlots() async {
+    if (_pendingFlots.isEmpty) {
+      debugPrint('✅ Aucun flot en attente à synchroniser');
+      return;
     }
+    
+    debugPrint('🔄 Synchronisation de ${_pendingFlots.length} flots en attente...');
+    
+    int synced = 0;
+    final List<Map<String, dynamic>> failedFlots = [];
+    
+    // Créer une copie des flots à synchroniser
+    final flotsToSync = List<Map<String, dynamic>>.from(_pendingFlots);
+    
+    for (final flot in flotsToSync) {
+      try {
+        // Récupérer l'URL de base (IMPORTANT: _baseUrl est async)
+        final baseUrl = await _baseUrl;
+        
+        // Uploader le flot
+        final response = await http.post(
+          Uri.parse('$baseUrl/flots/upload.php'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'entities': [flot],
+            'user_id': flot['lastModifiedBy'] ?? 'offline_user',
+            'timestamp': DateTime.now().toIso8601String(),
+          }),
+        ).timeout(_syncTimeout);
+        
+        if (response.statusCode == 200) {
+          final result = jsonDecode(response.body);
+          if (result['success'] == true) {
+            synced++;
+            _pendingFlots.remove(flot);
+            debugPrint('✅ Flot ${flot['id']} synchronisé avec succès');
+            
+            // IMPORTANT: Marquer le flot comme synchronisé dans LocalDB
+            // CLÉ UNIQUE: reference
+            try {
+              final reference = flot['reference'];
+              if (reference != null && reference.isNotEmpty) {
+                final localFlot = await LocalDB.instance.getFlotByReference(reference);
+                if (localFlot != null) {
+                  final syncedFlot = localFlot.copyWith(
+                    isSynced: true,
+                    syncedAt: DateTime.now(),
+                  );
+                  await LocalDB.instance.saveFlot(syncedFlot);
+                  debugPrint('💾 Flot reference=$reference marqué comme synchronisé dans LocalDB');
+                } else {
+                  debugPrint('⚠️ Flot reference=$reference non trouvé dans LocalDB');
+                }
+              }
+            } catch (e) {
+              debugPrint('⚠️ Erreur marquage sync flot LocalDB: $e');
+            }
+          } else {
+            failedFlots.add(flot);
+          }
+        } else {
+          failedFlots.add(flot);
+        }
+      } catch (e) {
+        debugPrint('❌ Erreur sync flot: $e');
+        failedFlots.add(flot);
+      }
+    }
+    
+    // Mettre à jour le compteur
+    _pendingFlotsCount = _pendingFlots.length;
+    
+    // Sauvegarder les flots non synchronisés
+    final prefs = await SharedPreferences.getInstance();
+    if (_pendingFlots.isEmpty) {
+      await prefs.remove('pending_flots');
+    } else {
+      await prefs.setString('pending_flots', jsonEncode(_pendingFlots));
+    }
+    
+    debugPrint('✅ Synchronisation flots terminée: $synced réussies, ${failedFlots.length} échouées');
+    
+    // IMPORTANT: NE PAS appeler syncAll() ici pour éviter les boucles infinies
+    // La synchronisation complète sera gérée par RobustSyncService ou manuellement
   }
   
   /// Force le téléchargement complet de toutes les opérations (ignore synced_at)

@@ -186,52 +186,65 @@ class ReportService extends ChangeNotifier {
       });
     }
 
-    // Ajouter les mouvements FLOT
+    // Ajouter les FLOTs au rapport avec les dates appropriées
     for (final flot in flots) {
-      final isEntree = flot.statut == flot_model.StatutFlot.servi && flot.shopDestinationId == shopId;
-      final isSortie = flot.statut == flot_model.StatutFlot.enRoute && flot.shopSourceId == shopId;
+      final isEntree = flot.shopDestinationId == shopId;
+      final isSortie = flot.shopSourceId == shopId;
       
-      if (isEntree || isSortie) {
-        final montant = flot.montant;
-        final mode = flot.modePaiement.name;
-        
-        if (isEntree) {
-          totalEntrees += montant;
-        } else {
-          totalSorties += montant;
+      if ((isEntree || isSortie) && flot.devise == 'USD') {
+        // Utiliser date_reception pour les flots reçus et created_at pour les flots envoyés
+        final dateAction = isEntree 
+            ? (flot.dateReception ?? flot.dateEnvoi)  // Pour les flots reçus, préférer date_reception
+            : (flot.createdAt ?? flot.dateEnvoi);     // Pour les flots envoyés, préférer created_at
+            
+        // Vérifier si la date est dans la période demandée
+        if ((startDate == null || dateAction.isAfter(startDate.subtract(const Duration(days: 1)))) &&
+            (endDate == null || dateAction.isBefore(endDate.add(const Duration(days: 1))))) {
+          
+          final montant = flot.montant;
+          final mode = flot.modePaiement.name;
+          
+          // Mettre à jour les totaux
+          if (isEntree) {
+            totalEntrees += montant;
+          } else if (isSortie) {
+            totalSorties += montant;
+          }
+          
+          // Mettre à jour les totaux par mode de paiement
+          totauxParMode[mode] = (totauxParMode[mode] ?? 0) + montant;
+          
+          // Récupérer les noms des agents
+          final agentEnvoyeur = flot.agentEnvoyeurId != null 
+              ? agentService.getAgentById(flot.agentEnvoyeurId!) 
+              : null;
+          final agentRecepteur = flot.agentRecepteurId != null 
+              ? agentService.getAgentById(flot.agentRecepteurId!) 
+              : null;
+          
+          final agentName = isEntree 
+              ? (agentRecepteur?.nom ?? agentRecepteur?.username ?? 'Agent inconnu')
+              : (agentEnvoyeur?.nom ?? agentEnvoyeur?.username ?? 'Agent inconnu');
+          
+          mouvements.add({
+            'date': dateAction,
+            'type': 'FLOT',
+            'typeDirection': isEntree ? 'entree' : 'sortie',
+            'agent': agentName,
+            'montantBrut': montant,
+            'montantNet': montant,
+            'commission': 0.0,
+            'montant': montant,
+            'devise': flot.devise,
+            'mode': mode,
+            'soldeAvant': 0.0,
+            'soldeApres': 0.0,
+            'statut': flot.statut.name,
+            'destinataire': isEntree 
+                ? 'Reçu de ${flot.shopSourceDesignation}'
+                : 'Envoyé vers ${flot.shopDestinationDesignation}',
+          });
         }
-        
-        // Ajouter au total par mode de paiement
-        totauxParMode[mode] = (totauxParMode[mode] ?? 0) + montant;
-        
-        // Get agent names
-        final agentEnvoyeur = agentService.getAgentById(flot.agentEnvoyeurId);
-        final agentRecepteur = flot.agentRecepteurId != null 
-            ? agentService.getAgentById(flot.agentRecepteurId!) 
-            : null;
-        
-        final agentName = isEntree 
-            ? (agentRecepteur?.nom ?? agentRecepteur?.username ?? 'Agent inconnu')
-            : (agentEnvoyeur?.nom ?? agentEnvoyeur?.username ?? 'Agent inconnu');
-        
-        mouvements.add({
-          'date': isEntree ? flot.dateReception! : flot.dateEnvoi,
-          'type': 'FLOT',
-          'typeDirection': isEntree ? 'entree' : 'sortie',
-          'agent': agentName,
-          'montantBrut': montant,
-          'montantNet': montant,
-          'commission': 0.0,
-          'montant': montant,
-          'devise': flot.devise,
-          'mode': mode,
-          'soldeAvant': 0.0,
-          'soldeApres': 0.0,
-          'statut': flot.statut.name,
-          'destinataire': isEntree 
-              ? 'Reçu de ${flot.shopSourceDesignation}'
-              : 'Envoyé vers ${flot.shopDestinationDesignation}',
-        });
       }
     }
 
@@ -472,7 +485,7 @@ class ReportService extends ChangeNotifier {
 
     final retraits = _operations.where((op) => 
       op.shopSourceId == shopId && 
-      op.type == OperationType.retrait &&
+      (op.type == OperationType.retrait || op.type == OperationType.retraitMobileMoney) &&
       (op.statut == OperationStatus.validee || op.statut == OperationStatus.terminee)
     ).toList();
 
@@ -667,7 +680,7 @@ class ReportService extends ChangeNotifier {
         }),
         // AJOUT: Transferts sortants (ce shop a envoyé)
         ...transfertsSortants.map((op) => {
-          'dateOp': op.dateOp.toIso8601String(),
+          'dateOp': op.createdAt?.toIso8601String() ?? op.dateOp.toIso8601String(),
           'type': op.type.name,
           'destinataire': op.destinataire ?? 'Shop ${op.shopDestinationId}',
           'montantBrut': op.montantBrut,
@@ -679,7 +692,7 @@ class ReportService extends ChangeNotifier {
         }),
         // AJOUT: Transferts entrants (ce shop a reçu)
         ...transfertsEntrants.map((op) => {
-          'dateOp': op.dateOp.toIso8601String(),
+          'dateOp': op.dateValidation?.toIso8601String() ?? op.createdAt?.toIso8601String() ?? op.dateOp.toIso8601String(),
           'type': op.type.name,
           'destinataire': op.destinataire ?? 'Shop ${op.shopSourceId}',
           'montantBrut': op.montantBrut,
@@ -691,7 +704,7 @@ class ReportService extends ChangeNotifier {
         }),
         // AJOUT: FLOT reçus
         ...flotsRecus.map((flot) => {
-          'dateOp': flot.dateReception?.toIso8601String() ?? flot.dateEnvoi.toIso8601String(),
+          'dateOp': flot.dateReception?.toIso8601String() ?? flot.createdAt?.toIso8601String() ?? flot.dateEnvoi.toIso8601String(),
           'type': 'FLOT_RECU',
           'destinataire': 'Reçu de ${flot.shopSourceDesignation}',
           'montantBrut': flot.montant,
@@ -702,7 +715,7 @@ class ReportService extends ChangeNotifier {
         }),
         // AJOUT: FLOT servis
         ...flotsServis.map((flot) => {
-          'dateOp': flot.dateEnvoi.toIso8601String(),
+          'dateOp': flot.createdAt?.toIso8601String() ?? flot.dateEnvoi.toIso8601String(),
           'type': 'FLOT_SERVI',
           'destinataire': 'Envoyé vers ${flot.shopDestinationDesignation}',
           'montantBrut': flot.montant,
@@ -711,6 +724,7 @@ class ReportService extends ChangeNotifier {
           'modePaiement': flot.modePaiement.name,
           'statut': flot.statut.name,
         }),
+
       ]..sort((a, b) => DateTime.parse(b['dateOp'] as String).compareTo(DateTime.parse(a['dateOp'] as String))),
     };
   }
@@ -742,6 +756,7 @@ class ReportService extends ChangeNotifier {
           totalDepots += operation.montantNet;
           break;
         case OperationType.retrait:
+        case OperationType.retraitMobileMoney:
           totalRetraits += operation.montantNet;
           break;
         case OperationType.transfertNational:
@@ -766,6 +781,7 @@ class ReportService extends ChangeNotifier {
           soldeActuel += operation.montantNet;
           break;
         case OperationType.retrait:
+        case OperationType.retraitMobileMoney:
           soldeActuel -= operation.montantNet;
           break;
         case OperationType.transfertNational:
@@ -813,6 +829,7 @@ class ReportService extends ChangeNotifier {
         return true;
         
       case OperationType.retrait:
+      case OperationType.retraitMobileMoney:
         // Retrait = SORTIE de caisse (client prend de l'argent)
         return false;
         

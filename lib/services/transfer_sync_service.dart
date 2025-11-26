@@ -323,22 +323,31 @@ class TransferSyncService extends ChangeNotifier {
             
             _pendingTransfers = mergedOperations
                 .where((op) {
-                  // 1. Doit être un transfert
+                  // 1. Doit être un transfert OU un depot/retrait
                   final isTransfer = op.type == OperationType.transfertNational ||
                      op.type == OperationType.transfertInternationalEntrant ||
                      op.type == OperationType.transfertInternationalSortant;
+                     
+                  final isDepotOrRetrait = op.type == OperationType.depot ||
+                     op.type == OperationType.retrait;
                   
-                  // 2. Doit être EN ATTENTE
-                  final isPending = op.statut == OperationStatus.enAttente;
+                  // 2. Pour les transferts: doit être EN ATTENTE
+                  // Pour les depot/retrait: peut être VALIDE ou TERMINE (pas d'attente)
+                  final isPending = isTransfer 
+                      ? op.statut == OperationStatus.enAttente
+                      : (op.statut == OperationStatus.validee || op.statut == OperationStatus.terminee);
                   
-                  // 3. Ce shop doit être la DESTINATION (pour validation)
-                  final isForThisShop = op.shopDestinationId == _shopId;
+                  // 3. Pour les transferts: ce shop doit être la DESTINATION (pour validation)
+                  // Pour les depot/retrait: ce shop doit être la SOURCE
+                  final isForThisShop = isTransfer 
+                      ? op.shopDestinationId == _shopId 
+                      : op.shopSourceId == _shopId;
                   
-                  final shouldShow = isTransfer && isPending && isForThisShop;
+                  final shouldShow = (isTransfer || isDepotOrRetrait) && isPending && isForThisShop;
                   
                   // Debug détaillé pour CHAQUE opération
-                  debugPrint('🔍 [FILTER] ${op.codeOps}: type=${op.type.name}, statut=${op.statut}, dest=${op.shopDestinationId}, shop=$_shopId');
-                  debugPrint('🔍 [FILTER]   → isTransfer=$isTransfer, isPending=$isPending, isForThisShop=$isForThisShop → RESULT=$shouldShow');
+                  debugPrint('🔍 [FILTER] ${op.codeOps}: type=${op.type.name}, statut=${op.statut}, dest=${op.shopDestinationId}, source=${op.shopSourceId}, shop=$_shopId');
+                  debugPrint('🔍 [FILTER]   → isTransfer=$isTransfer, isDepotOrRetrait=$isDepotOrRetrait, isPending=$isPending, isForThisShop=$isForThisShop → RESULT=$shouldShow');
                   
                   return shouldShow;
                 })

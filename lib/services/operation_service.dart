@@ -10,10 +10,12 @@ import '../models/shop_model.dart';
 import 'local_db.dart';
 import 'rates_service.dart';
 import 'sync_service.dart';
+import 'depot_retrait_sync_service.dart';
 import 'taux_change_service.dart';
 import 'agent_service.dart';
 import 'auth_service.dart';
 import 'compte_special_service.dart';
+import 'sim_service.dart';
 import '../config/app_config.dart';
 
 class OperationService extends ChangeNotifier {
@@ -58,7 +60,7 @@ class OperationService extends ChangeNotifier {
   }
 
   // Charger les opérations
-  Future<void> loadOperations({int? shopId, int? agentId}) async {
+  Future<void> loadOperations({int? shopId, int? agentId, bool excludeVirement = true}) async {
     _setLoading(true);
     try {
       // Sauvegarder les filtres actifs pour réutilisation
@@ -72,6 +74,13 @@ class OperationService extends ChangeNotifier {
       _operations = await LocalDB.instance.getAllOperations();
       
       debugPrint('📊 loadOperations: ${_operations.length} opérations totales chargées depuis LocalDB');
+      
+      // Exclure les virements (FLOT) par défaut car ils sont visibles dans la section dédiée aux FLOTS
+      if (excludeVirement) {
+        final beforeExclusion = _operations.length;
+        _operations = _operations.where((op) => op.type != OperationType.virement).toList();
+        debugPrint('🚫 Exclusion FLOT (virements): $beforeExclusion → ${_operations.length} opérations');
+      }
       
       // Pas d'initialisation de données par défaut
       // Les opérations seront créées uniquement par les utilisateurs
@@ -197,15 +206,22 @@ class OperationService extends ChangeNotifier {
       
       // Enregistrer automatiquement les frais dans le compte FRAIS
       if (savedOperation.commission > 0) {
+        // Selon la logique métier : les frais appartiennent au SHOP DESTINATION qui servira le transfert
+        final fraisShopId = (savedOperation.shopDestinationId != null && 
+                           (savedOperation.type == OperationType.transfertNational ||
+                            savedOperation.type == OperationType.transfertInternationalSortant))
+                          ? savedOperation.shopDestinationId!
+                          : savedOperation.shopSourceId!;
+        
         await CompteSpecialService.instance.addFrais(
           montant: savedOperation.commission,
           description: 'Commission ${savedOperation.type.name} - ${savedOperation.codeOps}',
-          shopId: savedOperation.shopSourceId!,
+          shopId: fraisShopId, // ← CORRECTED: Frais vont au shop destination pour transferts
           operationId: savedOperation.id,
           agentId: savedOperation.agentId,
           agentUsername: savedOperation.agentUsername,
         );
-        debugPrint('💰 FRAIS enregistrés: \$${savedOperation.commission.toStringAsFixed(2)}');
+        debugPrint('💰 FRAIS enregistrés: \$${savedOperation.commission.toStringAsFixed(2)} au Shop ID: $fraisShopId');
       }
       
       // Toujours sauvegarder en local d'abord, la synchronisation se fera en arrière-plan
@@ -293,6 +309,14 @@ class OperationService extends ChangeNotifier {
         commission = 0.0;
         break;
         
+      case OperationType.retraitMobileMoney:
+        // Retraits Mobile Money : frais selon l'opérateur
+        // Le montantNet est le montant VIRTUEL reçu sur la SIM
+        // Les frais sont déduits pour donner le montant CASH au client
+        commission = _calculateRetraitMobileMoneyFees(operation.modePaiement, operation.montantNet);
+        debugPrint('💰 Frais Retrait Mobile Money: ${commission.toStringAsFixed(2)} ${operation.devise} (${_getRetraitFeeRate(operation.modePaiement)}% de ${operation.montantNet})');
+        break;
+        
       case OperationType.virement:
         // Virements internes gratuits
         commission = 0.0;
@@ -317,6 +341,9 @@ class OperationService extends ChangeNotifier {
         break;
       case OperationType.retrait:
         await _handleRetraitBalances(operation);
+        break;
+      case OperationType.retraitMobileMoney:
+        await _handleRetraitMobileMoneyBalances(operation);
         break;
       case OperationType.transfertNational:
       case OperationType.transfertInternationalSortant:
@@ -411,6 +438,90 @@ class OperationService extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('❌ Erreur mise à jour soldes retrait: $e');
+      throw e;
+    }
+  }
+
+  /// Gérer les soldes pour un retrait Mobile Money (Cash-Out)
+  /// LOGIQUE: 
+  /// - À la création (enAttente): PAS de mouvement (juste enregistrement)
+  /// - À la validation: Augmente virtuel SIM + Diminue cash agent
+  /// FRAIS: montantBrut = virtuel reçu, montantNet = cash donné, commission = frais
+  Future<void> _handleRetraitMobileMoneyBalances(OperationModel operation) async {
+    try {
+      // Si EN_ATTENTE : Pas de mouvement de capital (juste enregistrement)
+      if (operation.statut == OperationStatus.enAttente) {
+        debugPrint('📱 Retrait Mobile Money enregistré (en attente): Référence ${operation.reference}');
+        debugPrint('   Aucun mouvement de capital pour l\'instant');
+        return;
+      }
+      
+      // Si VALIDE : Mise à jour SIM + Capital
+      if (operation.statut == OperationStatus.validee || operation.statut == OperationStatus.terminee) {
+        debugPrint('📱 === VALIDATION RETRAIT MOBILE MONEY ===');
+        debugPrint('   Montant VIRTUEL (SIM): ${operation.montantBrut} ${operation.devise}');
+        debugPrint('   Frais: ${operation.commission} ${operation.devise}');
+        debugPrint('   Montant CASH (Client): ${operation.montantNet} ${operation.devise}');
+        debugPrint('   Référence: ${operation.reference}');
+        debugPrint('   SIM: ${operation.simNumero}');
+        
+        // 1. Augmenter le solde virtuel de la SIM (montantBrut = virtuel)
+        if (operation.simNumero != null) {
+          final simService = SimService.instance;
+          await simService.loadSims(shopId: operation.shopSourceId);
+          
+          final sim = simService.sims.firstWhere(
+            (s) => s.numero == operation.simNumero,
+            orElse: () => throw Exception('SIM ${operation.simNumero} introuvable'),
+          );
+          
+          final updatedSim = sim.copyWith(
+            soldeActuel: sim.soldeActuel + operation.montantBrut, // VIRTUEL = montantBrut
+            lastModifiedAt: DateTime.now(),
+            lastModifiedBy: 'operation_${operation.id}',
+          );
+          
+          await LocalDB.instance.updateSim(updatedSim);
+          debugPrint('💳 Solde SIM ${sim.numero}: ${sim.soldeActuel.toStringAsFixed(2)} → ${updatedSim.soldeActuel.toStringAsFixed(2)} USD (+${operation.montantBrut})');
+        }
+        
+        // 2. Diminuer le capital CASH du shop (montantNet = cash donné au client)
+        if (operation.shopSourceId != null) {
+          final shop = await LocalDB.instance.getShopById(operation.shopSourceId!);
+          if (shop != null) {
+            // Diminuer le CASH du montant NET (ce que le client reçoit)
+            final updatedShop = _updateShopCapital(shop, ModePaiement.cash, operation.montantNet, false, devise: operation.devise);
+            await LocalDB.instance.saveShop(updatedShop);
+            debugPrint('🏪 Capital CASH shop ${shop.designation}: -${operation.montantNet} ${operation.devise}');
+            
+            // Créer entrée journal de caisse (SORTIE du cash)
+            final journalEntry = JournalCaisseModel(
+              shopId: operation.shopSourceId!,
+              agentId: operation.agentId,
+              libelle: 'Retrait Mobile Money - ${operation.destinataire ?? "Client"} (Réf: ${operation.reference})',
+              montant: operation.montantNet, // Cash sorti
+              type: TypeMouvement.sortie,
+              mode: ModePaiement.cash,
+              dateAction: DateTime.now(),
+              operationId: operation.id,
+              notes: 'Cash-Out ${_getModePaiementName(operation.modePaiement)} vers SIM ${operation.simNumero} - Frais: ${operation.commission} ${operation.devise}',
+              lastModifiedAt: DateTime.now(),
+              lastModifiedBy: 'agent_${operation.agentId}',
+            );
+            
+            await LocalDB.instance.saveJournalEntry(journalEntry);
+            debugPrint('📋 Journal caisse: SORTIE CASH de ${operation.montantNet} ${operation.devise}');
+          }
+        }
+        
+        debugPrint('✅ Retrait Mobile Money validé avec succès!');
+        debugPrint('   💰 RÉCAPITULATIF:');
+        debugPrint('      Virtuel SIM: +${operation.montantBrut} ${operation.devise}');
+        debugPrint('      Frais Agent: +${operation.commission} ${operation.devise}');
+        debugPrint('      Cash Sorti: -${operation.montantNet} ${operation.devise}');
+      }
+    } catch (e) {
+      debugPrint('❌ Erreur mise à jour soldes retrait mobile money: $e');
       throw e;
     }
   }
@@ -568,6 +679,43 @@ class OperationService extends ChangeNotifier {
     return shop;
   }
 
+  /// Helper pour obtenir le nom du mode de paiement
+  String _getModePaiementName(ModePaiement mode) {
+    switch (mode) {
+      case ModePaiement.cash:
+        return 'Cash';
+      case ModePaiement.airtelMoney:
+        return 'Airtel Money';
+      case ModePaiement.mPesa:
+        return 'M-Pesa';
+      case ModePaiement.orangeMoney:
+        return 'Orange Money';
+    }
+  }
+
+  /// Obtenir le taux de frais pour retrait Mobile Money selon l'opérateur
+  double _getRetraitFeeRate(ModePaiement operateur) {
+    switch (operateur) {
+      case ModePaiement.airtelMoney:
+        return 4.0; // 4% pour Airtel Money
+      case ModePaiement.mPesa:
+        return 3.5; // 3.5% pour M-Pesa
+      case ModePaiement.orangeMoney:
+        return 4.0; // 4% pour Orange Money
+      case ModePaiement.cash:
+        return 0.0; // Pas de frais pour cash
+    }
+  }
+
+  /// Calculer les frais de retrait Mobile Money
+  /// montantVirtuel = montant reçu sur la SIM
+  /// Retourne les frais à déduire
+  double _calculateRetraitMobileMoneyFees(ModePaiement operateur, double montantVirtuel) {
+    final tauxPourcentage = _getRetraitFeeRate(operateur);
+    final frais = (montantVirtuel * tauxPourcentage / 100);
+    return double.parse(frais.toStringAsFixed(2)); // Arrondi à 2 décimales
+  }
+
   // Créer une ou plusieurs entrées dans le journal de caisse
   Future<void> _createJournalEntry(OperationModel operation) async {
     String libelle = '';
@@ -704,8 +852,14 @@ class OperationService extends ChangeNotifier {
     OperationType? type,
     DateTime? dateDebut,
     DateTime? dateFin,
+    bool excludeVirement = true, // Par défaut, exclure les virements (FLOT)
   }) {
     var filtered = List<OperationModel>.from(_operations);
+    
+    // Exclure les virements (FLOT) par défaut car ils sont visibles dans la section dédiée
+    if (excludeVirement) {
+      filtered = filtered.where((op) => op.type != OperationType.virement).toList();
+    }
     
     if (statut != null) {
       filtered = filtered.where((op) => op.statut == statut).toList();
@@ -1159,19 +1313,37 @@ class OperationService extends ChangeNotifier {
       debugPrint('📊 Vérification transferts: ${allOps.length} opérations en mémoire');
       
       // Filtrer les opérations en attente
-      List<OperationModel> pendingOps = allOps.where((op) => 
-        op.statut == OperationStatus.enAttente &&
-        (op.type == OperationType.transfertNational ||
-         op.type == OperationType.transfertInternationalSortant ||
-         op.type == OperationType.transfertInternationalEntrant)
-      ).toList();
+      List<OperationModel> pendingOps = allOps.where((op) {
+        // Pour les transferts: doit être EN ATTENTE
+        if ((op.type == OperationType.transfertNational ||
+             op.type == OperationType.transfertInternationalSortant ||
+             op.type == OperationType.transfertInternationalEntrant) &&
+            op.statut == OperationStatus.enAttente) {
+          return true;
+        }
+        // Pour les depot/retrait: peut être VALIDE ou TERMINE
+        if ((op.type == OperationType.depot ||
+             op.type == OperationType.retrait) &&
+            (op.statut == OperationStatus.validee || op.statut == OperationStatus.terminee)) {
+          return true;
+        }
+        return false;
+      }).toList();
       
-      // Filtrer par shop si nécessaire (seulement les transferts destinés à ce shop)
+      // Filtrer par shop si nécessaire (seulement les transferts destinés à ce shop et depot/retrait provenant de ce shop)
       if (_activeShopFilter != null) {
         pendingOps = pendingOps.where((op) => 
-          op.shopDestinationId == _activeShopFilter
+          // Pour les transferts, le shop doit être la destination
+          ((op.type == OperationType.transfertNational ||
+            op.type == OperationType.transfertInternationalSortant ||
+            op.type == OperationType.transfertInternationalEntrant) &&
+           op.shopDestinationId == _activeShopFilter) ||
+          // Pour les depot/retrait, le shop doit être la source
+          ((op.type == OperationType.depot ||
+            op.type == OperationType.retrait) &&
+           op.shopSourceId == _activeShopFilter)
         ).toList();
-        debugPrint('🔍 ${pendingOps.length} transferts en attente pour shop $_activeShopFilter');
+        debugPrint('🔍 ${pendingOps.length} opérations en attente pour shop $_activeShopFilter');
       }
       
       final previousCount = _pendingOpsCount;
@@ -1283,53 +1455,36 @@ class OperationService extends ChangeNotifier {
   }
   
   /// Synchronise une opération en arrière-plan sans bloquer l'interface
-  /// Avec système de retry automatique en cas d'échec
+  /// Utilise DepotRetraitSyncService pour les dépôts/retraits, SyncService pour les transferts
   Future<void> _syncOperationInBackground(OperationModel operation) async {
-    // Ne pas attendre la fin de la synchronisation
-    // Cela permet de continuer l'exécution de l'application immédiatement
     Future.microtask(() async {
-      int retryCount = 0;
-      const maxRetries = 3;
-      const retryDelay = Duration(seconds: 5);
-      
-      while (retryCount < maxRetries) {
-        try {
-          debugPrint('🔄 [BACKGROUND] Synchronisation opération ${operation.codeOps} (tentative ${retryCount + 1}/$maxRetries)...');
+      try {
+        // Vérifier le type d'opération
+        final isDepotRetrait = operation.type == OperationType.depot ||
+                              operation.type == OperationType.retrait ||
+                              operation.type == OperationType.retraitMobileMoney;
+        
+        if (isDepotRetrait) {
+          // Utiliser le service spécialisé pour dépôts/retraits
+          debugPrint('💰 [DEPOT/RETRAIT] Ajout à la queue de sync spécialisée: ${operation.type.name} - ${operation.codeOps}');
           
-          // Convertir l'opération en Map pour la queue
+          final depotRetraitSync = DepotRetraitSyncService();
+          await depotRetraitSync.queueOperation(operation);
+          
+          debugPrint('✅ [DEPOT/RETRAIT] Opération en file - synchronisation auto dans 2s');
+        } else {
+          // Utiliser la queue générique pour les transferts
+          debugPrint('📦 [TRANSFERT] Ajout à la queue générale: ${operation.type.name} - ${operation.codeOps}');
+          
           final operationMap = operation.toJson();
-          
-          // Ajouter l'opération à la file d'attente de synchronisation
           final syncService = SyncService();
           await syncService.queueOperation(operationMap);
           
-          // Attendre un court délai pour permettre à l'interface de se mettre à jour
-          await Future.delayed(const Duration(milliseconds: 100));
-          
-          // Synchroniser les données en attente
-          await syncService.syncAll(userId: operation.lastModifiedBy ?? 'system');
-          
-          debugPrint('✅ [BACKGROUND] Opération ${operation.codeOps} synchronisée avec succès');
-          
-          // Marquer l'opération comme synchronisée en local
-          await _markOperationAsSynced(operation.id!);
-          
-          return; // Succès, sortir de la boucle
-        } catch (e) {
-          retryCount++;
-          debugPrint('⚠️ [BACKGROUND] Échec synchronisation opération ${operation.codeOps} (tentative $retryCount/$maxRetries): $e');
-          
-          if (retryCount < maxRetries) {
-            debugPrint('   ⏳ Nouvelle tentative dans ${retryDelay.inSeconds}s...');
-            await Future.delayed(retryDelay);
-          } else {
-            debugPrint('❌ [BACKGROUND] Échec définitif après $maxRetries tentatives');
-            debugPrint('   💡 L\'opération restera en file d\'attente et sera retentée lors de la prochaine synchronisation');
-            
-            // Ajouter l'opération aux opérations en attente pour retry manuel/automatique
-            await _addToPendingSyncQueue(operation);
-          }
+          debugPrint('✅ [QUEUE] Opération en file - RobustSyncService la synchronisera');
         }
+      } catch (e, stackTrace) {
+        debugPrint('❌ [SYNC] Erreur ajout opération: $e');
+        debugPrint('   Stack trace: $stackTrace');
       }
     });
   }

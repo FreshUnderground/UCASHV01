@@ -17,6 +17,8 @@ import '../widgets/admin_help_widget.dart';
 import '../widgets/sync_status_widget.dart';
 import '../widgets/comptes_speciaux_widget.dart';
 import '../widgets/sync_monitor_widget.dart';
+import '../widgets/audit_history_widget.dart';
+import '../widgets/reconciliation_report_widget.dart';
 import '../utils/responsive_utils.dart';
 import '../theme/ucash_typography.dart';
 import '../theme/ucash_containers.dart';
@@ -35,6 +37,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
   final List<String> _menuItems = [
     'Dashboard',
     'Dépenses',
+    'Shops',
     'Agents',
     'Partenaires',
     'Taux & Commissions',
@@ -45,6 +48,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
   final List<IconData> _menuIcons = [
     Icons.dashboard,
     Icons.account_balance_wallet,
+    Icons.store,
     Icons.people,
     Icons.account_circle,
     Icons.currency_exchange,
@@ -66,22 +70,29 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
   // Function to trigger synchronization of operation data
   void _triggerOperationSync() async {
     try {
-      final transferSyncService = TransferSyncService();
-      debugPrint('🔄 Déclenchement de la synchronisation des opérations...');
+      final authService = Provider.of<AuthService>(context, listen: false);
       
-      // Force a refresh from API to get latest operation data
-      await transferSyncService.forceRefreshFromAPI();
-      
-      debugPrint('✅ Synchronisation des opérations terminée');
-      
-      // Show a snackbar to inform user
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Données des opérations synchronisées'),
-            duration: Duration(seconds: 2),
-          ),
-        );
+      // Only proceed if user is an agent with a shop ID
+      if (authService.currentUser?.role == 'AGENT' && authService.currentUser?.shopId != null) {
+        final transferSyncService = TransferSyncService();
+        debugPrint('🔄 Déclenchement de la synchronisation des opérations...');
+        
+        // Force a refresh from API to get latest operation data
+        await transferSyncService.forceRefreshFromAPI();
+        
+        debugPrint('✅ Synchronisation des opérations terminée');
+        
+        // Show a snackbar to inform user
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Données des opérations synchronisées'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } else {
+        debugPrint('ℹ️ Synchronisation des opérations ignorée (admin ou shop ID non disponible)');
       }
     } catch (e) {
       debugPrint('❌ Erreur lors de la synchronisation des opérations: $e');
@@ -414,14 +425,16 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
       case 1:
         return _buildFraisDepensesContent();
       case 2:
-        return _buildAgentsContent();
+        return _buildShopsContent();
       case 3:
-        return _buildClientsContent();
+        return _buildAgentsContent();
       case 4:
-        return _buildTauxCommissionsContent();
+        return _buildClientsContent();
       case 5:
-        return _buildReportsContent();
+        return _buildTauxCommissionsContent();
       case 6:
+        return _buildReportsContent();
+      case 7:
         return _buildConfigurationContent();
       default:
         return _buildDashboardContent();
@@ -657,9 +670,62 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 768;
     
-    return Padding(
-      padding: EdgeInsets.all(isMobile ? 16 : 24),
-      child: const ConfigReportsWidget(),
+    return DefaultTabController(
+      length: 3,
+      child: Column(
+        children: [
+          Container(
+            color: Colors.white,
+            padding: EdgeInsets.all(isMobile ? 8 : 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Configuration',
+                  style: TextStyle(
+                    fontSize: isMobile ? 20 : 24,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFFDC2626),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TabBar(
+                  labelColor: const Color(0xFFDC2626),
+                  unselectedLabelColor: Colors.grey,
+                  indicatorColor: const Color(0xFFDC2626),
+                  isScrollable: isMobile,
+                  tabs: [
+                    Tab(
+                      icon: Icon(Icons.settings, size: isMobile ? 18 : 22),
+                      text: 'Paramètres',
+                    ),
+                    Tab(
+                      icon: Icon(Icons.history, size: isMobile ? 18 : 22),
+                      text: 'Audit Trail',
+                    ),
+                    Tab(
+                      icon: Icon(Icons.account_balance_wallet, size: isMobile ? 18 : 22),
+                      text: 'Réconciliation',
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                Padding(
+                  padding: EdgeInsets.all(isMobile ? 16 : 24),
+                  child: const ConfigReportsWidget(),
+                ),
+                _buildAuditTrailContent(),
+                _buildReconciliationContent(),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -817,12 +883,6 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
           childAspectRatio: childAspectRatio,
           children: [
             _buildFluidActionCard(
-              title: 'Dashboard',
-              icon: Icons.dashboard,
-              color: const Color(0xFF3B82F6),
-              onTap: () => setState(() => _selectedIndex = 0),  // Index 0 = Dashboard
-            ),
-            _buildFluidActionCard(
               title: 'Dépenses',
               icon: Icons.account_balance_wallet,
               color: const Color(0xFF059669),
@@ -832,36 +892,40 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
               title: 'Agents',
               icon: Icons.people,
               color: const Color(0xFF7C3AED),
-              onTap: () => setState(() => _selectedIndex = 2),  // Index 2 = Agents
+              onTap: () => setState(() => _selectedIndex = 3),  // Index 3 = Agents
+            ),
+            _buildFluidActionCard(
+              title: 'Shops',
+              icon: Icons.store,
+              color: const Color(0xFFEC4899),
+              onTap: () => setState(() => _selectedIndex = 2),  // Index 2 = Shops
             ),
             _buildFluidActionCard(
               title: 'Partenaires',
               icon: Icons.account_circle,
               color: const Color(0xFFF59E0B),
-              onTap: () => setState(() => _selectedIndex = 3),  // Index 3 = Partenaires
-            ),
-            _buildFluidActionCard(
-              title: 'Taux & Commissions',
-              icon: Icons.currency_exchange,
-              color: const Color(0xFF10B981),
-              onTap: () => setState(() => _selectedIndex = 4),  // Index 4 = Taux
-            ),
-            _buildFluidActionCard(
-              title: 'Rapports',
-              icon: Icons.analytics,
-              color: const Color(0xFFDC2626),
-              onTap: () => setState(() => _selectedIndex = 5),  // Index 5 = Rapports
+              onTap: () => setState(() => _selectedIndex = 4),  // Index 4 = Partenaires
             ),
             _buildFluidActionCard(
               title: 'Configuration',
               icon: Icons.settings,
               color: const Color(0xFF0891B2),
-              onTap: () => setState(() => _selectedIndex = 6),  // Index 6 = Configuration
+              onTap: () => setState(() => _selectedIndex = 7),  // Index 7 = Configuration
             ),
           ],
         );
       },
     );
+  }
+
+  Widget _buildAuditTrailContent() {
+    return const AuditHistoryWidget(
+      showFilters: true,
+    );
+  }
+
+  Widget _buildReconciliationContent() {
+    return const ReconciliationReportWidget();
   }
 
   Future<void> _handleLogout() async {
@@ -883,30 +947,32 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
     );
   }
 
-  // Mapper l'index desktop (7 items) vers l'index mobile (5 items)
+  // Mapper l'index desktop (8 items) vers l'index mobile (6 items)
   int _getMobileNavIndex(int desktopIndex) {
-    // Desktop: 0=Dashboard, 1=Dépenses, 2=Agents, 3=Partenaires, 4=Taux, 5=Rapports, 6=Config
-    // Mobile:  0=Dashboard, 1=Frais, 2=Partenaires, 3=Rapports, 4=Config
+    // Desktop: 0=Dashboard, 1=Dépenses, 2=Shops, 3=Agents, 4=Partenaires, 5=Taux, 6=Rapports, 7=Config
+    // Mobile:  0=Dashboard, 1=Frais, 2=Shops, 3=Partenaires, 4=Rapports, 5=Config
     if (desktopIndex == 0) return 0; // Dashboard
     if (desktopIndex == 1) return 1; // Dépenses → Frais
-    if (desktopIndex == 2) return 2; // Agents → Partenaires
-    if (desktopIndex == 3) return 2; // Partenaires → Partenaires
-    if (desktopIndex == 4) return 3; // Taux → Rapports
-    if (desktopIndex == 5) return 3; // Rapports → Rapports
-    if (desktopIndex == 6) return 4; // Config → Config
+    if (desktopIndex == 2) return 2; // Shops
+    if (desktopIndex == 3) return 3; // Agents → Partenaires (regroupé avec clients)
+    if (desktopIndex == 4) return 3; // Partenaires
+    if (desktopIndex == 5) return 4; // Taux → Rapports (regroupé)
+    if (desktopIndex == 6) return 4; // Rapports
+    if (desktopIndex == 7) return 5; // Config
     return 0;
   }
 
   // Mapper l'index mobile vers l'index desktop
   int _getDesktopIndexFromMobile(int mobileIndex) {
-    // Mobile:  0=Dashboard, 1=Frais, 2=Partenaires, 3=Rapports, 4=Config
-    // Desktop: 0=Dashboard, 1=Dépenses, 2=Agents, 3=Partenaires, 4=Taux, 5=Rapports, 6=Config
+    // Mobile:  0=Dashboard, 1=Frais, 2=Shops, 3=Partenaires, 4=Rapports, 5=Config
+    // Desktop: 0=Dashboard, 1=Dépenses, 2=Shops, 3=Agents, 4=Partenaires, 5=Taux, 6=Rapports, 7=Config
     switch (mobileIndex) {
       case 0: return 0; // Dashboard
       case 1: return 1; // Frais → Dépenses
-      case 2: return 3; // Partenaires
-      case 3: return 5; // Rapports
-      case 4: return 6; // Config
+      case 2: return 2; // Shops
+      case 3: return 4; // Partenaires
+      case 4: return 6; // Rapports
+      case 5: return 7; // Config
       default: return 0;
     }
   }
@@ -947,15 +1013,19 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
             label: 'Frais',
           ),
           BottomNavigationBarItem(
-            icon: Icon(_menuIcons[3]),
+            icon: Icon(_menuIcons[2]),  // Shops (index 2)
+            label: 'Shops',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(_menuIcons[4]),  // Partenaires (index 4)
             label: 'Partenaires',
           ),
           BottomNavigationBarItem(
-            icon: Icon(_menuIcons[5]),
+            icon: Icon(_menuIcons[6]),  // Rapports (index 6)
             label: 'Rapports',
           ),
           BottomNavigationBarItem(
-            icon: Icon(_menuIcons[6]),
+            icon: Icon(_menuIcons[7]),  // Config (index 7)
             label: 'Config',
           ),
         ],

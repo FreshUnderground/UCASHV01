@@ -390,6 +390,7 @@ class _ClientTransactionHistoryState extends State<ClientTransactionHistory> {
       case OperationType.depot:
         return Icons.add_circle;
       case OperationType.retrait:
+      case OperationType.retraitMobileMoney:
         return Icons.remove_circle;
       case OperationType.transfertNational:
       case OperationType.transfertInternationalSortant:
@@ -407,6 +408,8 @@ class _ClientTransactionHistoryState extends State<ClientTransactionHistory> {
         return 'Dépôt';
       case OperationType.retrait:
         return 'Retrait';
+      case OperationType.retraitMobileMoney:
+        return 'Retrait Mobile Money';
       case OperationType.transfertNational:
         return 'Transfert National';
       case OperationType.transfertInternationalSortant:

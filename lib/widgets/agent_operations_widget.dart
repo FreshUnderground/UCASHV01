@@ -34,6 +34,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
   OperationType? _typeFilter;
   bool _showFiltersAndStats = false; // Contrôle l'affichage des stats et filtres (masqué par défaut)
   String _categoryFilter = 'all'; // all, pending, my_transfers, my_withdrawals, my_served, my_deposits
+  bool _includeFlots = false; // ✨ Nouveau: Contrôle l'affichage des FLOT (virements)
 
   // Calculer les statistiques du shop (cash en caisse) DEPUIS DONNEES LOCALES MULTI-DEVISES
   Map<String, dynamic> _getShopStats(ShopService shopService, int shopId) {
@@ -169,7 +170,10 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
       // 2. Filter by operation type
       final matchesType = _typeFilter == null || operation.type == _typeFilter;
       
-      // 3. Filter by category
+      // ✨ 3. Filter by FLOT inclusion
+      final matchesFlotFilter = _includeFlots || operation.type != OperationType.virement;
+      
+      // 4. Filter by category
       bool matchesCategory = true;
       switch (_categoryFilter) {
         case 'pending':
@@ -211,7 +215,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
           matchesCategory = true;
       }
       
-      return matchesSearch && matchesType && matchesCategory;
+      return matchesSearch && matchesType && matchesFlotFilter && matchesCategory;
     }).toList();
   }
 
@@ -452,6 +456,19 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
                           ),
                         ),
                         const SizedBox(width: 8),
+                        // ✨ Toggle FLOT (virements)
+                        IconButton(
+                          onPressed: () {
+                            setState(() {
+                              _includeFlots = !_includeFlots;
+                            });
+                          },
+                          icon: Icon(
+                            _includeFlots ? Icons.visibility : Icons.visibility_off,
+                            color: _includeFlots ? const Color(0xFFDC2626) : Colors.grey,
+                          ),
+                          tooltip: _includeFlots ? 'Masquer les FLOT' : 'Afficher les FLOT',
+                        ),
                         IconButton(
                           onPressed: _loadOperations,
                           icon: const Icon(Icons.refresh),
@@ -506,6 +523,19 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
                       ),
                     ),
                     const SizedBox(width: 16),
+                    // ✨ Toggle FLOT (virements)
+                    IconButton(
+                      onPressed: () {
+                        setState(() {
+                          _includeFlots = !_includeFlots;
+                        });
+                      },
+                      icon: Icon(
+                        _includeFlots ? Icons.visibility : Icons.visibility_off,
+                        color: _includeFlots ? const Color(0xFFDC2626) : Colors.grey,
+                      ),
+                      tooltip: _includeFlots ? 'Masquer les FLOT' : 'Afficher les FLOT',
+                    ),
                     IconButton(
                       onPressed: _loadOperations,
                       icon: const Icon(Icons.refresh),
@@ -1159,6 +1189,11 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
         typeColor = Colors.orange;
         typeIcon = Icons.remove_circle;
         typeText = 'Retrait';
+        break;
+      case OperationType.retraitMobileMoney:
+        typeColor = Colors.orange;
+        typeIcon = Icons.mobile_friendly;
+        typeText = 'Retrait MM';
         break;
       case OperationType.transfertNational:
         typeColor = const Color(0xFFDC2626);

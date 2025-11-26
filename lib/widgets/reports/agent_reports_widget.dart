@@ -16,6 +16,7 @@ import '../../widgets/flot_management_widget.dart';
 import '../../widgets/cloture_agent_widget.dart';
 import '../../services/rapportcloture_pdf_service.dart';
 import 'releve_compte_client_report.dart';
+import '../../widgets/frais_transfert_widget.dart'; // Add this import for Frais Transfert
 
 class AgentReportsWidget extends StatefulWidget {
   const AgentReportsWidget({super.key});
@@ -34,6 +35,7 @@ class _AgentReportsWidgetState extends State<AgentReportsWidget> with SingleTick
     {'icon': Icons.account_balance, 'text': 'Caisse'},
     {'icon': Icons.lock, 'text': 'Clôtures'},
     {'icon': Icons.local_shipping, 'text': 'FLOT'},
+    {'icon': Icons.percent, 'text': 'Frais'}, // Add Frais tab
   ];
 
   @override
@@ -196,15 +198,22 @@ class _AgentReportsWidgetState extends State<AgentReportsWidget> with SingleTick
                                 showAllShops: false,
                               )
                             : _buildNoShopAssignedError(),
-                          
+                              
                           // Gestion des clôtures
                           user.shopId != null
                             ? ClotureAgentWidget(shopId: user.shopId!)
                             : _buildNoShopAssignedError(),
-                          
+                              
                           // FLOT - Menu complet
                           user.shopId != null
                             ? FlotManagementWidget()
+                            : _buildNoShopAssignedError(),
+                              
+                          // Frais - Liste des frais de transfert
+                          user.shopId != null
+                            ? FraisTransfertWidget(
+                                shopId: user.shopId!,
+                              )
                             : _buildNoShopAssignedError(),
                         ],
                       ),

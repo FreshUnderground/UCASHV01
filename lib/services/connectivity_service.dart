@@ -27,7 +27,7 @@ class ConnectivityService extends ChangeNotifier {
     });
     
     // Vérification périodique de la connectivité
-    _connectivityTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+    _connectivityTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       _checkConnectivity();
     });
   }
@@ -69,16 +69,8 @@ class ConnectivityService extends ChangeNotifier {
     // Déclencher la synchronisation automatique quand la connexion est restaurée
     debugPrint('🌐 Connexion restaurée - Déclenchement de la synchronisation automatique...');
     
-    // Déclencher la synchronisation avec un délai pour éviter les dépendances circulaires
-    Timer(const Duration(seconds: 3), () {
-      try {
-        // TODO: Déclencher la synchronisation automatique
-        // SyncService.instance.autoSync();
-        debugPrint('🔄 Synchronisation automatique déclenchée');
-      } catch (e) {
-        debugPrint('Erreur lors du déclenchement de la synchronisation: $e');
-      }
-    });
+    // Note: The actual sync triggering should be handled by the UI or other services
+    // that have access to the RobustSyncService instance
   }
 
   /// Démarre la surveillance de connectivité

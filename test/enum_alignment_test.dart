@@ -12,7 +12,7 @@ void main() {
   group('Enum Alignment Tests', () {
     
     test('OperationType enum indices match PHP conversion array', () {
-      // PHP: $types = ['transfertNational', 'transfertInternationalSortant', 'transfertInternationalEntrant', 'depot', 'retrait', 'virement'];
+      // PHP: $types = ['transfertNational', 'transfertInternationalSortant', 'transfertInternationalEntrant', 'depot', 'retrait', 'virement', 'retraitMobileMoney'];
       
       expect(OperationType.transfertNational.index, 0, 
         reason: 'transfertNational must be index 0 to match PHP array');
@@ -31,6 +31,9 @@ void main() {
       
       expect(OperationType.virement.index, 5,
         reason: 'virement must be index 5 to match PHP array');
+      
+      expect(OperationType.retraitMobileMoney.index, 6,
+        reason: 'retraitMobileMoney must be index 6 to match PHP array');
     });
     
     test('ModePaiement enum indices match PHP conversion array', () {
@@ -68,8 +71,8 @@ void main() {
     test('Enum counts match PHP array lengths', () {
       // Vérifier que le nombre d'éléments dans chaque enum correspond au nombre d'éléments dans les tableaux PHP
       
-      expect(OperationType.values.length, 6,
-        reason: 'OperationType must have exactly 6 values to match PHP array');
+      expect(OperationType.values.length, 7,
+        reason: 'OperationType must have exactly 7 values to match PHP array');
       
       expect(ModePaiement.values.length, 4,
         reason: 'ModePaiement must have exactly 4 values to match PHP array');
@@ -103,6 +106,7 @@ void main() {
       expect(OperationType.depot.name, 'depot');
       expect(OperationType.retrait.name, 'retrait');
       expect(OperationType.virement.name, 'virement');
+      expect(OperationType.retraitMobileMoney.name, 'retraitMobileMoney');
       
       expect(ModePaiement.cash.name, 'cash');
       expect(ModePaiement.airtelMoney.name, 'airtelMoney');
@@ -119,7 +123,7 @@ void main() {
       // Simuler le processus complet de conversion
       
       // Flutter index -> PHP string (simulation)
-      final phpTypes = ['transfertNational', 'transfertInternationalSortant', 'transfertInternationalEntrant', 'depot', 'retrait', 'virement'];
+      final phpTypes = ['transfertNational', 'transfertInternationalSortant', 'transfertInternationalEntrant', 'depot', 'retrait', 'virement', 'retraitMobileMoney'];
       final phpModes = ['cash', 'airtelMoney', 'mPesa', 'orangeMoney'];
       final phpStatuts = ['enAttente', 'validee', 'terminee', 'annulee'];
       

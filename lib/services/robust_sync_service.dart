@@ -6,6 +6,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
 import 'sync_service.dart';
 import 'transfer_sync_service.dart';
+import 'depot_retrait_sync_service.dart';
 import 'flot_service.dart';
 import 'compte_special_service.dart';
 import 'client_service.dart';
@@ -55,7 +56,11 @@ class RobustSyncService {
   // Services
   final SyncService _syncService = SyncService();
   final TransferSyncService _transferSync = TransferSyncService();
+  final DepotRetraitSyncService _depotRetraitSync = DepotRetraitSyncService();
   final FlotService _flotService = FlotService.instance;
+  
+  // Timer de vérification de connectivité
+  Timer? _connectivityCheckTimer;
 
   /// Initialise le service robuste
   Future<void> initialize() async {
@@ -63,6 +68,9 @@ class RobustSyncService {
     
     // Écouter la connectivité
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen(_onConnectivityChanged);
+    
+    // Démarrer le timer de vérification périodique de connectivité
+    _startConnectivityCheckTimer();
     
     // Vérifier connectivité initiale
     final connectivityResult = await Connectivity().checkConnectivity();
@@ -127,7 +135,7 @@ class RobustSyncService {
     debugPrint('⏰ Timer SLOW SYNC démarré (${_slowSyncInterval.inMinutes} min)');
   }
 
-  /// Exécute FAST SYNC: operations, flots, comptes_speciaux, clients
+  /// Exécute FAST SYNC: operations, flots, comptes_speciaux, clients, audit_log, reconciliations
   Future<void> _performFastSync({bool isInitial = false}) async {
     if (_isFastSyncing) {
       debugPrint('⏸️ FAST SYNC déjà en cours, ignoré');
@@ -138,24 +146,65 @@ class RobustSyncService {
     final startTime = DateTime.now();
     
     debugPrint('🚀 ${isInitial ? "[INITIAL]" : ""} FAST SYNC - Début');
-    debugPrint('   Tables: operations, flots, comptes_speciaux, clients');
-    
-    // 0. RETRY des flots en attente (avant tout)
-    try {
-      debugPrint('  🔄 Retry flots en attente...');
-      await _flotService.retrySyncPendingFlots();
-    } catch (e) {
-      debugPrint('  ⚠️ Erreur retry flots: $e (non bloquant)');
-    }
+    debugPrint('   Tables critiques: operations, flots, clients, comptes_speciaux, audit_log, reconciliations');
     
     int successCount = 0;
     int errorCount = 0;
     final List<String> errors = [];
     
     try {
-      // 1. OPÉRATIONS (via TransferSyncService)
+      // ========== ÉTAPE 1: SYNCHRONISER LES QUEUES (PRIORITÉ ABSOLUE) ==========
+      // Les opérations et flots créés localement DOIVENT être envoyés en premier
+      
+      // 1.1 Queue Dépôts/Retraits (Service spécialisé)
+      if (await _syncWithRetry('queue_depots_retraits', () async {
+        debugPrint('  💰 [PRIORITÉ 1] Sync dépôts/retraits via service spécialisé...');
+        await _depotRetraitSync.syncDepotsRetraits();
+      })) {
+        successCount++;
+      } else {
+        errorCount++;
+        errors.add('queue_depots_retraits');
+      }
+      
+      // 1.2 Queue Transferts (Autres opérations)
+      if (await _syncWithRetry('queue_transferts', () async {
+        debugPrint('  📎 [PRIORITÉ 1] Sync queue transferts...');
+        await _syncService.syncPendingData();
+      })) {
+        successCount++;
+      } else {
+        errorCount++;
+        errors.add('queue_transferts');
+      }
+      
+      // 1.3 Queue Flots (Transferts entre shops)
+      if (await _syncWithRetry('queue_flots', () async {
+        debugPrint('  📪 [PRIORITÉ 1] Sync queue flots...');
+        await _syncService.syncPendingFlots();
+      })) {
+        successCount++;
+      } else {
+        errorCount++;
+        errors.add('queue_flots');
+      }
+      
+      // ========== ÉTAPE 2: RETRY DES FLOTS NON SYNCHRONISÉS ==========
+      // Les flots en échec précédent sont retestés
+      if (await _syncWithRetry('retry_flots', () async {
+        debugPrint('  🔄 [PRIORITÉ 2] Retry flots en attente...');
+        await _flotService.retrySyncPendingFlots();
+      })) {
+        successCount++;
+      } else {
+        errorCount++;
+        errors.add('retry_flots');
+      }
+      
+      // ========== ÉTAPE 3: SYNC BIDIRECTIONNELLE DES OPÉRATIONS ==========
+      // Download les nouvelles opérations depuis le serveur
       if (await _syncWithRetry('operations', () async {
-        debugPrint('  📤📥 Sync OPERATIONS...');
+        debugPrint('  📤📥 [PRIORITÉ 3] Sync opérations bidirectionnelle...');
         await _transferSync.syncTransfers();
       })) {
         successCount++;
@@ -164,7 +213,7 @@ class RobustSyncService {
         errors.add('operations');
       }
       
-      // 2. FLOTS
+      // ========== ÉTAPE 4: SYNC BIDIRECTIONNELLE DES FLOTS ==========
       if (await _syncWithRetry('flots', () async {
         debugPrint('  📤 Upload FLOTS...');
         await _syncService.uploadTableData('flots', 'auto_fast_sync');
@@ -177,7 +226,7 @@ class RobustSyncService {
         errors.add('flots');
       }
       
-      // 3. COMPTES SPÉCIAUX
+      // ========== ÉTAPE 5: SYNC COMPTES SPÉCIAUX (Clients) ==========
       if (await _syncWithRetry('comptes_speciaux', () async {
         debugPrint('  📤 Upload COMPTES SPÉCIAUX...');
         await _syncService.uploadTableData('comptes_speciaux', 'auto_fast_sync');
@@ -190,7 +239,7 @@ class RobustSyncService {
         errors.add('comptes_speciaux');
       }
       
-      // 4. CLIENTS
+      // ========== ÉTAPE 6: SYNC CLIENTS ==========
       if (await _syncWithRetry('clients', () async {
         debugPrint('  📤 Upload CLIENTS...');
         await _syncService.uploadTableData('clients', 'auto_fast_sync');
@@ -201,6 +250,32 @@ class RobustSyncService {
       } else {
         errorCount++;
         errors.add('clients');
+      }
+      
+      // ========== ÉTAPE 7: SYNC AUDIT LOG ==========
+      if (await _syncWithRetry('audit_log', () async {
+        debugPrint('  📤 Upload AUDIT LOG...');
+        await _syncService.uploadTableData('audit_log', 'auto_fast_sync');
+        debugPrint('  📥 Download AUDIT LOG...');
+        await _syncService.downloadTableData('audit_log', 'auto_fast_sync', 'admin');
+      })) {
+        successCount++;
+      } else {
+        errorCount++;
+        errors.add('audit_log');
+      }
+      
+      // ========== ÉTAPE 8: SYNC RECONCILIATIONS ==========
+      if (await _syncWithRetry('reconciliations', () async {
+        debugPrint('  📤 Upload RECONCILIATIONS...');
+        await _syncService.uploadTableData('reconciliations', 'auto_fast_sync');
+        debugPrint('  📥 Download RECONCILIATIONS...');
+        await _syncService.downloadTableData('reconciliations', 'auto_fast_sync', 'admin');
+      })) {
+        successCount++;
+      } else {
+        errorCount++;
+        errors.add('reconciliations');
       }
       
       _lastFastSync = DateTime.now();
@@ -216,6 +291,8 @@ class RobustSyncService {
         _failedFastTables.addAll(errors);
         // Programmer un retry dans 30 secondes
         _scheduleRetry(true);
+      } else {
+        debugPrint('🎉 FAST SYNC 100% réussi - Toutes les données critiques synchronisées !');
       }
       
     } catch (e, stack) {
@@ -405,6 +482,68 @@ class RobustSyncService {
       _slowSyncTimer?.cancel();
     }
   }
+  
+  /// Vérifie périodiquement la connectivité et tente de se reconnecter
+  void _startConnectivityCheckTimer() {
+    // Annuler le timer précédent s'il existe
+    _connectivityCheckTimer?.cancel();
+    
+    // Timer périodique pour vérifier la connectivité toutes les 30 secondes
+    _connectivityCheckTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
+      if (!_isOnline && _isEnabled) {
+        try {
+          final connectivityResult = await Connectivity().checkConnectivity();
+          final isNowOnline = connectivityResult != ConnectivityResult.none;
+          
+          if (isNowOnline && !_isOnline) {
+            // Nous sommes maintenant en ligne
+            _isOnline = true;
+            debugPrint('🌐 Connectivité retrouvée - redémarrage sync');
+            
+            // Sync immédiate des données critiques
+            _performFastSync();
+            
+            // Redémarrer les timers
+            _startFastSyncTimer();
+            _startSlowSyncTimer();
+          }
+        } catch (e) {
+          debugPrint('⚠️ Erreur vérification connectivité: $e');
+        }
+      }
+    });
+  }
+
+  /// Vérifie la connectivité et tente une synchronisation si en ligne
+  Future<void> checkConnectivityAndSync() async {
+    try {
+      final connectivityResult = await Connectivity().checkConnectivity();
+      final isNowOnline = connectivityResult != ConnectivityResult.none;
+      
+      if (isNowOnline && !_isOnline) {
+        // Nous sommes maintenant en ligne
+        _isOnline = true;
+        debugPrint('🌐 Connectivité retrouvée - déclenchement sync');
+        
+        // Sync immédiate des données critiques
+        await _performFastSync();
+        
+        // Redémarrer les timers
+        _startFastSyncTimer();
+        _startSlowSyncTimer();
+        
+        return;
+      }
+      
+      if (isNowOnline && _isOnline) {
+        // Déjà en ligne, déclencher une sync manuelle
+        debugPrint('🌐 Déclenchement sync manuelle');
+        await syncNow();
+      }
+    } catch (e) {
+      debugPrint('⚠️ Erreur vérification connectivité et sync: $e');
+    }
+  }
 
   /// Synchronisation manuelle immédiate (TOUT)
   Future<void> syncNow() async {
@@ -450,6 +589,7 @@ class RobustSyncService {
     _fastSyncTimer?.cancel();
     _slowSyncTimer?.cancel();
     _connectivitySubscription?.cancel();
+    _connectivityCheckTimer?.cancel();
     debugPrint('🛑 ROBUST SYNC SERVICE arrêté');
   }
 }

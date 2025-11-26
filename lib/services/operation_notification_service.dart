@@ -160,6 +160,8 @@ class OperationNotificationService extends ChangeNotifier {
         return '📥 Dépôt';
       case OperationType.retrait:
         return '📤 Retrait';
+      case OperationType.retraitMobileMoney:
+        return '📱 Retrait Mobile Money';
       case OperationType.virement:
         return '🔄 Virement';
     }
@@ -179,6 +181,8 @@ class OperationNotificationService extends ChangeNotifier {
         return '$amount de $client';
       case OperationType.retrait:
         return '$amount pour $client';
+      case OperationType.retraitMobileMoney:
+        return '$amount - Réf: ${operation.reference ?? "N/A"}';
       case OperationType.virement:
         return '$amount - Virement interne';
     }

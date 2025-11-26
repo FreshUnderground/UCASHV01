@@ -879,7 +879,7 @@ class _RapportClotureState extends State<RapportCloture> {
 
         // Shops Qui nous Doivent
         _buildSection(
-          '7️⃣ Shops Qui nous Doivent',
+          '7️⃣ Shops Qui nous Doivent (DIFF. DETTES)',
           [
             Text('${rapport.shopsNousDoivent.length} shop(s)', style: const TextStyle(fontWeight: FontWeight.bold)),
             const Divider(),
@@ -898,7 +898,7 @@ class _RapportClotureState extends State<RapportCloture> {
 
         // Shops Nous Devons
         _buildSection(
-          '8️⃣ DIFF. DETTES SHOPS',
+          '8️⃣ Shop Que nous devons',
           [
             Text('${rapport.shopsNousDevons.length} shop(s)', style: const TextStyle(fontWeight: FontWeight.bold)),
             const Divider(),
@@ -952,9 +952,9 @@ class _RapportClotureState extends State<RapportCloture> {
             const SizedBox(height: 8),
             _buildCashRow('Cash Disponible', rapport.cashDisponibleTotal),
             _buildCashRow('+ Partenaires Servis', rapport.totalClientsNousDoivent),
-            _buildCashRow('+ Shops Qui nous Doivent', rapport.totalShopsNousDoivent),
+            _buildCashRow('+ Shops Qui nous Doivent (DIFF. DETTES)', rapport.totalShopsNousDoivent),
             _buildCashRow('- Dépôts Partenaires', rapport.totalClientsNousDevons),
-            _buildCashRow('- DIFF. DETTES SHOPS', rapport.totalShopsNousDevons),
+            _buildCashRow('- Shops Que Nous Devons', rapport.totalShopsNousDevons),
             const Divider(thickness: 2, color: Colors.blue),
             _buildTotalRow('= CAPITAL NET', rapport.capitalNet, bold: true, color: rapport.capitalNet >= 0 ? Colors.blue : Colors.red),
           ],

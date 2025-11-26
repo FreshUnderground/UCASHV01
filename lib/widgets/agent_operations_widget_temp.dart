@@ -853,6 +853,11 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
         typeIcon = Icons.remove_circle;
         typeText = 'Retrait';
         break;
+      case OperationType.retraitMobileMoney:
+        typeColor = Colors.orange;
+        typeIcon = Icons.mobile_friendly;
+        typeText = 'Retrait MM';
+        break;
       case OperationType.transfertNational:
         typeColor = const Color(0xFFDC2626);
         typeIcon = Icons.send;

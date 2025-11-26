@@ -1123,10 +1123,11 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
               Expanded(
                 flex: 2,
                 child: Text(
-                  isCredit ? (transaction['observation']?.toString() ?? transaction['destinataire']?.toString() ?? '--') : '--',
+                  isCredit ? (transaction['observation']?.toString() ?? '--') : '--',
                   style: TextStyle(
                     fontSize: 10,
-                    color: Colors.grey[700],
+                    color: Colors.blue[800],
+                    fontStyle: FontStyle.italic,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1134,10 +1135,11 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
               Expanded(
                 flex: 2,
                 child: Text(
-                  !isCredit ? (transaction['observation']?.toString() ?? transaction['destinataire']?.toString() ?? '--') : '--',
+                  !isCredit ? (transaction['observation']?.toString() ?? '--') : '--',
                   style: TextStyle(
                     fontSize: 10,
-                    color: Colors.grey[700],
+                    color: Colors.blue[800],
+                    fontStyle: FontStyle.italic,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),

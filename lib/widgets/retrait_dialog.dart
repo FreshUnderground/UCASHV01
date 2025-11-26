@@ -427,6 +427,16 @@ class _RetraitDialogState extends State<RetraitDialog> {
       
       final montant = double.parse(_montantController.text);
       
+      // Récupérer le shop de l'agent pour obtenir la designation
+      final shopId = authService.currentUser?.shopId ?? _selectedClient!.shopId ?? 1;
+      ShopModel? shop;
+      try {
+        shop = shopService.shops.firstWhere((s) => s.id == shopId);
+      } catch (e) {
+        debugPrint('⚠️ Shop non trouvé pour ID $shopId');
+        shop = null;
+      }
+      
       // Créer l'opération de retrait
       final operation = OperationModel(
         codeOps: '', // Sera généré automatiquement par createOperation
@@ -441,7 +451,8 @@ class _RetraitDialogState extends State<RetraitDialog> {
         modePaiement: _modePaiement,
         agentId: authService.currentUser?.id ?? 1,
         agentUsername: authService.currentUser?.username,
-        shopSourceId: authService.currentUser?.shopId ?? _selectedClient!.shopId ?? 1,
+        shopSourceId: shopId,
+        shopSourceDesignation: shop?.designation, // Récupérer la designation
         statut: OperationStatus.terminee,
         dateOp: DateTime.now(),
         notes: 'Retrait du compte client',
@@ -455,15 +466,7 @@ class _RetraitDialogState extends State<RetraitDialog> {
         // Fermer le dialog de retrait
         Navigator.of(context).pop(true);
         
-        // Récupérer les données pour le reçu
-        final shopId = authService.currentUser?.shopId ?? _selectedClient!.shopId ?? 1;
-        ShopModel? shop;
-        try {
-          shop = shopService.shops.firstWhere((s) => s.id == shopId);
-        } catch (e) {
-          shop = shopService.shops.isNotEmpty ? shopService.shops.first : null;
-        }
-        
+        // Le shop a déjà été récupéré plus haut
         // Convertir UserModel en AgentModel pour le reçu
         if (shop != null && authService.currentUser != null) {
           final agent = AgentModel(

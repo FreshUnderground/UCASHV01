@@ -253,6 +253,7 @@ class AgentOperationsList extends StatelessWidget {
       case OperationType.depot:
         return Icons.arrow_downward;
       case OperationType.retrait:
+      case OperationType.retraitMobileMoney:
         return Icons.arrow_upward;
       case OperationType.virement:
         return Icons.swap_horiz;
@@ -268,6 +269,7 @@ class AgentOperationsList extends StatelessWidget {
       case OperationType.depot:
         return const Color(0xFF388E3C);
       case OperationType.retrait:
+      case OperationType.retraitMobileMoney:
         return const Color(0xFFFF9800);
       case OperationType.virement:
         return const Color(0xFF9C27B0);
@@ -293,6 +295,7 @@ class AgentOperationsList extends StatelessWidget {
       case OperationType.transfertInternationalEntrant:
         return const Color(0xFF388E3C); // Vert pour les entrées
       case OperationType.retrait:
+      case OperationType.retraitMobileMoney:
       case OperationType.transfertNational:
       case OperationType.transfertInternationalSortant:
         return const Color(0xFFDC2626); // Rouge pour les sorties

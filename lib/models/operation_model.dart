@@ -5,6 +5,7 @@ enum OperationType {
   depot,
   retrait,
   virement,
+  retraitMobileMoney, // Retrait Mobile Money (Cash-Out)
 }
 
 enum OperationStatus {
@@ -182,6 +183,9 @@ class OperationModel {
           return OperationType.retrait;
         case 'virement':
           return OperationType.virement;
+        case 'retrait_mobile_money':
+        case 'retraitmobilemoney':
+          return OperationType.retraitMobileMoney;
         default:
           return OperationType.depot;
       }
@@ -282,9 +286,9 @@ class OperationModel {
       
       // Shops
       'shop_source_id': shopSourceId,
-      'shop_source_designation': shopSourceDesignation,
+      'shop_source_designation': (shopSourceDesignation == null || shopSourceDesignation!.isEmpty) ? null : shopSourceDesignation,
       'shop_destination_id': shopDestinationId,
-      'shop_destination_designation': shopDestinationDesignation,
+      'shop_destination_designation': (shopDestinationDesignation == null || shopDestinationDesignation!.isEmpty) ? null : shopDestinationDesignation,
       
       // Agent
       'agent_id': agentId,
@@ -326,6 +330,8 @@ class OperationModel {
         return 'Retrait';
       case OperationType.virement:
         return 'Virement';
+      case OperationType.retraitMobileMoney:
+        return 'Retrait Mobile Money';
     }
   }
 

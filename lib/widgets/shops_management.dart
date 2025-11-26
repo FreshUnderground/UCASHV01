@@ -56,7 +56,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
         children: [
           Expanded(
             child: Text(
-              'Gestion des Clients (Partenaires)',
+              'Gestion des Shops',
               style: context.titleAccent,
             ),
           ),
@@ -78,7 +78,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
           ElevatedButton.icon(
             onPressed: _showCreateDialog,
             icon: Icon(Icons.add, size: context.fluidIcon(mobile: 16, tablet: 18, desktop: 20)),
-            label: Text(context.isSmallScreen ? 'Nouveau' : 'Nouveau Partenaire'),
+            label: Text(context.isSmallScreen ? 'Nouveau' : 'Nouveau Shop'),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFDC2626),
               foregroundColor: Colors.white,
@@ -103,9 +103,9 @@ class _ShopsManagementState extends State<ShopsManagement> {
           aspectRatio: context.isSmallScreen ? 1.4 : 1.1,
           children: [
             _buildStatCard(
-              'Total Partenaires',
+              'Total Shops',
               '${stats['totalShops']}',
-              Icons.people,
+              Icons.store,
               const Color(0xFF1976D2),
             ),
             _buildStatCard(
@@ -121,7 +121,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
               const Color(0xFFFF9800),
             ),
             _buildStatCard(
-              'Partenaires Actifs',
+              'Shops Actifs',
               '${stats['activeShops']}',
               Icons.check_circle,
               const Color(0xFF4CAF50),
@@ -226,12 +226,12 @@ class _ShopsManagementState extends State<ShopsManagement> {
           ),
           context.verticalSpace(mobile: 12, tablet: 16, desktop: 20),
           Text(
-            'Aucun partenaire créé',
+            'Aucun shop créé',
             style: context.h3.copyWith(color: Colors.grey[600]),
           ),
           context.verticalSpace(mobile: 6, tablet: 8, desktop: 10),
           Text(
-            'Cliquez sur "Nouveau Partenaire" pour créer votre premier partenaire',
+            'Cliquez sur "Nouveau Shop" pour créer votre premier shop',
             style: context.bodySecondary,
             textAlign: TextAlign.center,
           ),
@@ -387,7 +387,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
         columns: const [
             DataColumn(
               label: Text(
-                'Partenaire',
+                'Shop',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
@@ -553,7 +553,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Confirmer la suppression'),
-        content: Text('Êtes-vous sûr de vouloir supprimer le partenaire "${shop.designation}" ?'),
+        content: Text('Êtes-vous sûr de vouloir supprimer le shop "${shop.designation}" ?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -568,7 +568,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('Partenaire supprimé avec succès'),
+                      content: Text('Shop supprimé avec succès'),
                       backgroundColor: Colors.green,
                     ),
                   );

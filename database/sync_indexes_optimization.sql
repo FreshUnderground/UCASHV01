@@ -12,12 +12,16 @@ USE inves2504808_6oor7p;
 -- TABLE: operations
 -- ============================================================================
 
--- Index pour les requêtes de synchronisation (changes.php)
+-- ----------------------------------------------------------------------------
+-- Index de synchronisation
+-- ----------------------------------------------------------------------------
 -- Utilisé par: WHERE last_modified_at > ? AND is_synced = ?
 CREATE INDEX IF NOT EXISTS idx_operations_sync 
 ON operations(last_modified_at, is_synced);
 
--- Index pour le filtrage par shop (queries agent)
+-- ----------------------------------------------------------------------------
+-- Index de filtrage par shop
+-- ----------------------------------------------------------------------------
 -- Utilisé par: WHERE shop_source_id = ? OR shop_destination_id = ?
 CREATE INDEX IF NOT EXISTS idx_operations_shop_source 
 ON operations(shop_source_id, last_modified_at);
@@ -29,20 +33,25 @@ ON operations(shop_destination_id, last_modified_at);
 CREATE INDEX IF NOT EXISTS idx_operations_agent_filter 
 ON operations(shop_source_id, shop_destination_id, last_modified_at);
 
--- Index pour recherche par code_ops (upload duplicate check)
+-- ----------------------------------------------------------------------------
+-- Index de recherche et détection de doublons
+-- ----------------------------------------------------------------------------
+-- Utilisé pour: recherche par code_ops (upload duplicate check)
 CREATE INDEX IF NOT EXISTS idx_operations_code_ops 
 ON operations(code_ops);
 
--- Index pour recherche de doublons logiques (upload)
 -- Utilisé par: WHERE montant_brut = ? AND agent_id = ? AND DATE(created_at) = ? AND type = ?
 CREATE INDEX IF NOT EXISTS idx_operations_duplicate_check 
 ON operations(montant_brut, agent_id, created_at, type);
 
--- Index pour recherche par date d'opération
+-- ----------------------------------------------------------------------------
+-- Index de tri et rapports
+-- ----------------------------------------------------------------------------
+-- Utilisé pour: recherche par date d'opération
 CREATE INDEX IF NOT EXISTS idx_operations_date_op 
 ON operations(date_op DESC);
 
--- Index pour statut et type (analyses et rapports)
+-- Utilisé pour: statut et type (analyses et rapports)
 CREATE INDEX IF NOT EXISTS idx_operations_statut 
 ON operations(statut, type);
 
@@ -50,11 +59,15 @@ ON operations(statut, type);
 -- TABLE: shops
 -- ============================================================================
 
--- Index pour synchronisation
+-- ----------------------------------------------------------------------------
+-- Index de synchronisation
+-- ----------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_shops_sync 
 ON shops(last_modified_at, is_synced);
 
--- Index pour recherche par designation (clé naturelle)
+-- ----------------------------------------------------------------------------
+-- Index de recherche par clé naturelle
+-- ----------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_shops_designation 
 ON shops(designation);
 
@@ -62,43 +75,56 @@ ON shops(designation);
 -- TABLE: agents
 -- ============================================================================
 
--- Index pour synchronisation
+-- ----------------------------------------------------------------------------
+-- Index de synchronisation
+-- ----------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_agents_sync 
 ON agents(last_modified_at, is_synced);
 
--- Index pour recherche par username (clé naturelle)
+-- ----------------------------------------------------------------------------
+-- Index de recherche et authentification
+-- ----------------------------------------------------------------------------
+-- Recherche par username (clé naturelle)
 CREATE INDEX IF NOT EXISTS idx_agents_username 
 ON agents(username);
-
--- Index pour filtrage par shop
-CREATE INDEX IF NOT EXISTS idx_agents_shop 
-ON agents(shop_id, is_active);
 
 -- Index composite pour authentification
 CREATE INDEX IF NOT EXISTS idx_agents_auth 
 ON agents(username, password, is_active);
 
+-- ----------------------------------------------------------------------------
+-- Index de filtrage
+-- ----------------------------------------------------------------------------
+CREATE INDEX IF NOT EXISTS idx_agents_shop 
+ON agents(shop_id, is_active);
+
 -- ============================================================================
 -- TABLE: clients
 -- ============================================================================
 
--- Index pour synchronisation
+-- ----------------------------------------------------------------------------
+-- Index de synchronisation
+-- ----------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_clients_sync 
 ON clients(last_modified_at, is_synced);
 
--- Index pour recherche par nom (clé naturelle pour résolution ID)
+-- ----------------------------------------------------------------------------
+-- Index de recherche par clés naturelles
+-- ----------------------------------------------------------------------------
+-- Recherche par nom (clé naturelle pour résolution ID)
 CREATE INDEX IF NOT EXISTS idx_clients_nom 
 ON clients(nom);
 
--- Index pour recherche par téléphone (clé naturelle unique)
+-- Recherche par téléphone (clé naturelle unique)
 CREATE INDEX IF NOT EXISTS idx_clients_telephone 
 ON clients(telephone);
 
--- Index pour filtrage par shop
+-- ----------------------------------------------------------------------------
+-- Index de filtrage
+-- ----------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_clients_shop 
 ON clients(shop_id);
 
--- Index pour filtrage par agent
 CREATE INDEX IF NOT EXISTS idx_clients_agent 
 ON clients(agent_id);
 
@@ -106,15 +132,21 @@ ON clients(agent_id);
 -- TABLE: taux_change
 -- ============================================================================
 
--- Index pour synchronisation
+-- ----------------------------------------------------------------------------
+-- Index de synchronisation
+-- ----------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_taux_sync 
 ON taux_change(last_modified_at, is_synced);
 
--- Index pour recherche par devise (clé naturelle)
+-- ----------------------------------------------------------------------------
+-- Index de recherche par clé naturelle
+-- ----------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_taux_devise 
 ON taux_change(devise_source, devise_cible, type);
 
--- Index pour taux actifs
+-- ----------------------------------------------------------------------------
+-- Index de filtrage
+-- ----------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_taux_actif 
 ON taux_change(est_actif, date_effet DESC);
 
@@ -122,15 +154,21 @@ ON taux_change(est_actif, date_effet DESC);
 -- TABLE: commissions
 -- ============================================================================
 
--- Index pour synchronisation
+-- ----------------------------------------------------------------------------
+-- Index de synchronisation
+-- ----------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_commissions_sync 
 ON commissions(last_modified_at, is_synced);
 
--- Index pour recherche par type (clé naturelle)
+-- ----------------------------------------------------------------------------
+-- Index de recherche par clé naturelle
+-- ----------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_commissions_type 
 ON commissions(type);
 
--- Index pour commissions actives
+-- ----------------------------------------------------------------------------
+-- Index de filtrage
+-- ----------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_commissions_active 
 ON commissions(is_active, type);
 
@@ -138,19 +176,21 @@ ON commissions(is_active, type);
 -- TABLE: journal_caisse
 -- ============================================================================
 
--- Index pour recherche par shop et date
+-- ----------------------------------------------------------------------------
+-- Index de recherche par entités
+-- ----------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_journal_shop_date 
 ON journal_caisse(shop_id, date_action DESC);
 
--- Index pour recherche par agent
 CREATE INDEX IF NOT EXISTS idx_journal_agent 
 ON journal_caisse(agent_id, date_action DESC);
 
--- Index pour recherche par opération
 CREATE INDEX IF NOT EXISTS idx_journal_operation 
 ON journal_caisse(operation_id);
 
--- Index pour rapports (type, mode, période)
+-- ----------------------------------------------------------------------------
+-- Index de rapports
+-- ----------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_journal_reports 
 ON journal_caisse(shop_id, type, date_action DESC);
 

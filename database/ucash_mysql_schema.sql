@@ -138,7 +138,8 @@ CREATE TABLE IF NOT EXISTS operations (
         'transfertInternationalEntrant',
         'depot',
         'retrait',
-        'virement'
+        'virement',
+        'retraitMobileMoney'
     ) NOT NULL,
     
     -- Montants

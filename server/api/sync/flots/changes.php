@@ -56,10 +56,10 @@ try {
             // Convertir le timestamp en format MySQL
             $sinceDate = date('Y-m-d H:i:s', strtotime($since));
             
-            // Synchronisation incrémentale par date_envoi uniquement
+            // Synchronisation incrémentale par last_modified_at pour capturer les changements de statut
             // Récupérer tous les flots liés au shop (source OU destination) modifiés depuis $since
             $sql .= " AND (shop_source_id = :shop_id OR shop_destination_id = :shop_id2)";
-            $sql .= " AND date_envoi >= :since";
+            $sql .= " AND last_modified_at >= :since";
             
             $params[':shop_id'] = $shopIdInt;
             $params[':shop_id2'] = $shopIdInt;
@@ -72,12 +72,12 @@ try {
     } else if ($since) {
         // Si pas de shop_id mais filtre de date (cas admin)
         $sinceDate = date('Y-m-d H:i:s', strtotime($since));
-        $sql .= " AND date_envoi >= :since";
+        $sql .= " AND last_modified_at >= :since";
         $params[':since'] = $sinceDate;
     }
     
     // Ordre et limite
-    $sql .= " ORDER BY date_envoi DESC, id DESC LIMIT :limit";
+    $sql .= " ORDER BY last_modified_at DESC, id DESC LIMIT :limit";
     
     $stmt = $pdo->prepare($sql);
     
