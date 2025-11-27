@@ -132,7 +132,7 @@ class TransferSyncService extends ChangeNotifier {
       final response = await http.post(
         url,
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json; charset=utf-8',
           'Accept': 'application/json',
         },
         body: jsonEncode({
@@ -254,7 +254,7 @@ class TransferSyncService extends ChangeNotifier {
       final response = await http.get(
         url,
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json; charset=utf-8',
           'Accept': 'application/json',
         },
       ).timeout(

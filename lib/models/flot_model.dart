@@ -24,6 +24,54 @@ class FlotModel {
   final String? lastModifiedBy;
   final bool isSynced;
   final DateTime? syncedAt;
+  
+  /// Obtient la désignation du shop source (avec fallback sur ID)
+  String getShopSourceDesignation([List<dynamic>? shops]) {
+    if (shopSourceDesignation.isNotEmpty) {
+      return shopSourceDesignation;
+    }
+    
+    // Essayer de résoudre depuis la liste des shops si fournie
+    if (shops != null) {
+      try {
+        final shop = shops.firstWhere(
+          (s) => s.id == shopSourceId,
+          orElse: () => null,
+        );
+        if (shop != null && shop.designation != null && shop.designation.isNotEmpty) {
+          return shop.designation;
+        }
+      } catch (e) {
+        // Ignorer l'erreur
+      }
+    }
+    
+    return 'Shop #$shopSourceId';
+  }
+  
+  /// Obtient la désignation du shop destination (avec fallback sur ID)
+  String getShopDestinationDesignation([List<dynamic>? shops]) {
+    if (shopDestinationDesignation.isNotEmpty) {
+      return shopDestinationDesignation;
+    }
+    
+    // Essayer de résoudre depuis la liste des shops si fournie
+    if (shops != null) {
+      try {
+        final shop = shops.firstWhere(
+          (s) => s.id == shopDestinationId,
+          orElse: () => null,
+        );
+        if (shop != null && shop.designation != null && shop.designation.isNotEmpty) {
+          return shop.designation;
+        }
+      } catch (e) {
+        // Ignorer l'erreur
+      }
+    }
+    
+    return 'Shop #$shopDestinationId';
+  }
 
   FlotModel({
     this.id,

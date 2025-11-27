@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/sync_service.dart';
+import '../services/auth_service.dart';
 
 /// Widget d'indicateur de synchronisation automatique
 /// Affiche le statut de sync et le temps restant avant la prochaine sync
@@ -242,8 +243,19 @@ class _ManualSyncButtonState extends State<ManualSyncButton> {
           }
         });
         
-        if (result.success && widget.onSyncComplete != null) {
-          widget.onSyncComplete!();
+        if (result.success) {
+          // Rafraîchir les données utilisateur après sync
+          try {
+            final authService = AuthService();
+            await authService.refreshUserData();
+            debugPrint('✅ Données utilisateur rafraîchies après sync');
+          } catch (e) {
+            debugPrint('⚠️ Erreur rafraîchissement données utilisateur: $e');
+          }
+          
+          if (widget.onSyncComplete != null) {
+            widget.onSyncComplete!();
+          }
         }
       }
     } catch (e) {

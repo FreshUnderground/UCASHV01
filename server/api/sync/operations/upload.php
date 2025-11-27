@@ -214,6 +214,26 @@ try {
             
             if ($exists) {
                 // Mise à jour de l'opération existante
+                // PROTECTION: Ne pas écraser date_validation si déjà définie
+                $existingDateValidation = null;
+                $checkDateStmt = $db->prepare("SELECT date_validation FROM operations WHERE id = :id");
+                $checkDateStmt->execute([':id' => $exists['id']]);
+                $existingData = $checkDateStmt->fetch(PDO::FETCH_ASSOC);
+                if ($existingData && $existingData['date_validation'] !== null) {
+                    $existingDateValidation = $existingData['date_validation'];
+                    error_log("[UPDATE PROTECTION] date_validation déjà définie: {$existingDateValidation} - préservation");
+                }
+                
+                // CRITIQUE: Si le statut change à 'validee' et date_validation est NULL, utiliser NOW()
+                $dateValidation = $entity['date_validation'] ?? null;
+                if ($existingDateValidation !== null) {
+                    // Préserver la date existante - ne JAMAIS écraser
+                    $dateValidation = $existingDateValidation;
+                } elseif ($statut === 'validee' && empty($dateValidation)) {
+                    $dateValidation = date('Y-m-d H:i:s');
+                    error_log("[UPDATE] date_validation auto-set to NOW() car statut=validee");
+                }
+                
                 $updateStmt = $db->prepare("
                     UPDATE operations SET
                         type = :type,
@@ -254,7 +274,7 @@ try {
                     ':agent_id' => $agentId,
                     ':mode_paiement' => $modePaiement,
                     ':statut' => $statut,
-                    ':date_validation' => $entity['date_validation'] ?? null,
+                    ':date_validation' => $dateValidation,
                     ':reference' => $entity['reference'] ?? null,
                     ':notes' => $entity['notes'] ?? '',
                     ':observation' => $entity['observation'] ?? null,
@@ -301,6 +321,13 @@ try {
                 
                 // shopSourceId, shopDestinationId, agentId déjà résolus plus haut
                 
+                // CRITIQUE: Si le statut est 'validee' et date_validation est NULL, utiliser NOW()
+                $dateValidation = $entity['date_validation'] ?? null;
+                if ($statut === 'validee' && empty($dateValidation)) {
+                    $dateValidation = date('Y-m-d H:i:s');
+                    error_log("[INSERT] date_validation auto-set to NOW() car statut=validee");
+                }
+                
                 // Logger toutes les données avant insertion
                 error_log("[INSERT] Preparation INSERT: type={$type}, montant={$entity['montant_brut']}, shop_id={$shopSourceId}, shop_designation={$entity['shop_source_designation']}, agent_id={$agentId}, agent_username={$entity['agent_username']}, mode={$modePaiement}, statut={$statut}");
                 error_log("[INSERT] Valeurs: client_id={$clientId}, client_nom={$entity['client_nom']}, code_ops={$entity['code_ops']}");
@@ -336,7 +363,7 @@ try {
                     ':agent_username' => $entity['agent_username'] ?? null,
                     ':mode_paiement' => $modePaiement,
                     ':statut' => $statut,
-                    ':date_validation' => $entity['date_validation'] ?? null,
+                    ':date_validation' => $dateValidation,
                     ':reference' => $entity['reference'] ?? null,
                     ':notes' => $entity['notes'] ?? '',
                     ':observation' => $entity['observation'] ?? null,

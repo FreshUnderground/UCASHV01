@@ -33,8 +33,8 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
   String _searchQuery = '';
   OperationType? _typeFilter;
   bool _showFiltersAndStats = false; // Contrôle l'affichage des stats et filtres (masqué par défaut)
-  String _categoryFilter = 'all'; // all, pending, my_transfers, my_withdrawals, my_served, my_deposits
-  bool _includeFlots = false; // ✨ Nouveau: Contrôle l'affichage des FLOT (virements)
+  String _categoryFilter = 'all'; // all, pending, my_transfers, my_withdrawals, my_served, my_deposits, my_flots
+  // ❌ REMOVED: bool _includeFlots - FLOT operations now ONLY visible in 'my_flots' category
 
   // Calculer les statistiques du shop (cash en caisse) DEPUIS DONNEES LOCALES MULTI-DEVISES
   Map<String, dynamic> _getShopStats(ShopService shopService, int shopId) {
@@ -102,6 +102,10 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
       // 2️⃣ ENSUITE: Charger les opérations filtrées par shop depuis LocalDB
       Provider.of<OperationService>(context, listen: false).loadOperations(shopId: currentUser!.shopId!);
       debugPrint('📋 [MES OPS] Chargement des opérations pour shop ${currentUser.shopId}');
+      
+      // 3️⃣ CHARGER LES FLOTS: Charger les FLOTs pour ce shop
+      await FlotService.instance.loadFlots(shopId: currentUser.shopId);
+      debugPrint('📦 [MES OPS] Chargement des FLOTs pour shop ${currentUser.shopId}');
     }
   }
 
@@ -170,44 +174,46 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
       // 2. Filter by operation type
       final matchesType = _typeFilter == null || operation.type == _typeFilter;
       
-      // ✨ 3. Filter by FLOT inclusion
-      final matchesFlotFilter = _includeFlots || operation.type != OperationType.virement;
       
       // 4. Filter by category
       bool matchesCategory = true;
       switch (_categoryFilter) {
         case 'pending':
-          // Operations en attente (transfers waiting for validation)
-          matchesCategory = operation.statut == OperationStatus.enAttente &&
-              (operation.type == OperationType.transfertNational ||
-               operation.type == OperationType.transfertInternationalEntrant ||
-               operation.type == OperationType.transfertInternationalSortant) &&
+          // Operations en attente (transfers waiting for validation) - NO FLOT
+          matchesCategory = 
+              operation.statut == OperationStatus.enAttente &&
               operation.shopDestinationId == shopId; // Transfers I need to serve
           break;
         case 'my_transfers':
-          // My sent transfers (all statuses)
-          matchesCategory = (operation.type == OperationType.transfertNational ||
+          // My sent transfers (all statuses) - NO FLOT
+          matchesCategory = 
+              (operation.type == OperationType.transfertNational ||
                operation.type == OperationType.transfertInternationalEntrant ||
                operation.type == OperationType.transfertInternationalSortant) &&
               operation.shopSourceId == shopId; // Transfers I sent
           break;
         case 'my_withdrawals':
-          // My withdrawals
+          // My withdrawals - NO FLOT
           matchesCategory = operation.type == OperationType.retrait &&
               operation.shopSourceId == shopId;
           break;
         case 'my_served':
-          // Transfers I validated/served
-          matchesCategory = (operation.type == OperationType.transfertNational ||
+          // Transfers I validated/served - NO FLOT
+          matchesCategory = 
+              (operation.type == OperationType.transfertNational ||
                operation.type == OperationType.transfertInternationalEntrant ||
                operation.type == OperationType.transfertInternationalSortant) &&
-              (operation.statut == OperationStatus.validee ||
-               operation.statut == OperationStatus.terminee) &&
+              (operation.statut == OperationStatus.validee) &&
               operation.shopDestinationId == shopId; // Transfers I validated
           break;
         case 'my_deposits':
-          // My deposits
+          // My deposits - NO FLOT
           matchesCategory = operation.type == OperationType.depot &&
+              operation.shopSourceId == shopId;
+          break;
+        case 'my_flots':
+          // My FLOTs (virements) ONLY
+          matchesCategory = operation.type == OperationType.virement &&
               operation.shopSourceId == shopId;
           break;
         case 'all':
@@ -215,7 +221,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
           matchesCategory = true;
       }
       
-      return matchesSearch && matchesType && matchesFlotFilter && matchesCategory;
+      return matchesSearch && matchesType && matchesCategory;
     }).toList();
   }
 
@@ -456,19 +462,6 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        // ✨ Toggle FLOT (virements)
-                        IconButton(
-                          onPressed: () {
-                            setState(() {
-                              _includeFlots = !_includeFlots;
-                            });
-                          },
-                          icon: Icon(
-                            _includeFlots ? Icons.visibility : Icons.visibility_off,
-                            color: _includeFlots ? const Color(0xFFDC2626) : Colors.grey,
-                          ),
-                          tooltip: _includeFlots ? 'Masquer les FLOT' : 'Afficher les FLOT',
-                        ),
                         IconButton(
                           onPressed: _loadOperations,
                           icon: const Icon(Icons.refresh),
@@ -523,19 +516,6 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
                       ),
                     ),
                     const SizedBox(width: 16),
-                    // ✨ Toggle FLOT (virements)
-                    IconButton(
-                      onPressed: () {
-                        setState(() {
-                          _includeFlots = !_includeFlots;
-                        });
-                      },
-                      icon: Icon(
-                        _includeFlots ? Icons.visibility : Icons.visibility_off,
-                        color: _includeFlots ? const Color(0xFFDC2626) : Colors.grey,
-                      ),
-                      tooltip: _includeFlots ? 'Masquer les FLOT' : 'Afficher les FLOT',
-                    ),
                     IconButton(
                       onPressed: _loadOperations,
                       icon: const Icon(Icons.refresh),
@@ -604,6 +584,13 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
                 label: 'Mes Dépôts',
                 icon: Icons.add_circle,
                 value: 'my_deposits',
+                isMobile: isMobile,
+              ),
+              SizedBox(width: isMobile ? 6 : 8),
+              _buildCategoryTabButton(
+                label: 'Mes Flots',
+                icon: Icons.swap_horiz,
+                value: 'my_flots',
                 isMobile: isMobile,
               ),
             ],
@@ -1341,6 +1328,47 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
                 ],
               ),
               SizedBox(height: isMobile ? 4 : 6),
+              
+              // Source et Destination pour les FLOT (virement)
+              if (operation.type == OperationType.virement)
+                Row(
+                  children: [
+                    Icon(Icons.arrow_upward, size: isMobile ? 11 : 13, color: Colors.orange),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        _getShopName(operation.shopSourceId),
+                        style: TextStyle(
+                          fontSize: detailFontSize,
+                          color: Colors.grey[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(Icons.arrow_forward, size: isMobile ? 11 : 13, color: Colors.grey[500]),
+                    const SizedBox(width: 8),
+                    Icon(Icons.arrow_downward, size: isMobile ? 11 : 13, color: Colors.green),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        _getShopName(operation.shopDestinationId),
+                        style: TextStyle(
+                          fontSize: detailFontSize,
+                          color: Colors.grey[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              if (operation.type == OperationType.virement)
+                SizedBox(height: isMobile ? 4 : 6),
+              
               // Mode de paiement + Statut
               Row(
                 children: [
@@ -1609,13 +1637,13 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
       typeColor = Colors.orange;
       typeIcon = Icons.local_shipping;
       typeText = 'FLOT Envoyé';
-      directionText = 'Vers: ${flot.shopDestinationDesignation}';
+      directionText = 'Vers: ${flot.getShopDestinationDesignation(Provider.of<ShopService>(context, listen: false).shops)}';
     } else if (isCurrentShopDestination) {
       // Incoming FLOT (received by current shop)
       typeColor = Colors.green;
       typeIcon = Icons.local_shipping;
       typeText = 'FLOT Reçu';
-      directionText = 'De: ${flot.shopSourceDesignation}';
+      directionText = 'De: ${flot.getShopSourceDesignation(Provider.of<ShopService>(context, listen: false).shops)}';
     } else {
       // Should not happen with proper filtering
       typeColor = Colors.grey;
@@ -1843,19 +1871,6 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
   }
 
   void _showFlotDetails(flot_model.FlotModel flot) {
-    final authService = Provider.of<AuthService>(context, listen: false);
-    final currentUser = authService.currentUser;
-    
-    final isCurrentShopSource = currentUser?.shopId != null && flot.shopSourceId == currentUser!.shopId;
-    final isCurrentShopDestination = currentUser?.shopId != null && flot.shopDestinationId == currentUser!.shopId;
-    
-    String directionInfo = '';
-    if (isCurrentShopSource) {
-      directionInfo = 'Envoyé vers: ${flot.shopDestinationDesignation}';
-    } else if (isCurrentShopDestination) {
-      directionInfo = 'Reçu de: ${flot.shopSourceDesignation}';
-    }
-    
     String statusInfo = '';
     switch (flot.statut) {
       case flot_model.StatutFlot.enRoute:
@@ -1885,7 +1900,36 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Montant: ${flot.montant} ${flot.devise}'),
-            Text(directionInfo),
+            const SizedBox(height: 8),
+            // Afficher source et destination (avec résolution si nécessaire)
+            Row(
+              children: [
+                const Icon(Icons.store, size: 16, color: Colors.orange),
+                const SizedBox(width: 8),
+                const Text('De: ', style: TextStyle(fontWeight: FontWeight.w600)),
+                Expanded(
+                  child: Text(
+                    flot.getShopSourceDesignation(Provider.of<ShopService>(context, listen: false).shops),
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(Icons.send, size: 16, color: Colors.blue),
+                const SizedBox(width: 8),
+                const Text('Envoyé vers: ', style: TextStyle(fontWeight: FontWeight.w600)),
+                Expanded(
+                  child: Text(
+                    flot.getShopDestinationDesignation(Provider.of<ShopService>(context, listen: false).shops),
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             Text('Mode de paiement: ${_getFlotModePaiementLabel(flot.modePaiement)}'),
             Text(statusInfo),
             Text(dateInfo),
@@ -1938,10 +1982,59 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
     });
   }
 
+  // Helper method to get shop name by ID
+  String _getShopName(int? shopId) {
+    if (shopId == null) return 'Non spécifié';
+    
+    final shopService = Provider.of<ShopService>(context, listen: false);
+    final shop = shopService.shops.firstWhere(
+      (s) => s.id == shopId,
+      orElse: () => ShopModel(designation: 'Shop #$shopId', localisation: ''),
+    );
+    return shop.designation;
+  }
+
   void _showOperationDetails(OperationModel operation) {
     final agentService = Provider.of<AgentService>(context, listen: false);
+    final shopService = Provider.of<ShopService>(context, listen: false);
+    final authService = Provider.of<AuthService>(context, listen: false);
     final agent = agentService.getAgentById(operation.agentId);
     final agentName = agent?.nom ?? agent?.username ?? operation.lastModifiedBy ?? 'Agent inconnu';
+    
+    // Get shop names for FLOT operations
+    String? shopSourceName;
+    String? shopDestinationName;
+    String? flotDirectionInfo;
+    
+    if (operation.type == OperationType.virement) {
+      // For FLOT (virement), get both source and destination shops
+      if (operation.shopSourceId != null) {
+        final sourceShop = shopService.shops.firstWhere(
+          (s) => s.id == operation.shopSourceId,
+          orElse: () => ShopModel(designation: 'Shop #${operation.shopSourceId}', localisation: ''),
+        );
+        shopSourceName = sourceShop.designation;
+      }
+      
+      if (operation.shopDestinationId != null) {
+        final destShop = shopService.shops.firstWhere(
+          (s) => s.id == operation.shopDestinationId,
+          orElse: () => ShopModel(designation: 'Shop #${operation.shopDestinationId}', localisation: ''),
+        );
+        shopDestinationName = destShop.designation;
+      }
+      
+      // Determine direction based on current shop
+      final currentUser = authService.currentUser;
+      final isCurrentShopSource = currentUser?.shopId != null && operation.shopSourceId == currentUser!.shopId;
+      final isCurrentShopDestination = currentUser?.shopId != null && operation.shopDestinationId == currentUser!.shopId;
+      
+      if (isCurrentShopSource && shopDestinationName != null) {
+        flotDirectionInfo = 'Envoyé vers: $shopDestinationName';
+      } else if (isCurrentShopDestination && shopSourceName != null) {
+        flotDirectionInfo = 'Reçu de: $shopSourceName';
+      }
+    }
     
     showDialog(
       context: context,
@@ -1955,6 +2048,73 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
               if (operation.codeOps != null)
                 Text('Code: ${operation.codeOps}'),
               Text('Type: ${operation.typeLabel}'),
+              
+              // Show source and destination for FLOT operations
+              if (operation.type == OperationType.virement && (shopSourceName != null || shopDestinationName != null))
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (shopSourceName != null)
+                        Row(
+                          children: [
+                            const Icon(Icons.store, size: 16, color: Colors.orange),
+                            const SizedBox(width: 8),
+                            const Text('De: ', style: TextStyle(fontWeight: FontWeight.w600)),
+                            Expanded(
+                              child: Text(
+                                shopSourceName,
+                                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
+                              ),
+                            ),
+                          ],
+                        ),
+                      if (shopSourceName != null && shopDestinationName != null)
+                        const SizedBox(height: 4),
+                      if (shopDestinationName != null)
+                        Row(
+                          children: [
+                            const Icon(Icons.send, size: 16, color: Colors.blue),
+                            const SizedBox(width: 8),
+                            const Text('Envoy\u00e9 vers: ', style: TextStyle(fontWeight: FontWeight.w600)),
+                            Expanded(
+                              child: Text(
+                                shopDestinationName,
+                                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              
+              // Expéditeur - From observation field
+              Row(
+                children: [
+                  const Icon(Icons.person, size: 16, color: Colors.orange),
+                  const SizedBox(width: 8),
+                  const Text('Expéditeur: ', style: TextStyle(fontWeight: FontWeight.w600)),
+                  Expanded(
+                    child: Text(
+                      operation.observation != null && operation.observation!.isNotEmpty
+                          ? operation.observation!
+                          : (operation.clientNom != null && operation.clientNom!.isNotEmpty
+                              ? operation.clientNom!
+                              : 'Non spécifié'),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: (operation.observation != null && operation.observation!.isNotEmpty) ||
+                                (operation.clientNom != null && operation.clientNom!.isNotEmpty)
+                            ? Colors.black
+                            : Colors.grey,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
               if (operation.destinataire != null)
                 Text('Destinataire: ${operation.destinataire}'),
               Text('Montant brut: ${operation.montantBrut} ${operation.devise}'),
@@ -1967,8 +2127,6 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
               Text('Date: ${_formatDate(operation.dateOp)}'),
               if (operation.notes != null)
                 Text('Notes: ${operation.notes}'),
-              if (operation.observation != null && operation.observation!.isNotEmpty)
-                Text('Observation: ${operation.observation}'),
             ],
           ),
         ),

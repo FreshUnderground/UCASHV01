@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/flot_model.dart' as flot_model;
 import '../models/operation_model.dart';
+import '../models/retrait_virtuel_model.dart';
 import '../services/flot_service.dart';
 import '../services/shop_service.dart';
 import '../services/auth_service.dart';
@@ -35,20 +36,27 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
   Future<void> _chargerFlots() async {
     final authService = Provider.of<AuthService>(context, listen: false);
     final shopId = authService.currentUser?.shopId;
-    final isAdmin = authService.currentUser?.role == 'ADMIN';
+    final userRole = authService.currentUser?.role;
+    final isAdmin = userRole == 'ADMIN' || userRole == 'admin';
     
-    debugPrint('🔄 Chargement des FLOTs - ShopID: $shopId, isAdmin: $isAdmin');
+    debugPrint('🔄 Chargement des FLOTs - ShopID: $shopId, Role: $userRole, isAdmin: $isAdmin');
+    debugPrint('   Current User: ${authService.currentUser?.username}');
     
     await FlotService.instance.loadFlots(shopId: shopId, isAdmin: isAdmin);
     
     final flotService = Provider.of<FlotService>(context, listen: false);
     debugPrint('✅ FLOTs chargés: ${flotService.flots.length} total');
     
+    // Debug: Afficher tous les FLOTs en détail
+    for (var flot in flotService.flots) {
+      debugPrint('   FLOT: ${flot.reference} - Source: ${flot.shopSourceId}, Dest: ${flot.shopDestinationId}, Statut: ${flot.statutLabel}');
+    }
+    
     if (shopId != null && !isAdmin) {
       final mesFlots = flotService.flots.where((f) => 
         f.shopSourceId == shopId || f.shopDestinationId == shopId
       ).toList();
-      debugPrint('   → Mes FLOTs: ${mesFlots.length}');
+      debugPrint('   → Mes FLOTs (filtrés): ${mesFlots.length}');
       
       final flotsEnCours = mesFlots.where((f) => f.statut == flot_model.StatutFlot.enRoute).toList();
       debugPrint('   → En cours: ${flotsEnCours.length}');
@@ -58,6 +66,11 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
       
       final flotsAnnules = mesFlots.where((f) => f.statut == flot_model.StatutFlot.annule).toList();
       debugPrint('   → Annulés: ${flotsAnnules.length}');
+    }
+    
+    // Force UI refresh
+    if (mounted) {
+      setState(() {});
     }
   }
 
@@ -152,219 +165,239 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
   }
 
   Widget _buildHeaderInfo() {
-    return Consumer4<FlotService, AuthService, ShopService, OperationService>(
-      builder: (context, flotService, authService, shopService, operationService, child) {
-        final currentShopId = authService.currentUser?.shopId;
-        if (currentShopId == null) return const SizedBox.shrink();
-        
-        final currentShop = shopService.getShopById(currentShopId);
-        if (currentShop == null) return const SizedBox.shrink();
-        
-        // NOUVELLE LOGIQUE: Calculer les dettes et créances inter-shop
-        final Map<int, double> soldesParShop = {};
-        
-        // 1. TRANSFERTS SERVIS PAR NOUS (shop source nous doit le montant BRUT)
-        for (final op in operationService.operations) {
-          if ((op.type == OperationType.transfertNational || op.type == OperationType.transfertInternationalEntrant) &&
-              op.shopDestinationId == currentShopId && // Nous servons le client
-              op.devise == 'USD') {
-            final autreShopId = op.shopSourceId; // Shop qui a reçu l'argent du client
-            if (autreShopId != null) {
-              // IMPORTANT: Montant BRUT (montantNet + commission)
-              soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + op.montantBrut;
-            }
-          }
-        }
-        
-        // 2. TRANSFERTS REÇUS/INITIÉS PAR NOUS (on doit le montant BRUT à l'autre shop)
-        for (final op in operationService.operations) {
-          if ((op.type == OperationType.transfertNational || op.type == OperationType.transfertInternationalSortant) &&
-              op.shopSourceId == currentShopId && // Client nous a payé
-              op.devise == 'USD') {
-            final autreShopId = op.shopDestinationId; // Shop qui va servir
-            if (autreShopId != null) {
-              // IMPORTANT: Montant BRUT (montantNet + commission)
-              soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - op.montantBrut;
-            }
-          }
-        }
-        
-        // 3. FLOTS EN COURS - Deux sens selon qui a initié
-        for (final flot in flotService.flots) {
-          if (flot.statut == flot_model.StatutFlot.enRoute && flot.devise == 'USD') {
-            if (flot.shopSourceId == currentShopId) {
-              // NOUS avons envoyé en cours → Ils nous doivent rembourser
-              final autreShopId = flot.shopDestinationId;
-              if (autreShopId != null) {
-                soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + flot.montant;
-              }
-            } else if (flot.shopDestinationId == currentShopId) {
-              // ILS ont envoyé en cours → On leur doit rembourser
-              final autreShopId = flot.shopSourceId;
-              if (autreShopId != null) {
-                soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - flot.montant;
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentShopId = authService.currentUser?.shopId;
+    
+    if (currentShopId == null) return const SizedBox.shrink();
+    
+    return FutureBuilder<List<RetraitVirtuelModel>>(
+      future: LocalDB.instance.getAllRetraitsVirtuels(shopSourceId: currentShopId),
+      builder: (context, retraitsSnapshot) {
+        return Consumer4<FlotService, AuthService, ShopService, OperationService>(
+          builder: (context, flotService, authService, shopService, operationService, child) {
+            if (currentShopId == null) return const SizedBox.shrink();
+            
+            final currentShop = shopService.getShopById(currentShopId);
+            if (currentShop == null) return const SizedBox.shrink();
+            
+            // NOUVELLE LOGIQUE: Calculer les dettes et créances inter-shop
+            final Map<int, double> soldesParShop = {};
+            
+            // 1. TRANSFERTS SERVIS PAR NOUS (shop source nous doit le montant BRUT)
+            for (final op in operationService.operations) {
+              if ((op.type == OperationType.transfertNational || op.type == OperationType.transfertInternationalEntrant) &&
+                  op.shopDestinationId == currentShopId && // Nous servons le client
+                  op.devise == 'USD') {
+                final autreShopId = op.shopSourceId; // Shop qui a reçu l'argent du client
+                if (autreShopId != null) {
+                  // IMPORTANT: Montant BRUT (montantNet + commission)
+                  soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + op.montantBrut;
+                }
               }
             }
-          }
-        }
-        
-        // 4. FLOTS REÇUS ET SERVIS (shopDestinationId = nous) → On leur doit rembourser
-        for (final flot in flotService.flots) {
-          if (flot.shopDestinationId == currentShopId &&
-              flot.statut == flot_model.StatutFlot.servi &&
-              flot.devise == 'USD') {
-            final autreShopId = flot.shopSourceId;
-            if (autreShopId != null) {
-              soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - flot.montant;
+            
+            // 2. TRANSFERTS REÇUS/INITIÉS PAR NOUS (on doit le montant BRUT à l'autre shop)
+            for (final op in operationService.operations) {
+              if ((op.type == OperationType.transfertNational || op.type == OperationType.transfertInternationalSortant) &&
+                  op.shopSourceId == currentShopId && // Client nous a payé
+                  op.devise == 'USD') {
+                final autreShopId = op.shopDestinationId; // Shop qui va servir
+                if (autreShopId != null) {
+                  // IMPORTANT: Montant BRUT (montantNet + commission)
+                  soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - op.montantBrut;
+                }
+              }
             }
-          }
-        }
-        
-        // 5. FLOTS ENVOYÉS ET SERVIS (shopSourceId = nous) → Ils nous doivent rembourser
-        for (final flot in flotService.flots) {
-          if (flot.shopSourceId == currentShopId &&
-              flot.statut == flot_model.StatutFlot.servi &&
-              flot.devise == 'USD') {
-            final autreShopId = flot.shopDestinationId;
-            if (autreShopId != null) {
-              soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + flot.montant;
+            
+            // 2.5 NOUVEAU: RETRAITS VIRTUELS EN ATTENTE (Autres shops nous doivent)
+            if (retraitsSnapshot.hasData) {
+              final retraitsVirtuels = retraitsSnapshot.data!;
+              for (final retrait in retraitsVirtuels) {
+                if (retrait.statut == RetraitVirtuelStatus.enAttente) {
+                  // Le shop débiteur nous doit ce montant
+                  soldesParShop[retrait.shopDebiteurId] = (soldesParShop[retrait.shopDebiteurId] ?? 0.0) + retrait.montant;
+                }
+              }
             }
-          }
-        }
-        
-        // Calculer les totaux
-        double totalCreance = 0.0; // Ils nous doivent (solde > 0)
-        double totalDette = 0.0;   // On leur doit (solde < 0)
-        
-        for (final solde in soldesParShop.values) {
-          if (solde > 0) {
-            totalCreance += solde;
-          } else if (solde < 0) {
-            totalDette += solde.abs();
-          }
-        }
-        
-        return Card(
-          margin: EdgeInsets.all(ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
-          elevation: ResponsiveUtils.getFluidSpacing(context, mobile: 2, tablet: 3, desktop: 4),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(
-              ResponsiveUtils.getFluidBorderRadius(context, mobile: 12, tablet: 14, desktop: 16),
-            ),
-          ),
-          child: Padding(
-            padding: ResponsiveUtils.getFluidPadding(
-              context,
-              mobile: const EdgeInsets.all(16),
-              tablet: const EdgeInsets.all(20),
-              desktop: const EdgeInsets.all(24),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '📊 Votre Position Financière',
-                  style: TextStyle(
-                    fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 18, tablet: 20, desktop: 22),
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF333333),
-                  ),
+            
+            // 3. FLOTS EN COURS - Deux sens selon qui a initié
+            for (final flot in flotService.flots) {
+              if (flot.statut == flot_model.StatutFlot.enRoute && flot.devise == 'USD') {
+                if (flot.shopSourceId == currentShopId) {
+                  // NOUS avons envoyé en cours → Ils nous doivent rembourser
+                  final autreShopId = flot.shopDestinationId;
+                  if (autreShopId != null) {
+                    soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + flot.montant;
+                  }
+                } else if (flot.shopDestinationId == currentShopId) {
+                  // ILS ont envoyé en cours → On leur doit rembourser
+                  final autreShopId = flot.shopSourceId;
+                  if (autreShopId != null) {
+                    soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - flot.montant;
+                  }
+                }
+              }
+            }
+            
+            // 4. FLOTS REÇUS ET SERVIS (shopDestinationId = nous) → On leur doit rembourser
+            for (final flot in flotService.flots) {
+              if (flot.shopDestinationId == currentShopId &&
+                  flot.statut == flot_model.StatutFlot.servi &&
+                  flot.devise == 'USD') {
+                final autreShopId = flot.shopSourceId;
+                if (autreShopId != null) {
+                  soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - flot.montant;
+                }
+              }
+            }
+            
+            // 5. FLOTS ENVOYÉS ET SERVIS (shopSourceId = nous) → Ils nous doivent rembourser
+            for (final flot in flotService.flots) {
+              if (flot.shopSourceId == currentShopId &&
+                  flot.statut == flot_model.StatutFlot.servi &&
+                  flot.devise == 'USD') {
+                final autreShopId = flot.shopDestinationId;
+                if (autreShopId != null) {
+                  soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + flot.montant;
+                }
+              }
+            }
+            
+            // Calculer les totaux
+            double totalCreance = 0.0; // Ils nous doivent (solde > 0)
+            double totalDette = 0.0;   // On leur doit (solde < 0)
+            
+            for (final solde in soldesParShop.values) {
+              if (solde > 0) {
+                totalCreance += solde;
+              } else if (solde < 0) {
+                totalDette += solde.abs();
+              }
+            }
+            
+            return Card(
+              margin: EdgeInsets.all(ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
+              elevation: ResponsiveUtils.getFluidSpacing(context, mobile: 2, tablet: 3, desktop: 4),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(
+                  ResponsiveUtils.getFluidBorderRadius(context, mobile: 12, tablet: 14, desktop: 16),
                 ),
-                SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 16, tablet: 18, desktop: 20)),
-                if (context.isSmallScreen)
-                  Column(
-                    children: [
-                      _buildFinancialCard(
-                        title: 'Vous devez',
-                        amount: totalDette,
-                        color: Colors.red,
-                        icon: Icons.arrow_upward,
+              ),
+              child: Padding(
+                padding: ResponsiveUtils.getFluidPadding(
+                  context,
+                  mobile: const EdgeInsets.all(16),
+                  tablet: const EdgeInsets.all(20),
+                  desktop: const EdgeInsets.all(24),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '📊 Votre Position Financière',
+                      style: TextStyle(
+                        fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 18, tablet: 20, desktop: 22),
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF333333),
                       ),
-                      SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
-                      _buildFinancialCard(
-                        title: 'On vous doit',
-                        amount: totalCreance,
-                        color: Colors.green,
-                        icon: Icons.arrow_downward,
-                      ),
-                      SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
-                      _buildFinancialCard(
-                        title: 'Solde net',
-                        amount: totalCreance - totalDette,
-                        color: (totalCreance - totalDette) >= 0 ? Colors.blue : Colors.orange,
-                        icon: Icons.account_balance,
-                      ),
-                    ],
-                  )
-                else
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildFinancialCard(
-                          title: 'Vous devez',
-                          amount: totalDette,
-                          color: Colors.red,
-                          icon: Icons.arrow_upward,
-                        ),
-                      ),
-                      SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
-                      Expanded(
-                        child: _buildFinancialCard(
-                          title: 'On vous doit',
-                          amount: totalCreance,
-                          color: Colors.green,
-                          icon: Icons.arrow_downward,
-                        ),
-                      ),
-                      SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
-                      Expanded(
-                        child: _buildFinancialCard(
-                          title: 'Solde net',
-                          amount: totalCreance - totalDette,
-                          color: (totalCreance - totalDette) >= 0 ? Colors.blue : Colors.orange,
-                          icon: Icons.account_balance,
-                        ),
-                      ),
-                    ],
-                  ),
-                SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
-                Container(
-                  padding: ResponsiveUtils.getFluidPadding(
-                    context,
-                    mobile: const EdgeInsets.all(12),
-                    tablet: const EdgeInsets.all(14),
-                    desktop: const EdgeInsets.all(16),
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(
-                      ResponsiveUtils.getFluidBorderRadius(context, mobile: 12, tablet: 14, desktop: 16),
                     ),
-                    border: Border.all(color: Colors.blue.withOpacity(0.2)),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.info, 
-                        color: Colors.blue, 
-                        size: ResponsiveUtils.getFluidIconSize(context, mobile: 16, tablet: 18, desktop: 20),
-                      ),
-                      SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 8, tablet: 10, desktop: 12)),
-                      Expanded(
-                        child: Text(
-                          'ℹ️ Les approvisionnements (FLOT) réduisent vos dettes envers d\'autres shops',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.blue,
+                    SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 16, tablet: 18, desktop: 20)),
+                    if (context.isSmallScreen)
+                      Column(
+                        children: [
+                          _buildFinancialCard(
+                            title: 'Vous devez',
+                            amount: totalDette,
+                            color: Colors.red,
+                            icon: Icons.arrow_upward,
                           ),
-                        ),
+                          SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
+                          _buildFinancialCard(
+                            title: 'On vous doit',
+                            amount: totalCreance,
+                            color: Colors.green,
+                            icon: Icons.arrow_downward,
+                          ),
+                          SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
+                          _buildFinancialCard(
+                            title: 'Solde net',
+                            amount: totalCreance - totalDette,
+                            color: (totalCreance - totalDette) >= 0 ? Colors.blue : Colors.orange,
+                            icon: Icons.account_balance,
+                          ),
+                        ],
+                      )
+                    else
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildFinancialCard(
+                              title: 'Vous devez',
+                              amount: totalDette,
+                              color: Colors.red,
+                              icon: Icons.arrow_upward,
+                            ),
+                          ),
+                          SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
+                          Expanded(
+                            child: _buildFinancialCard(
+                              title: 'On vous doit',
+                              amount: totalCreance,
+                              color: Colors.green,
+                              icon: Icons.arrow_downward,
+                            ),
+                          ),
+                          SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
+                          Expanded(
+                            child: _buildFinancialCard(
+                              title: 'Solde net',
+                              amount: totalCreance - totalDette,
+                              color: (totalCreance - totalDette) >= 0 ? Colors.blue : Colors.orange,
+                              icon: Icons.account_balance,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
+                    Container(
+                      padding: ResponsiveUtils.getFluidPadding(
+                        context,
+                        mobile: const EdgeInsets.all(12),
+                        tablet: const EdgeInsets.all(14),
+                        desktop: const EdgeInsets.all(16),
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(
+                          ResponsiveUtils.getFluidBorderRadius(context, mobile: 12, tablet: 14, desktop: 16),
+                        ),
+                        border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.info, 
+                            color: Colors.blue, 
+                            size: ResponsiveUtils.getFluidIconSize(context, mobile: 16, tablet: 18, desktop: 20),
+                          ),
+                          SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 8, tablet: 10, desktop: 12)),
+                          Expanded(
+                            child: Text(
+                              'ℹ️ Les approvisionnements (FLOT) réduisent vos dettes envers d\'autres shops',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.blue,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );
@@ -604,318 +637,200 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
 
     Color statutColor;
     IconData statutIcon;
-    String statutDescription;
     
     switch (flot.statut) {
       case flot_model.StatutFlot.enRoute:
-        statutColor = Colors.orange.shade600;
-        statutIcon = Icons.local_shipping_rounded;
-        statutDescription = 'En attente de réception';
+        statutColor = Colors.orange;
+        statutIcon = Icons.local_shipping;
         break;
       case flot_model.StatutFlot.servi:
-        statutColor = Colors.green.shade600;
-        statutIcon = Icons.check_circle_rounded;
-        statutDescription = 'Reçu par le destinataire';
+        statutColor = Colors.green;
+        statutIcon = Icons.check_circle;
         break;
       case flot_model.StatutFlot.annule:
-        statutColor = Colors.red.shade600;
-        statutIcon = Icons.cancel_rounded;
-        statutDescription = 'Annulé';
+        statutColor = Colors.red;
+        statutIcon = Icons.cancel;
         break;
     }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
-          BoxShadow(
-            color: statutColor.withOpacity(0.08),
-            blurRadius: 30,
-            offset: const Offset(0, 8),
-          ),
-        ],
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: statutColor.withOpacity(0.3), width: 1),
       ),
       child: Padding(
-        padding: EdgeInsets.all(isMobile ? 18 : 24),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header with gradient background
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    statutColor.withOpacity(0.1),
-                    statutColor.withOpacity(0.05),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                children: [
-                  // Circular icon with gradient
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: LinearGradient(
-                        colors: [statutColor, statutColor.withOpacity(0.7)],
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: statutColor.withOpacity(0.4),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Icon(statutIcon, color: Colors.white, size: 28),
-                  ),
-                  const SizedBox(width: 16),
-                  
-                  // Status label
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          flot.statutLabel,
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: statutColor,
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          statutDescription,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  
-                  // Amount badge
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Colors.purple.shade600, Colors.blue.shade500],
-                      ),
-                      borderRadius: BorderRadius.circular(14),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.purple.withOpacity(0.3),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        Text(
-                          '${flot.montant.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                          ),
-                        ),
-                        Text(
-                          flot.devise,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Colors.white70,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            
-            const SizedBox(height: 20),
-            
-            // Shops info with modern design
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey.shade200),
-              ),
-              child: Column(
-                children: [
-                  _buildModernShopInfo(
-                    title: 'Expéditeur',
-                    shopName: flot.shopSourceDesignation,
-                    isCurrentShop: flot.shopSourceId == currentShopId,
-                    icon: Icons.upload_rounded,
-                    color: Colors.orange.shade600,
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(Icons.arrow_downward_rounded, color: Colors.grey.shade400, size: 20),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildModernShopInfo(
-                    title: 'Destinataire',
-                    shopName: flot.shopDestinationDesignation,
-                    isCurrentShop: flot.shopDestinationId == currentShopId,
-                    icon: Icons.download_rounded,
-                    color: Colors.green.shade600,
-                  ),
-                ],
-              ),
-            ),
-            
-            const SizedBox(height: 16),
-            
-            // Dates in modern cards
+            // Header: Statut + Montant
             Row(
               children: [
-                Expanded(
-                  child: _buildModernDateCard(
-                    icon: Icons.send_rounded,
-                    label: 'Envoyé',
-                    date: flot.dateEnvoi,
-                    color: Colors.orange.shade600,
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: statutColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
                   ),
+                  child: Icon(statutIcon, color: statutColor, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        flot.statutLabel,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: statutColor,
+                        ),
+                      ),
+                      if (flot.reference != null)
+                        Text(
+                          flot.reference!,
+                          style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                        ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.purple.withOpacity(0.3)),
+                  ),
+                  child: Text(
+                    '${flot.montant.toStringAsFixed(0)} ${flot.devise}',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.purple,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 12),
+            
+            // Route: Source -> Destination
+            Row(
+              children: [
+                Icon(Icons.store, size: 14, color: Colors.grey[600]),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    flot.getShopSourceDesignation(ShopService.instance.shops),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: flot.shopSourceId == currentShopId ? FontWeight.bold : FontWeight.normal,
+                      color: flot.shopSourceId == currentShopId ? Colors.purple : Colors.grey[700],
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Icon(Icons.arrow_forward, size: 14, color: Colors.grey[400]),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    flot.getShopDestinationDesignation(ShopService.instance.shops),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: flot.shopDestinationId == currentShopId ? FontWeight.bold : FontWeight.normal,
+                      color: flot.shopDestinationId == currentShopId ? Colors.purple : Colors.grey[700],
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                  ),
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 8),
+            
+            // Date
+            Row(
+              children: [
+                Icon(Icons.schedule, size: 14, color: Colors.grey[600]),
+                const SizedBox(width: 6),
+                Text(
+                  _formatDate(flot.dateEnvoi),
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
                 if (flot.dateReception != null) ...[
                   const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildModernDateCard(
-                      icon: Icons.check_circle_rounded,
-                      label: 'Reçu',
-                      date: flot.dateReception!,
-                      color: Colors.green.shade600,
-                    ),
+                  Icon(Icons.check, size: 14, color: Colors.green),
+                  const SizedBox(width: 4),
+                  Text(
+                    _formatDate(flot.dateReception!),
+                    style: const TextStyle(fontSize: 12, color: Colors.green),
                   ),
                 ],
               ],
             ),
             
-            if (flot.reference != null || (flot.notes != null && flot.notes!.isNotEmpty)) ...[
-              const SizedBox(height: 16),
-              if (flot.reference != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.tag_rounded, size: 16, color: Colors.blue.shade700),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Réf: ${flot.reference}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.blue.shade700,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              if (flot.notes != null && flot.notes!.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.amber.shade200),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.note_rounded, size: 18, color: Colors.amber.shade700),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Notes',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.amber.shade900,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              flot.notes!,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.amber.shade900,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+            // Notes (si présentes)
+            if (flot.notes != null && flot.notes!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                flot.notes!,
+                style: TextStyle(fontSize: 12, color: Colors.grey[600], fontStyle: FontStyle.italic),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
             ],
             
+            // Actions
             if (peutModifier || peutSupprimer || peutMarquerServi) ...[
-              const SizedBox(height: 20),
+              const SizedBox(height: 8),
               const Divider(height: 1),
-              const SizedBox(height: 20),
-              
-              // Action buttons
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
+              const SizedBox(height: 8),
+              Row(
                 children: [
                   if (peutModifier)
-                    _buildModernActionButton(
-                      label: 'Modifier',
-                      icon: Icons.edit_rounded,
-                      color: Colors.blue.shade600,
-                      onPressed: () => _afficherDialogueModifierFlot(flot),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _afficherDialogueModifierFlot(flot),
+                        icon: const Icon(Icons.edit, size: 14),
+                        label: const Text('Modifier', style: TextStyle(fontSize: 12)),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          side: BorderSide(color: Colors.blue.withOpacity(0.5)),
+                        ),
+                      ),
                     ),
+                  if (peutModifier && peutSupprimer)
+                    const SizedBox(width: 8),
                   if (peutSupprimer)
-                    _buildModernActionButton(
-                      label: 'Supprimer',
-                      icon: Icons.delete_rounded,
-                      color: Colors.red.shade600,
-                      onPressed: () => _supprimerFlot(flot),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _supprimerFlot(flot),
+                        icon: const Icon(Icons.delete, size: 14),
+                        label: const Text('Supprimer', style: TextStyle(fontSize: 12)),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          side: BorderSide(color: Colors.red.withOpacity(0.5)),
+                        ),
+                      ),
                     ),
                   if (peutMarquerServi)
-                    _buildModernActionButton(
-                      label: 'Marquer SERVI',
-                      icon: Icons.check_circle_rounded,
-                      color: Colors.green.shade600,
-                      onPressed: () => _marquerServi(flot),
-                      gradient: true,
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _marquerServi(flot),
+                        icon: const Icon(Icons.check_circle, size: 14),
+                        label: const Text('SERVI', style: TextStyle(fontSize: 12)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                        ),
+                      ),
                     ),
                 ],
               ),
@@ -1130,10 +1045,18 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
       );
 
       if (success && mounted) {
+        await _chargerFlots(); // Recharger la liste
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('✅ Flot marqué comme servi'),
             backgroundColor: Colors.green,
+          ),
+        );
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Erreur lors du marquage du flot'),
+            backgroundColor: Colors.red,
           ),
         );
       }

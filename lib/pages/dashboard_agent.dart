@@ -15,6 +15,7 @@ import '../widgets/offline_banner.dart';
 import '../widgets/flot_management_widget.dart';
 import '../widgets/comptes_speciaux_widget.dart';
 import '../widgets/sync_monitor_widget.dart';
+import '../widgets/virtual_transactions_widget.dart';
 
 class DashboardAgentPage extends StatefulWidget {
   const DashboardAgentPage({super.key});
@@ -32,6 +33,7 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
     'Rapports',
     'FLOT',
     'Frais',
+    'VIRTUEL',
   ];
 
   final List<IconData> _menuIcons = [
@@ -40,6 +42,7 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
     Icons.receipt_long,
     Icons.local_shipping,
     Icons.account_balance,
+    Icons.mobile_friendly,
   ];
 
   @override
@@ -549,7 +552,7 @@ Widget _buildMainContent() {
   final isMobile = size.width <= 768;
 
   // Widgets qui gèrent leur propre layout (ne pas les mettre dans SingleChildScrollView)
-  final widgetsWithOwnLayout = [0, 1, 2, 3, 4]; // Opérations, Validations, Rapports, FLOT, Frais
+  final widgetsWithOwnLayout = [0, 1, 2, 3, 4, 5]; // Opérations, Validations, Rapports, FLOT, Frais, VIRTUEL
 
   Widget content = switch (_selectedIndex) {
     0 => _buildOperationsContent(),   // Opérations
@@ -557,6 +560,7 @@ Widget _buildMainContent() {
     2 => _buildReportsContent(),      // Rapports
     3 => _buildFlotContent(),         // Gestion FLOT
     4 => _buildFraisContent(),        // Frais
+    5 => _buildVirtuelContent(),      // VIRTUEL
     _ => _buildOperationsContent(),
   };
 
@@ -591,6 +595,10 @@ Widget _buildMainContent() {
       shopId: shopId,
       isAdmin: false,
     );
+  }
+
+  Widget _buildVirtuelContent() {
+    return const VirtualTransactionsWidget();
   }
 
   Future<void> _handleLogout() async {

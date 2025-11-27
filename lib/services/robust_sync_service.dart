@@ -15,7 +15,7 @@ import '../config/app_config.dart';
 /// Service de synchronisation robuste avec gestion avancée des erreurs
 /// 
 /// ARCHITECTURE:
-/// - FAST SYNC (2 min): operations, flots, comptes_speciaux, clients
+/// - FAST SYNC (2 min): operations, flots, comptes_speciaux, clients, sims, virtual_transactions
 /// - SLOW SYNC (10 min): commissions, cloture_caisse, shops, agents
 /// - Toutes s'exécutent au démarrage puis suivent leur timing
 class RobustSyncService {
@@ -146,7 +146,7 @@ class RobustSyncService {
     final startTime = DateTime.now();
     
     debugPrint('🚀 ${isInitial ? "[INITIAL]" : ""} FAST SYNC - Début');
-    debugPrint('   Tables critiques: operations, flots, clients, comptes_speciaux, audit_log, reconciliations');
+    debugPrint('   Tables critiques: operations, flots, clients, comptes_speciaux, sims, virtual_transactions, audit_log, reconciliations');
     
     int successCount = 0;
     int errorCount = 0;
@@ -252,7 +252,33 @@ class RobustSyncService {
         errors.add('clients');
       }
       
-      // ========== ÉTAPE 7: SYNC AUDIT LOG ==========
+      // ========== ÉTAPE 7: SYNC SIMS ==========
+      if (await _syncWithRetry('sims', () async {
+        debugPrint('  📱 Upload SIMS...');
+        await _syncService.uploadTableData('sims', 'auto_fast_sync');
+        debugPrint('  📥 Download SIMS...');
+        await _syncService.downloadTableData('sims', 'auto_fast_sync', 'admin');
+      })) {
+        successCount++;
+      } else {
+        errorCount++;
+        errors.add('sims');
+      }
+      
+      // ========== ÉTAPE 8: SYNC TRANSACTIONS VIRTUELLES ==========
+      if (await _syncWithRetry('virtual_transactions', () async {
+        debugPrint('  💰 Upload VIRTUAL_TRANSACTIONS...');
+        await _syncService.uploadTableData('virtual_transactions', 'auto_fast_sync');
+        debugPrint('  📥 Download VIRTUAL_TRANSACTIONS...');
+        await _syncService.downloadTableData('virtual_transactions', 'auto_fast_sync', 'admin');
+      })) {
+        successCount++;
+      } else {
+        errorCount++;
+        errors.add('virtual_transactions');
+      }
+      
+      // ========== ÉTAPE 9: SYNC AUDIT LOG ==========
       if (await _syncWithRetry('audit_log', () async {
         debugPrint('  📤 Upload AUDIT LOG...');
         await _syncService.uploadTableData('audit_log', 'auto_fast_sync');

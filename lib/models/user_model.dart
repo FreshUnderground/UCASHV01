@@ -90,4 +90,10 @@ class UserModel {
       createdAt: createdAt ?? this.createdAt,
     );
   }
+
+  /// Vérifie si l'utilisateur est administrateur
+  bool get isAdmin => role.toUpperCase() == 'ADMIN' || role.toUpperCase() == 'ADMINISTRATEUR';
+
+  /// Vérifie si l'utilisateur est agent
+  bool get isAgent => role.toUpperCase() == 'AGENT';
 }

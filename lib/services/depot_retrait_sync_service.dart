@@ -124,7 +124,7 @@ class DepotRetraitSyncService extends ChangeNotifier {
         final response = await http.post(
           Uri.parse(url),
           headers: {
-            'Content-Type': 'application/json',
+            'Content-Type': 'application/json; charset=utf-8',
             'Accept': 'application/json',
           },
           body: jsonEncode({

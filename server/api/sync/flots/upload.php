@@ -95,10 +95,22 @@ try {
             
             if ($exists) {
                 // Mise à jour du flot existant (notamment changement enRoute → servi)
+                // PROTECTION: Ne pas écraser date_reception si déjà définie
+                $existingDateReception = $exists['date_reception'];
+                $dateReception = $entity['date_reception'];
+                
+                if ($existingDateReception !== null) {
+                    // Préserver la date existante - ne JAMAIS écraser
+                    $dateReception = $existingDateReception;
+                    error_log("[UPDATE PROTECTION] date_reception déjà définie: {$existingDateReception} - préservation");
+                }
+                
                 $stmt = $pdo->prepare("
                     UPDATE flots SET
                         shop_source_id = :shop_source_id,
+                        shop_source_designation = :shop_source_designation,
                         shop_destination_id = :shop_destination_id,
+                        shop_destination_designation = :shop_destination_designation,
                         montant = :montant,
                         devise = :devise,
                         mode_paiement = :mode_paiement,
@@ -115,7 +127,9 @@ try {
                 
                 $stmt->execute([
                     ':shop_source_id' => $entity['shop_source_id'],
+                    ':shop_source_designation' => $entity['shop_source_designation'] ?? null,
                     ':shop_destination_id' => $entity['shop_destination_id'],
+                    ':shop_destination_designation' => $entity['shop_destination_designation'] ?? null,
                     ':montant' => $entity['montant'],
                     ':devise' => $entity['devise'] ?? 'USD',
                     ':mode_paiement' => $entity['mode_paiement'],
@@ -123,7 +137,7 @@ try {
                     ':agent_envoyeur_id' => $entity['agent_envoyeur_id'],
                     ':agent_recepteur_id' => $entity['agent_recepteur_id'] ?? null,
                     ':date_envoi' => $entity['date_envoi'],
-                    ':date_reception' => $entity['date_reception'],
+                    ':date_reception' => $dateReception, // Utilisé la date protégée
                     ':notes' => $entity['notes'] ?? null,
                     ':last_modified_at' => $entity['last_modified_at'],
                     ':last_modified_by' => $entity['last_modified_by'],
@@ -138,13 +152,15 @@ try {
                 // Insertion
                 $stmt = $pdo->prepare("
                     INSERT INTO flots (
-                        id, shop_source_id, shop_destination_id,
+                        id, shop_source_id, shop_source_designation,
+                        shop_destination_id, shop_destination_designation,
                         montant, devise, mode_paiement, statut,
                         agent_envoyeur_id, agent_recepteur_id,
                         date_envoi, date_reception, reference, notes,
                         created_at, last_modified_at, last_modified_by
                     ) VALUES (
-                        :id, :shop_source_id, :shop_destination_id,
+                        :id, :shop_source_id, :shop_source_designation,
+                        :shop_destination_id, :shop_destination_designation,
                         :montant, :devise, :mode_paiement, :statut,
                         :agent_envoyeur_id, :agent_recepteur_id,
                         :date_envoi, :date_reception, :reference, :notes,
@@ -155,7 +171,9 @@ try {
                 $stmt->execute([
                     ':id' => $entity['id'] ?? null,
                     ':shop_source_id' => $entity['shop_source_id'],
+                    ':shop_source_designation' => $entity['shop_source_designation'] ?? null,
                     ':shop_destination_id' => $entity['shop_destination_id'],
+                    ':shop_destination_designation' => $entity['shop_destination_designation'] ?? null,
                     ':montant' => $entity['montant'],
                     ':devise' => $entity['devise'] ?? 'USD',
                     ':mode_paiement' => $entity['mode_paiement'],

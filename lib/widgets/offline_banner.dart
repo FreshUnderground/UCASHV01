@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/sync_service.dart';
+import '../services/auth_service.dart';
 
 /// Widget de bannière pour afficher le mode offline et les opérations en attente
 class OfflineBanner extends StatefulWidget {
@@ -111,6 +112,18 @@ class _OfflineBannerState extends State<OfflineBanner> {
               onPressed: () async {
                 // Tenter de synchroniser
                 final result = await widget.syncService.syncAll();
+                
+                // Rafraîchir les données utilisateur si sync réussie
+                if (result.success) {
+                  try {
+                    final authService = AuthService();
+                    await authService.refreshUserData();
+                    debugPrint('✅ Données utilisateur rafraîchies après retry sync (OfflineBanner)');
+                  } catch (e) {
+                    debugPrint('⚠️ Erreur rafraîchissement données utilisateur: $e');
+                  }
+                }
+                
                 if (mounted) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     if (mounted) {

@@ -611,10 +611,23 @@ class _RetraitMobileMoneyWidgetState extends State<RetraitMobileMoneyWidget> {
     setState(() => _isLoading = true);
     
     try {
+      // PROTECTION: Ne pas permettre de revalider une opération déjà validée
+      if (retrait.dateValidation != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('⚠️ Ce retrait a déjà été validé le ${retrait.dateValidation}'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+      
       // Update status to VALIDEE
       final updatedRetrait = retrait.copyWith(
         statut: OperationStatus.validee,
-        dateValidation: DateTime.now(),
+        dateValidation: DateTime.now(), // Définie UNE SEULE FOIS
       );
       
       // Save and trigger balance updates

@@ -81,15 +81,26 @@ class _AdminSimManagementWidgetState extends State<AdminSimManagementWidget> wit
                   ],
                 ),
               ),
-              ElevatedButton.icon(
-                onPressed: _creerNouvelleSim,
-                icon: const Icon(Icons.add),
-                label: const Text('Nouvelle SIM'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: const Color(0xFFDC2626),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                ),
+              Row(
+                children: [
+                  IconButton(
+                    onPressed: _loadData,
+                    icon: const Icon(Icons.refresh),
+                    color: Colors.white,
+                    tooltip: 'Actualiser',
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: _creerNouvelleSim,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Nouvelle SIM'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: const Color(0xFFDC2626),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

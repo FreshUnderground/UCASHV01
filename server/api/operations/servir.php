@@ -32,6 +32,19 @@ try {
     
     error_log("📱 [Servir Opération] Traitement opération ID: $operationId");
     
+    // PROTECTION: Vérifier que l'opération n'est pas déjà validée
+    $checkStmt = $conn->prepare("SELECT date_validation FROM operations WHERE id = ?");
+    $checkStmt->execute([$operationId]);
+    $existingOp = $checkStmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$existingOp) {
+        throw new Exception('Opération non trouvée');
+    }
+    
+    if ($existingOp['date_validation'] !== null) {
+        throw new Exception('Cette opération a déjà été validée le ' . $existingOp['date_validation']);
+    }
+    
     // 1. Mettre à jour l'opération comme SERVIE
     $stmt = $conn->prepare("
         UPDATE operations SET
@@ -42,7 +55,7 @@ try {
             date_validation = ?,
             last_modified_at = ?,
             last_modified_by = ?
-        WHERE id = ?
+        WHERE id = ? AND date_validation IS NULL
     ");
     
     $stmt->execute([

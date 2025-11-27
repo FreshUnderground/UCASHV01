@@ -1,0 +1,368 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../services/virtual_transaction_service.dart';
+import '../services/auth_service.dart';
+import '../services/sim_service.dart';
+import '../models/sim_model.dart';
+
+/// Dialog pour créer une nouvelle transaction virtuelle (capture client)
+class CreateVirtualTransactionDialog extends StatefulWidget {
+  const CreateVirtualTransactionDialog({super.key});
+
+  @override
+  State<CreateVirtualTransactionDialog> createState() => _CreateVirtualTransactionDialogState();
+}
+
+class _CreateVirtualTransactionDialogState extends State<CreateVirtualTransactionDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _referenceController = TextEditingController();
+  final _montantController = TextEditingController();
+  final _notesController = TextEditingController();
+  
+  SimModel? _selectedSim;
+  bool _isLoading = false;
+  bool _isLoadingSims = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSims();
+  }
+
+  @override
+  void dispose() {
+    _referenceController.dispose();
+    _montantController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadSims() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentUser = authService.currentUser;
+    
+    debugPrint('🔄 [CreateVirtualTransactionDialog] Chargement SIMs...');
+    debugPrint('   User shopId: ${currentUser?.shopId}');
+    
+    if (currentUser?.shopId != null) {
+      await SimService.instance.loadSims(shopId: currentUser!.shopId);
+      debugPrint('✅ [CreateVirtualTransactionDialog] SIMs chargées: ${SimService.instance.sims.length}');
+      if (SimService.instance.sims.isNotEmpty) {
+        for (var sim in SimService.instance.sims.take(3)) {
+          debugPrint('   - ${sim.numero} (${sim.operateur}) - Shop: ${sim.shopId}, Statut: ${sim.statut.name}');
+        }
+      }
+    }
+    
+    setState(() => _isLoadingSims = false);
+  }
+
+
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    if (_selectedSim == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Veuillez sélectionner une SIM'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final currentUser = authService.currentUser;
+      
+      if (currentUser == null) {
+        throw Exception('Utilisateur non connecté');
+      }
+
+      final montantVirtuel = double.parse(_montantController.text);
+
+      debugPrint('📦 [CreateVirtualTransaction] Création transaction...');
+      debugPrint('   Référence: ${_referenceController.text.trim()}');
+      debugPrint('   Montant virtuel: $montantVirtuel');
+      debugPrint('   SIM: ${_selectedSim!.numero}');
+      debugPrint('   Shop ID: ${currentUser.shopId}');
+      debugPrint('   Agent: ${currentUser.username}');
+
+      final transaction = await VirtualTransactionService.instance.createTransaction(
+        reference: _referenceController.text.trim(),
+        montantVirtuel: montantVirtuel,
+        frais: 0.0, // Frais = 0, commission saisie lors du service
+        simNumero: _selectedSim!.numero,
+        shopId: currentUser.shopId!,
+        shopDesignation: _selectedSim!.shopDesignation,
+        agentId: currentUser.id!,
+        agentUsername: currentUser.username,
+        notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
+      );
+
+      debugPrint('✅ [CreateVirtualTransaction] Résultat: ${transaction != null ? "SUCCÈS" : "ÉCHEC"}');
+      if (transaction != null) {
+        debugPrint('   Transaction créée - ID: ${transaction.id}, RÉF: ${transaction.reference}');
+      } else {
+        debugPrint('   Erreur: ${VirtualTransactionService.instance.errorMessage}');
+      }
+
+      if (mounted) {
+        if (transaction != null) {
+          debugPrint('🔄 [CreateVirtualTransaction] Rechargement des transactions...');
+          // Recharger pour mettre à jour l'affichage
+          await VirtualTransactionService.instance.loadTransactions(shopId: currentUser.shopId);
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ Capture enregistrée!\nRÉF: ${transaction.reference}\nMontant: \$${transaction.montantVirtuel.toStringAsFixed(2)}'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+          Navigator.pop(context, true);
+        } else {
+          final errorMsg = VirtualTransactionService.instance.errorMessage ?? 'Erreur inconnue';
+          debugPrint('❌ [CreateVirtualTransaction] Affichage erreur: $errorMsg');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ $errorMsg'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ [CreateVirtualTransaction] Exception: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Erreur: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 500),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.add_photo_alternate, color: Color(0xFF48bb78)),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Enregistrer Capture Client',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  
+                  // Référence
+                  TextFormField(
+                    controller: _referenceController,
+                    decoration: const InputDecoration(
+                      labelText: 'Référence *',
+                      hintText: 'Ex: REF12345',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.qr_code),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'La référence est requise';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // SIM
+                  if (_isLoadingSims)
+                    const LinearProgressIndicator()
+                  else
+                    Consumer<SimService>(
+                      builder: (context, simService, child) {
+                        final authService = Provider.of<AuthService>(context, listen: false);
+                        final currentShopId = authService.currentUser?.shopId;
+                        
+                        final activeSims = simService.sims
+                            .where((s) => s.shopId == currentShopId && s.statut == SimStatus.active)
+                            .toList();
+
+                        if (activeSims.isEmpty) {
+                          return Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.orange[50],
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.orange),
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.warning, color: Colors.orange[700]),
+                                    const SizedBox(width: 12),
+                                    const Expanded(
+                                      child: Text(
+                                        'Aucune SIM active disponible',
+                                        style: TextStyle(fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Veuillez créer une SIM dans "SIMs" (admin) avant de créer une transaction virtuelle.',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                                const SizedBox(height: 12),
+                                ElevatedButton.icon(
+                                  onPressed: () {
+                                    setState(() => _isLoadingSims = true);
+                                    _loadSims();
+                                  },
+                                  icon: const Icon(Icons.refresh, size: 16),
+                                  label: const Text('Recharger les SIMs'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.orange[700],
+                                    foregroundColor: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+
+                        return DropdownButtonFormField<SimModel>(
+                          value: _selectedSim,
+                          decoration: const InputDecoration(
+                            labelText: 'SIM *',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.sim_card),
+                          ),
+                          items: activeSims.map((sim) {
+                            return DropdownMenuItem(
+                              value: sim,
+                              child: Text('${sim.numero} (${sim.operateur})'),
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            setState(() => _selectedSim = value);
+                          },
+                          validator: (value) {
+                            if (value == null) {
+                              return 'Veuillez sélectionner une SIM';
+                            }
+                            return null;
+                          },
+                        );
+                      },
+                    ),
+                  const SizedBox(height: 16),
+                  
+                  // Montant
+                  TextFormField(
+                    controller: _montantController,
+                    decoration: const InputDecoration(
+                      labelText: 'Montant Virtuel *',
+                      hintText: '100.00',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.attach_money),
+                      suffixText: 'USD',
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Le montant est requis';
+                      }
+                      final montant = double.tryParse(value);
+                      if (montant == null || montant <= 0) {
+                        return 'Montant invalide';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Notes
+                  TextFormField(
+                    controller: _notesController,
+                    decoration: const InputDecoration(
+                      labelText: 'Notes (optionnel)',
+                      hintText: 'Informations supplémentaires...',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.note),
+                    ),
+                    maxLines: 2,
+                  ),
+                  const SizedBox(height: 24),
+                  
+                  // Boutons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Annuler'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: _isLoading ? null : _submit,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF48bb78),
+                            foregroundColor: Colors.white,
+                          ),
+                          child: _isLoading
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text('Enregistrer'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

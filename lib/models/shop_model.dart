@@ -305,4 +305,41 @@ class ShopModel {
     }
     return devises;
   }
+  
+  /// Résout la désignation d'un shop depuis son ID
+  /// Utilise la désignation fournie si disponible, sinon cherche dans la liste des shops
+  /// Retourne "Shop #ID" en dernier recours
+  static String resolveDesignation({
+    required int? shopId,
+    String? designation,
+    List<ShopModel>? shops,
+  }) {
+    // Si la désignation est fournie et non vide, l'utiliser
+    if (designation != null && designation.isNotEmpty) {
+      return designation;
+    }
+    
+    // Si pas d'ID, impossible de résoudre
+    if (shopId == null) {
+      return 'Shop inconnu';
+    }
+    
+    // Essayer de résoudre depuis la liste des shops
+    if (shops != null && shops.isNotEmpty) {
+      try {
+        final shop = shops.firstWhere(
+          (s) => s.id == shopId,
+          orElse: () => ShopModel(designation: '', localisation: ''),
+        );
+        if (shop.designation.isNotEmpty) {
+          return shop.designation;
+        }
+      } catch (e) {
+        // Ignorer l'erreur et utiliser le fallback
+      }
+    }
+    
+    // Fallback: afficher l'ID
+    return 'Shop #$shopId';
+  }
 }

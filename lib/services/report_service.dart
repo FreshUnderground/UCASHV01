@@ -241,8 +241,8 @@ class ReportService extends ChangeNotifier {
             'soldeApres': 0.0,
             'statut': flot.statut.name,
             'destinataire': isEntree 
-                ? 'Reçu de ${flot.shopSourceDesignation}'
-                : 'Envoyé vers ${flot.shopDestinationDesignation}',
+                ? 'Reçu de ${flot.getShopSourceDesignation(_shops)}'
+                : 'Envoyé vers ${flot.getShopDestinationDesignation(_shops)}',
           });
         }
       }

@@ -44,6 +44,11 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
   void initState() {
     super.initState();
     _montantController.addListener(_calculateCommission);
+    // Add listeners to all controllers for auto-refresh summary
+    _destinataireController.addListener(_refreshSummary);
+    _destinatairePhoneController.addListener(_refreshSummary);
+    _expediteurController.addListener(_refreshSummary);
+    _expediteurPhoneController.addListener(_refreshSummary);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadShops();
     });
@@ -52,6 +57,10 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
   @override
   void dispose() {
     _montantController.removeListener(_calculateCommission);
+    _destinataireController.removeListener(_refreshSummary);
+    _destinatairePhoneController.removeListener(_refreshSummary);
+    _expediteurController.removeListener(_refreshSummary);
+    _expediteurPhoneController.removeListener(_refreshSummary);
     _montantController.dispose();
     _destinataireController.dispose();
     _destinatairePhoneController.dispose(); // Dispose phone controller
@@ -62,6 +71,13 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
   
   void _loadShops() {
     Provider.of<ShopService>(context, listen: false).loadShops();
+  }
+  
+  // Auto-refresh summary when text fields change
+  void _refreshSummary() {
+    if (mounted) {
+      setState(() {});
+    }
   }
   
   void _calculateCommission() async {

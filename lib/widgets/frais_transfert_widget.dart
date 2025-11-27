@@ -4,6 +4,7 @@ import '../services/rates_service.dart';
 import '../services/shop_service.dart';
 import '../models/commission_model.dart';
 import '../models/shop_model.dart';
+import '../utils/shop_designation_resolver.dart';
 
 /// Widget pour afficher la liste des frais de transfert entre shops
 class FraisTransfertWidget extends StatefulWidget {
@@ -50,11 +51,15 @@ class _FraisTransfertWidgetState extends State<FraisTransfertWidget> {
     }
   }
 
-  String _getShopName(int? shopId) {
+  String _getShopName(int? shopId, List<ShopModel> shops) {
     if (shopId == null) return 'Tous';
     
-    final shop = ShopService.instance.getShopById(shopId);
-    return shop?.designation ?? 'Shop #$shopId';
+    // Utiliser le resolver centralisé pour résoudre la désignation
+    return ShopDesignationResolver.resolve(
+      shopId: shopId,
+      designation: null,
+      shops: shops,
+    );
   }
 
   @override
@@ -97,13 +102,13 @@ class _FraisTransfertWidgetState extends State<FraisTransfertWidget> {
 
         // Trier par shop source puis par shop destination
         shopToShopCommissions.sort((a, b) {
-          final sourceA = _getShopName(a.shopSourceId);
-          final sourceB = _getShopName(b.shopSourceId);
+          final sourceA = _getShopName(a.shopSourceId, shopService.shops);
+          final sourceB = _getShopName(b.shopSourceId, shopService.shops);
           if (sourceA != sourceB) {
             return sourceA.compareTo(sourceB);
           }
-          return _getShopName(a.shopDestinationId)
-              .compareTo(_getShopName(b.shopDestinationId));
+          return _getShopName(a.shopDestinationId, shopService.shops)
+              .compareTo(_getShopName(b.shopDestinationId, shopService.shops));
         });
 
         return Column(
@@ -130,30 +135,6 @@ class _FraisTransfertWidgetState extends State<FraisTransfertWidget> {
                       Icons.percent,
                       color: Colors.white,
                       size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Frais de Transfert',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'Liste des commissions entre shops',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.white70,
-                          ),
-                        ),
-                      ],
                     ),
                   ),
                 ],
@@ -197,10 +178,19 @@ class _FraisTransfertWidgetState extends State<FraisTransfertWidget> {
                   itemCount: shopToShopCommissions.length,
                   itemBuilder: (context, index) {
                     final commission = shopToShopCommissions[index];
-                    final shopSource =
-                        shopService.getShopById(commission.shopSourceId!);
-                    final shopDestination =
-                        shopService.getShopById(commission.shopDestinationId!);
+                    
+                    // Résoudre les désignations des shops avec fallback automatique
+                    final shopSourceDesignation = ShopDesignationResolver.resolve(
+                      shopId: commission.shopSourceId,
+                      designation: null,
+                      shops: shopService.shops,
+                    );
+                    
+                    final shopDestinationDesignation = ShopDesignationResolver.resolve(
+                      shopId: commission.shopDestinationId,
+                      designation: null,
+                      shops: shopService.shops,
+                    );
 
                     return Card(
                       margin: const EdgeInsets.symmetric(
@@ -219,7 +209,7 @@ class _FraisTransfertWidgetState extends State<FraisTransfertWidget> {
                           ),
                         ),
                         title: Text(
-                          '${shopSource?.designation ?? 'Shop #${commission.shopSourceId}'} → ${shopDestination?.designation ?? 'Shop #${commission.shopDestinationId}'}',
+                          '$shopSourceDesignation → $shopDestinationDesignation',
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                           ),

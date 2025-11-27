@@ -12,11 +12,19 @@ class AgentAuthService extends ChangeNotifier {
   ShopModel? _currentShop;
   bool _isAuthenticated = false;
   String? _errorMessage;
+  
+  // Référence au service de synchronisation (injecté)
+  dynamic _syncService;
 
   AgentModel? get currentAgent => _currentAgent;
   ShopModel? get currentShop => _currentShop;
   bool get isAuthenticated => _isAuthenticated;
   String? get errorMessage => _errorMessage;
+  
+  /// Injecte le service de synchronisation
+  void setSyncService(dynamic syncService) {
+    _syncService = syncService;
+  }
 
   Future<bool> login(String username, String password) async {
     try {
@@ -45,9 +53,36 @@ class AgentAuthService extends ChangeNotifier {
     } catch (e) {
       _errorMessage = e.toString();
       _isAuthenticated = false;
+      
+      // 🔄 RELANCER LA SYNCHRONISATION APRÈS ÉCHEC DE LOGIN
+      // Cela permet de récupérer les données manquantes (agents, shops)
+      debugPrint('❌ Échec login: $_errorMessage');
+      debugPrint('🔄 Lancement synchronisation pour récupérer les données...');
+      _syncAfterLoginFailure();
+      
       notifyListeners();
       return false;
     }
+  }
+  
+  /// Synchronise les données après un échec de login
+  Future<void> _syncAfterLoginFailure() async {
+    try {
+      // Import nécessaire pour accéder au RobustSyncService
+      final robustSync = await _getRobustSyncService();
+      if (robustSync != null) {
+        debugPrint('🚀 Démarrage synchronisation shops & agents...');
+        await robustSync.syncNow();
+        debugPrint('✅ Synchronisation terminée - veuillez réessayer de vous connecter');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Erreur synchronisation après échec login: $e');
+    }
+  }
+  
+  /// Récupère l'instance de RobustSyncService (si disponible)
+  Future<dynamic> _getRobustSyncService() async {
+    return _syncService;
   }
 
   void logout() {

@@ -540,6 +540,16 @@ class _TransferValidationWidgetState extends State<TransferValidationWidget> {
                 onPressed: transferSync.isSyncing ? null : () async {
                   try {
                     await transferSync.forceRefreshFromAPI();
+                    
+                    // Rafraîchir les données utilisateur après sync réussie
+                    try {
+                      final authService = AuthService();
+                      await authService.refreshUserData();
+                      debugPrint('✅ Données utilisateur rafraîchies après transfer sync');
+                    } catch (e) {
+                      debugPrint('⚠️ Erreur rafraîchissement données utilisateur: $e');
+                    }
+                    
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
@@ -697,7 +707,11 @@ class _TransferValidationWidgetState extends State<TransferValidationWidget> {
                       children: [
                         _buildInfoRow(Icons.person, 'Destinataire', transfer.destinataire ?? 'N/A', isMobile),
                         const SizedBox(height: 8),
-                        _buildInfoRow(Icons.person_outline, 'Expéditeur', transfer.clientNom ?? 'N/A', isMobile),
+                        _buildInfoRow(Icons.person_outline, 'Expéditeur', 
+                          transfer.observation != null && transfer.observation!.isNotEmpty 
+                            ? transfer.observation! 
+                            : (transfer.clientNom ?? 'N/A'), 
+                          isMobile),
                       ],
                     ),
                   ),

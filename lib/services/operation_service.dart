@@ -174,10 +174,19 @@ class OperationService extends ChangeNotifier {
         }
       }
       
-      // Générer le code d'opération unique
+      // Générer le code d'opération unique avec milliseconde pour garantir l'unicité
+      // Format: YYMMDDHHMMSSXXX (14 chiffres) - aucun caractère spécial
       final now = DateTime.now();
-      final milliseconds = now.millisecondsSinceEpoch % 1000;
-      final codeOps = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}${enrichedOperation.agentId}${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}${milliseconds.toString().padLeft(3, '0')}';
+      final year = (now.year % 100).toString().padLeft(2, '0');
+      final month = now.month.toString().padLeft(2, '0');
+      final day = now.day.toString().padLeft(2, '0');
+      final hour = now.hour.toString().padLeft(2, '0');
+      final minute = now.minute.toString().padLeft(2, '0');
+      final second = now.second.toString().padLeft(2, '0');
+      final milliseconds = (now.millisecondsSinceEpoch % 1000).toString().padLeft(3, '0');
+      final codeOps = '$year$month$day$hour$minute$second$milliseconds';
+      
+      debugPrint('✅ Code opération généré: $codeOps');
       
       // Ajouter le codeOps à l'opération
       final operationWithCode = enrichedOperation.copyWith(
@@ -213,15 +222,33 @@ class OperationService extends ChangeNotifier {
                           ? savedOperation.shopDestinationId!
                           : savedOperation.shopSourceId!;
         
+        // Récupérer les informations pour la description détaillée
+        final shopSource = await LocalDB.instance.getShopById(savedOperation.shopSourceId!);
+        final shopDest = savedOperation.shopDestinationId != null 
+            ? await LocalDB.instance.getShopById(savedOperation.shopDestinationId!)
+            : null;
+        
+        // Nom du client déposant (qui envoie)
+        final deposant = savedOperation.clientNom ?? 'Client inconnu';
+        
+        // Nom du destinataire (qui reçoit)
+        final destinataire = savedOperation.destinataire ?? 'Destinataire inconnu';
+        
+        // Description détaillée : Déposant → Destinataire - Montant - Shops
+        final description = shopDest != null
+            ? 'Commission: $deposant → $destinataire - \$${savedOperation.montantNet.toStringAsFixed(2)} (${shopSource?.designation ?? "Shop ${savedOperation.shopSourceId}"} → ${shopDest.designation})'
+            : 'Commission: $deposant → $destinataire - \$${savedOperation.montantNet.toStringAsFixed(2)} (${shopSource?.designation ?? "Shop ${savedOperation.shopSourceId}"})'; 
+        
         await CompteSpecialService.instance.addFrais(
           montant: savedOperation.commission,
-          description: 'Commission ${savedOperation.type.name} - ${savedOperation.codeOps}',
+          description: description,
           shopId: fraisShopId, // ← CORRECTED: Frais vont au shop destination pour transferts
           operationId: savedOperation.id,
           agentId: savedOperation.agentId,
           agentUsername: savedOperation.agentUsername,
         );
         debugPrint('💰 FRAIS enregistrés: \$${savedOperation.commission.toStringAsFixed(2)} au Shop ID: $fraisShopId');
+        debugPrint('   Description: $description');
       }
       
       // Toujours sauvegarder en local d'abord, la synchronisation se fera en arrière-plan
@@ -247,10 +274,18 @@ class OperationService extends ChangeNotifier {
     try {
       final operation = _operations.firstWhere((op) => op.id == operationId);
       
+      // PROTECTION: Ne pas permettre de revalider une opération déjà validée
+      if (operation.dateValidation != null) {
+        _errorMessage = 'Cette opération a déjà été validée le ${operation.dateValidation}';
+        debugPrint('⚠️ $_errorMessage');
+        notifyListeners();
+        return false;
+      }
+      
       final updatedOperation = operation.copyWith(
         statut: OperationStatus.validee,
         modePaiement: modePaiement,
-        dateValidation: DateTime.now(),
+        dateValidation: DateTime.now(), // Définie UNE SEULE FOIS
         lastModifiedAt: DateTime.now(),
       );
       
@@ -1056,11 +1091,18 @@ class OperationService extends ChangeNotifier {
         return false;
       }
       
+      // PROTECTION: Ne pas permettre de revalider une opération déjà validée
+      if (operation.dateValidation != null) {
+        _errorMessage = 'Ce transfert a déjà été validé le ${operation.dateValidation}';
+        debugPrint('⚠️ $_errorMessage');
+        return false;
+      }
+      
       // Mettre à jour le statut et le mode de paiement
       final updatedOperation = operation.copyWith(
         statut: OperationStatus.validee,
         modePaiement: modePaiement,
-        dateValidation: DateTime.now(),
+        dateValidation: DateTime.now(), // Définie UNE SEULE FOIS
         lastModifiedAt: DateTime.now(),
         isSynced: false,  // IMPORTANT: Marquer comme non synchronisé pour forcer l'upload
       );

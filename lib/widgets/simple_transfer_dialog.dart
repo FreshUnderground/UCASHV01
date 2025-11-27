@@ -39,11 +39,18 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
   void initState() {
     super.initState();
     _montantController.addListener(_calculateCommission);
+    // Add listeners to all controllers for auto-refresh summary
+    _destinataireController.addListener(_refreshSummary);
+    _referenceController.addListener(_refreshSummary);
+    _expediteurController.addListener(_refreshSummary);
   }
 
   @override
   void dispose() {
     _montantController.removeListener(_calculateCommission);
+    _destinataireController.removeListener(_refreshSummary);
+    _referenceController.removeListener(_refreshSummary);
+    _expediteurController.removeListener(_refreshSummary);
     _montantController.dispose();
     _destinataireController.dispose();
     _referenceController.dispose();
@@ -100,6 +107,13 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
     _montantNet = montantNet;  // Ce que le destinataire reçoit
     // montantBrut sera = montantNet + commission (calculé lors de la création)
     
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  // Auto-refresh summary when text fields change
+  void _refreshSummary() {
     if (mounted) {
       setState(() {});
     }
@@ -440,8 +454,16 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
                       ),
                     ),
                     Text(
-                      // Generate a preview of what the CodeOps will look like
-                      '${DateTime.now().year}${DateTime.now().month.toString().padLeft(2, '0')}${DateTime.now().day.toString().padLeft(2, '0')}0001',
+                      // Generate a preview of what the CodeOps will look like (timestamp-based for uniqueness)
+                      () {
+                        final now = DateTime.now();
+                        final year = (now.year % 100).toString().padLeft(2, '0');
+                        final month = now.month.toString().padLeft(2, '0');
+                        final day = now.day.toString().padLeft(2, '0');
+                        final hour = now.hour.toString().padLeft(2, '0');
+                        final minute = now.minute.toString().padLeft(2, '0');
+                        return '$year$month$day${hour}${minute}00123';
+                      }(),
                       style: const TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 14,

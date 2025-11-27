@@ -12,14 +12,14 @@ class ApiService {
 
   // Headers par défaut
   static Map<String, String> get defaultHeaders => {
-    'Content-Type': 'application/json',
+    'Content-Type': 'application/json; charset=utf-8',
     'Accept': 'application/json',
   };
 
   // Méthode privée pour obtenir les headers avec authentification
   static Map<String, String> _getHeaders() {
     return {
-      'Content-Type': 'application/json',
+      'Content-Type': 'application/json; charset=utf-8',
       'Accept': 'application/json',
       // TODO: Ajouter le token d'authentification si nécessaire
       // 'Authorization': 'Bearer $token',

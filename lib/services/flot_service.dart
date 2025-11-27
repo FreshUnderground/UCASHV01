@@ -29,14 +29,21 @@ class FlotService extends ChangeNotifier {
     _currentIsAdmin = isAdmin;
     
     try {
+      debugPrint('📦 loadFlots() called - shopId: $shopId, isAdmin: $isAdmin');
+      
       if (isAdmin) {
         // Admin voit tous les flots
         _flots = await LocalDB.instance.getAllFlots();
         debugPrint('📊 ADMIN - Tous les flots chargés: ${_flots.length}');
       } else if (shopId != null) {
         // Shop voit seulement les flots où il est source ou destination
-        _flots = await LocalDB.instance.getFlotsByShop(shopId);
-        debugPrint('🏪 SHOP $shopId - Flots chargés: ${_flots.length}');
+        final allFlots = await LocalDB.instance.getAllFlots();
+        _flots = allFlots.where((f) => 
+          f.shopSourceId == shopId || f.shopDestinationId == shopId
+        ).toList();
+        
+        debugPrint('🏪 SHOP $shopId - Total local: ${allFlots.length}, Filtrés: ${_flots.length}');
+        debugPrint('   └─ Critère: shopSourceId == $shopId OU shopDestinationId == $shopId');
         
         // Debug: Afficher le détail
         final enCours = _flots.where((f) => f.statut == flot_model.StatutFlot.enRoute).length;
@@ -143,11 +150,13 @@ class FlotService extends ChangeNotifier {
         debugPrint('⚠️ Erreur enregistrement journal: $e (non bloquant)');
       }
       
-      // Recharger avec les paramètres actuels
-      await loadFlots(shopId: _currentShopId, isAdmin: _currentIsAdmin);
-      
       // IMPORTANT: Synchroniser en arrière-plan avec retry automatique
-      _syncFlotInBackground(newFlot);
+      debugPrint('🚀 Lancement synchronisation FLOT...');
+      await _syncFlotInBackground(newFlot);
+      
+      // Recharger avec les paramètres actuels APRES la sync
+      debugPrint('🔄 Rechargement des FLOTs...');
+      await loadFlots(shopId: _currentShopId, isAdmin: _currentIsAdmin);
       
       debugPrint('✅ Flot créé: $montant $devise de $shopSourceDesignation vers $shopDestinationDesignation');
       _errorMessage = null;
@@ -200,11 +209,19 @@ class FlotService extends ChangeNotifier {
   }) async {
     try {
       final flot = _flots.firstWhere((f) => f.id == flotId);
+      
+      // PROTECTION: Ne pas permettre de re-servir un flot déjà servi
+      if (flot.dateReception != null) {
+        _errorMessage = 'Ce FLOT a déjà été reçu le ${flot.dateReception}';
+        debugPrint('⚠️ $_errorMessage');
+        return false;
+      }
+      
       final updatedFlot = flot.copyWith(
         statut: flot_model.StatutFlot.servi,
         agentRecepteurId: agentRecepteurId,
         agentRecepteurUsername: agentRecepteurUsername,
-        dateReception: DateTime.now(),
+        dateReception: DateTime.now(), // Définie UNE SEULE FOIS
         lastModifiedAt: DateTime.now(),
         lastModifiedBy: 'agent_$agentRecepteurUsername',
       );
@@ -212,11 +229,13 @@ class FlotService extends ChangeNotifier {
       // Mettre à jour dans LocalDB
       await LocalDB.instance.updateFlot(updatedFlot);
       
-      // Recharger avec les paramètres actuels
-      await loadFlots(shopId: _currentShopId, isAdmin: _currentIsAdmin);
-      
       // IMPORTANT: Synchroniser en arrière-plan avec retry automatique
-      _syncFlotInBackground(updatedFlot);
+      debugPrint('🚀 Lancement synchronisation FLOT SERVI...');
+      await _syncFlotInBackground(updatedFlot);
+      
+      // Recharger avec les paramètres actuels APRES la sync
+      debugPrint('🔄 Rechargement des FLOTs...');
+      await loadFlots(shopId: _currentShopId, isAdmin: _currentIsAdmin);
       
       debugPrint('✅ Flot marqué servi: ${updatedFlot.reference}');
       _errorMessage = null;
@@ -245,12 +264,14 @@ class FlotService extends ChangeNotifier {
     ).toList();
   }
 
-  /// Générer une référence unique pour le flot
+  /// Générer une référence unique pour le flot (format court: FsrcIDdestIDMMDDHHmm sans caractères spéciaux)
   String _generateReference(int shopSourceId, int shopDestinationId) {
     final now = DateTime.now();
-    final dateStr = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
-    final timeStr = '${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}';
-    return 'FLOT-$shopSourceId-$shopDestinationId-$dateStr-$timeStr';
+    final month = now.month.toString().padLeft(2, '0');
+    final day = now.day.toString().padLeft(2, '0');
+    final hour = now.hour.toString().padLeft(2, '0');
+    final minute = now.minute.toString().padLeft(2, '0');
+    return 'F$shopSourceId$shopDestinationId$month$day$hour$minute';
   }
 
   bool _isSameDay(DateTime date1, DateTime date2) {
@@ -267,22 +288,26 @@ class FlotService extends ChangeNotifier {
   /// Synchronise un flot en arrière-plan sans bloquer l'interface
   /// SIMPLIFIÉ: Ajoute juste à la queue, RobustSyncService s'occupe du reste
   Future<void> _syncFlotInBackground(flot_model.FlotModel flot) async {
-    Future.microtask(() async {
-      try {
-        debugPrint('📋 [QUEUE] Ajout flot ${flot.reference} à la queue de sync...');
-        
-        // Convertir le flot en Map pour la queue
-        final flotMap = flot.toJson();
-        
-        // Ajouter le flot à la file d'attente de synchronisation
-        final syncService = SyncService();
-        await syncService.queueFlot(flotMap);
-        
-        debugPrint('✅ [QUEUE] Flot ${flot.reference} en file d\'attente - RobustSyncService le synchronisera');
-      } catch (e) {
-        debugPrint('❌ [QUEUE] Erreur ajout flot: $e');
-      }
-    });
+    try {
+      debugPrint('📋 [QUEUE] Ajout flot ${flot.reference} à la queue de sync...');
+      
+      // Convertir le flot en Map pour la queue
+      final flotMap = flot.toJson();
+      
+      // Ajouter le flot à la file d'attente de synchronisation
+      final syncService = SyncService();
+      await syncService.queueFlot(flotMap);
+      
+      debugPrint('✅ [QUEUE] Flot ${flot.reference} en file d\'attente');
+      debugPrint('🚀 [SYNC] Lancement synchronisation immédiate...');
+      
+      // Lancer la synchronisation immédiatement au lieu d'attendre
+      await syncService.syncPendingFlots();
+      
+      debugPrint('✅ [SYNC] Synchronisation FLOT terminée');
+    } catch (e) {
+      debugPrint('❌ [QUEUE/SYNC] Erreur: $e');
+    }
   }
 
   /// Marque un flot comme synchronisé

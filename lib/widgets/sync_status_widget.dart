@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../services/sync_service.dart';
+import '../services/auth_service.dart';
 import '../utils/responsive_utils.dart';
 import '../theme/ucash_containers.dart';
 
@@ -405,6 +405,9 @@ class DashboardSyncWidget extends StatelessWidget {
   }
 
   void _showSyncSuccess(BuildContext context) {
+    // Rafraîchir les données utilisateur après sync réussie
+    _refreshUserDataAfterSync();
+    
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Row(
@@ -422,6 +425,17 @@ class DashboardSyncWidget extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Rafraîchir les données utilisateur après une synchronisation réussie
+  void _refreshUserDataAfterSync() async {
+    try {
+      final authService = AuthService();
+      await authService.refreshUserData();
+      debugPrint('✅ Données utilisateur rafraîchies après sync (DashboardSyncWidget)');
+    } catch (e) {
+      debugPrint('⚠️ Erreur rafraîchissement données utilisateur: $e');
+    }
   }
 
   void _showSyncError(BuildContext context, String message) {

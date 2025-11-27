@@ -225,19 +225,20 @@ class OperationModel {
     return ModePaiement.cash;
   }
   
-  /// Génère un code d'opération unique
+  /// Génère un code d'opération unique (format court: YYMMDDHHMMSSXXX sans caractères spéciaux)
+  /// Utilisé uniquement en fallback si aucun code n'est fourni
   static String _generateCodeOps(dynamic id) {
-    // Si l'ID est disponible, l'utiliser pour générer le code
-    if (id != null) {
-      final now = DateTime.now();
-      final timestamp = now.millisecondsSinceEpoch;
-      return '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}${id}${timestamp.toString().substring(timestamp.toString().length - 4)}';
-    }
-    
-    // Sinon, générer un code aléatoire
     final now = DateTime.now();
-    final random = (DateTime.now().millisecondsSinceEpoch % 10000).toString().padLeft(4, '0');
-    return '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}${random}';
+    final year = (now.year % 100).toString().padLeft(2, '0');
+    final month = now.month.toString().padLeft(2, '0');
+    final day = now.day.toString().padLeft(2, '0');
+    final hour = now.hour.toString().padLeft(2, '0');
+    final minute = now.minute.toString().padLeft(2, '0');
+    final second = now.second.toString().padLeft(2, '0');
+    final milliseconds = (now.millisecondsSinceEpoch % 1000).toString().padLeft(3, '0');
+    
+    // Format: YYMMDDHHMMSSXXX (14 chiffres) garantit l'unicité via timestamp complet
+    return '$year$month$day$hour$minute$second$milliseconds';
   }
   
   /// Parse OperationStatus depuis String (MySQL) ou int (local)
@@ -359,6 +360,52 @@ class OperationModel {
       case ModePaiement.orangeMoney:
         return 'Orange Money';
     }
+  }
+  
+  /// Résout la désignation du shop source (avec fallback sur ID)
+  String getShopSourceDesignation([List<dynamic>? shops]) {
+    if (shopSourceDesignation != null && shopSourceDesignation!.isNotEmpty) {
+      return shopSourceDesignation!;
+    }
+    
+    if (shops != null && shopSourceId != null) {
+      try {
+        final shop = shops.firstWhere(
+          (s) => s.id == shopSourceId,
+          orElse: () => null,
+        );
+        if (shop != null && shop.designation != null && shop.designation.isNotEmpty) {
+          return shop.designation;
+        }
+      } catch (e) {
+        // Ignorer l'erreur
+      }
+    }
+    
+    return shopSourceId != null ? 'Shop #$shopSourceId' : 'Shop inconnu';
+  }
+  
+  /// Résout la désignation du shop destination (avec fallback sur ID)
+  String getShopDestinationDesignation([List<dynamic>? shops]) {
+    if (shopDestinationDesignation != null && shopDestinationDesignation!.isNotEmpty) {
+      return shopDestinationDesignation!;
+    }
+    
+    if (shops != null && shopDestinationId != null) {
+      try {
+        final shop = shops.firstWhere(
+          (s) => s.id == shopDestinationId,
+          orElse: () => null,
+        );
+        if (shop != null && shop.designation != null && shop.designation.isNotEmpty) {
+          return shop.designation;
+        }
+      } catch (e) {
+        // Ignorer l'erreur
+      }
+    }
+    
+    return shopDestinationId != null ? 'Shop #$shopDestinationId' : 'Shop inconnu';
   }
 
   OperationModel copyWith({

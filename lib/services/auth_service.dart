@@ -5,8 +5,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 import '../models/shop_model.dart';
 import '../models/client_model.dart';
+import '../models/agent_model.dart';
 import 'local_db.dart';
 import 'transfer_sync_service.dart'; // Add this import
+import 'agent_service.dart';
+import 'rates_service.dart';
+import 'shop_service.dart';
+import 'sync_service.dart';
 
 class AuthService extends ChangeNotifier {
   UserModel? _currentUser;
@@ -60,6 +65,9 @@ class AuthService extends ChangeNotifier {
             debugPrint('⚠️ Erreur initialisation TransferSyncService: $e');
           }
         }
+        
+        // Déclencher une synchronisation automatique après session sauvegardée
+        _triggerPostLoginSync();
       }
     } catch (e) {
       _errorMessage = 'Erreur lors de la vérification de session: $e';
@@ -113,6 +121,9 @@ class AuthService extends ChangeNotifier {
             debugPrint('⚠️ Erreur initialisation TransferSyncService: $e');
           }
         }
+        
+        // Déclencher une synchronisation automatique après login réussi
+        _triggerPostLoginSync();
         
         _setLoading(false);
         return true;
@@ -268,6 +279,139 @@ class AuthService extends ChangeNotifier {
     } catch (e) {
       debugPrint('Erreur synchronisation: $e');
     }
+  }
+
+  /// Rafraîchir les données utilisateur et shop depuis la base locale
+  /// À appeler après une synchronisation pour récupérer les modifications
+  /// faites par l'admin (commission, shop, agents, etc.)
+  Future<void> refreshUserData() async {
+    try {
+      debugPrint('🔄 Rafraîchissement des données utilisateur...');
+      
+      // 1. Rafraîchir les services de données de base
+      debugPrint('📊 Rafraîchissement des services de données...');
+      
+      // Rafraîchir les taux et commissions
+      try {
+        await RatesService.instance.loadRatesAndCommissions();
+        debugPrint('✅ Taux et commissions rechargés');
+      } catch (e) {
+        debugPrint('⚠️ Erreur rechargement taux/commissions: $e');
+      }
+      
+      // Rafraîchir les shops
+      try {
+        await ShopService.instance.loadShops(forceRefresh: true);
+        debugPrint('✅ Shops rechargés');
+      } catch (e) {
+        debugPrint('⚠️ Erreur rechargement shops: $e');
+      }
+      
+      // 2. Rafraîchir l'utilisateur actuel depuis la base locale
+      if (_currentUser != null) {
+        final userId = _currentUser!.id;
+        final username = _currentUser!.username;
+        
+        // Recharger les agents depuis la base locale
+        await AgentService.instance.loadAgents(forceRefresh: true);
+        
+        // Recharger l'utilisateur depuis AgentService
+        AgentModel? updatedAgent;
+        if (userId != null) {
+          updatedAgent = AgentService.instance.getAgentById(userId);
+        }
+        
+        // Si pas trouvé par ID, chercher par username
+        if (updatedAgent == null) {
+          try {
+            updatedAgent = AgentService.instance.agents.firstWhere(
+              (agent) => agent.username == username,
+            );
+          } catch (e) {
+            debugPrint('⚠️ Agent non trouvé par username: $username');
+          }
+        }
+        
+        if (updatedAgent != null) {
+          // Convertir AgentModel en UserModel
+          _currentUser = UserModel(
+            id: updatedAgent.id,
+            username: updatedAgent.username,
+            password: updatedAgent.password,
+            role: 'AGENT',
+            shopId: updatedAgent.shopId,
+            nom: updatedAgent.nom,
+            telephone: updatedAgent.telephone,
+            createdAt: updatedAgent.createdAt,
+          );
+          
+          debugPrint('✅ Utilisateur rechargé: ${updatedAgent.username}');
+          
+          // Rafraîchir le shop si l'utilisateur a un shopId
+          if (updatedAgent.shopId != null) {
+            final updatedShop = await LocalDB.instance.getShopById(updatedAgent.shopId!);
+            if (updatedShop != null) {
+              _currentShop = updatedShop;
+              debugPrint('✅ Shop rechargé: ${updatedShop.designation}');
+            }
+          }
+          
+          // Mettre à jour la session sauvegardée
+          await LocalDB.instance.saveUserSession(_currentUser!);
+          
+          // Notifier les listeners pour mettre à jour l'interface
+          notifyListeners();
+          
+          debugPrint('✅ Données utilisateur rafraîchies avec succès');
+        } else {
+          debugPrint('⚠️ Utilisateur non trouvé lors du rafraîchissement');
+        }
+      }
+      
+      // 3. Rafraîchir le client actuel si applicable
+      if (_currentClient != null) {
+        final clientId = _currentClient!.id;
+        if (clientId != null) {
+          final updatedClient = await LocalDB.instance.getClientById(clientId);
+          if (updatedClient != null) {
+            _currentClient = updatedClient;
+            debugPrint('✅ Client rechargé: ${updatedClient.nom}');
+            notifyListeners();
+          }
+        }
+      }
+      
+      debugPrint('🎉 Rafraîchissement complet des données terminé');
+    } catch (e) {
+      debugPrint('❌ Erreur rafraîchissement données utilisateur: $e');
+    }
+  }
+
+  /// Déclencher une synchronisation automatique après login
+  /// Exécute en arrière-plan pour ne pas bloquer l'interface
+  void _triggerPostLoginSync() {
+    // Exécuter la synchronisation en arrière-plan
+    Future.delayed(const Duration(seconds: 1), () async {
+      try {
+        debugPrint('🔄 Déclenchement synchronisation post-login...');
+        
+        // Utiliser SyncService directement
+        final syncService = SyncService();
+        final result = await syncService.syncAll(
+          userId: _currentUser?.username ?? 'unknown'
+        );
+        
+        if (result.success) {
+          debugPrint('✅ Synchronisation post-login réussie');
+          // Rafraîchir les données utilisateur après sync
+          await refreshUserData();
+        } else {
+          debugPrint('⚠️ Synchronisation post-login échouée: ${result.message}');
+        }
+      } catch (e) {
+        debugPrint('⚠️ Erreur synchronisation post-login: $e');
+      }
+    });
   }
 
   // Méthodes utilitaires privées

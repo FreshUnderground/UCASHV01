@@ -15,6 +15,9 @@ import '../models/flot_model.dart' as flot_model;
 import '../models/cloture_caisse_model.dart';
 import '../models/sim_model.dart';
 import '../models/sim_movement_model.dart';
+import '../models/virtual_transaction_model.dart';
+import '../models/retrait_virtuel_model.dart';
+import '../models/cloture_virtuelle_model.dart';
 
 class LocalDB {
   static final LocalDB _instance = LocalDB._internal();
@@ -1253,10 +1256,13 @@ class LocalDB {
     try {
       // Pour le shop source: SORTIE (quand le flot est envoyé)
       if (flot.statut == flot_model.StatutFlot.enRoute) {
+        // Charger les shops pour résoudre les désignations
+        final shops = await getAllShops();
+        
         final journalEntry = JournalCaisseModel(
           shopId: flot.shopSourceId,
           agentId: flot.agentEnvoyeurId,
-          libelle: 'FLOT envoyé vers ${flot.shopDestinationDesignation}',
+          libelle: 'FLOT envoyé vers ${flot.getShopDestinationDesignation(shops)}',
           montant: flot.montant,
           type: TypeMouvement.sortie,
           mode: _convertFlotModeToJournalMode(flot.modePaiement),
@@ -1272,10 +1278,13 @@ class LocalDB {
       
       // Pour le shop destination: ENTRÉE (quand le flot est servi/reçu)
       if (flot.statut == flot_model.StatutFlot.servi && flot.dateReception != null) {
+        // Charger les shops pour résoudre les désignations
+        final shops = await getAllShops();
+        
         final journalEntry = JournalCaisseModel(
           shopId: flot.shopDestinationId,
           agentId: flot.agentRecepteurId ?? 0, // Peut être null
-          libelle: 'FLOT reçu de ${flot.shopSourceDesignation}',
+          libelle: 'FLOT reçu de ${flot.getShopSourceDesignation(shops)}',
           montant: flot.montant,
           type: TypeMouvement.entree,
           mode: _convertFlotModeToJournalMode(flot.modePaiement),
@@ -1633,6 +1642,323 @@ class LocalDB {
     final prefs = await database;
     await prefs.remove('sim_movement_$movementId');
     debugPrint('🗑️ Mouvement SIM supprimé: ID=$movementId');
+  }
+
+  // === CRUD VIRTUAL TRANSACTIONS ===
+  
+  /// Sauvegarder une transaction virtuelle
+  Future<VirtualTransactionModel> saveVirtualTransaction(VirtualTransactionModel transaction) async {
+    final prefs = await database;
+    final transactionId = transaction.id ?? DateTime.now().millisecondsSinceEpoch;
+    final updatedTransaction = transaction.id == null 
+        ? transaction.copyWith(
+            id: transactionId,
+            lastModifiedAt: DateTime.now(),
+          )
+        : transaction; // Si la transaction a déjà un ID, ne pas modifier
+    await prefs.setString('virtual_transaction_$transactionId', jsonEncode(updatedTransaction.toJson()));
+    debugPrint('💰 Transaction virtuelle sauvegardée: ID=$transactionId, REF=${updatedTransaction.reference}');
+    return updatedTransaction;
+  }
+
+  /// Mettre à jour une transaction virtuelle
+  Future<void> updateVirtualTransaction(VirtualTransactionModel transaction) async {
+    if (transaction.id == null) throw Exception('Transaction ID is required for update');
+    await saveVirtualTransaction(transaction);
+  }
+
+  /// Récupérer toutes les transactions virtuelles (avec filtres optionnels)
+  Future<List<VirtualTransactionModel>> getAllVirtualTransactions({
+    int? shopId,
+    String? simNumero,
+    DateTime? dateDebut,
+    DateTime? dateFin,
+    VirtualTransactionStatus? statut,
+  }) async {
+    final prefs = await database;
+    final transactions = <VirtualTransactionModel>[];
+    
+    final keys = prefs.getKeys();
+    for (String key in keys) {
+      if (key.startsWith('virtual_transaction_')) {
+        try {
+          final transactionData = prefs.getString(key);
+          if (transactionData != null) {
+            final transaction = VirtualTransactionModel.fromJson(jsonDecode(transactionData));
+            
+            // Appliquer les filtres
+            bool matches = true;
+            
+            if (shopId != null && transaction.shopId != shopId) {
+              matches = false;
+            }
+            
+            if (simNumero != null && transaction.simNumero != simNumero) {
+              matches = false;
+            }
+            
+            if (statut != null && transaction.statut != statut) {
+              matches = false;
+            }
+            
+            if (dateDebut != null && transaction.dateEnregistrement.isBefore(dateDebut)) {
+              matches = false;
+            }
+            
+            if (dateFin != null && transaction.dateEnregistrement.isAfter(dateFin)) {
+              matches = false;
+            }
+            
+            if (matches) {
+              transactions.add(transaction);
+            }
+          }
+        } catch (e) {
+          debugPrint('⚠️ Erreur chargement transaction virtuelle $key: $e');
+        }
+      }
+    }
+    
+    // Trier par date (plus récents en premier)
+    transactions.sort((a, b) => b.dateEnregistrement.compareTo(a.dateEnregistrement));
+    return transactions;
+  }
+
+  /// Récupérer une transaction virtuelle par ID
+  Future<VirtualTransactionModel?> getVirtualTransactionById(int transactionId) async {
+    final prefs = await database;
+    final transactionData = prefs.getString('virtual_transaction_$transactionId');
+    if (transactionData != null) {
+      return VirtualTransactionModel.fromJson(jsonDecode(transactionData));
+    }
+    return null;
+  }
+
+  /// Récupérer une transaction virtuelle par référence
+  Future<VirtualTransactionModel?> getVirtualTransactionByReference(String reference) async {
+    final prefs = await database;
+    final keys = prefs.getKeys();
+    
+    for (String key in keys) {
+      if (key.startsWith('virtual_transaction_')) {
+        try {
+          final transactionData = prefs.getString(key);
+          if (transactionData != null) {
+            final transaction = VirtualTransactionModel.fromJson(jsonDecode(transactionData));
+            if (transaction.reference == reference) {
+              return transaction;
+            }
+          }
+        } catch (e) {
+          debugPrint('⚠️ Erreur recherche transaction par référence: $e');
+        }
+      }
+    }
+    return null;
+  }
+
+  /// Récupérer une SIM par numéro
+  Future<SimModel?> getSimByNumero(String numero) async {
+    final allSims = await getAllSims();
+    try {
+      return allSims.firstWhere((sim) => sim.numero == numero);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Supprimer une transaction virtuelle
+  Future<void> deleteVirtualTransaction(int transactionId) async {
+    final prefs = await database;
+    await prefs.remove('virtual_transaction_$transactionId');
+    debugPrint('🗑️ Transaction virtuelle supprimée: ID=$transactionId');
+  }
+
+  // === CRUD RETRAITS VIRTUELS ===
+  
+  /// Sauvegarder un retrait virtuel
+  Future<RetraitVirtuelModel> saveRetraitVirtuel(RetraitVirtuelModel retrait) async {
+    final prefs = await database;
+    final retraitId = retrait.id ?? DateTime.now().millisecondsSinceEpoch;
+    final updatedRetrait = retrait.id == null 
+        ? retrait.copyWith(
+            id: retraitId,
+            lastModifiedAt: DateTime.now(),
+          )
+        : retrait;
+    await prefs.setString('retrait_virtuel_$retraitId', jsonEncode(updatedRetrait.toJson()));
+    debugPrint('Retrait virtuel sauvegarde: ID=$retraitId, Montant=\$${updatedRetrait.montant}');
+    return updatedRetrait;
+  }
+
+  /// Mettre à jour un retrait virtuel
+  Future<void> updateRetraitVirtuel(RetraitVirtuelModel retrait) async {
+    if (retrait.id == null) throw Exception('Retrait ID is required for update');
+    await saveRetraitVirtuel(retrait);
+  }
+
+  /// Récupérer tous les retraits virtuels (avec filtres optionnels)
+  Future<List<RetraitVirtuelModel>> getAllRetraitsVirtuels({
+    int? shopSourceId,
+    int? shopDebiteurId,
+    String? simNumero,
+    DateTime? dateDebut,
+    DateTime? dateFin,
+    RetraitVirtuelStatus? statut,
+  }) async {
+    final prefs = await database;
+    final retraits = <RetraitVirtuelModel>[];
+    
+    final keys = prefs.getKeys();
+    for (String key in keys) {
+      if (key.startsWith('retrait_virtuel_')) {
+        try {
+          final retraitData = prefs.getString(key);
+          if (retraitData != null) {
+            final retrait = RetraitVirtuelModel.fromJson(jsonDecode(retraitData));
+            
+            // Appliquer les filtres
+            bool matches = true;
+            
+            if (shopSourceId != null && retrait.shopSourceId != shopSourceId) {
+              matches = false;
+            }
+            
+            if (shopDebiteurId != null && retrait.shopDebiteurId != shopDebiteurId) {
+              matches = false;
+            }
+            
+            if (simNumero != null && retrait.simNumero != simNumero) {
+              matches = false;
+            }
+            
+            if (statut != null && retrait.statut != statut) {
+              matches = false;
+            }
+            
+            if (dateDebut != null && retrait.dateRetrait.isBefore(dateDebut)) {
+              matches = false;
+            }
+            
+            if (dateFin != null && retrait.dateRetrait.isAfter(dateFin)) {
+              matches = false;
+            }
+            
+            if (matches) {
+              retraits.add(retrait);
+            }
+          }
+        } catch (e) {
+          debugPrint('⚠️ Erreur chargement retrait virtuel $key: $e');
+        }
+      }
+    }
+    
+    // Trier par date (plus récents en premier)
+    retraits.sort((a, b) => b.dateRetrait.compareTo(a.dateRetrait));
+    return retraits;
+  }
+
+  /// Supprimer un retrait virtuel
+  Future<void> deleteRetraitVirtuel(int retraitId) async {
+    final prefs = await database;
+    await prefs.remove('retrait_virtuel_$retraitId');
+    debugPrint('Retrait virtuel supprime: ID=$retraitId');
+  }
+
+  // === CRUD CLOTURES VIRTUELLES ===
+  
+  /// Sauvegarder une clôture virtuelle
+  Future<ClotureVirtuelleModel> saveClotureVirtuelle(ClotureVirtuelleModel cloture) async {
+    final prefs = await database;
+    final clotureId = cloture.id ?? DateTime.now().millisecondsSinceEpoch;
+    final updatedCloture = cloture.id == null 
+        ? cloture.copyWith(
+            id: clotureId,
+            lastModifiedAt: DateTime.now(),
+          )
+        : cloture;
+    await prefs.setString('cloture_virtuelle_$clotureId', jsonEncode(updatedCloture.toJson()));
+    debugPrint('Cloture virtuelle sauvegardee: ID=$clotureId, Date=${updatedCloture.dateCloture}');
+    return updatedCloture;
+  }
+
+  /// Recuperer toutes les clotures virtuelles
+  Future<List<ClotureVirtuelleModel>> getAllCloturesVirtuelles({
+    int? shopId,
+    DateTime? dateDebut,
+    DateTime? dateFin,
+  }) async {
+    final prefs = await database;
+    final clotures = <ClotureVirtuelleModel>[];
+    
+    final keys = prefs.getKeys();
+    for (String key in keys) {
+      if (key.startsWith('cloture_virtuelle_')) {
+        try {
+          final clotureData = prefs.getString(key);
+          if (clotureData != null) {
+            final cloture = ClotureVirtuelleModel.fromJson(jsonDecode(clotureData));
+            
+            // Appliquer les filtres
+            bool matches = true;
+            
+            if (shopId != null && cloture.shopId != shopId) {
+              matches = false;
+            }
+            
+            if (dateDebut != null && cloture.dateCloture.isBefore(dateDebut)) {
+              matches = false;
+            }
+            
+            if (dateFin != null && cloture.dateCloture.isAfter(dateFin)) {
+              matches = false;
+            }
+            
+            if (matches) {
+              clotures.add(cloture);
+            }
+          }
+        } catch (e) {
+          debugPrint('Erreur chargement cloture virtuelle $key: $e');
+        }
+      }
+    }
+    
+    // Trier par date (plus recents en premier)
+    clotures.sort((a, b) => b.dateCloture.compareTo(a.dateCloture));
+    return clotures;
+  }
+
+  /// Recuperer une cloture virtuelle par shop et date
+  Future<ClotureVirtuelleModel?> getClotureVirtuelleByDate(int shopId, DateTime date) async {
+    final allClotures = await getAllCloturesVirtuelles(shopId: shopId);
+    
+    final dateOnly = DateTime(date.year, date.month, date.day);
+    
+    try {
+      return allClotures.firstWhere(
+        (c) {
+          final clotureDate = DateTime(c.dateCloture.year, c.dateCloture.month, c.dateCloture.day);
+          return clotureDate.isAtSameMomentAs(dateOnly);
+        },
+      );
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Verifier si une cloture existe pour une date
+  Future<bool> clotureVirtuelleExistsPourDate(int shopId, DateTime date) async {
+    final cloture = await getClotureVirtuelleByDate(shopId, date);
+    return cloture != null;
+  }
+
+  /// Supprimer une cloture virtuelle
+  Future<void> deleteClotureVirtuelle(int clotureId) async {
+    final prefs = await database;
+    await prefs.remove('cloture_virtuelle_$clotureId');
+    debugPrint('Cloture virtuelle supprimee: ID=$clotureId');
   }
 
 }

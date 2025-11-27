@@ -352,6 +352,12 @@ class _CreateSimDialogState extends State<CreateSimDialog> {
       
       final soldeInitial = double.tryParse(_soldeInitialController.text) ?? 0.0;
       
+      debugPrint('📦 [CreateSimDialog] Début création SIM...');
+      debugPrint('   Numéro: ${_numeroController.text.trim()}');
+      debugPrint('   Opérateur: $_selectedOperateur');
+      debugPrint('   Shop ID: ${_selectedShop!.id}');
+      debugPrint('   Shop: ${_selectedShop!.designation}');
+      
       final sim = await SimService.instance.createSim(
         numero: _numeroController.text.trim(),
         operateur: _selectedOperateur,
@@ -361,21 +367,45 @@ class _CreateSimDialogState extends State<CreateSimDialog> {
         creePar: currentUser.username,
       );
       
+      debugPrint('✅ [CreateSimDialog] Résultat création: ${sim != null ? "SUCCÈS" : "ÉCHEC"}');
+      if (sim != null) {
+        debugPrint('   SIM créée - ID: ${sim.id}, Numéro: ${sim.numero}');
+      } else {
+        debugPrint('   Erreur: ${SimService.instance.errorMessage}');
+      }
+      
       if (sim != null && mounted) {
+        debugPrint('🔄 [CreateSimDialog] Rechargement des SIMs dans tous les providers...');
+        // Recharger les SIMs dans le provider pour mettre à jour partout
+        await SimService.instance.loadSims();
+        
         Navigator.pop(context, sim);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('✅ SIM créée avec succès: ${sim.numero}'),
             backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else if (mounted) {
+        final errorMsg = SimService.instance.errorMessage ?? 'Erreur inconnue';
+        debugPrint('❌ [CreateSimDialog] Affichage erreur: $errorMsg');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ $errorMsg'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
           ),
         );
       }
     } catch (e) {
+      debugPrint('❌ [CreateSimDialog] Exception: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('❌ Erreur: $e'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
           ),
         );
       }

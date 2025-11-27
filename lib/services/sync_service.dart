@@ -14,6 +14,7 @@ import 'rates_service.dart';
 import 'transfer_sync_service.dart';
 import 'compte_special_service.dart';
 import 'auth_service.dart'; // Add this import
+import 'flot_service.dart'; // Add FlotService import
 import 'local_db.dart';
 import '../models/shop_model.dart';
 import '../models/agent_model.dart';
@@ -26,6 +27,8 @@ import '../models/compte_special_model.dart';
 import '../models/document_header_model.dart';
 import '../models/cloture_caisse_model.dart';
 import '../models/flot_model.dart' as flot_model;
+import '../models/sim_model.dart';
+import '../models/virtual_transaction_model.dart';
 import '../config/app_config.dart';
 
 /// Service de synchronisation bidirectionnelle avec gestion des conflits
@@ -242,7 +245,7 @@ class SyncService {
       debugPrint('🔄 Synchronisation des flots en file d\'attente...');
       await syncPendingFlots();
       
-      final dependentTables = ['agents', 'clients', 'operations', 'taux', 'commissions', 'comptes_speciaux', 'document_headers', 'cloture_caisse', 'flots'];
+      final dependentTables = ['agents', 'clients', 'operations', 'taux', 'commissions', 'comptes_speciaux', 'document_headers', 'cloture_caisse', 'flots', 'sims', 'virtual_transactions'];
       for (String table in dependentTables) {
         try {
           await _uploadTableDataWithRetry(table, userIdToUse, userRole); // Pass user role
@@ -358,7 +361,7 @@ class SyncService {
   /// Upload des changements locaux vers le serveur
   Future<void> _uploadLocalChanges(String userId) async {
     // NOTE: 'operations' est maintenant inclus dans la sync normale
-    final tables = ['shops', 'agents', 'clients', 'operations', 'taux', 'commissions', 'document_headers', 'cloture_caisse'];
+    final tables = ['shops', 'agents', 'clients', 'operations', 'taux', 'commissions', 'document_headers', 'cloture_caisse', 'sims', 'virtual_transactions'];
     int successCount = 0;
     int errorCount = 0;
     
@@ -512,7 +515,7 @@ class SyncService {
       final response = await http.post(
         Uri.parse('$baseUrl/$tableName/upload.php'),
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json; charset=utf-8',
           'Accept': 'application/json',
         },
         body: jsonEncode({
@@ -600,10 +603,21 @@ class SyncService {
     try {
       final lastSync = await _getLastSyncTimestamp(tableName);
       
-      // Pour les tables standards, utiliser le timestamp de dernière sync
-      String sinceParam = lastSync != null 
-          ? lastSync.toIso8601String() 
+      // OPTIMIZATION: Add 60-second overlap window to prevent missing data
+      // This ensures we catch any concurrent modifications that happened
+      // during the previous sync window
+      DateTime? adjustedSince;
+      if (lastSync != null) {
+        adjustedSince = lastSync.subtract(const Duration(seconds: 60));
+        debugPrint('🔄 $tableName: Overlap window applied (60s before $lastSync)');
+      }
+      
+      // Pour les tables standards, utiliser le timestamp de dernière sync avec overlap
+      String sinceParam = adjustedSince != null 
+          ? adjustedSince.toIso8601String() 
           : '2020-01-01T00:00:00.000';  // Date par défaut très ancienne
+      
+      debugPrint('📥 $tableName: Downloading since $sinceParam ${adjustedSince != null ? '(with 60s overlap)' : '(initial sync)'}');
       
       final baseUrl = await _baseUrl;
       
@@ -635,6 +649,20 @@ class SyncService {
         } else {
           debugPrint('👤 Mode AGENT: filtrage $tableName par shop_id=$currentShopId');
         }
+      } else if (tableName == 'flots') {
+        // Pour flots, filtrer par shop (source OU destination)
+        final queryParams = {
+          'since': sinceParam,
+        };
+        
+        if (userRole != 'admin' && currentShopId != null) {
+          queryParams['shop_id'] = currentShopId.toString();
+          debugPrint('🚚 Mode AGENT: filtrage FLOTs par shop_id=$currentShopId (source OU destination)');
+        } else {
+          debugPrint('👑 Mode ADMIN: téléchargement de tous les FLOTs');
+        }
+        
+        uri = Uri.parse('$baseUrl/$tableName/$endpoint').replace(queryParameters: queryParams);
       } else if (tableName == 'operations') {
         // Pour operations, ajouter les paramètres requis
         final queryParams = {
@@ -656,7 +684,7 @@ class SyncService {
       final response = await http.get(
         uri,
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json; charset=utf-8',
           'Accept': 'application/json',
         },
       ).timeout(_syncTimeout);
@@ -693,7 +721,10 @@ class SyncService {
               case 'flots':
                 // Recharger les flots dans le service
                 debugPrint('🚚 Rechargement des FLOTs en mémoire...');
-                // Les FLOTs sont chargés par FlotService si nécessaire
+                await FlotService.instance.loadFlots(
+                  shopId: currentShopId,
+                  isAdmin: userRole == 'admin',
+                );
                 break;
               case 'document_headers':
               case 'cloture_caisse':
@@ -769,7 +800,7 @@ class SyncService {
               conflicts++;
             }
           } else {
-            // Pas de conflit - mettre à jour
+            // Pas de conflit - mettre à jour avec les données distantes
             await _updateLocalEntity(tableName, remoteEntity);
             updated++;
             debugPrint('✏️ $tableName ID $entityId mis à jour');
@@ -803,8 +834,15 @@ class SyncService {
         await CompteSpecialService.instance.loadTransactions();
         break;
       case 'flots':
-        // Les FLOTs sont rechargés par FlotService si nécessaire
-        debugPrint('🚚 FLOTs: Chargement à la demande par FlotService');
+        // Recharger les FLOTs automatiquement après traitement
+        debugPrint('🚚 Rechargement des FLOTs après traitement...');
+        final prefs = await SharedPreferences.getInstance();
+        final currentShopId = prefs.getInt('current_shop_id');
+        final currentUserRole = prefs.getString('current_user_role') ?? 'agent';
+        await FlotService.instance.loadFlots(
+          shopId: currentShopId,
+          isAdmin: currentUserRole == 'admin',
+        );
         break;
       case 'document_headers':
       case 'cloture_caisse':
@@ -1159,6 +1197,42 @@ class SyncService {
             unsyncedData = allFlots.map((flot) => _addSyncMetadata(flot.toJson(), 'flot')).toList();
           }
           break;
+        
+        case 'sims':
+          // Récupérer toutes les SIMs depuis LocalDB
+          final allSims = await LocalDB.instance.getAllSims();
+          debugPrint('📱 SIMS: Total SIMs en mémoire: ${allSims.length}');
+          
+          // Filtrer uniquement les SIMs non synchronisées
+          unsyncedData = allSims
+              .where((sim) => sim.isSynced != true)
+              .map((sim) {
+                final json = _addSyncMetadata(sim.toJson(), 'sim');
+                debugPrint('📤 SIM ${sim.numero} à synchroniser: ${sim.operateur} - Solde: ${sim.soldeActuel}');
+                return json;
+              })
+              .toList();
+          
+          debugPrint('📤 SIMS: ${unsyncedData.length}/${allSims.length} non synchronisées');
+          break;
+        
+        case 'virtual_transactions':
+          // Récupérer toutes les transactions virtuelles depuis LocalDB
+          final allVirtualTransactions = await LocalDB.instance.getAllVirtualTransactions();
+          debugPrint('💰 VIRTUAL_TRANSACTIONS: Total en mémoire: ${allVirtualTransactions.length}');
+          
+          // Filtrer uniquement les transactions non synchronisées
+          unsyncedData = allVirtualTransactions
+              .where((transaction) => transaction.isSynced != true)
+              .map((transaction) {
+                final json = _addSyncMetadata(transaction.toJson(), 'virtual_transaction');
+                debugPrint('📤 Virtual Transaction ${transaction.reference} à synchroniser: ${transaction.simNumero} - ${transaction.montantVirtuel} ${transaction.devise}');
+                return json;
+              })
+              .toList();
+          
+          debugPrint('📤 VIRTUAL_TRANSACTIONS: ${unsyncedData.length}/${allVirtualTransactions.length} non synchronisées');
+          break;
           
         case 'audit_log':
           // Récupérer les audits depuis SharedPreferences
@@ -1502,18 +1576,93 @@ class SyncService {
           break;
         
         case 'flots':
-          final flot = flot_model.FlotModel.fromJson(data);
-          
           // Vérifier si le flot existe déjà
-          final existingFlot = await LocalDB.instance.getFlotById(flot.id!);
-          if (existingFlot != null) {
-            debugPrint('⚠️ Doublon ignoré: flot ID ${flot.id} existe déjà');
-            return;
+          final flotId = data['id'];
+          if (flotId != null) {
+            final existingFlot = await LocalDB.instance.getFlotById(flotId);
+            if (existingFlot != null) {
+              debugPrint('⚠️ Doublon ignoré: flot ID $flotId existe déjà');
+              return;
+            }
           }
+          
+          // CRITIQUE: Résoudre shop_source_designation et shop_destination_designation si manquantes
+          String? shopSourceDesignation = data['shop_source_designation'];
+          String? shopDestinationDesignation = data['shop_destination_designation'];
+          
+          if (shopSourceDesignation == null || shopSourceDesignation.isEmpty) {
+            final shopSourceId = data['shop_source_id'];
+            if (shopSourceId != null) {
+              final shops = ShopService.instance.shops;
+              final shop = shops.where((s) => s.id == shopSourceId).firstOrNull;
+              if (shop != null) {
+                shopSourceDesignation = shop.designation;
+                debugPrint('🔍 Flot: shop_source_id $shopSourceId → shop_source_designation "$shopSourceDesignation"');
+              } else {
+                debugPrint('⚠️ Shop source ID $shopSourceId non trouvé');
+              }
+            }
+          }
+          
+          if (shopDestinationDesignation == null || shopDestinationDesignation.isEmpty) {
+            final shopDestinationId = data['shop_destination_id'];
+            if (shopDestinationId != null) {
+              final shops = ShopService.instance.shops;
+              final shop = shops.where((s) => s.id == shopDestinationId).firstOrNull;
+              if (shop != null) {
+                shopDestinationDesignation = shop.designation;
+                debugPrint('🔍 Flot: shop_destination_id $shopDestinationId → shop_destination_designation "$shopDestinationDesignation"');
+              } else {
+                debugPrint('⚠️ Shop destination ID $shopDestinationId non trouvé');
+              }
+            }
+          }
+          
+          // Créer le flot avec les désignations résolues
+          final flotData = {
+            ...data,
+            'shop_source_designation': shopSourceDesignation,
+            'shop_destination_designation': shopDestinationDesignation,
+          };
+          final flot = flot_model.FlotModel.fromJson(flotData);
           
           // Sauvegarder le flot
           await LocalDB.instance.saveFlot(flot);
           debugPrint('✅ Flot ID ${flot.id} sauvegardé: ${flot.shopSourceDesignation} → ${flot.shopDestinationDesignation} - ${flot.montant} ${flot.devise}');
+          break;
+          
+        case 'sims':
+          // Vérifier si la SIM existe déjà
+          final simId = data['id'];
+          if (simId != null) {
+            final existingSim = await LocalDB.instance.getSimById(simId);
+            if (existingSim != null) {
+              debugPrint('⚠️ Doublon ignoré: SIM ID $simId existe déjà');
+              return;
+            }
+          }
+          
+          // Créer et sauvegarder la SIM
+          final sim = SimModel.fromJson(data);
+          await LocalDB.instance.saveSim(sim);
+          debugPrint('✅ SIM ID ${sim.id} sauvegardée: ${sim.numero} - ${sim.operateur} - Solde: ${sim.soldeActuel}');
+          break;
+          
+        case 'virtual_transactions':
+          // Vérifier si la transaction existe déjà
+          final vtId = data['id'];
+          if (vtId != null) {
+            final existingVt = await LocalDB.instance.getVirtualTransactionById(vtId);
+            if (existingVt != null) {
+              debugPrint('⚠️ Doublon ignoré: Transaction virtuelle ID $vtId existe déjà');
+              return;
+            }
+          }
+          
+          // Créer et sauvegarder la transaction virtuelle
+          final vt = VirtualTransactionModel.fromJson(data);
+          await LocalDB.instance.saveVirtualTransaction(vt);
+          debugPrint('✅ Transaction virtuelle ID ${vt.id} sauvegardée: ${vt.reference} - ${vt.simNumero} - ${vt.montantVirtuel} ${vt.devise}');
           break;
           
         default:
@@ -1660,9 +1809,61 @@ class SyncService {
           break;
         
         case 'flots':
-          final flot = flot_model.FlotModel.fromJson(data);
+          // CRITIQUE: Résoudre shop_source_designation et shop_destination_designation si manquantes
+          String? shopSourceDesignation = data['shop_source_designation'];
+          String? shopDestinationDesignation = data['shop_destination_designation'];
+          
+          if (shopSourceDesignation == null || shopSourceDesignation.isEmpty) {
+            final shopSourceId = data['shop_source_id'];
+            if (shopSourceId != null) {
+              final shops = ShopService.instance.shops;
+              final shop = shops.where((s) => s.id == shopSourceId).firstOrNull;
+              if (shop != null) {
+                shopSourceDesignation = shop.designation;
+                debugPrint('🔍 Flot UPDATE: shop_source_id $shopSourceId → shop_source_designation "$shopSourceDesignation"');
+              } else {
+                debugPrint('⚠️ Shop source ID $shopSourceId non trouvé');
+              }
+            }
+          }
+          
+          if (shopDestinationDesignation == null || shopDestinationDesignation.isEmpty) {
+            final shopDestinationId = data['shop_destination_id'];
+            if (shopDestinationId != null) {
+              final shops = ShopService.instance.shops;
+              final shop = shops.where((s) => s.id == shopDestinationId).firstOrNull;
+              if (shop != null) {
+                shopDestinationDesignation = shop.designation;
+                debugPrint('🔍 Flot UPDATE: shop_destination_id $shopDestinationId → shop_destination_designation "$shopDestinationDesignation"');
+              } else {
+                debugPrint('⚠️ Shop destination ID $shopDestinationId non trouvé');
+              }
+            }
+          }
+          
+          // Créer le flot avec les désignations résolues
+          final flotData = {
+            ...data,
+            'shop_source_designation': shopSourceDesignation,
+            'shop_destination_designation': shopDestinationDesignation,
+          };
+          final flot = flot_model.FlotModel.fromJson(flotData);
           await LocalDB.instance.saveFlot(flot);
           debugPrint('✅ Flot ID ${flot.id} mis à jour');
+          break;
+          
+        case 'sims':
+          // Mettre à jour la SIM
+          final sim = SimModel.fromJson(data);
+          await LocalDB.instance.updateSim(sim);
+          debugPrint('✅ SIM ID ${sim.id} mise à jour: ${sim.numero} - ${sim.operateur} - Solde: ${sim.soldeActuel}');
+          break;
+          
+        case 'virtual_transactions':
+          // Mettre à jour la transaction virtuelle
+          final vt = VirtualTransactionModel.fromJson(data);
+          await LocalDB.instance.updateVirtualTransaction(vt);
+          debugPrint('✅ Transaction virtuelle ID ${vt.id} mise à jour: ${vt.reference} - ${vt.simNumero}');
           break;
           
         default:
@@ -1797,6 +1998,28 @@ class SyncService {
               flotJson['is_synced'] = true;
               flotJson['synced_at'] = now.toIso8601String();
               await prefs.setString('flot_$entityId', jsonEncode(flotJson));
+            }
+            break;
+          
+          case 'sims':
+            final prefs = await LocalDB.instance.database;
+            final simData = prefs.getString('sim_$entityId');
+            if (simData != null) {
+              final simJson = jsonDecode(simData);
+              simJson['is_synced'] = true;
+              simJson['synced_at'] = now.toIso8601String();
+              await prefs.setString('sim_$entityId', jsonEncode(simJson));
+            }
+            break;
+          
+          case 'virtual_transactions':
+            final prefs = await LocalDB.instance.database;
+            final vtData = prefs.getString('virtual_transaction_$entityId');
+            if (vtData != null) {
+              final vtJson = jsonDecode(vtData);
+              vtJson['is_synced'] = true;
+              vtJson['synced_at'] = now.toIso8601String();
+              await prefs.setString('virtual_transaction_$entityId', jsonEncode(vtJson));
             }
             break;
         }
@@ -2432,7 +2655,10 @@ class SyncService {
         // Uploader le flot
         final response = await http.post(
           Uri.parse('$baseUrl/flots/upload.php'),
-          headers: {'Content-Type': 'application/json'},
+          headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Accept': 'application/json',
+          },
           body: jsonEncode({
             'entities': [flot],
             'user_id': flot['lastModifiedBy'] ?? 'offline_user',

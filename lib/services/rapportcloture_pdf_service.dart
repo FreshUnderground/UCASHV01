@@ -144,7 +144,7 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                       // Transferts Reçus Groupés
                       if (rapport.transfertsRecusGroupes.isNotEmpty) ...[
                         pw.SizedBox(height: 4),
-                        pw.Text('Transferts Reçus Détails:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                        pw.Text('Transferts Reçus:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
                         pw.Divider(),
                         ...rapport.transfertsRecusGroupes.entries.map((entry) => _buildDetailRow(entry.key, 'Total du jour', entry.value, PdfColors.green700)),
                       ],
@@ -156,24 +156,11 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                         pw.Divider(),
                         ...rapport.transfertsServisGroupes.entries.map((entry) => _buildDetailRow(entry.key, 'Total du jour', entry.value, PdfColors.red700)),
                       ],
-                      
-                      // Transferts En Attente - Détails individuels puis groupés
-                      if (rapport.transfertsEnAttenteDetails.isNotEmpty) ...[
-                        pw.SizedBox(height: 4),
-                        pw.Text('Transferts En Attente Détails Individuels:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: PdfColors.orange700)),
-                        pw.Divider(),
-                        ...rapport.transfertsEnAttenteDetails.map((transfert) => _buildOperationDetailRow(
-                          transfert.destinataire ?? 'N/A',
-                          '${DateFormat('dd/MM HH:mm').format(transfert.date)} - ${transfert.modePaiement}',
-                          transfert.montant,
-                          PdfColors.orange700,
-                        )),
-                      ],
-                      
+                     
                       // Transferts En Attente Groupés par Shop
                       if (rapport.transfertsEnAttenteGroupes.isNotEmpty) ...[
                         pw.SizedBox(height: 4),
-                        pw.Text('Transferts En Attente (Groupé par Shop):', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                        pw.Text('Transferts En Attente:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
                         pw.Divider(),
                         ...rapport.transfertsEnAttenteGroupes.entries.map((entry) => _buildDetailRow(entry.key, 'Total du jour', entry.value, PdfColors.orange700)),
                       ],

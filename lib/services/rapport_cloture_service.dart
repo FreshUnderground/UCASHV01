@@ -318,8 +318,7 @@ class RapportClotureService {
         (op.type == OperationType.transfertNational ||
          op.type == OperationType.transfertInternationalEntrant ||
          op.type == OperationType.transfertInternationalSortant) &&
-        (op.statut == OperationStatus.enAttente || 
-         (op.statut == OperationStatus.validee && op.dateValidation == null))
+        (op.statut == OperationStatus.enAttente )
     ).toList();
     
     // Créer la liste détaillée des transferts en attente
@@ -725,24 +724,24 @@ class RapportClotureService {
     // Récupérer tous les shops pour obtenir leurs désignations
     final allShops = await LocalDB.instance.getAllShops();
     
-    // Filtrer les transferts reçus (validees) pour le shop courant
+    // Filtrer les transferts reçus (validees) pour le shop courant - utilise dateValidation si disponible, sinon createdAt
     final transfertsRecus = operations.where((op) =>
         op.shopDestinationId == shopId &&
         (op.type == OperationType.transfertNational ||
          op.type == OperationType.transfertInternationalEntrant ||
          op.type == OperationType.transfertInternationalSortant) &&
         op.statut == OperationStatus.validee &&
-        _isSameDay(op.lastModifiedAt ?? op.dateOp, dateRapport)
+        _isSameDay(op.dateValidation ?? op.createdAt ?? op.dateOp, dateRapport)
     ).toList();
 
-    // Filtrer les transferts servis (validees) par le shop courant
+    // Filtrer les transferts servis (validees) par le shop courant - utilise dateValidation si disponible, sinon createdAt
     final transfertsServis = operations.where((op) =>
         op.shopSourceId == shopId &&
         (op.type == OperationType.transfertNational ||
          op.type == OperationType.transfertInternationalSortant ||
          op.type == OperationType.transfertInternationalEntrant) &&
         op.statut == OperationStatus.validee &&
-        _isSameDay(op.lastModifiedAt ?? op.dateOp, dateRapport)
+        _isSameDay(op.dateValidation ?? op.createdAt ?? op.dateOp, dateRapport)
     ).toList();
 
     // Filtrer les transferts en attente pour le shop courant

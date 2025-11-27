@@ -28,16 +28,14 @@ class CompteSpecialService extends ChangeNotifier {
       final keys = prefs.getKeys();
       _transactions = [];
 
+      // TOUJOURS charger TOUTES les transactions
+      // Le filtrage se fera au niveau de getStatistics, getFrais, getDepenses
       for (String key in keys) {
         if (key.startsWith('compte_special_')) {
           final data = prefs.getString(key);
           if (data != null) {
             final transaction = CompteSpecialModel.fromJson(jsonDecode(data));
-            
-            // Filtrer par shop si spécifié
-            if (shopId == null || transaction.shopId == shopId) {
-              _transactions.add(transaction);
-            }
+            _transactions.add(transaction);
           }
         }
       }
@@ -45,7 +43,11 @@ class CompteSpecialService extends ChangeNotifier {
       // Trier par date décroissante
       _transactions.sort((a, b) => b.dateTransaction.compareTo(a.dateTransaction));
       
-      debugPrint('📊 ${_transactions.length} transactions de comptes spéciaux chargées');
+      debugPrint('📊 ${_transactions.length} transactions de comptes spéciaux chargées (toutes shops)');
+      if (shopId != null) {
+        final filteredCount = _transactions.where((t) => t.shopId == shopId).length;
+        debugPrint('   → $filteredCount transactions pour shop $shopId');
+      }
     } catch (e) {
       debugPrint('❌ Erreur chargement comptes spéciaux: $e');
     } finally {
@@ -261,6 +263,14 @@ class CompteSpecialService extends ChangeNotifier {
     );
   }
 
+  /// Obtenir la date effective pour filtrage (dateTransaction ou createdAt si null)
+  DateTime _getEffectiveDate(CompteSpecialModel transaction) {
+    // Si dateTransaction existe et est valide, l'utiliser
+    // Sinon, utiliser createdAt comme fallback
+    // Cela permet de gérer les cas où date_validation pourrait être null
+    return transaction.dateTransaction;
+  }
+
   /// Supprimer une transaction
   Future<bool> deleteTransaction(int id, {int? shopId}) async {
     try {
@@ -310,46 +320,114 @@ class CompteSpecialService extends ChangeNotifier {
 
   /// Calculer le solde du compte FRAIS
   double getSoldeFrais({int? shopId, DateTime? startDate, DateTime? endDate}) {
-    return _transactions
-        .where((t) => 
-            t.type == TypeCompteSpecial.FRAIS &&
-            (shopId == null || t.shopId == shopId) &&
-            (startDate == null || t.dateTransaction.isAfter(startDate)) &&
-            (endDate == null || t.dateTransaction.isBefore(endDate)))
-        .fold(0.0, (sum, t) => sum + t.montant); // Montants positifs (commissions) et négatifs (retraits)
+    return _transactions.where((t) {
+      // Filtre par type
+      if (t.type != TypeCompteSpecial.FRAIS) return false;
+      
+      // Filtre par shop
+      if (shopId != null && t.shopId != shopId) return false;
+      
+      // Obtenir la date effective (dateTransaction ou createdAt)
+      final effectiveDate = _getEffectiveDate(t);
+      
+      // Filtre par date de début (inclure startDate)
+      if (startDate != null) {
+        final startOfDay = DateTime(startDate.year, startDate.month, startDate.day);
+        if (effectiveDate.isBefore(startOfDay)) return false;
+      }
+      
+      // Filtre par date de fin (inclure endDate jusqu'à 23:59:59)
+      if (endDate != null) {
+        final endOfDay = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
+        if (effectiveDate.isAfter(endOfDay)) return false;
+      }
+      
+      return true;
+    }).fold(0.0, (sum, t) => sum + t.montant); // Montants positifs (commissions) et négatifs (retraits)
   }
 
   /// Calculer le solde du compte DÉPENSE
   double getSoldeDepense({int? shopId, DateTime? startDate, DateTime? endDate}) {
-    return _transactions
-        .where((t) => 
-            t.type == TypeCompteSpecial.DEPENSE &&
-            (shopId == null || t.shopId == shopId) &&
-            (startDate == null || t.dateTransaction.isAfter(startDate)) &&
-            (endDate == null || t.dateTransaction.isBefore(endDate)))
-        .fold(0.0, (sum, t) => sum + t.montant); // Montants positifs (dépôts) et négatifs (sorties)
+    return _transactions.where((t) {
+      // Filtre par type
+      if (t.type != TypeCompteSpecial.DEPENSE) return false;
+      
+      // Filtre par shop
+      if (shopId != null && t.shopId != shopId) return false;
+      
+      // Obtenir la date effective (dateTransaction ou createdAt)
+      final effectiveDate = _getEffectiveDate(t);
+      
+      // Filtre par date de début (inclure startDate)
+      if (startDate != null) {
+        final startOfDay = DateTime(startDate.year, startDate.month, startDate.day);
+        if (effectiveDate.isBefore(startOfDay)) return false;
+      }
+      
+      // Filtre par date de fin (inclure endDate jusqu'à 23:59:59)
+      if (endDate != null) {
+        final endOfDay = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
+        if (effectiveDate.isAfter(endOfDay)) return false;
+      }
+      
+      return true;
+    }).fold(0.0, (sum, t) => sum + t.montant); // Montants positifs (dépôts) et négatifs (sorties)
   }
 
   /// Obtenir les transactions FRAIS
   List<CompteSpecialModel> getFrais({int? shopId, DateTime? startDate, DateTime? endDate}) {
-    return _transactions
-        .where((t) => 
-            t.type == TypeCompteSpecial.FRAIS &&
-            (shopId == null || t.shopId == shopId) &&
-            (startDate == null || t.dateTransaction.isAfter(startDate)) &&
-            (endDate == null || t.dateTransaction.isBefore(endDate)))
-        .toList();
+    return _transactions.where((t) {
+      // Filtre par type
+      if (t.type != TypeCompteSpecial.FRAIS) return false;
+      
+      // Filtre par shop
+      if (shopId != null && t.shopId != shopId) return false;
+      
+      // Obtenir la date effective (dateTransaction ou createdAt)
+      final effectiveDate = _getEffectiveDate(t);
+      
+      // Filtre par date de début (inclure startDate)
+      if (startDate != null) {
+        final startOfDay = DateTime(startDate.year, startDate.month, startDate.day);
+        if (effectiveDate.isBefore(startOfDay)) return false;
+      }
+      
+      // Filtre par date de fin (inclure endDate jusqu'à 23:59:59)
+      if (endDate != null) {
+        final endOfDay = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
+        if (effectiveDate.isAfter(endOfDay)) return false;
+      }
+      
+      return true;
+    }).toList();
   }
 
   /// Obtenir les transactions DÉPENSE
   List<CompteSpecialModel> getDepenses({int? shopId, DateTime? startDate, DateTime? endDate}) {
-    return _transactions
-        .where((t) => 
-            t.type == TypeCompteSpecial.DEPENSE &&
-            (shopId == null || t.shopId == shopId) &&
-            (startDate == null || t.dateTransaction.isAfter(startDate)) &&
-            (endDate == null || t.dateTransaction.isBefore(endDate)))
-        .toList();
+    return _transactions.where((t) {
+      // Filtre par type
+      if (t.type != TypeCompteSpecial.DEPENSE) return false;
+      
+      // Filtre par shop
+      if (shopId != null && t.shopId != shopId) return false;
+      
+      // Obtenir la date effective (dateTransaction ou createdAt)
+      final effectiveDate = _getEffectiveDate(t);
+      
+      // Filtre par date de début (inclure startDate)
+      if (startDate != null) {
+        final startOfDay = DateTime(startDate.year, startDate.month, startDate.day);
+        if (effectiveDate.isBefore(startOfDay)) return false;
+      }
+      
+      // Filtre par date de fin (inclure endDate jusqu'à 23:59:59)
+      if (endDate != null) {
+        final endOfDay = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
+        if (effectiveDate.isAfter(endOfDay)) return false;
+      }
+      
+      return true;
+    }).toList();
   }
 
   /// Statistiques pour les rapports

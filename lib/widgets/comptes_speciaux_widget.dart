@@ -33,7 +33,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
   DateTime? _startDate;
   DateTime? _endDate;
   int? _selectedShopId;
-  bool _showFilters = false; // Contrôle l'affichage des filtres
+  bool _showFilters = true; // Afficher les filtres par défaut
 
   @override
   void initState() {
@@ -245,6 +245,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                 date: _startDate,
                 onDateSelected: (date) {
                   setState(() => _startDate = date);
+                  _loadData(); // Recharger les données après changement
                 },
               ),
             ),
@@ -255,6 +256,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                 date: _endDate,
                 onDateSelected: (date) {
                   setState(() => _endDate = date);
+                  _loadData(); // Recharger les données après changement
                 },
               ),
             ),
@@ -265,6 +267,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                   _startDate = null;
                   _endDate = null;
                 });
+                _loadData(); // Recharger les données après réinitialisation
               },
               icon: const Icon(Icons.clear),
               label: const Text('Réinitialiser'),
@@ -293,6 +296,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
               date: _startDate,
               onDateSelected: (date) {
                 setState(() => _startDate = date);
+                _loadData(); // Recharger les données après changement
               },
             ),
             const SizedBox(height: 8),
@@ -301,6 +305,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
               date: _endDate,
               onDateSelected: (date) {
                 setState(() => _endDate = date);
+                _loadData(); // Recharger les données après changement
               },
             ),
             const SizedBox(height: 12),
@@ -312,6 +317,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                     _startDate = null;
                     _endDate = null;
                   });
+                  _loadData(); // Recharger les données après réinitialisation
                 },
                 icon: const Icon(Icons.clear),
                 label: const Text('Réinitialiser'),
@@ -738,11 +744,30 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
               child: TabBarView(
                 children: [
                   _buildTransactionsListView(
-                    service.transactions.where((t) => 
-                      (_selectedShopId == null || t.shopId == _selectedShopId) &&
-                      (_startDate == null || t.dateTransaction.isAfter(_startDate!)) &&
-                      (_endDate == null || t.dateTransaction.isBefore(_endDate!))
-                    ).toList(),
+                    service.transactions.where((t) {
+                      // Filtre par shop
+                      if (_selectedShopId != null && t.shopId != _selectedShopId) {
+                        return false;
+                      }
+                      
+                      // Filtre par date de début (inclure les transactions >= startDate)
+                      if (_startDate != null) {
+                        final startOfDay = DateTime(_startDate!.year, _startDate!.month, _startDate!.day);
+                        if (t.dateTransaction.isBefore(startOfDay)) {
+                          return false;
+                        }
+                      }
+                      
+                      // Filtre par date de fin (inclure les transactions <= endDate + 23:59:59)
+                      if (_endDate != null) {
+                        final endOfDay = DateTime(_endDate!.year, _endDate!.month, _endDate!.day, 23, 59, 59);
+                        if (t.dateTransaction.isAfter(endOfDay)) {
+                          return false;
+                        }
+                      }
+                      
+                      return true;
+                    }).toList(),
                     isWide
                   ),
                   _buildTransactionsListView(service.getFrais(
@@ -843,7 +868,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
                         ),
-                        maxLines: 1,
+                        maxLines: 3, // Afficher jusqu'à 3 lignes
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
@@ -899,6 +924,27 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                         color: isPositive ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    // Badge du type de compte
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: transaction.type == TypeCompteSpecial.FRAIS
+                            ? const Color(0xFF10B981).withOpacity(0.1)
+                            : const Color(0xFF3B82F6).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        transaction.type == TypeCompteSpecial.FRAIS ? 'FRAIS' : 'DÉPENSE',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: transaction.type == TypeCompteSpecial.FRAIS
+                              ? const Color(0xFF10B981)
+                              : const Color(0xFF3B82F6),
+                        ),
                       ),
                     ),
                    ],
@@ -1432,7 +1478,25 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
       ),
     );
 
-    await Printing.layoutPdf(onLayout: (format) async => pdf.save());
+    // Afficher la prévisualisation dans un dialog avec PdfPreview
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => Dialog(
+          child: SizedBox(
+            width: MediaQuery.of(context).size.width * 0.9,
+            height: MediaQuery.of(context).size.height * 0.9,
+            child: PdfPreview(
+              build: (format) => pdf.save(),
+              canChangePageFormat: false,
+              canChangeOrientation: false,
+              canDebug: false,
+              pdfFileName: 'Rapport_Frais_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+            ),
+          ),
+        ),
+      );
+    }
   }
 
   // Méthodes helper pour les PDFs
@@ -1686,6 +1750,24 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
       ),
     );
 
-    await Printing.layoutPdf(onLayout: (format) async => pdf.save());
+    // Afficher la prévisualisation dans un dialog avec PdfPreview
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => Dialog(
+          child: SizedBox(
+            width: MediaQuery.of(context).size.width * 0.9,
+            height: MediaQuery.of(context).size.height * 0.9,
+            child: PdfPreview(
+              build: (format) => pdf.save(),
+              canChangePageFormat: false,
+              canChangeOrientation: false,
+              canDebug: false,
+              pdfFileName: 'Rapport_Depenses_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+            ),
+          ),
+        ),
+      );
+    }
   }
 }

@@ -19,6 +19,8 @@ import '../widgets/comptes_speciaux_widget.dart';
 import '../widgets/sync_monitor_widget.dart';
 import '../widgets/audit_history_widget.dart';
 import '../widgets/reconciliation_report_widget.dart';
+import '../widgets/virtual_transactions_widget.dart';
+import '../widgets/admin_sim_management_widget.dart';
 import '../utils/responsive_utils.dart';
 import '../theme/ucash_typography.dart';
 import '../theme/ucash_containers.dart';
@@ -607,6 +609,10 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
     return const AdminClientsWidget();
   }
 
+  Widget _buildSimsContent() {
+    return const AdminSimManagementWidget();
+  }
+
   Widget _buildTauxCommissionsContent() {
     return const TauxCommissionsManagement();
   }
@@ -671,7 +677,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
     final isMobile = size.width <= 768;
     
     return DefaultTabController(
-      length: 3,
+      length: 5,
       child: Column(
         children: [
           Container(
@@ -707,6 +713,14 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
                       icon: Icon(Icons.account_balance_wallet, size: isMobile ? 18 : 22),
                       text: 'Réconciliation',
                     ),
+                    Tab(
+                      icon: Icon(Icons.sim_card, size: isMobile ? 18 : 22),
+                      text: 'SIM',
+                    ),
+                    Tab(
+                      icon: Icon(Icons.mobile_friendly, size: isMobile ? 18 : 22),
+                      text: 'VIRTUEL',
+                    ),
                   ],
                 ),
               ],
@@ -721,12 +735,18 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
                 ),
                 _buildAuditTrailContent(),
                 _buildReconciliationContent(),
+                _buildSimsContent(),
+                _buildVirtuelContent(),
               ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildVirtuelContent() {
+    return const VirtualTransactionsWidget();
   }
 
 
