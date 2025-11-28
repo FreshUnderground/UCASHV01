@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:async';
 import '../models/flot_model.dart' as flot_model;
 import '../models/operation_model.dart';
 import '../models/retrait_virtuel_model.dart';
 import '../services/flot_service.dart';
+import '../services/flot_notification_service.dart';
+import '../services/transfer_sync_service.dart';
 import '../services/shop_service.dart';
 import '../services/auth_service.dart';
 import '../services/operation_service.dart';
@@ -24,13 +27,129 @@ class FlotManagementWidget extends StatefulWidget {
 
 class _FlotManagementWidgetState extends State<FlotManagementWidget> {
   flot_model.StatutFlot? _filtreStatut;
+  bool _isInitialized = false;
+  Timer? _autoRefreshTimer;
+  int _selectedTab = 0; // 0 = En attente, 1 = Mes Validations, 2 = Mes FLOTs
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _chargerFlots();
+    _initializeService();
+  }
+  
+  @override
+  void dispose() {
+    _autoRefreshTimer?.cancel();
+    super.dispose();
+  }
+  
+  Future<void> _initializeService() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final operationService = Provider.of<OperationService>(context, listen: false);
+    final shopId = authService.currentUser?.shopId ?? 0;
+    
+    if (shopId > 0) {
+      try {
+        // Charger les opérations du shop
+        debugPrint('📥 [FLOT-INIT] Chargement des opérations du shop $shopId...');
+        await operationService.loadOperations(shopId: shopId);
+        debugPrint('✅ [FLOT-INIT] ${operationService.operations.length} opérations chargées');
+        
+        // Initialiser le service de transferts (inclut les FLOTs)
+        final transferSync = Provider.of<TransferSyncService>(context, listen: false);
+        await transferSync.initialize(shopId);
+        
+        // Forcer un refresh immédiat depuis l'API
+        try {
+          await transferSync.forceRefreshFromAPI();
+        } catch (e) {
+          debugPrint('⚠️ [FLOT-INIT] Première synchronisation échouée: $e');
+        }
+        
+        // Démarrer le rafraîchissement automatique toutes les 5 minutes
+        _startAutoRefresh(transferSync);
+        
+        // Démarrer les notifications pour les FLOTs entrants
+        _startFlotNotifications(authService, operationService);
+        
+        if (mounted) {
+          setState(() => _isInitialized = true);
+        }
+      } catch (e) {
+        debugPrint('❌ [FLOT-INIT] Erreur d\'initialisation: $e');
+        if (mounted) {
+          setState(() => _isInitialized = true);
+        }
+      }
+    } else {
+      if (mounted) {
+        setState(() => _isInitialized = true);
+      }
+    }
+  }
+  
+  void _startAutoRefresh(TransferSyncService transferSync) {
+    _autoRefreshTimer?.cancel();
+    
+    _autoRefreshTimer = Timer.periodic(const Duration(minutes: 5), (timer) {
+      if (mounted && !transferSync.isSyncing) {
+        debugPrint('⏰ [FLOT-AUTO-REFRESH] Rafraîchissement automatique depuis l\'API...');
+        transferSync.forceRefreshFromAPI();
+      }
     });
+    
+    debugPrint('✅ [FLOT-AUTO-REFRESH] Timer démarré (5 minutes)');
+  }
+  
+  void _startFlotNotifications(AuthService authService, OperationService operationService) {
+    final flotNotificationService = FlotNotificationService();
+    
+    // Démarrer la surveillance avec un callback pour afficher les notifications
+    flotNotificationService.onNewFlotDetected = (title, message, flotId) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(message),
+              ],
+            ),
+            backgroundColor: Colors.purple.shade700,
+            duration: const Duration(seconds: 8),
+            action: SnackBarAction(
+              label: 'VOIR',
+              textColor: Colors.white,
+              onPressed: () {
+                // Basculer sur l'onglet "En attente"
+                if (mounted) {
+                  setState(() => _selectedTab = 0);
+                }
+              },
+            ),
+          ),
+        );
+      }
+    };
+    
+    // Démarrer la surveillance
+    // Utiliser AgentAuthService si disponible, sinon adapter
+    debugPrint('🔔 [FLOT-NOTIF] Démarrage des notifications pour FLOTs entrants');
+    
+    // Note: FlotNotificationService attend AgentAuthService
+    // Si vous utilisez AuthService, vous devrez adapter ou créer un wrapper
+    // Pour l'instant, on utilise juste le callback manuel
+    
+    debugPrint('✅ [FLOT-NOTIF] Notifications activées');
   }
 
   Future<void> _chargerFlots() async {
@@ -58,13 +177,13 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
       ).toList();
       debugPrint('   → Mes FLOTs (filtrés): ${mesFlots.length}');
       
-      final flotsEnCours = mesFlots.where((f) => f.statut == flot_model.StatutFlot.enRoute).toList();
+      final flotsEnCours = mesFlots.where((f) => f.statut == OperationStatus.enAttente).toList();
       debugPrint('   → En cours: ${flotsEnCours.length}');
       
-      final flotsServis = mesFlots.where((f) => f.statut == flot_model.StatutFlot.servi).toList();
+      final flotsServis = mesFlots.where((f) => f.statut == OperationStatus.validee).toList();
       debugPrint('   → Servis: ${flotsServis.length}');
       
-      final flotsAnnules = mesFlots.where((f) => f.statut == flot_model.StatutFlot.annule).toList();
+      final flotsAnnules = mesFlots.where((f) => f.statut == OperationStatus.annulee).toList();
       debugPrint('   → Annulés: ${flotsAnnules.length}');
     }
     
@@ -78,87 +197,308 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
   Widget build(BuildContext context) {
     final isMobile = MediaQuery.of(context).size.width < 600;
     
-    return Scaffold(
-      backgroundColor: Colors.grey.shade50,
-      appBar: AppBar(
-        elevation: 0,
-        flexibleSpace: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Colors.purple.shade700, Colors.blue.shade600],
+    if (!_isInitialized) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Gestion des FLOT')),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    
+    return Consumer<TransferSyncService>(
+      builder: (context, transferSync, child) {
+        final authService = Provider.of<AuthService>(context, listen: false);
+        final operationService = Provider.of<OperationService>(context, listen: false);
+        final shopId = authService.currentUser?.shopId ?? 0;
+        
+        // Déterminer les FLOTs à afficher selon l'onglet
+        List<OperationModel> displayedFlots;
+        
+        if (_selectedTab == 0) {
+          // Onglet 1: FLOTs EN ATTENTE que je dois servir (destination = moi)
+          // Utiliser la méthode spécifique pour les FLOTs
+          displayedFlots = transferSync.getPendingFlotsForShop(shopId);
+          
+          debugPrint('🔍 [FLOT] Onglet En Attente: ${displayedFlots.length} FLOTs');
+        } else if (_selectedTab == 1) {
+          // Onglet 2: MES VALIDATIONS (FLOTs que j'ai validés, destination = moi)
+          displayedFlots = operationService.operations.where((op) {
+            // Uniquement les FLOTs
+            if (op.type != OperationType.flotShopToShop) return false;
+            
+            // FLOTs validés/terminés
+            final isValidated = op.statut == OperationStatus.validee || 
+                op.statut == OperationStatus.terminee;
+            // Validés dans ce shop (destination = shop qui reçoit et valide)
+            final isForThisShop = op.shopDestinationId == shopId;
+            
+            return isValidated && isForThisShop;
+          }).toList();
+          
+          // Trier par date de modification (plus récents en premier)
+          displayedFlots.sort((a, b) => 
+            (b.lastModifiedAt ?? b.dateOp).compareTo(a.lastModifiedAt ?? a.dateOp)
+          );
+        } else {
+          // Onglet 3: MES FLOTs (FLOTs que j'ai initiés, source = moi)
+          displayedFlots = operationService.operations.where((op) {
+            // Uniquement les FLOTs
+            if (op.type != OperationType.flotShopToShop) return false;
+            
+            // FLOTs initiés par ce shop (source = moi)
+            final isMyFlot = op.shopSourceId == shopId;
+            
+            return isMyFlot;
+          }).toList();
+          
+          // Trier par date de création (plus récents en premier)
+          displayedFlots.sort((a, b) => b.dateOp.compareTo(a.dateOp));
+        }
+        
+        // Appliquer le filtre de statut si sélectionné
+        if (_filtreStatut != null) {
+          displayedFlots = displayedFlots.where((flot) {
+            if (_filtreStatut == flot_model.StatutFlot.enRoute) {
+              return flot.statut == OperationStatus.enAttente;
+            } else if (_filtreStatut == flot_model.StatutFlot.servi) {
+              return flot.statut == OperationStatus.validee || flot.statut == OperationStatus.terminee;
+            } else if (_filtreStatut == flot_model.StatutFlot.annule) {
+              return flot.statut == OperationStatus.annulee;
+            }
+            return false;
+          }).toList();
+        }
+        
+        return Scaffold(
+          backgroundColor: Colors.grey.shade50,
+          body: Padding(
+            padding: EdgeInsets.all(isMobile ? 2 : 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Onglets pour basculer entre En attente et Mes Validations
+                _buildTabBar(isMobile),
+                
+                SizedBox(height: isMobile ? 4 : 16),
+                
+                // Compteur de FLOTs
+                _buildStatusBar(isMobile, transferSync, displayedFlots.length),
+                
+                SizedBox(height: isMobile ? 4 : 20),
+                
+                // Liste des FLOTs
+                Expanded(
+                  child: displayedFlots.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.inbox, size: 64, color: Colors.grey),
+                            SizedBox(height: 16),
+                            Text(
+                              _selectedTab == 0 
+                                ? 'Aucun FLOT en attente' 
+                                : _selectedTab == 1
+                                  ? 'Aucun FLOT à valider'
+                                  : 'Aucun de mes FLOTs',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: displayedFlots.length,
+                        itemBuilder: (context, index) => _buildFlotCard(displayedFlots[index]),
+                      ),
+                ),
+              ],
             ),
           ),
+          floatingActionButton: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: LinearGradient(
+                colors: [Colors.purple.shade600, Colors.blue.shade500],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.purple.withOpacity(0.4),
+                  blurRadius: 12,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: FloatingActionButton.extended(
+              onPressed: () => _afficherDialogueNouveauFlot(),
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              icon: const Icon(Icons.add_rounded, size: 24),
+              label: Text(
+                isMobile ? 'Nouveau' : 'Nouveau FLOT',
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+  
+  Widget _buildTabBar(bool isMobile) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: EdgeInsets.all(isMobile ? 6 : 10),
+        child: Row(
+          children: [
+            // Onglet 1: En attente
+            Expanded(
+              child: _buildTabButton(
+                label: 'En attente',
+                icon: Icons.pending_actions,
+                isSelected: _selectedTab == 0,
+                onTap: () {
+                  if (mounted) {
+                    setState(() => _selectedTab = 0);
+                  }
+                },
+                isMobile: isMobile,
+              ),
+            ),
+            SizedBox(width: isMobile ? 8 : 12),
+            // Onglet 2: Validation
+            Expanded(
+              child: _buildTabButton(
+                label: 'Validation',
+                icon: Icons.check_circle,
+                isSelected: _selectedTab == 1,
+                onTap: () {
+                  if (mounted) {
+                    setState(() => _selectedTab = 1);
+                  }
+                },
+                isMobile: isMobile,
+              ),
+            ),
+            SizedBox(width: isMobile ? 8 : 12),
+            // Onglet 3: Mes Flots
+            Expanded(
+              child: _buildTabButton(
+                label: 'Mes Flots',
+                icon: Icons.send,
+                isSelected: _selectedTab == 2,
+                onTap: () {
+                  if (mounted) {
+                    setState(() => _selectedTab = 2);
+                  }
+                },
+                isMobile: isMobile,
+              ),
+            ),
+          ],
         ),
-        title: Row(
+      ),
+    );
+  }
+
+  Widget _buildTabButton({
+    required String label,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required bool isMobile,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          vertical: isMobile ? 10 : 12,
+          horizontal: isMobile ? 8 : 12,
+        ),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.purple.shade600 : Colors.grey[100],
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? Colors.purple.shade600 : Colors.grey[300]!,
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              color: isSelected ? Colors.white : Colors.grey[700],
+              size: isMobile ? 18 : 20,
+            ),
+            SizedBox(width: isMobile ? 6 : 8),
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: isSelected ? Colors.white : Colors.grey[700],
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                  fontSize: isMobile ? 13 : 14,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusBar(bool isMobile, TransferSyncService transferSync, int count) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: EdgeInsets.all(isMobile ? 12 : 16),
+        child: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(14),
+                color: Colors.purple.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.local_shipping_rounded, size: 26),
+              child: Icon(
+                Icons.local_shipping,
+                color: Colors.purple[700],
+                size: 24,
+              ),
             ),
-            const SizedBox(width: 14),
-            Flexible(
-              child: Text(
-                'Gestion des FLOT',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: isMobile ? 18 : 22,
-                  letterSpacing: -0.5,
-                ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _selectedTab == 0 
+                        ? '$count FLOT(s) en attente'
+                        : _selectedTab == 1
+                          ? '$count FLOT(s) à valider'
+                          : '$count de mes FLOTs',
+                    style: TextStyle(
+                      fontSize: isMobile ? 15 : 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[800],
+                    ),
+                  ),
+                  if (transferSync.lastSyncTime != null)
+                    Text(
+                      'Dernière mise à jour: ${DateFormat('HH:mm:ss').format(transferSync.lastSyncTime!)}',
+                      style: TextStyle(
+                        fontSize: isMobile ? 11 : 12,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                ],
               ),
             ),
           ],
-        ),
-        actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 12),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: IconButton(
-              icon: const Icon(Icons.refresh_rounded, size: 24),
-              onPressed: _chargerFlots,
-              tooltip: 'Actualiser',
-            ),
-          ),
-        ],
-      ),
-      body: ListView(
-        children: [
-          _buildHeaderInfo(),
-          _buildModernFiltres(),
-          _buildListe(),
-        ],
-      ),
-      floatingActionButton: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: LinearGradient(
-            colors: [Colors.purple.shade600, Colors.blue.shade500],
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.purple.withOpacity(0.4),
-              blurRadius: 12,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: FloatingActionButton.extended(
-          onPressed: () => _afficherDialogueNouveauFlot(),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          icon: const Icon(Icons.add_rounded, size: 24),
-          label: Text(
-            isMobile ? 'Nouveau' : 'Nouveau FLOT',
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-          ),
         ),
       ),
     );
@@ -222,18 +562,18 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
             
             // 3. FLOTS EN COURS - Deux sens selon qui a initié
             for (final flot in flotService.flots) {
-              if (flot.statut == flot_model.StatutFlot.enRoute && flot.devise == 'USD') {
+              if (flot.statut == OperationStatus.enAttente && flot.devise == 'USD') {
                 if (flot.shopSourceId == currentShopId) {
                   // NOUS avons envoyé en cours → Ils nous doivent rembourser
                   final autreShopId = flot.shopDestinationId;
                   if (autreShopId != null) {
-                    soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + flot.montant;
+                    soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + flot.montantNet;
                   }
                 } else if (flot.shopDestinationId == currentShopId) {
                   // ILS ont envoyé en cours → On leur doit rembourser
                   final autreShopId = flot.shopSourceId;
                   if (autreShopId != null) {
-                    soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - flot.montant;
+                    soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - flot.montantNet;
                   }
                 }
               }
@@ -242,11 +582,11 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
             // 4. FLOTS REÇUS ET SERVIS (shopDestinationId = nous) → On leur doit rembourser
             for (final flot in flotService.flots) {
               if (flot.shopDestinationId == currentShopId &&
-                  flot.statut == flot_model.StatutFlot.servi &&
+                  flot.statut == OperationStatus.validee &&
                   flot.devise == 'USD') {
                 final autreShopId = flot.shopSourceId;
                 if (autreShopId != null) {
-                  soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - flot.montant;
+                  soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - flot.montantNet;
                 }
               }
             }
@@ -254,11 +594,11 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
             // 5. FLOTS ENVOYÉS ET SERVIS (shopSourceId = nous) → Ils nous doivent rembourser
             for (final flot in flotService.flots) {
               if (flot.shopSourceId == currentShopId &&
-                  flot.statut == flot_model.StatutFlot.servi &&
+                  flot.statut == OperationStatus.validee &&
                   flot.devise == 'USD') {
                 final autreShopId = flot.shopDestinationId;
                 if (autreShopId != null) {
-                  soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + flot.montant;
+                  soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + flot.montantNet;
                 }
               }
             }
@@ -626,30 +966,34 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
     );
   }
 
-  Widget _buildFlotCard(flot_model.FlotModel flot) {
+  Widget _buildFlotCard(OperationModel flot) {
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentShopId = authService.currentUser?.shopId;
     final isDestination = flot.shopDestinationId == currentShopId;
-    final peutMarquerServi = isDestination && flot.statut == flot_model.StatutFlot.enRoute;
-    final peutModifier = flot.shopSourceId == currentShopId && flot.statut == flot_model.StatutFlot.enRoute;
-    final peutSupprimer = flot.shopSourceId == currentShopId && flot.statut == flot_model.StatutFlot.enRoute;
+    final peutMarquerServi = isDestination && flot.statut == OperationStatus.enAttente;
+    final peutModifier = flot.shopSourceId == currentShopId && flot.statut == OperationStatus.enAttente;
+    final peutSupprimer = flot.shopSourceId == currentShopId && flot.statut == OperationStatus.enAttente;
     final isMobile = MediaQuery.of(context).size.width < 600;
 
     Color statutColor;
     IconData statutIcon;
     
     switch (flot.statut) {
-      case flot_model.StatutFlot.enRoute:
+      case OperationStatus.enAttente:
         statutColor = Colors.orange;
         statutIcon = Icons.local_shipping;
         break;
-      case flot_model.StatutFlot.servi:
+      case OperationStatus.validee:
         statutColor = Colors.green;
         statutIcon = Icons.check_circle;
         break;
-      case flot_model.StatutFlot.annule:
+      case OperationStatus.annulee:
         statutColor = Colors.red;
         statutIcon = Icons.cancel;
+        break;
+      case OperationStatus.terminee:
+        statutColor = Colors.green;
+        statutIcon = Icons.check_circle;
         break;
     }
 
@@ -689,9 +1033,9 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
                           color: statutColor,
                         ),
                       ),
-                      if (flot.reference != null)
+                      if (flot.codeOps != null)
                         Text(
-                          flot.reference!,
+                          flot.codeOps!,
                           style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                         ),
                     ],
@@ -705,7 +1049,7 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
                     border: Border.all(color: Colors.purple.withOpacity(0.3)),
                   ),
                   child: Text(
-                    '${flot.montant.toStringAsFixed(0)} ${flot.devise}',
+                    '${flot.montantNet.toStringAsFixed(0)} ${flot.devise}',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -759,15 +1103,15 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
                 Icon(Icons.schedule, size: 14, color: Colors.grey[600]),
                 const SizedBox(width: 6),
                 Text(
-                  _formatDate(flot.dateEnvoi),
+                  _formatDate(flot.dateOp),
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
-                if (flot.dateReception != null) ...[
+                if (flot.dateValidation != null) ...[
                   const SizedBox(width: 12),
                   Icon(Icons.check, size: 14, color: Colors.green),
                   const SizedBox(width: 4),
                   Text(
-                    _formatDate(flot.dateReception!),
+                    _formatDate(flot.dateValidation!),
                     style: const TextStyle(fontSize: 12, color: Colors.green),
                   ),
                 ],
@@ -824,7 +1168,7 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
                       child: ElevatedButton.icon(
                         onPressed: () => _marquerServi(flot),
                         icon: const Icon(Icons.check_circle, size: 14),
-                        label: const Text('SERVI', style: TextStyle(fontSize: 12)),
+                        label: const Text('Récéption', style: TextStyle(fontSize: 12)),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green,
                           foregroundColor: Colors.white,
@@ -1009,19 +1353,29 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
     );
   }
 
-  Future<void> _marquerServi(flot_model.FlotModel flot) async {
+  Future<void> _marquerServi(OperationModel flot) async {
     final authService = Provider.of<AuthService>(context, listen: false);
-    final agentId = authService.currentUser?.id;
-    final agentUsername = authService.currentUser?.username;
+    final transferSync = Provider.of<TransferSyncService>(context, listen: false);
 
-    if (agentId == null) return;
+    // Vérifier que le code_ops existe
+    if (flot.codeOps == null || flot.codeOps!.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Erreur: Le FLOT n\'a pas de code d\'opération'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
 
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Confirmer la réception'),
         content: Text(
-          'Confirmez-vous avoir reçu ${flot.montant.toStringAsFixed(2)} ${flot.devise} ?',
+          'Confirmez-vous avoir reçu ${flot.montantNet.toStringAsFixed(2)} ${flot.devise} ?',
         ),
         actions: [
           TextButton(
@@ -1038,27 +1392,38 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
     );
 
     if (confirm == true) {
-      final success = await FlotService.instance.marquerFlotServi(
-        flotId: flot.id!,
-        agentRecepteurId: agentId,
-        agentRecepteurUsername: agentUsername,
-      );
+      try {
+        debugPrint('🔍 [FLOT-VALIDATION] Validation du FLOT: ${flot.codeOps}');
+        
+        // Utiliser TransferSyncService.validateTransfer (même que les transferts)
+        final success = await transferSync.validateTransfer(flot.codeOps!, 'PAYE');
 
-      if (success && mounted) {
-        await _chargerFlots(); // Recharger la liste
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Flot marqué comme servi'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('❌ Erreur lors du marquage du flot'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        if (success && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ FLOT validé avec succès'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          setState(() {}); // Refresh UI
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('❌ Erreur lors de la validation du FLOT'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } catch (e) {
+        debugPrint('❌ [FLOT-VALIDATION] Erreur: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ Erreur: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }
@@ -1091,7 +1456,7 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
   }
 
   // Add this new method for editing a flot
-  Future<void> _afficherDialogueModifierFlot(flot_model.FlotModel flot) async {
+  Future<void> _afficherDialogueModifierFlot(OperationModel flot) async {
     final authService = Provider.of<AuthService>(context, listen: false);
     final shopId = authService.currentUser?.shopId;
     
@@ -1110,7 +1475,7 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
       return;
     }
 
-    if (flot.statut != flot_model.StatutFlot.enRoute) {
+    if (flot.statut != OperationStatus.enAttente) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('❌ Seuls les flots en cours peuvent être modifiés')),
       );
@@ -1134,7 +1499,7 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
   }
 
   // Add this new method for deleting a flot
-  Future<void> _supprimerFlot(flot_model.FlotModel flot) async {
+  Future<void> _supprimerFlot(OperationModel flot) async {
     final authService = Provider.of<AuthService>(context, listen: false);
     final shopId = authService.currentUser?.shopId;
     
@@ -1153,7 +1518,7 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
       return;
     }
 
-    if (flot.statut != flot_model.StatutFlot.enRoute) {
+    if (flot.statut != OperationStatus.enAttente) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('❌ Seuls les flots en cours peuvent être supprimés')),
       );
@@ -1165,7 +1530,7 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
       builder: (context) => AlertDialog(
         title: const Text('Confirmer la suppression'),
         content: Text(
-          'Êtes-vous sûr de vouloir supprimer le flot de ${flot.montant.toStringAsFixed(2)} ${flot.devise} vers ${flot.shopDestinationDesignation} ?',
+          'Êtes-vous sûr de vouloir supprimer le flot de ${flot.montantNet.toStringAsFixed(2)} ${flot.devise} vers ${flot.shopDestinationDesignation ?? "Shop inconnu"} ?',
         ),
         actions: [
           TextButton(
@@ -1183,7 +1548,7 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
 
     if (confirm == true && mounted) {
       try {
-        await LocalDB.instance.deleteFlot(flot.id!); // This should work now
+        await LocalDB.instance.deleteOperation(flot.id!); // Use deleteOperation instead of deleteFlot
         await _chargerFlots();
         
         if (mounted) {

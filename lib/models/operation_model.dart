@@ -6,6 +6,7 @@ enum OperationType {
   retrait,
   virement,
   retraitMobileMoney, // Retrait Mobile Money (Cash-Out)
+  flotShopToShop, // FLOT: Transfert de liquidité entre shops (commission = 0)
 }
 
 enum OperationStatus {
@@ -186,6 +187,9 @@ class OperationModel {
         case 'retrait_mobile_money':
         case 'retraitmobilemoney':
           return OperationType.retraitMobileMoney;
+        case 'flotshoptoshop':
+        case 'flot_shop_to_shop':
+          return OperationType.flotShopToShop;
         default:
           return OperationType.depot;
       }
@@ -333,6 +337,8 @@ class OperationModel {
         return 'Virement';
       case OperationType.retraitMobileMoney:
         return 'Retrait Mobile Money';
+      case OperationType.flotShopToShop:
+        return 'FLOT Shop-to-Shop';
     }
   }
 

@@ -29,6 +29,7 @@ class _RetraitDialogState extends State<RetraitDialog> {
   ModePaiement _modePaiement = ModePaiement.cash;
   bool _isLoading = false;
   List<ClientModel> _clients = [];
+  DateTime _selectedDate = DateTime.now();
 
   @override
   void initState() {
@@ -199,9 +200,107 @@ class _RetraitDialogState extends State<RetraitDialog> {
             ),
             SizedBox(height: fieldSpacing),
             
-            // 3. Mode de paiement
+            // 3. Date de l'opération (Admin seulement pour dates antérieures)
             Text(
-              '3. Mode de paiement *',
+              '3. Date de l\'opération *',
+              style: TextStyle(
+                fontSize: labelFontSize,
+                fontWeight: FontWeight.bold,
+                color: Colors.orange,
+              ),
+            ),
+            SizedBox(height: isMobile ? 8 : 12),
+            
+            Consumer<AuthService>(
+              builder: (context, authService, child) {
+                final isAdmin = authService.currentUser?.role == 'admin';
+                
+                return InkWell(
+                  onTap: isAdmin ? () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: _selectedDate,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now(),
+                      helpText: 'Sélectionner la date du retrait',
+                    );
+                    if (date != null) {
+                      setState(() {
+                        _selectedDate = date;
+                      });
+                    }
+                  } : null,
+                  child: Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isMobile ? 12 : 16,
+                      vertical: isMobile ? 16 : 18,
+                    ),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade400),
+                      borderRadius: BorderRadius.circular(4),
+                      color: isAdmin ? Colors.white : Colors.grey.shade100,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.calendar_today,
+                          size: ResponsiveDialogUtils.getIconSize(context),
+                          color: isAdmin ? Colors.orange : Colors.grey,
+                        ),
+                        SizedBox(width: isMobile ? 8 : 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Date',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                              Text(
+                                '${_selectedDate.day.toString().padLeft(2, '0')}/${_selectedDate.month.toString().padLeft(2, '0')}/${_selectedDate.year}',
+                                style: TextStyle(
+                                  fontSize: isMobile ? 16 : 18,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (!isAdmin)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.shade100,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              "Aujourd'hui",
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.orange.shade800,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        if (isAdmin)
+                          Icon(
+                            Icons.arrow_drop_down,
+                            color: Colors.grey.shade600,
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+            SizedBox(height: fieldSpacing),
+            
+            // 4. Mode de paiement
+            Text(
+              '4. Mode de paiement *',
               style: TextStyle(
                 fontSize: labelFontSize,
                 fontWeight: FontWeight.bold,
@@ -271,9 +370,9 @@ class _RetraitDialogState extends State<RetraitDialog> {
             ),
             SizedBox(height: fieldSpacing),
             
-            // 4. Observation (new field)
+            // 5. Observation (new field)
             Text(
-              '4. Observation (facultatif)',
+              '5. Observation (facultatif)',
               style: TextStyle(
                 fontSize: labelFontSize,
                 fontWeight: FontWeight.bold,
@@ -454,7 +553,7 @@ class _RetraitDialogState extends State<RetraitDialog> {
         shopSourceId: shopId,
         shopSourceDesignation: shop?.designation, // Récupérer la designation
         statut: OperationStatus.terminee,
-        dateOp: DateTime.now(),
+        dateOp: _selectedDate,
         notes: 'Retrait du compte client',
         observation: _observationController.text.isNotEmpty ? _observationController.text : null,
       );

@@ -1038,6 +1038,70 @@ class LocalDB {
     await ensureAdminExists();
   }
 
+  /// Supprimer tous les shops en local (pour forcer le rechargement depuis le serveur)
+  Future<void> clearAllShops() async {
+    final prefs = await database;
+    final keys = prefs.getKeys();
+    int cleared = 0;
+    
+    for (String key in keys) {
+      if (key.startsWith('shop_')) {
+        await prefs.remove(key);
+        cleared++;
+      }
+    }
+    
+    debugPrint('🗑️ Shops supprimés en local: $cleared');
+  }
+  
+  /// Supprimer tous les clients en local (pour forcer le rechargement depuis le serveur)
+  Future<void> clearAllClients() async {
+    final prefs = await database;
+    final keys = prefs.getKeys();
+    int cleared = 0;
+    
+    for (String key in keys) {
+      if (key.startsWith('client_')) {
+        await prefs.remove(key);
+        cleared++;
+      }
+    }
+    
+    debugPrint('🗑️ Clients supprimés en local: $cleared');
+  }
+  
+  /// Supprimer toutes les commissions en local (pour forcer le rechargement depuis le serveur)
+  Future<void> clearAllCommissions() async {
+    final prefs = await database;
+    final keys = prefs.getKeys();
+    int cleared = 0;
+    
+    for (String key in keys) {
+      if (key.startsWith('commission_')) {
+        await prefs.remove(key);
+        cleared++;
+      }
+    }
+    
+    debugPrint('🗑️ Commissions supprimées en local: $cleared');
+  }
+  
+  /// Supprimer tous les taux en local (pour forcer le rechargement depuis le serveur)
+  Future<void> clearAllTaux() async {
+    final prefs = await database;
+    final keys = prefs.getKeys();
+    int cleared = 0;
+    
+    for (String key in keys) {
+      if (key.startsWith('taux_')) {
+        await prefs.remove(key);
+        cleared++;
+      }
+    }
+    
+    debugPrint('🗑️ Taux supprimés en local: $cleared');
+  }
+
 
   // === CRUD TRANSACTIONS ===
   Future<TransactionModel> saveTransaction(TransactionModel transaction) async {

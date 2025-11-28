@@ -97,9 +97,13 @@ try {
                         $shopId = $shop['id'];
                     }
                 }
-                if ($shopId === null) {
-                    $shopId = $entity['shop_id'] ?? 1;
+                // Si aucun shop trouvé via designation, utiliser shop_id direct
+                // IMPORTANT: Pour les clients admin, shop_id peut être NULL
+                if ($shopId === null && isset($entity['shop_id']) && $entity['shop_id'] > 0) {
+                    $shopId = $entity['shop_id'];
                 }
+                // Si toujours null, laisser NULL (pour les clients admin globaux)
+                // Ne plus forcer à 1 par défaut
                 
                 // Résoudre agent_id depuis agent_username
                 $agentId = null;

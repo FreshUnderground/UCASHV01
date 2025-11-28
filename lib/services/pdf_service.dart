@@ -2,41 +2,34 @@ import 'dart:convert';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/operation_model.dart';
 import '../models/client_model.dart';
 import '../models/shop_model.dart';
 import '../models/agent_model.dart';
 import '../models/document_header_model.dart';
-import 'pdf_config_service.dart';
+import 'document_header_service.dart';
 
 /// Service PDF pour générer des reçus et rapports d'opérations
 class PdfService {
-  /// Charger l'en-tête depuis SharedPreferences
+  /// Charger l'en-tête depuis DocumentHeaderService (synchronisé avec MySQL)
   Future<DocumentHeaderModel> _loadHeaderFromCache() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final cachedData = prefs.getString('document_header_active');
-      
-      if (cachedData != null) {
-        final json = jsonDecode(cachedData);
-        return DocumentHeaderModel.fromJson(json);
-      }
+      final headerService = DocumentHeaderService();
+      await headerService.initialize();
+      return headerService.getHeaderOrDefault();
     } catch (e) {
       // Retourner en-tête par défaut si erreur
+      return DocumentHeaderModel(
+        id: 0,
+        companyName: 'UCASH',
+        companySlogan: 'Merci pour votre confiance',
+        address: '',
+        phone: '',
+        email: '',
+        website: '',
+        createdAt: DateTime.now(),
+      );
     }
-    
-    // En-tête par défaut si rien n'est trouvé
-    return DocumentHeaderModel(
-      id: 0,
-      companyName: 'UCASH',
-      companySlogan: 'Merci pour votre confiance',
-      address: '',
-      phone: '',
-      email: '',
-      website: '',
-      createdAt: DateTime.now(),
-    );
   }
   
   /// Génère un PDF de reçu pour une opération (format ticket 58mm)

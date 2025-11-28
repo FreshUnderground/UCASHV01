@@ -12,7 +12,7 @@ import '../models/operation_model.dart';
 import '../models/shop_model.dart';
 import '../models/agent_model.dart';
 import 'native_printer_service.dart';
-import 'pdf_config_service.dart';
+import 'document_header_service.dart';
 import 'pdf_service.dart';
 
 class PrinterService {
@@ -339,11 +339,16 @@ class PrinterService {
   }) async {
     final pdf = pw.Document();
     
-    // Charger la configuration PDF
-    final companyName = await PdfConfigService.getCompanyName();
-    final companyAddress = await PdfConfigService.getCompanyAddress();
-    final companyPhone = await PdfConfigService.getCompanyPhone();
-    final footerMessage = await PdfConfigService.getFooterMessage();
+    // Charger l'en-tête personnalisé depuis DocumentHeaderService (synchronisé avec MySQL)
+    final headerService = DocumentHeaderService();
+    await headerService.initialize();
+    final headerModel = headerService.getHeaderOrDefault();
+    
+    // Utiliser les données de l'en-tête
+    final companyName = headerModel.companyName;
+    final companyAddress = headerModel.address ?? '';
+    final companyPhone = headerModel.phone ?? '';
+    final footerMessage = headerModel.companySlogan ?? 'Merci pour votre confiance';
     
     final dateTime = DateFormat('dd/MM/yyyy HH:mm:ss').format(operation.dateOp);
     final typeOp = _getOperationType(operation.type);
@@ -522,11 +527,16 @@ class PrinterService {
   }) async {
     final List<LineText> lines = [];
     
-    // Charger la configuration PDF
-    final companyName = await PdfConfigService.getCompanyName();
-    final companyAddress = await PdfConfigService.getCompanyAddress();
-    final companyPhone = await PdfConfigService.getCompanyPhone();
-    final footerMessage = await PdfConfigService.getFooterMessage();
+    // Charger l'en-tête personnalisé depuis DocumentHeaderService (synchronisé avec MySQL)
+    final headerService = DocumentHeaderService();
+    await headerService.initialize();
+    final headerModel = headerService.getHeaderOrDefault();
+    
+    // Utiliser les données de l'en-tête
+    final companyName = headerModel.companyName;
+    final companyAddress = headerModel.address ?? '';
+    final companyPhone = headerModel.phone ?? '';
+    final footerMessage = headerModel.companySlogan ?? 'Merci pour votre confiance';
     
     final isDepotOrRetrait = operation.type == OperationType.depot || operation.type == OperationType.retrait;
 

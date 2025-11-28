@@ -187,6 +187,9 @@ class _TransferValidationWidgetState extends State<TransferValidationWidget> {
           debugPrint('🔍 [MES VALIDATIONS] ShopId: $shopId');
           
           displayedOperations = operationService.operations.where((op) {
+            // EXCLURE les FLOTs (flotShopToShop) - ont leur propre section
+            if (op.type == OperationType.flotShopToShop) return false;
+            
             // Transferts validés/terminés
             final isTransfer = op.type == OperationType.transfertNational ||
                 op.type == OperationType.transfertInternationalEntrant ||

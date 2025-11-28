@@ -208,37 +208,44 @@ class RapportClotureService {
 
   /// Calculer les flots (reçus, en cours, servis) + LISTES DÉTAILLÉES
   Future<Map<String, dynamic>> _calculerFlots(int shopId, DateTime dateRapport) async {
-    final flotService = FlotService.instance;
-    await flotService.loadFlots(shopId: shopId);
+    // IMPORTANT: Charger les FLOTs depuis la table operations (type = flotShopToShop)
+    // Au lieu de l'ancienne table flots
+    final operations = await LocalDB.instance.getAllOperations();
     
     // Charger tous les shops pour avoir leurs noms
     final shops = await LocalDB.instance.getAllShops();
     final shopsMap = {for (var shop in shops) shop.id: shop.designation};
 
-    // FLOT REÇUS = FLOTs vers nous (reçus aujourd'hui - utilisent date_reception, fallback sur created_at si null)
-    final flotsRecusServis = flotService.flots.where((f) =>
+    // FLOT REÇUS = FLOTs vers nous (reçus aujourd'hui - utilisent date_validation, fallback sur created_at si null)
+    final flotsRecusServis = operations.where((f) =>
+        f.type == OperationType.flotShopToShop &&
         f.shopDestinationId == shopId &&
-        f.statut == flot_model.StatutFlot.servi &&
-        _isSameDay(f.dateReception ?? f.createdAt ?? f.dateEnvoi, dateRapport)
+        f.statut == OperationStatus.validee &&
+        _isSameDay(f.dateValidation ?? f.createdAt ?? f.dateOp, dateRapport)
     ).toList();
     final flotsRecus = flotsRecusServis;
     
+    debugPrint('📥 FLOTs REÇUS (shopDestinationId=$shopId): ${flotsRecus.length} FLOTs');
+    
     // FLOT ENVOYÉS = FLOTs par nous (envoyés aujourd'hui - utilisent created_at)
-    final flotsEnvoyes = flotService.flots.where((f) =>
+    final flotsEnvoyes = operations.where((f) =>
+        f.type == OperationType.flotShopToShop &&
         f.shopSourceId == shopId &&
-        _isSameDay(f.createdAt ?? f.dateEnvoi, dateRapport)
+        _isSameDay(f.createdAt ?? f.dateOp, dateRapport)
     ).toList();
+    
+    debugPrint('📤 FLOTs ENVOYÉS (shopSourceId=$shopId): ${flotsEnvoyes.length} FLOTs');
     
     // Créer les listes détaillées pour affichage dans le rapport
     final flotsRecusDetails = flotsRecus.map((f) => FlotResume(
       flotId: f.id!,
-      shopSourceDesignation: f.shopSourceDesignation,
-      shopDestinationDesignation: f.shopDestinationDesignation,
-      montant: f.montant,
+      shopSourceDesignation: shopsMap[f.shopSourceId] ?? 'Shop inconnu',
+      shopDestinationDesignation: shopsMap[f.shopDestinationId] ?? 'Shop inconnu',
+      montant: f.montantNet,
       devise: f.devise,
       statut: f.statut.name,
-      dateEnvoi: f.dateEnvoi,
-      dateReception: f.dateReception,
+      dateEnvoi: f.dateOp,
+      dateReception: f.dateValidation,
       modePaiement: f.modePaiement.name,
     )).toList();
     
@@ -247,7 +254,7 @@ class RapportClotureService {
     for (var flot in flotsRecus) {
       final shopSourceId = flot.shopSourceId;
       final shopName = shopsMap[shopSourceId] ?? 'Shop inconnu (ID: $shopSourceId)';
-      flotsRecusGroupes[shopName] = (flotsRecusGroupes[shopName] ?? 0.0) + flot.montant;
+      flotsRecusGroupes[shopName] = (flotsRecusGroupes[shopName] ?? 0.0) + flot.montantNet;
     }
     
     debugPrint('📊 FLOTS REÇUS GROUPÉS PAR SHOP SOURCE:');
@@ -257,13 +264,13 @@ class RapportClotureService {
     
     final flotsEnvoyesDetails = flotsEnvoyes.map((f) => FlotResume(
       flotId: f.id!,
-      shopSourceDesignation: f.shopSourceDesignation,
-      shopDestinationDesignation: f.shopDestinationDesignation,
-      montant: f.montant,
+      shopSourceDesignation: shopsMap[f.shopSourceId] ?? 'Shop inconnu',
+      shopDestinationDesignation: shopsMap[f.shopDestinationId] ?? 'Shop inconnu',
+      montant: f.montantNet,
       devise: f.devise,
       statut: f.statut.name,
-      dateEnvoi: f.dateEnvoi,
-      dateReception: f.dateReception,
+      dateEnvoi: f.dateOp,
+      dateReception: f.dateValidation,
       modePaiement: f.modePaiement.name,
     )).toList();
     
@@ -272,12 +279,12 @@ class RapportClotureService {
     for (var flot in flotsEnvoyes) {
       final shopDestinationId = flot.shopDestinationId;
       final shopName = shopsMap[shopDestinationId] ?? 'Shop inconnu (ID: $shopDestinationId)';
-      flotsEnvoyesGroupes[shopName] = (flotsEnvoyesGroupes[shopName] ?? 0.0) + flot.montant;
+      flotsEnvoyesGroupes[shopName] = (flotsEnvoyesGroupes[shopName] ?? 0.0) + flot.montantNet;
     }
 
     return {
-      'recu': flotsRecus.fold(0.0, (sum, f) => sum + f.montant),     // ENTRÉE (+)
-      'envoye': flotsEnvoyes.fold(0.0, (sum, f) => sum + f.montant), // SORTIE (-)
+      'recu': flotsRecus.fold(0.0, (sum, f) => sum + f.montantNet),     // ENTRÉE (+)
+      'envoye': flotsEnvoyes.fold(0.0, (sum, f) => sum + f.montantNet), // SORTIE (-)
       'flotsRecusDetails': flotsRecusDetails,
       'flotsRecusGroupes': flotsRecusGroupes, // GROUPÉ PAR SHOP EXPÉDITEUR
       'flotsEnvoyesDetails': flotsEnvoyesDetails,
@@ -560,20 +567,20 @@ class RapportClotureService {
     
     // 3. FLOTS EN COURS - Deux sens selon qui a initié
     for (final flot in flotService.flots) {
-      if (flot.statut == flot_model.StatutFlot.enRoute && flot.devise == 'USD') {
+      if (flot.statut == OperationStatus.enAttente && flot.devise == 'USD') {
         if (flot.shopSourceId == shopId) {
           // NOUS avons envoyé en cours → Ils nous doivent rembourser
           final autreShopId = flot.shopDestinationId;
           if (autreShopId != null && autreShopId != shopId) {
-            soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + flot.montant;
-            debugPrint('   FLOT EN COURS envoyé PAR nous à Shop $autreShopId: Ils nous doivent +${flot.montant} USD');
+            soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + flot.montantNet;
+            debugPrint('   FLOT EN COURS envoyé PAR nous à Shop $autreShopId: Ils nous doivent +${flot.montantNet} USD');
           }
         } else if (flot.shopDestinationId == shopId) {
           // ILS ont envoyé en cours → On leur doit rembourser
           final autreShopId = flot.shopSourceId;
           if (autreShopId != null && autreShopId != shopId) {
-            soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - flot.montant;
-            debugPrint('   FLOT EN COURS reçu DE Shop $autreShopId: On leur doit -${flot.montant} USD');
+            soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - flot.montantNet;
+            debugPrint('   FLOT EN COURS reçu DE Shop $autreShopId: On leur doit -${flot.montantNet} USD');
           }
         }
       }
@@ -582,12 +589,12 @@ class RapportClotureService {
     // 4. FLOTS REÇUS ET SERVIS (shopDestinationId = nous) → On leur doit rembourser
     for (final flot in flotService.flots) {
       if (flot.shopDestinationId == shopId &&
-          flot.statut == flot_model.StatutFlot.servi &&
+          flot.statut == OperationStatus.validee &&
           flot.devise == 'USD') {
         final autreShopId = flot.shopSourceId;
         if (autreShopId != null && autreShopId != shopId) {
-          soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - flot.montant;
-          debugPrint('   FLOT SERVI reçu DE Shop $autreShopId: On leur doit -${flot.montant} USD');
+          soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - flot.montantNet;
+          debugPrint('   FLOT SERVI reçu DE Shop $autreShopId: On leur doit -${flot.montantNet} USD');
         }
       }
     }
@@ -595,12 +602,12 @@ class RapportClotureService {
     // 5. FLOTS ENVOYÉS ET SERVIS (shopSourceId = nous) → Ils nous doivent rembourser
     for (final flot in flotService.flots) {
       if (flot.shopSourceId == shopId &&
-          flot.statut == flot_model.StatutFlot.servi &&
+          flot.statut == OperationStatus.validee &&
           flot.devise == 'USD') {
         final autreShopId = flot.shopDestinationId;
         if (autreShopId != null && autreShopId != shopId) {
-          soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + flot.montant;
-          debugPrint('   FLOT SERVI envoyé À Shop $autreShopId: Ils nous doivent +${flot.montant} USD');
+          soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + flot.montantNet;
+          debugPrint('   FLOT SERVI envoyé À Shop $autreShopId: Ils nous doivent +${flot.montantNet} USD');
         }
       }
     }

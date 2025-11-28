@@ -1,8 +1,9 @@
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
+import 'document_header_service.dart';
 import '../models/journal_caisse_model.dart';
-import '../models/flot_model.dart';
+import '../models/operation_model.dart';
 import '../models/shop_model.dart';
 
 /// Service pour générer les PDFs des rapports (Journal Caisse, Commissions, FLOT)
@@ -18,6 +19,11 @@ Future<pw.Document> generateJournalCaisseReportPdf({
   required DateTime endDate,
 }) async {
   final pdf = pw.Document();
+  
+  // Charger le header depuis DocumentHeaderService (synchronisé avec MySQL)
+  final headerService = DocumentHeaderService();
+  await headerService.initialize();
+  final header = headerService.getHeaderOrDefault();
   
   final formattedStartDate = DateFormat('dd/MM/yyyy').format(startDate);
   final formattedEndDate = DateFormat('dd/MM/yyyy').format(endDate);
@@ -54,7 +60,13 @@ Future<pw.Document> generateJournalCaisseReportPdf({
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Text('UCASH', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                  pw.Text(header.companyName, style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                  if (header.companySlogan?.isNotEmpty ?? false)
+                    pw.Text(header.companySlogan!, style: pw.TextStyle(fontSize: 9, color: PdfColors.white)),
+                  if (header.address?.isNotEmpty ?? false)
+                    pw.Text(header.address!, style: pw.TextStyle(fontSize: 10, color: PdfColors.white)),
+                  if (header.phone?.isNotEmpty ?? false)
+                    pw.Text(header.phone!, style: pw.TextStyle(fontSize: 10, color: PdfColors.white)),
                   pw.Text(shop.designation, style: pw.TextStyle(fontSize: 10, color: PdfColors.white)),
                 ],
               ),
@@ -198,6 +210,11 @@ Future<pw.Document> generateCommissionsReportPdf({
 }) async {
   final pdf = pw.Document();
   
+  // Charger le header depuis DocumentHeaderService (synchronisé avec MySQL)
+  final headerService = DocumentHeaderService();
+  await headerService.initialize();
+  final header = headerService.getHeaderOrDefault();
+  
   final totalCommissions = reportData['totalCommissions'] as double;
   final operations = reportData['operations'] as List<Map<String, dynamic>>;
   final commissionsParType = reportData['commissionsParType'] as Map<String, double>;
@@ -223,7 +240,9 @@ Future<pw.Document> generateCommissionsReportPdf({
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Text('UCASH', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                  pw.Text(header.companyName, style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                  if (header.companySlogan?.isNotEmpty ?? false)
+                    pw.Text(header.companySlogan!, style: pw.TextStyle(fontSize: 9, color: PdfColors.white)),
                   pw.Text('Rapport Commissions', style: pw.TextStyle(fontSize: 10, color: PdfColors.white)),
                 ],
               ),
@@ -326,11 +345,16 @@ Future<pw.Document> generateCommissionsReportPdf({
 // ============================================================================
 
 Future<pw.Document> generateFlotReportPdf({
-  required List<FlotModel> flots,
+  required List<OperationModel> flots,
   required DateTime? startDate,
   required DateTime? endDate,
 }) async {
   final pdf = pw.Document();
+  
+  // Charger le header depuis DocumentHeaderService (synchronisé avec MySQL)
+  final headerService = DocumentHeaderService();
+  await headerService.initialize();
+  final header = headerService.getHeaderOrDefault();
   
   final formattedStartDate = startDate != null ? DateFormat('dd/MM/yyyy').format(startDate) : 'Début';
   final formattedEndDate = endDate != null ? DateFormat('dd/MM/yyyy').format(endDate) : 'Fin';
@@ -342,14 +366,16 @@ Future<pw.Document> generateFlotReportPdf({
   
   for (var flot in flots) {
     switch (flot.statut) {
-      case StatutFlot.enRoute:
-        totalEnRoute += flot.montant;
+      case OperationStatus.enAttente:
+        totalEnRoute += flot.montantNet;
         break;
-      case StatutFlot.servi:
-        totalServis += flot.montant;
+      case OperationStatus.validee:
+        totalServis += flot.montantNet;
         break;
-      case StatutFlot.annule:
-        totalAnnules += flot.montant;
+      case OperationStatus.annulee:
+        totalAnnules += flot.montantNet;
+        break;
+      default:
         break;
     }
   }
@@ -372,7 +398,9 @@ Future<pw.Document> generateFlotReportPdf({
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Text('UCASH', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                  pw.Text(header.companyName, style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                  if (header.companySlogan?.isNotEmpty ?? false)
+                    pw.Text(header.companySlogan!, style: pw.TextStyle(fontSize: 9, color: PdfColors.white)),
                   pw.Text('Rapport FLOT', style: pw.TextStyle(fontSize: 10, color: PdfColors.white)),
                 ],
               ),
@@ -488,14 +516,14 @@ Future<pw.Document> generateFlotReportPdf({
             ),
             ...flots.map((flot) => pw.TableRow(
               children: [
-                _buildTableCell(DateFormat('dd/MM/yy').format(flot.dateEnvoi)),
-                _buildTableCell(flot.shopSourceDesignation, maxLines: 2),
-                _buildTableCell(flot.shopDestinationDesignation, maxLines: 2),
-                _buildTableCell('${flot.montant.toStringAsFixed(2)}', bold: true),
+                _buildTableCell(DateFormat('dd/MM/yy').format(flot.dateOp)),
+                _buildTableCell(flot.shopSourceDesignation ?? 'N/A', maxLines: 2),
+                _buildTableCell(flot.shopDestinationDesignation ?? 'N/A', maxLines: 2),
+                _buildTableCell('${flot.montantNet.toStringAsFixed(2)}', bold: true),
                 _buildTableCell(
                   flot.statutLabel,
-                  color: flot.statut == StatutFlot.servi ? PdfColors.green700 : 
-                         flot.statut == StatutFlot.enRoute ? PdfColors.orange700 : PdfColors.red700,
+                  color: flot.statut == OperationStatus.validee ? PdfColors.green700 : 
+                         flot.statut == OperationStatus.enAttente ? PdfColors.orange700 : PdfColors.red700,
                 ),
               ],
             )),

@@ -7,7 +7,7 @@ import '../services/agent_service.dart';
 import '../services/flot_service.dart';
 import '../services/flot_notification_service.dart';
 import '../services/sync_service.dart';
-import '../models/flot_model.dart' as flot_model;
+import '../models/operation_model.dart';
 import '../widgets/agent_operations_list.dart';
 import '../widgets/agent_capital_overview.dart';
 import '../widgets/journal_caisse_widget.dart';
@@ -101,7 +101,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
       
       flotNotificationService.startMonitoring(
         authService: authService,
-        getFlots: () => flotService.flots,
+        getFlots: () => flotService.flots, // Returns List<OperationModel> filtered by flotShopToShop
       );
       
       // Définir le callback pour les nouvelles notifications de flots
@@ -155,6 +155,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final isDesktop = size.width > 1024;
+    final isMobile = size.width <= 768;
     
     return Consumer<AgentAuthService>(
       builder: (context, authService, child) {
@@ -174,6 +175,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
               ),
             ],
           ),
+          bottomNavigationBar: isMobile ? _buildBottomNavigation() : null,
         );
       },
     );
@@ -450,7 +452,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
         
         final pendingFlotsCount = currentShopId != null 
             ? flotService.flots.where((f) => 
-                f.statut == flot_model.StatutFlot.enRoute && 
+                f.statut == OperationStatus.enAttente && 
                 f.shopDestinationId == currentShopId
               ).length 
             : 0;
@@ -674,6 +676,99 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
 
   Widget _buildRetraitMobileMoneyContent() {
     return const RetraitMobileMoneyWidget();
+  }
+
+  Widget _buildBottomNavigation() {
+    // Map pour convertir entre l'index desktop (12 items) et l'index mobile (6 items)
+    int _getMobileNavIndex(int desktopIndex) {
+      // Dashboard=0, Rapports=1, FLOT=2, Frais=3, VIRTUEL=4, Config=5
+      switch (desktopIndex) {
+        case 0: return 0; // Dashboard
+        case 6: return 1; // Rapports
+        case 7: return 2; // FLOT
+        case 9: return 3; // Frais
+        case 11: return 4; // VIRTUEL (Retrait Mobile Money)
+        case 10: return 5; // Config
+        default: return 0;
+      }
+    }
+
+    int _getDesktopIndexFromMobile(int mobileIndex) {
+      switch (mobileIndex) {
+        case 0: return 0; // Dashboard
+        case 1: return 6; // Rapports
+        case 2: return 7; // FLOT
+        case 3: return 9; // Frais
+        case 4: return 11; // VIRTUEL
+        case 5: return 10; // Config
+        default: return 0;
+      }
+    }
+
+    return BottomNavigationBar(
+      currentIndex: _getMobileNavIndex(_selectedIndex),
+      onTap: (mobileIndex) {
+        final desktopIndex = _getDesktopIndexFromMobile(mobileIndex);
+        setState(() => _selectedIndex = desktopIndex);
+      },
+      backgroundColor: Colors.white,
+      selectedItemColor: const Color(0xFFDC2626),
+      unselectedItemColor: Colors.grey,
+      type: BottomNavigationBarType.fixed,
+      elevation: 0,
+      selectedFontSize: 11,
+      unselectedFontSize: 10,
+      items: [
+        BottomNavigationBarItem(
+          icon: Icon(_menuIcons[0]),
+          label: 'Dashboard',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(_menuIcons[6]),
+          label: 'Rapports',
+        ),
+        BottomNavigationBarItem(
+          icon: _buildFlotIconWithBadge(),
+          label: 'FLOT',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(_menuIcons[9]),
+          label: 'Frais',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(_menuIcons[11]),
+          label: 'VIRTUEL',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(_menuIcons[10]),
+          label: 'Config',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFlotIconWithBadge() {
+    return Consumer<FlotService>(builder: (context, flotService, child) {
+      final authService = Provider.of<AgentAuthService>(context, listen: false);
+      final currentShopId = authService.currentAgent?.shopId;
+      
+      final pendingFlotsCount = currentShopId != null 
+          ? flotService.flots.where((f) => 
+              f.statut == OperationStatus.enAttente && 
+              f.shopDestinationId == currentShopId
+            ).length 
+          : 0;
+      
+      if (pendingFlotsCount > 0) {
+        return Badge(
+          label: Text(pendingFlotsCount.toString()),
+          backgroundColor: const Color(0xFF2563EB),
+          child: Icon(_menuIcons[7]),
+        );
+      }
+      
+      return Icon(_menuIcons[7]);
+    });
   }
 
   Future<void> _syncData() async {

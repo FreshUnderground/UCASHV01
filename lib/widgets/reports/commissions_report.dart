@@ -710,10 +710,7 @@ class _CommissionsReportState extends State<CommissionsReport> {
                         PdfPreviewAction(
                           icon: const Icon(Icons.share),
                           onPressed: (context, build, pageFormat) async {
-                            await Printing.sharePdf(
-                              bytes: pdfBytes,
-                              filename: 'rapport_commissions_${DateTime.now().toString().split(' ')[0]}.pdf',
-                            );
+                            await _partagerPDF();
                           },
                         ),
                         PdfPreviewAction(
@@ -737,6 +734,40 @@ class _CommissionsReportState extends State<CommissionsReport> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('❌ Erreur: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _partagerPDF() async {
+    if (_reportData == null) return;
+
+    try {
+      final periode = _reportData!['periode'] as Map<String, dynamic>;
+      final startDate = periode['debut'] != null ? DateTime.parse(periode['debut']) : null;
+      final endDate = periode['fin'] != null ? DateTime.parse(periode['fin']) : null;
+
+      final pdf = await generateCommissionsReportPdf(
+        reportData: _reportData!,
+        startDate: startDate,
+        endDate: endDate,
+      );
+
+      final pdfBytes = await pdf.save();
+      final fileName = 'rapport_commissions_${DateTime.now().toString().split(' ')[0]}.pdf';
+      
+      // Utiliser Printing.sharePdf qui fonctionne sur toutes les plateformes
+      await Printing.sharePdf(bytes: pdfBytes, filename: fileName);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ PDF partagé avec succès')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('❌ Erreur partage: $e')),
         );
       }
     }

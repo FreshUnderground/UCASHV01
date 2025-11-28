@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/flot_model.dart' as flot_model;
+import '../models/operation_model.dart';
 import '../services/flot_service.dart';
 import '../services/shop_service.dart';
 import '../services/auth_service.dart';
 
 /// Dialog pour créer ou mettre à jour un FLOT
 class FlotDialog extends StatefulWidget {
-  final flot_model.FlotModel? flot; // Si null, c'est une création, sinon c'est une mise à jour
+  final OperationModel? flot; // Si null, c'est une création, sinon c'est une mise à jour
   final int? currentShopId; // ID du shop actuel (source par défaut)
 
   const FlotDialog({
@@ -26,7 +26,7 @@ class _FlotDialogState extends State<FlotDialog> {
   late TextEditingController _notesController;
   
   int? _selectedShopDestinationId;
-  flot_model.ModePaiement _selectedModePaiement = flot_model.ModePaiement.cash;
+  ModePaiement _selectedModePaiement = ModePaiement.cash;
   
   bool _isLoading = false;
   String? _errorMessage;
@@ -35,14 +35,14 @@ class _FlotDialogState extends State<FlotDialog> {
   void initState() {
     super.initState();
     _montantController = TextEditingController(
-      text: widget.flot?.montant.toString() ?? '',
+      text: widget.flot?.montantNet.toString() ?? '',
     );
     _notesController = TextEditingController(
       text: widget.flot?.notes ?? '',
     );
     
     _selectedShopDestinationId = widget.flot?.shopDestinationId;
-    _selectedModePaiement = widget.flot?.modePaiement ?? flot_model.ModePaiement.cash;
+    _selectedModePaiement = widget.flot?.modePaiement ?? ModePaiement.cash;
   }
 
   @override
@@ -253,29 +253,29 @@ class _FlotDialogState extends State<FlotDialog> {
               _buildDropdownField(
                 label: 'Mode de paiement',
                 icon: Icons.payment,
-                child: DropdownButtonFormField<flot_model.ModePaiement>(
+                child: DropdownButtonFormField<ModePaiement>(
                   value: _selectedModePaiement,
                   decoration: const InputDecoration(
                     border: InputBorder.none,
                     isDense: true,
                   ),
-                  items: flot_model.ModePaiement.values.map((mode) {
+                  items: ModePaiement.values.map((mode) {
                     String label;
                     IconData icon;
                     switch (mode) {
-                      case flot_model.ModePaiement.cash:
+                      case ModePaiement.cash:
                         label = 'Cash';
                         icon = Icons.money;
                         break;
-                      case flot_model.ModePaiement.airtelMoney:
+                      case ModePaiement.airtelMoney:
                         label = 'Airtel Money';
                         icon = Icons.phone_android;
                         break;
-                      case flot_model.ModePaiement.mPesa:
+                      case ModePaiement.mPesa:
                         label = 'M-Pesa';
                         icon = Icons.phone_iphone;
                         break;
-                      case flot_model.ModePaiement.orangeMoney:
+                      case ModePaiement.orangeMoney:
                         label = 'Orange Money';
                         icon = Icons.phone_iphone;
                         break;
@@ -537,14 +537,15 @@ class _FlotDialogState extends State<FlotDialog> {
           throw Exception('Vous ne pouvez modifier que les flots que vous avez créés');
         }
         
-        if (widget.flot!.statut != flot_model.StatutFlot.enRoute) {
+        if (widget.flot!.statut != OperationStatus.enAttente) {
           throw Exception('Seuls les flots en cours peuvent être modifiés');
         }
         
         final updatedFlot = widget.flot!.copyWith(
           shopDestinationId: _selectedShopDestinationId!,
           shopDestinationDesignation: shopDestination.designation,
-          montant: montant,
+          montantBrut: montant,
+          montantNet: montant,
           modePaiement: _selectedModePaiement,
           notes: _notesController.text.isNotEmpty ? _notesController.text : null,
           lastModifiedAt: DateTime.now(),

@@ -769,6 +769,9 @@ class ReportService extends ChangeNotifier {
         case OperationType.virement:
           // Traiter les virements selon le contexte
           break;
+        case OperationType.flotShopToShop:
+          // FLOTs ne font pas partie des opérations clients
+          break;
       }
     }
 
@@ -791,6 +794,9 @@ class ReportService extends ChangeNotifier {
           break;
         case OperationType.virement:
           // Traiter les virements selon le contexte
+          break;
+        case OperationType.flotShopToShop:
+          // FLOTs ne font pas partie des opérations clients
           break;
       }
     }
@@ -850,6 +856,15 @@ class ReportService extends ChangeNotifier {
         
       case OperationType.virement:
         // Virement interne = généralement SORTIE
+        return false;
+        
+      case OperationType.flotShopToShop:
+        // FLOT = dépend de la direction (source vs destination)
+        if (operation.shopSourceId == shopId) {
+          return false; // SOURCE = SORTIE (envoi de liquidité)
+        } else if (operation.shopDestinationId == shopId) {
+          return true; // DESTINATION = ENTREE (réception de liquidité)
+        }
         return false;
     }
   }

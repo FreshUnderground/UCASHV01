@@ -20,9 +20,16 @@ class AgentService extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
 
   // Charger tous les agents
-  Future<void> loadAgents({bool forceRefresh = false}) async {
+  Future<void> loadAgents({bool forceRefresh = false, bool clearBeforeLoad = false}) async {
     _setLoading(true);
     try {
+      // Si clearBeforeLoad, supprimer toutes les données locales pour forcer le rechargement depuis le serveur
+      if (clearBeforeLoad) {
+        debugPrint('🗑️ [AgentService] Suppression des agents en local avant rechargement...');
+        await LocalDB.instance.clearAllAgents();
+        _agents.clear();
+      }
+      
       // Si forceRefresh, vider d'abord le cache
       if (forceRefresh) {
         _agents.clear();

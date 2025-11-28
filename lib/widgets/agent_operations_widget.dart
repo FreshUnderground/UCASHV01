@@ -6,10 +6,12 @@ import '../services/pdf_service.dart';
 import '../services/shop_service.dart';
 import '../services/agent_auth_service.dart';
 import '../services/agent_service.dart';
-import '../services/flot_service.dart';
 import '../services/transfer_sync_service.dart';
+import '../services/connectivity_service.dart';
+import '../services/rates_service.dart';
+import '../services/client_service.dart';
+import '../services/sync_service.dart';
 import '../models/operation_model.dart';
-import '../models/flot_model.dart' as flot_model;
 import '../models/shop_model.dart';
 import '../models/agent_model.dart';
 import '../services/printer_service.dart';
@@ -100,12 +102,9 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
       debugPrint('✅ [MES OPS] Synchronisation terminée');
       
       // 2️⃣ ENSUITE: Charger les opérations filtrées par shop depuis LocalDB
+      // ✅ Ceci inclut maintenant les FLOTs (type = flotShopToShop) depuis la table operations
       Provider.of<OperationService>(context, listen: false).loadOperations(shopId: currentUser!.shopId!);
-      debugPrint('📋 [MES OPS] Chargement des opérations pour shop ${currentUser.shopId}');
-      
-      // 3️⃣ CHARGER LES FLOTS: Charger les FLOTs pour ce shop
-      await FlotService.instance.loadFlots(shopId: currentUser.shopId);
-      debugPrint('📦 [MES OPS] Chargement des FLOTs pour shop ${currentUser.shopId}');
+      debugPrint('📋 [MES OPS] Chargement des opérations (incluant FLOTs) pour shop ${currentUser.shopId}');
     }
   }
 
@@ -164,6 +163,12 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
     final authService = Provider.of<AuthService>(context, listen: false);
     final shopId = authService.currentUser?.shopId ?? 0;
     
+    // Debug: Log all operations and their types
+    debugPrint('📊 [FILTER] Total operations: ${operations.length}');
+    final flotCount = operations.where((op) => op.type == OperationType.flotShopToShop).length;
+    debugPrint('📊 [FILTER] FLOTs (flotShopToShop): $flotCount');
+    debugPrint('📊 [FILTER] Current filter: $_categoryFilter, shopId: $shopId');
+    
     return operations.where((operation) {
       // 1. Filter by search query
       final matchesSearch = _searchQuery.isEmpty ||
@@ -212,9 +217,14 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
               operation.shopSourceId == shopId;
           break;
         case 'my_flots':
-          // My FLOTs (virements) ONLY
-          matchesCategory = operation.type == OperationType.virement &&
-              operation.shopSourceId == shopId;
+          // My FLOTs (flotShopToShop) - Show ALL FLOTs where I'm involved (source OR destination)
+          matchesCategory = operation.type == OperationType.flotShopToShop &&
+              (operation.shopSourceId == shopId || operation.shopDestinationId == shopId);
+          
+          // Debug logging
+          if (operation.type == OperationType.flotShopToShop) {
+            debugPrint('🔍 [MY_FLOTS] FLOT trouvé: ID=${operation.id}, source=${operation.shopSourceId}, dest=${operation.shopDestinationId}, currentShop=$shopId, match=$matchesCategory');
+          }
           break;
         case 'all':
         default:
@@ -1055,45 +1065,18 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
 
         final filteredOperations = _getFilteredOperations(operationService.operations);
 
-        // Get FLOTs for current shop
-        final authService = Provider.of<AuthService>(context, listen: false);
-        final currentUser = authService.currentUser;
-        final flotService = FlotService.instance;
+        // ✅ IMPORTANT: FLOTs are now in the operations table with type flotShopToShop
+        // No need to load from old FlotService - they're already in filteredOperations
+        // This prevents duplicates!
         
-        // Filter FLOTs by current shop (source or destination)
-        List<flot_model.FlotModel> shopFlots = [];
-        if (currentUser?.shopId != null) {
-          shopFlots = flotService.flots.where((f) => 
-            f.shopSourceId == currentUser!.shopId || 
-            f.shopDestinationId == currentUser.shopId
-          ).toList();
-        } else {
-          shopFlots = flotService.flots;
-        }
-
-        // Combine operations and FLOTs for display
-        final allItems = <dynamic>[...filteredOperations, ...shopFlots];
+        // Use only filteredOperations (which already includes FLOTs)
+        final allItems = <dynamic>[...filteredOperations];
         
         // Sort by date (most recent first)
         allItems.sort((a, b) {
-          DateTime dateA, dateB;
-          
-          if (a is OperationModel) {
-            dateA = a.dateOp;
-          } else if (a is flot_model.FlotModel) {
-            dateA = a.dateReception ?? a.dateEnvoi;
-          } else {
-            dateA = DateTime.now();
-          }
-          
-          if (b is OperationModel) {
-            dateB = b.dateOp;
-          } else if (b is flot_model.FlotModel) {
-            dateB = b.dateReception ?? b.dateEnvoi;
-          } else {
-            dateB = DateTime.now();
-          }
-          
+          // All items are OperationModel now
+          final dateA = (a as OperationModel).dateOp;
+          final dateB = (b as OperationModel).dateOp;
           return dateB.compareTo(dateA);
         });
 
@@ -1132,13 +1115,9 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
             itemCount: allItems.length,
             separatorBuilder: (context, index) => Divider(height: isMobile ? 12 : 16),
             itemBuilder: (context, index) {
-              final item = allItems[index];
-              if (item is OperationModel) {
-                return _buildOperationItem(item);
-              } else if (item is flot_model.FlotModel) {
-                return _buildFlotItem(item);
-              }
-              return const SizedBox.shrink();
+              // All items are OperationModel now (including FLOTs)
+              final operation = allItems[index] as OperationModel;
+              return _buildOperationItem(operation);
             },
           ),
         );
@@ -1201,6 +1180,11 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
         typeColor = Colors.purple;
         typeIcon = Icons.swap_horiz;
         typeText = 'Virement';
+        break;
+      case OperationType.flotShopToShop:
+        typeColor = const Color(0xFF2563EB);
+        typeIcon = Icons.local_shipping;
+        typeText = 'FLOT Shop-to-Shop';
         break;
     }
 
@@ -1617,369 +1601,217 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
     }
   }
 
-  Widget _buildFlotItem(flot_model.FlotModel flot) {
-    final size = MediaQuery.of(context).size;
-    final isMobile = size.width <= 768;
-    
-    Color typeColor;
-    IconData typeIcon;
-    String typeText;
-    String directionText;
-    
-    // Determine if this is an incoming or outgoing FLOT for the current shop
-    final authService = Provider.of<AuthService>(context, listen: false);
-    final currentUser = authService.currentUser;
-    final isCurrentShopSource = currentUser?.shopId != null && flot.shopSourceId == currentUser!.shopId;
-    final isCurrentShopDestination = currentUser?.shopId != null && flot.shopDestinationId == currentUser!.shopId;
-    
-    if (isCurrentShopSource) {
-      // Outgoing FLOT (sent by current shop)
-      typeColor = Colors.orange;
-      typeIcon = Icons.local_shipping;
-      typeText = 'FLOT Envoyé';
-      directionText = 'Vers: ${flot.getShopDestinationDesignation(Provider.of<ShopService>(context, listen: false).shops)}';
-    } else if (isCurrentShopDestination) {
-      // Incoming FLOT (received by current shop)
-      typeColor = Colors.green;
-      typeIcon = Icons.local_shipping;
-      typeText = 'FLOT Reçu';
-      directionText = 'De: ${flot.getShopSourceDesignation(Provider.of<ShopService>(context, listen: false).shops)}';
-    } else {
-      // Should not happen with proper filtering
-      typeColor = Colors.grey;
-      typeIcon = Icons.local_shipping;
-      typeText = 'FLOT';
-      directionText = 'Inconnu';
-    }
-    
-    Color statusColor;
-    String statusText;
-    IconData statusIcon;
-    
-    switch (flot.statut) {
-      case flot_model.StatutFlot.enRoute:
-        statusColor = Colors.orange;
-        statusText = 'En Route';
-        statusIcon = Icons.pending;
-        break;
-      case flot_model.StatutFlot.servi:
-        statusColor = Colors.green;
-        statusText = 'Servi';
-        statusIcon = Icons.check_circle;
-        break;
-      case flot_model.StatutFlot.annule:
-        statusColor = Colors.red;
-        statusText = 'Annulé';
-        statusIcon = Icons.cancel;
-        break;
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+  void _showDepotDialog() async {
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Synchronisation des clients...'),
+              ],
+            ),
           ),
-        ],
-      ),
-      child: ListTile(
-        contentPadding: EdgeInsets.symmetric(
-          horizontal: isMobile ? 12 : 16,
-          vertical: isMobile ? 8 : 4,
-        ),
-        leading: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [typeColor.withOpacity(0.2), typeColor.withOpacity(0.1)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(typeIcon, color: typeColor, size: isMobile ? 24 : 28),
-        ),
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                directionText,
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: isMobile ? 15 : 16,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: typeColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: typeColor.withOpacity(0.3)),
-              ),
-              child: Text(
-                typeText,
-                style: TextStyle(
-                  color: typeColor,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Montant principal avec icône
-              Row(
-                children: [
-                  Icon(Icons.attach_money, size: 14, color: Colors.grey[600]),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${flot.montant.toStringAsFixed(2)} ${flot.devise}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: isMobile ? 15 : 16,
-                      color: typeColor,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              // Mode de paiement + Statut
-              Row(
-                children: [
-                  // Mode
-                  Icon(
-                    _getFlotPaymentIcon(flot.modePaiement),
-                    size: 14,
-                    color: Colors.grey[600],
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    _getFlotModePaiementLabel(flot.modePaiement),
-                    style: TextStyle(
-                      fontSize: isMobile ? 12 : 13,
-                      color: Colors.grey[700],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  // Statut
-                  Icon(statusIcon, size: 14, color: statusColor),
-                  const SizedBox(width: 4),
-                  Text(
-                    statusText,
-                    style: TextStyle(
-                      fontSize: isMobile ? 12 : 13,
-                      color: statusColor,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              // Date
-              Row(
-                children: [
-                  Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
-                  const SizedBox(width: 4),
-                  Text(
-                    _formatFlotDate(flot),
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        trailing: PopupMenuButton<String>(
-          icon: Icon(Icons.more_vert, color: Colors.grey[600]),
-          itemBuilder: (context) => [
-            const PopupMenuItem(
-              value: 'details',
-              child: Row(
-                children: [
-                  Icon(Icons.info, size: 16, color: Colors.blue),
-                  SizedBox(width: 8),
-                  Text('Détails'),
-                ],
-              ),
-            ),
-          ],
-          onSelected: (value) => _handleFlotAction(value, flot),
         ),
       ),
     );
-  }
 
-  IconData _getFlotPaymentIcon(flot_model.ModePaiement mode) {
-    switch (mode) {
-      case flot_model.ModePaiement.cash:
-        return Icons.money;
-      case flot_model.ModePaiement.airtelMoney:
-        return Icons.phone_android;
-      case flot_model.ModePaiement.mPesa:
-        return Icons.account_balance_wallet;
-      case flot_model.ModePaiement.orangeMoney:
-        return Icons.payment;
-      default:
-        return Icons.money;
+    try {
+      // Check internet connectivity
+      final connectivityService = ConnectivityService.instance;
+      final hasConnection = connectivityService.isOnline;
+
+      if (hasConnection) {
+        debugPrint('📥 Synchronisation clients pour dépôt...');
+        
+        // NE PAS vider - juste synchroniser depuis le serveur
+        // Le serveur enverra les nouveaux et modifiés, LocalDB les mergera
+        debugPrint('🔄 Téléchargement depuis le serveur...');
+        final syncService = SyncService();
+        await syncService.downloadTableData('clients', 'admin', 'admin');
+        
+        // Recharger en mémoire
+        final clientService = ClientService();
+        await clientService.loadClients();
+
+        debugPrint('✅ ${clientService.clients.length} clients chargés');
+      } else {
+        debugPrint('ℹ️ Hors ligne - utilisation des données locales');
+        // Charger depuis la base locale
+        final clientService = ClientService();
+        await clientService.loadClients();
+      }
+    } catch (e) {
+      debugPrint('⚠️ Erreur lors de la synchronisation: $e');
+      // En cas d'erreur, charger depuis la base locale
+      try {
+        final clientService = ClientService();
+        await clientService.loadClients();
+        debugPrint('💾 Clients chargés depuis la base locale');
+      } catch (localError) {
+        debugPrint('❌ Erreur chargement local: $localError');
+      }
+    }
+
+    // Close loading dialog
+    if (mounted) Navigator.of(context).pop();
+
+    // Show depot dialog
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => const DepotDialog(),
+      ).then((result) {
+        if (result == true) {
+          _loadOperations();
+        }
+      });
     }
   }
 
-  String _getFlotModePaiementLabel(flot_model.ModePaiement mode) {
-    switch (mode) {
-      case flot_model.ModePaiement.cash:
-        return 'Cash';
-      case flot_model.ModePaiement.airtelMoney:
-        return 'Airtel Money';
-      case flot_model.ModePaiement.mPesa:
-        return 'M-Pesa';
-      case flot_model.ModePaiement.orangeMoney:
-        return 'Orange Money';
-      default:
-        return 'Cash';
-    }
-  }
-
-  String _formatFlotDate(flot_model.FlotModel flot) {
-    final date = flot.dateReception ?? flot.dateEnvoi;
-    return '${date.day}/${date.month}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-  }
-
-  void _handleFlotAction(String action, flot_model.FlotModel flot) {
-    switch (action) {
-      case 'details':
-        _showFlotDetails(flot);
-        break;
-    }
-  }
-
-  void _showFlotDetails(flot_model.FlotModel flot) {
-    String statusInfo = '';
-    switch (flot.statut) {
-      case flot_model.StatutFlot.enRoute:
-        statusInfo = 'Statut: En Route (en attente de réception)';
-        break;
-      case flot_model.StatutFlot.servi:
-        statusInfo = 'Statut: Servi (reçu par le shop destination)';
-        break;
-      case flot_model.StatutFlot.annule:
-        statusInfo = 'Statut: Annulé';
-        break;
-    }
-    
-    String dateInfo = '';
-    if (flot.statut == flot_model.StatutFlot.servi && flot.dateReception != null) {
-      dateInfo = 'Date de réception: ${_formatFlotDate(flot)}';
-    } else {
-      dateInfo = 'Date d\'envoi: ${_formatDate(flot.dateEnvoi)}';
-    }
-
+  void _showRetraitDialog() async {
+    // Show loading indicator
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Détails FLOT - ${flot.reference}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Montant: ${flot.montant} ${flot.devise}'),
-            const SizedBox(height: 8),
-            // Afficher source et destination (avec résolution si nécessaire)
-            Row(
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.store, size: 16, color: Colors.orange),
-                const SizedBox(width: 8),
-                const Text('De: ', style: TextStyle(fontWeight: FontWeight.w600)),
-                Expanded(
-                  child: Text(
-                    flot.getShopSourceDesignation(Provider.of<ShopService>(context, listen: false).shops),
-                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
-                  ),
-                ),
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Synchronisation des clients...'),
               ],
             ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                const Icon(Icons.send, size: 16, color: Colors.blue),
-                const SizedBox(width: 8),
-                const Text('Envoyé vers: ', style: TextStyle(fontWeight: FontWeight.w600)),
-                Expanded(
-                  child: Text(
-                    flot.getShopDestinationDesignation(Provider.of<ShopService>(context, listen: false).shops),
-                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text('Mode de paiement: ${_getFlotModePaiementLabel(flot.modePaiement)}'),
-            Text(statusInfo),
-            Text(dateInfo),
-            if (flot.notes != null && flot.notes!.isNotEmpty)
-              Text('Notes: ${flot.notes}'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Fermer'),
           ),
-        ],
+        ),
       ),
     );
+
+    try {
+      // Check internet connectivity
+      final connectivityService = ConnectivityService.instance;
+      final hasConnection = connectivityService.isOnline;
+
+      if (hasConnection) {
+        debugPrint('📥 Synchronisation clients pour retrait...');
+        
+        // NE PAS vider - juste synchroniser depuis le serveur
+        debugPrint('🔄 Téléchargement depuis le serveur...');
+        final syncService = SyncService();
+        await syncService.downloadTableData('clients', 'admin', 'admin');
+        
+        // Recharger en mémoire
+        final clientService = ClientService();
+        await clientService.loadClients();
+
+        debugPrint('✅ ${clientService.clients.length} clients chargés');
+      } else {
+        debugPrint('ℹ️ Hors ligne - utilisation des données locales');
+        // Charger depuis la base locale
+        final clientService = ClientService();
+        await clientService.loadClients();
+      }
+    } catch (e) {
+      debugPrint('⚠️ Erreur lors de la synchronisation: $e');
+      // En cas d'erreur, charger depuis la base locale
+      try {
+        final clientService = ClientService();
+        await clientService.loadClients();
+        debugPrint('💾 Clients chargés depuis la base locale');
+      } catch (localError) {
+        debugPrint('❌ Erreur chargement local: $localError');
+      }
+    }
+
+    // Close loading dialog
+    if (mounted) Navigator.of(context).pop();
+
+    // Show retrait dialog
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => const RetraitDialog(),
+      ).then((result) {
+        if (result == true) {
+          _loadOperations();
+        }
+      });
+    }
   }
 
-  void _showDepotDialog() {
+
+
+  void _showTransfertDestinationDialog() async {
+    // Show loading indicator
     showDialog(
       context: context,
-      builder: (context) => const DepotDialog(),
-    ).then((result) {
-      if (result == true) {
-        _loadOperations();
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Vérification des données...'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    try {
+      // Check internet connectivity
+      final connectivityService = ConnectivityService.instance;
+      final hasConnection = connectivityService.isOnline;
+
+      if (hasConnection) {
+        // Sync commissions and shops if online
+        final ratesService = RatesService.instance;
+        final shopService = Provider.of<ShopService>(context, listen: false);
+
+        await Future.wait([
+          ratesService.loadRatesAndCommissions(),
+          shopService.loadShops(),
+        ]);
+
+        debugPrint('✅ Commissions et shops synchronisés');
+      } else {
+        debugPrint('ℹ️ Pas de connexion - utilisation des données locales');
       }
-    });
-  }
+    } catch (e) {
+      debugPrint('⚠️ Erreur lors de la synchronisation: $e');
+      // Continue with local data
+    }
 
-  void _showRetraitDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => const RetraitDialog(),
-    ).then((result) {
-      if (result == true) {
-        _loadOperations();
-      }
-    });
-  }
+    // Close loading dialog
+    if (mounted) Navigator.of(context).pop();
 
-
-
-  void _showTransfertDestinationDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => const TransferDestinationDialog(),
-    ).then((result) {
-      if (result == true) {
-        _loadOperations();
-      }
-    });
+    // Show transfer dialog
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => const TransferDestinationDialog(),
+      ).then((result) {
+        if (result == true) {
+          _loadOperations();
+        }
+      });
+    }
   }
 
   // Helper method to get shop name by ID

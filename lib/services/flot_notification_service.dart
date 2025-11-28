@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/flot_model.dart' as flot_model;
+import '../models/operation_model.dart';
 import 'agent_auth_service.dart';
 
 /// Service de notification pour les flots entrants
@@ -18,7 +18,7 @@ class FlotNotificationService extends ChangeNotifier {
   int _pendingFlotsCount = 0;
   
   // Référence aux flots (injectée depuis l'extérieur)
-  List<flot_model.FlotModel> Function()? _getFlots;
+  List<OperationModel> Function()? _getFlots;
   
   int get pendingFlotsCount => _pendingFlotsCount;
   
@@ -28,7 +28,7 @@ class FlotNotificationService extends ChangeNotifier {
   /// Démarre la vérification automatique des flots entrants
   void startMonitoring({
     required AgentAuthService authService,
-    required List<flot_model.FlotModel> Function() getFlots,
+    required List<OperationModel> Function() getFlots,
   }) {
     stopMonitoring();
     
@@ -78,7 +78,8 @@ class FlotNotificationService extends ChangeNotifier {
       
       // Récupérer les flots en route pour ce shop (destination)
       final pendingFlots = allFlots.where((flot) {
-        return flot.statut == flot_model.StatutFlot.enRoute &&
+        return flot.statut == OperationStatus.enAttente &&
+               flot.type == OperationType.flotShopToShop &&
                flot.shopDestinationId == shopId;
       }).toList();
       
@@ -101,9 +102,9 @@ class FlotNotificationService extends ChangeNotifier {
         }
         
         if (!_notifiedFlotIds.contains(flot.id)) {
-          debugPrint('🔔 Nouveau flot détecté: ID ${flot.id}, Montant: ${flot.montant} ${flot.devise}');
+          debugPrint('🔔 Nouveau flot détecté: ID ${flot.id}, Montant: ${flot.montantNet} ${flot.devise}');
           debugPrint('   Source: ${flot.shopSourceDesignation} -> Destination: ${flot.shopDestinationDesignation}');
-          debugPrint('   Envoyé par: ${flot.agentEnvoyeurUsername ?? "Inconnu"}');
+          debugPrint('   Envoyé par: ${flot.agentUsername ?? "Inconnu"}');
           
           // Marquer comme notifié
           _notifiedFlotIds.add(flot.id!);
@@ -115,7 +116,7 @@ class FlotNotificationService extends ChangeNotifier {
             final modePaiement = _getModePaiementLabel(flot.modePaiement);
             onNewFlotDetected!(
               '💸 Nouveau FLOT Reçu',
-              '${flot.montant} ${flot.devise} ($modePaiement) de $sourceShopName\n${flot.notes != null && flot.notes!.isNotEmpty ? "Note: ${flot.notes}" : ""}',
+              '${flot.montantNet} ${flot.devise} ($modePaiement) de $sourceShopName\n${flot.notes != null && flot.notes!.isNotEmpty ? "Note: ${flot.notes}" : ""}',
               flot.id!,
             );
           }
@@ -133,23 +134,25 @@ class FlotNotificationService extends ChangeNotifier {
   }
   
   /// Convertit le mode de paiement en label lisible
-  String _getModePaiementLabel(flot_model.ModePaiement mode) {
+  String _getModePaiementLabel(ModePaiement mode) {
     switch (mode) {
-      case flot_model.ModePaiement.cash:
+      case ModePaiement.cash:
         return 'Cash';
-      case flot_model.ModePaiement.airtelMoney:
+      case ModePaiement.airtelMoney:
         return 'Airtel Money';
-      case flot_model.ModePaiement.mPesa:
+      case ModePaiement.mPesa:
         return 'M-Pesa';
-      case flot_model.ModePaiement.orangeMoney:
+      case ModePaiement.orangeMoney:
         return 'Orange Money';
     }
   }
   
   /// Nettoie les IDs des flots qui ne sont plus en route
-  void _cleanupNotifiedIds(List<flot_model.FlotModel> allFlots) {
+  void _cleanupNotifiedIds(List<OperationModel> allFlots) {
     final pendingIds = allFlots
-        .where((flot) => flot.statut == flot_model.StatutFlot.enRoute && flot.id != null)
+        .where((flot) => flot.statut == OperationStatus.enAttente && 
+                         flot.type == OperationType.flotShopToShop && 
+                         flot.id != null)
         .map((flot) => flot.id!)
         .toSet();
     

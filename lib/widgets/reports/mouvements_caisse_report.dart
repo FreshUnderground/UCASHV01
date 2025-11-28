@@ -170,7 +170,7 @@ class _MouvementsCaisseReportState extends State<MouvementsCaisseReport> {
       
       // 4. FLOTs du jour (filtrés par la plage de dates)
       final todayFlots = flotService.flots.where((flot) {
-        final flotDate = flot.dateEnvoi;
+        final flotDate = flot.dateOp;
         final isInRange = (widget.startDate == null || flotDate.isAfter(widget.startDate!) || flotDate.isAtSameMomentAs(widget.startDate!)) &&
                           (widget.endDate == null || flotDate.isBefore(widget.endDate!) || flotDate.isAtSameMomentAs(widget.endDate!));
         return (flot.shopSourceId == widget.shopId || flot.shopDestinationId == widget.shopId) && isInRange;
@@ -178,18 +178,18 @@ class _MouvementsCaisseReportState extends State<MouvementsCaisseReport> {
       
       // FLOT Reçu (reçus et servis)
       final flotRecu = todayFlots
-          .where((flot) => flot.shopDestinationId == widget.shopId && flot.statut.toString().contains('servi') && flot.devise == 'USD')
-          .fold<double>(0.0, (sum, flot) => sum + flot.montant);
+          .where((flot) => flot.shopDestinationId == widget.shopId && flot.statut == OperationStatus.validee && flot.devise == 'USD')
+          .fold<double>(0.0, (sum, flot) => sum + flot.montantNet);
       
       // FLOT En Cours (en route vers ce shop)
       final flotEnCours = todayFlots
-          .where((flot) => flot.shopDestinationId == widget.shopId && flot.statut.toString().contains('enRoute') && flot.devise == 'USD')
-          .fold<double>(0.0, (sum, flot) => sum + flot.montant);
+          .where((flot) => flot.shopDestinationId == widget.shopId && flot.statut == OperationStatus.enAttente && flot.devise == 'USD')
+          .fold<double>(0.0, (sum, flot) => sum + flot.montantNet);
       
       // FLOT Servi (envoyés et servis)
       final flotServi = todayFlots
-          .where((flot) => flot.shopSourceId == widget.shopId && flot.statut.toString().contains('servi') && flot.devise == 'USD')
-          .fold<double>(0.0, (sum, flot) => sum + flot.montant);
+          .where((flot) => flot.shopSourceId == widget.shopId && flot.statut == OperationStatus.validee && flot.devise == 'USD')
+          .fold<double>(0.0, (sum, flot) => sum + flot.montantNet);
       
       // 5. Transferts Reçus
       final transfertRecu = filteredOps

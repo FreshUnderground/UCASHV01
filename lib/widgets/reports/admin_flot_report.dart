@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import '../../models/flot_model.dart' as flot_model;
+import '../../models/operation_model.dart';
 import '../../models/shop_model.dart';
 import '../../services/flot_service.dart';
 import '../../services/shop_service.dart';
@@ -30,8 +30,8 @@ class _AdminFlotReportState extends State<AdminFlotReport> {
   DateTime? _startDate;
   DateTime? _endDate;
   int? _selectedShopId;
-  flot_model.StatutFlot? _filtreStatut;
-  List<flot_model.FlotModel> _flots = [];
+  OperationStatus? _filtreStatut;
+  List<OperationModel> _flots = [];
   List<ShopModel> _shops = [];
   bool _isLoading = false;
   String? _errorMessage;
@@ -89,16 +89,16 @@ class _AdminFlotReportState extends State<AdminFlotReport> {
     }
   }
 
-  List<flot_model.FlotModel> _getFilteredFlots() {
+  List<OperationModel> _getFilteredFlots() {
     var filteredFlots = _flots;
 
     // Filtrer par date
     if (_startDate != null) {
-      filteredFlots = filteredFlots.where((f) => f.dateEnvoi.isAfter(_startDate!)).toList();
+      filteredFlots = filteredFlots.where((f) => f.dateOp.isAfter(_startDate!)).toList();
     }
     
     if (_endDate != null) {
-      filteredFlots = filteredFlots.where((f) => f.dateEnvoi.isBefore(_endDate!.add(const Duration(days: 1)))).toList();
+      filteredFlots = filteredFlots.where((f) => f.dateOp.isBefore(_endDate!.add(const Duration(days: 1)))).toList();
     }
     
     // Filtrer par shop
@@ -114,7 +114,7 @@ class _AdminFlotReportState extends State<AdminFlotReport> {
     }
 
     // Trier par date d'envoi (plus récents en premier)
-    filteredFlots.sort((a, b) => b.dateEnvoi.compareTo(a.dateEnvoi));
+    filteredFlots.sort((a, b) => b.dateOp.compareTo(a.dateOp));
     
     return filteredFlots;
   }
@@ -312,27 +312,27 @@ class _AdminFlotReportState extends State<AdminFlotReport> {
                               },
                             ),
                             FilterChip(
-                              label: const Text('En Route'),
-                              selected: _filtreStatut == flot_model.StatutFlot.enRoute,
+                              label: const Text('En Attente'),
+                              selected: _filtreStatut == OperationStatus.enAttente,
                               selectedColor: Colors.orange.shade200,
                               onSelected: (selected) {
-                                setState(() => _filtreStatut = flot_model.StatutFlot.enRoute);
+                                setState(() => _filtreStatut = OperationStatus.enAttente);
                               },
                             ),
                             FilterChip(
-                              label: const Text('Servi'),
-                              selected: _filtreStatut == flot_model.StatutFlot.servi,
+                              label: const Text('Validée'),
+                              selected: _filtreStatut == OperationStatus.validee,
                               selectedColor: Colors.green.shade200,
                               onSelected: (selected) {
-                                setState(() => _filtreStatut = flot_model.StatutFlot.servi);
+                                setState(() => _filtreStatut = OperationStatus.validee);
                               },
                             ),
                             FilterChip(
-                              label: const Text('Annulé'),
-                              selected: _filtreStatut == flot_model.StatutFlot.annule,
+                              label: const Text('Annulée'),
+                              selected: _filtreStatut == OperationStatus.annulee,
                               selectedColor: Colors.red.shade200,
                               onSelected: (selected) {
-                                setState(() => _filtreStatut = flot_model.StatutFlot.annule);
+                                setState(() => _filtreStatut = OperationStatus.annulee);
                               },
                             ),
                           ],
@@ -373,17 +373,17 @@ class _AdminFlotReportState extends State<AdminFlotReport> {
     );
   }
 
-  Widget _buildStatistics(List<flot_model.FlotModel> flots) {
+  Widget _buildStatistics(List<OperationModel> flots) {
     // Calculer les statistiques
-    final flotsEnRoute = flots.where((f) => f.statut == flot_model.StatutFlot.enRoute).length;
-    final flotsServis = flots.where((f) => f.statut == flot_model.StatutFlot.servi).length;
-    final flotsAnnules = flots.where((f) => f.statut == flot_model.StatutFlot.annule).length;
+    final flotsEnRoute = flots.where((f) => f.statut == OperationStatus.enAttente).length;
+    final flotsServis = flots.where((f) => f.statut == OperationStatus.validee).length;
+    final flotsAnnules = flots.where((f) => f.statut == OperationStatus.annulee).length;
     
-    final totalMontant = flots.fold(0.0, (sum, f) => sum + f.montant);
-    final montantEnRoute = flots.where((f) => f.statut == flot_model.StatutFlot.enRoute)
-        .fold(0.0, (sum, f) => sum + f.montant);
-    final montantServi = flots.where((f) => f.statut == flot_model.StatutFlot.servi)
-        .fold(0.0, (sum, f) => sum + f.montant);
+    final totalMontant = flots.fold(0.0, (sum, f) => sum + f.montantNet);
+    final montantEnRoute = flots.where((f) => f.statut == OperationStatus.enAttente)
+        .fold(0.0, (sum, f) => sum + f.montantNet);
+    final montantServi = flots.where((f) => f.statut == OperationStatus.validee)
+        .fold(0.0, (sum, f) => sum + f.montantNet);
 
     return Card(
       child: Padding(
@@ -513,7 +513,7 @@ class _AdminFlotReportState extends State<AdminFlotReport> {
     );
   }
 
-  Widget _buildFlotsList(List<flot_model.FlotModel> flots, bool isMobile) {
+  Widget _buildFlotsList(List<OperationModel> flots, bool isMobile) {
     if (flots.isEmpty) {
       return Card(
         child: Padding(
@@ -574,26 +574,31 @@ class _AdminFlotReportState extends State<AdminFlotReport> {
     );
   }
 
-  Widget _buildFlotItem(flot_model.FlotModel flot, bool isMobile) {
+  Widget _buildFlotItem(OperationModel flot, bool isMobile) {
     Color statutColor;
     IconData statutIcon;
     String statutLabel;
     
     switch (flot.statut) {
-      case flot_model.StatutFlot.enRoute:
+      case OperationStatus.enAttente:
         statutColor = Colors.orange;
         statutIcon = Icons.local_shipping;
-        statutLabel = 'En Route';
+        statutLabel = 'En Attente';
         break;
-      case flot_model.StatutFlot.servi:
+      case OperationStatus.validee:
         statutColor = Colors.green;
         statutIcon = Icons.check_circle;
-        statutLabel = 'Servi';
+        statutLabel = 'Validée';
         break;
-      case flot_model.StatutFlot.annule:
+      case OperationStatus.annulee:
         statutColor = Colors.red;
         statutIcon = Icons.cancel;
-        statutLabel = 'Annulé';
+        statutLabel = 'Annulée';
+        break;
+      default:
+        statutColor = Colors.grey;
+        statutIcon = Icons.help;
+        statutLabel = flot.statutLabel;
         break;
     }
 
@@ -629,7 +634,7 @@ class _AdminFlotReportState extends State<AdminFlotReport> {
                 ),
                 const Spacer(),
                 Text(
-                  '${flot.montant.toStringAsFixed(2)} ${flot.devise}',
+                  '${flot.montantNet.toStringAsFixed(2)} ${flot.devise}',
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -647,7 +652,7 @@ class _AdminFlotReportState extends State<AdminFlotReport> {
                     children: [
                       const Text('De:', style: TextStyle(color: Colors.grey, fontSize: 12)),
                       Text(
-                        flot.shopSourceDesignation,
+                        flot.shopSourceDesignation ?? 'N/A',
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ],
@@ -661,7 +666,7 @@ class _AdminFlotReportState extends State<AdminFlotReport> {
                     children: [
                       const Text('Vers:', style: TextStyle(color: Colors.grey, fontSize: 12)),
                       Text(
-                        flot.shopDestinationDesignation,
+                        flot.shopDestinationDesignation ?? 'N/A',
                         style: const TextStyle(fontWeight: FontWeight.bold),
                         textAlign: TextAlign.right,
                       ),
@@ -676,16 +681,16 @@ class _AdminFlotReportState extends State<AdminFlotReport> {
                 const Icon(Icons.access_time, size: 14, color: Colors.grey),
                 const SizedBox(width: 4),
                 Text(
-                  'Envoyé: ${_formatDate(flot.dateEnvoi)}',
+                  'Envoyé: ${_formatDate(flot.dateOp)}',
                   style: const TextStyle(fontSize: 12, color: Colors.grey),
                 ),
-                if (flot.dateReception != null) ...[
+                if (flot.dateValidation != null) ...[
                   const SizedBox(width: 12),
                   const Icon(Icons.check, size: 14, color: Colors.green),
                   const SizedBox(width: 4),
                   Flexible(
                     child: Text(
-                      'Reçu: ${_formatDate(flot.dateReception!)}',
+                      'Reçu: ${_formatDate(flot.dateValidation!)}',
                       style: const TextStyle(fontSize: 12, color: Colors.green),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
@@ -694,10 +699,10 @@ class _AdminFlotReportState extends State<AdminFlotReport> {
                 ],
               ],
             ),
-            if (flot.reference != null) ...[
+            if (flot.codeOps.isNotEmpty) ...[
               const SizedBox(height: 4),
               Text(
-                'Réf: ${flot.reference}',
+                'Réf: ${flot.codeOps}',
                 style: const TextStyle(fontSize: 11, color: Colors.grey),
               ),
             ],
@@ -856,10 +861,7 @@ class _AdminFlotReportState extends State<AdminFlotReport> {
                         PdfPreviewAction(
                           icon: const Icon(Icons.share),
                           onPressed: (context, build, pageFormat) async {
-                            await Printing.sharePdf(
-                              bytes: pdfBytes,
-                              filename: 'rapport_flot_${DateTime.now().toString().split(' ')[0]}.pdf',
-                            );
+                            await _partagerPDF();
                           },
                         ),
                         PdfPreviewAction(
@@ -883,6 +885,36 @@ class _AdminFlotReportState extends State<AdminFlotReport> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('❌ Erreur: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _partagerPDF() async {
+    try {
+      final filteredFlots = _getFilteredFlots();
+      
+      final pdf = await generateFlotReportPdf(
+        flots: filteredFlots,
+        startDate: _startDate,
+        endDate: _endDate,
+      );
+
+      final pdfBytes = await pdf.save();
+      final fileName = 'rapport_flot_${DateTime.now().toString().split(' ')[0]}.pdf';
+      
+      // Utiliser Printing.sharePdf qui fonctionne sur toutes les plateformes
+      await Printing.sharePdf(bytes: pdfBytes, filename: fileName);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ PDF partagé avec succès')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('❌ Erreur partage: $e')),
         );
       }
     }

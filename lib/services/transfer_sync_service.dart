@@ -310,50 +310,55 @@ class TransferSyncService extends ChangeNotifier {
             }
             debugPrint('✅ [SYNC] Toutes les opérations sauvegardées dans LocalDB');
 
-            // IMPORTANT: Recharger TOUTES les opérations en mémoire (pas juste les transferts en attente)
-            debugPrint('🔄 Rechargement de TOUTES les opérations en mémoire...');
-            await OperationService().loadOperations();
-            debugPrint('✅ Opérations rechargées en mémoire pour affichage');
+            // IMPORTANT: NE PAS recharger OperationService() ici car cela peut causer des boucles
+            // Les opérations sont déjà sauvegardées dans LocalDB et seront chargées quand nécessaire
+            // L'appel à loadOperations() sera fait par le widget qui en a besoin
 
             // Mettre à jour la liste des transferts en attente (pour validation)
             // CRITIQUE: Filtrer uniquement les transferts EN ATTENTE pour ce shop
             // IMPORTANT: Utiliser les données FUSIONNÉES (local + serveur) pas juste serveur
-            debugPrint('🔍 [FILTER] Filtrage des transferts pour shop $_shopId...');
-            debugPrint('🔍 [FILTER] Avant filtrage: ${mergedOperations.length} opérations fusionnées');
             
             _pendingTransfers = mergedOperations
                 .where((op) {
-                  // 1. Doit être un transfert OU un depot/retrait
+                  // 1. Doit être un transfert OU un depot/retrait OU un FLOT
                   final isTransfer = op.type == OperationType.transfertNational ||
                      op.type == OperationType.transfertInternationalEntrant ||
+                     op.type == OperationType.flotShopToShop ||
                      op.type == OperationType.transfertInternationalSortant;
                      
                   final isDepotOrRetrait = op.type == OperationType.depot ||
                      op.type == OperationType.retrait;
+                     
+                  final isFlot = op.type == OperationType.flotShopToShop;
                   
                   // 2. Pour les transferts: doit être EN ATTENTE
                   // Pour les depot/retrait: peut être VALIDE ou TERMINE (pas d'attente)
-                  final isPending = isTransfer 
+                  // Pour les FLOTs: doit être EN ATTENTE
+                  final isPending = (isTransfer) 
                       ? op.statut == OperationStatus.enAttente
                       : (op.statut == OperationStatus.validee || op.statut == OperationStatus.terminee);
                   
                   // 3. Pour les transferts: ce shop doit être la DESTINATION (pour validation)
                   // Pour les depot/retrait: ce shop doit être la SOURCE
-                  final isForThisShop = isTransfer 
+                  // Pour les FLOTs: ce shop doit être la DESTINATION (pour validation)
+                  final isForThisShop = (isTransfer)
                       ? op.shopDestinationId == _shopId 
                       : op.shopSourceId == _shopId;
                   
-                  final shouldShow = (isTransfer || isDepotOrRetrait) && isPending && isForThisShop;
-                  
-                  // Debug détaillé pour CHAQUE opération
-                  debugPrint('🔍 [FILTER] ${op.codeOps}: type=${op.type.name}, statut=${op.statut}, dest=${op.shopDestinationId}, source=${op.shopSourceId}, shop=$_shopId');
-                  debugPrint('🔍 [FILTER]   → isTransfer=$isTransfer, isDepotOrRetrait=$isDepotOrRetrait, isPending=$isPending, isForThisShop=$isForThisShop → RESULT=$shouldShow');
-                  
-                  return shouldShow;
+                  return (isTransfer || isDepotOrRetrait || isFlot) && isPending && isForThisShop;
                 })
                 .toList();
             
-            debugPrint('📊 [FILTER] Après filtrage: ${_pendingTransfers.length} transferts EN ATTENTE pour validation');
+            // Log uniquement le résumé (évite spam avec détails de chaque opération)
+            debugPrint('📊 [FILTER] ${_pendingTransfers.length} transferts EN ATTENTE (sur ${mergedOperations.length} opérations totales)');
+            
+            // Log détaillé optionnel: activer seulement pour debug approfondi
+            // if (_pendingTransfers.isNotEmpty) {
+            //   debugPrint('🔍 Détails transferts en attente:');
+            //   for (var op in _pendingTransfers) {
+            //     debugPrint('   🔸 ${op.codeOps}: ${op.type.name}, shop_src=${op.shopSourceId}, shop_dst=${op.shopDestinationId}, statut=${op.statut.name}');
+            //   }
+            // }
 
             // Sauvegarder dans le cache
             await _savePendingTransfersToCache();
@@ -398,9 +403,6 @@ class TransferSyncService extends ChangeNotifier {
       // Important: remonter l'erreur pour affichage dans l'UI
       _error = e.toString();
       notifyListeners();
-      
-      // Relancer l'exception pour que l'appelant puisse la gérer
-      rethrow;
     }
   }
 
@@ -856,29 +858,42 @@ class TransferSyncService extends ChangeNotifier {
 
   /// Obtenir les transferts en attente pour un shop spécifique
   /// Retourne uniquement les transferts ENTRANTS (où le shop est destination)
+  /// EXCLUT les FLOTs (flotShopToShop) qui ont leur propre section de gestion
   List<OperationModel> getPendingTransfersForShop(int shopId) {
-    debugPrint('🔍 getPendingTransfersForShop appelé avec shopId=$shopId (${shopId.runtimeType})');
-    debugPrint('📊 Total _pendingTransfers: ${_pendingTransfers.length}');
-    
-    // Afficher tous les transferts en attente pour debug
-    for (var op in _pendingTransfers) {
-      debugPrint('   🔸 ${op.codeOps}: shop_src=${op.shopSourceId}, shop_dst=${op.shopDestinationId}, statut=${op.statut}');
-    }
-    
+    // Logs simplifiés - éviter de logger tous les transferts à chaque appel
     final filtered = _pendingTransfers.where((op) {
+      // EXCLURE les FLOTs (ont leur propre section)
+      if (op.type == OperationType.flotShopToShop) return false;
+      
       // Uniquement les transferts où notre shop est la destination (transferts entrants)
       final shopDest = op.shopDestinationId;
       final statut = op.statut;
       final shopMatch = shopDest == shopId;
       final statutMatch = statut == OperationStatus.enAttente;
-      final result = shopMatch && statutMatch;
-      
-      debugPrint('   🔍 ${op.codeOps}: shop_dest=$shopDest (${shopDest?.runtimeType}), shopId=$shopId (${shopId.runtimeType}), match=$shopMatch && statut=$statut (${statut.runtimeType}), match=$statutMatch → result=$result');
-      
-      return result;
+      return shopMatch && statutMatch;
     }).toList();
     
-    debugPrint('📊 getPendingTransfersForShop($shopId): ${filtered.length} transferts');
+    // Log uniquement le résultat final (évite spam de logs)
+    debugPrint('📊 getPendingTransfersForShop($shopId): ${filtered.length} transferts (sur ${_pendingTransfers.length} total)');
+    return filtered;
+  }
+  
+  /// Obtenir les FLOTs en attente pour un shop spécifique
+  /// Retourne uniquement les FLOTs ENTRANTS (où le shop est destination)
+  List<OperationModel> getPendingFlotsForShop(int shopId) {
+    final filtered = _pendingTransfers.where((op) {
+      // UNIQUEMENT les FLOTs
+      if (op.type != OperationType.flotShopToShop) return false;
+      
+      // FLOTs où notre shop est la destination (FLOTs entrants)
+      final shopDest = op.shopDestinationId;
+      final statut = op.statut;
+      final shopMatch = shopDest == shopId;
+      final statutMatch = statut == OperationStatus.enAttente;
+      return shopMatch && statutMatch;
+    }).toList();
+    
+    debugPrint('📊 getPendingFlotsForShop($shopId): ${filtered.length} FLOTs en attente (sur ${_pendingTransfers.length} total)');
     return filtered;
   }
 

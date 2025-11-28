@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
 import '../services/sync_service.dart';
+import '../services/connectivity_service.dart';
+import '../services/client_service.dart';
+import '../services/operation_service.dart';
 import '../widgets/admin_stats_cards.dart';
 import '../widgets/shops_management.dart';
 import '../widgets/taux_commissions_management.dart';
@@ -21,10 +25,15 @@ import '../widgets/audit_history_widget.dart';
 import '../widgets/reconciliation_report_widget.dart';
 import '../widgets/virtual_transactions_widget.dart';
 import '../widgets/admin_sim_management_widget.dart';
+import '../widgets/language_selector.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import '../utils/responsive_utils.dart';
 import '../theme/ucash_typography.dart';
 import '../theme/ucash_containers.dart';
 import '../services/transfer_sync_service.dart';
+import '../widgets/admin_deletion_widget.dart';
+import '../widgets/trash_bin_widget.dart';
+import '../services/deletion_service.dart';
 
 class DashboardAdminPage extends StatefulWidget {
   const DashboardAdminPage({super.key});
@@ -35,16 +44,22 @@ class DashboardAdminPage extends StatefulWidget {
 
 class _DashboardAdminPageState extends State<DashboardAdminPage> {
   int _selectedIndex = 0;
+  bool _isSyncingClients = false;
+  bool _isSyncingDeletions = false;  // ✅ NOUVEAU pour Suppressions
+  bool _isSyncingTrash = false;      // ✅ NOUVEAU pour Corbeille
 
-  final List<String> _menuItems = [
-    'Dashboard',
-    'Dépenses',
-    'Shops',
-    'Agents',
-    'Partenaires',
-    'Taux & Commissions',
-    'Rapports',
-    'Configuration',
+  // Les clés de menu qui seront traduites dynamiquement
+  List<String> _getMenuItems(AppLocalizations l10n) => [
+    l10n.dashboard,
+    l10n.expenses,
+    l10n.shops,
+    l10n.agents,
+    l10n.partners,
+    l10n.ratesAndCommissions,
+    l10n.reports,
+    l10n.configuration,
+    'Suppressions', // Nouvelle entrée
+    'Corbeille', // Nouvelle entrée
   ];
 
   final List<IconData> _menuIcons = [
@@ -56,6 +71,8 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
     Icons.currency_exchange,
     Icons.analytics,
     Icons.settings,
+    Icons.delete_outline, // Suppressions
+    Icons.restore_from_trash, // Corbeille
   ];
 
   @override
@@ -86,10 +103,11 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
         
         // Show a snackbar to inform user
         if (mounted) {
+          final l10n = AppLocalizations.of(context)!;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Données des opérations synchronisées'),
-              duration: Duration(seconds: 2),
+            SnackBar(
+              content: Text(l10n.operationDataSynced),
+              duration: const Duration(seconds: 2),
             ),
           );
         }
@@ -99,10 +117,11 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
     } catch (e) {
       debugPrint('❌ Erreur lors de la synchronisation des opérations: $e');
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Erreur lors de la synchronisation des opérations'),
-            duration: Duration(seconds: 2),
+          SnackBar(
+            content: Text(l10n.syncError),
+            duration: const Duration(seconds: 2),
           ),
         );
       }
@@ -111,6 +130,8 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final menuItems = _getMenuItems(l10n);
     final size = MediaQuery.of(context).size;
     final isDesktop = size.width > 1024;
     final isTablet = size.width > 768 && size.width <= 1024;
@@ -150,12 +171,32 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
   }
 
   PreferredSizeWidget _buildAppBar() {
+    final l10n = AppLocalizations.of(context)!;
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 768;
     
     return AppBar(
       title: Row(
         children: [
+          // Logo UCASH
+          Container(
+            height: 40,
+            width: 40,
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Image.asset(
+              'assets/images/logo.png',
+              fit: BoxFit.contain,
+            ),
+          ),
+          const SizedBox(width: 12),
+          if (!isMobile) const Text(
+            'UCASH Admin',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+          ),
         ],
       ),
       flexibleSpace: Container(
@@ -170,6 +211,10 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
       elevation: 4,
       shadowColor: Colors.black.withOpacity(0.3),
       actions: [
+        // Sélecteur de langue compact
+        const LanguageSelector(compact: true),
+        const SizedBox(width: 8),
+        
         // Bouton Sync Monitor
         IconButton(
           icon: const Icon(Icons.sync_alt, color: Colors.white),
@@ -229,7 +274,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
                       Icon(Icons.logout, size: isMobile ? 16 : 18, color: Colors.red),
                       SizedBox(width: isMobile ? 6 : 8),
                       Text(
-                        'Déconnexion',
+                        l10n.logout,
                         style: TextStyle(fontSize: isMobile ? 13 : 14, color: Colors.red),
                       ),
                     ],
@@ -245,6 +290,8 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
   }
 
   Widget _buildDrawer() {
+    final l10n = AppLocalizations.of(context)!;
+    final menuItems = _getMenuItems(l10n);
     return Drawer(
       child: Column(
         children: [
@@ -257,16 +304,26 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
                 end: Alignment.bottomRight,
               ),
             ),
-            child: const Center(
+            child: Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    '💸',
-                    style: TextStyle(fontSize: 32),
+                  // Logo UCASH
+                  Container(
+                    height: 60,
+                    width: 60,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      fit: BoxFit.contain,
+                    ),
                   ),
-                  SizedBox(height: 4),
-                  Text(
+                  const SizedBox(height: 8),
+                  const Text(
                     'UCASH Admin',
                     style: TextStyle(
                       color: Colors.white,
@@ -281,7 +338,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(vertical: 8),
-              itemCount: _menuItems.length,
+              itemCount: menuItems.length,
               itemBuilder: (context, index) {
                 final isSelected = _selectedIndex == index;
                 return Container(
@@ -296,17 +353,28 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
                       color: isSelected ? const Color(0xFFDC2626) : Colors.grey[600],
                     ),
                     title: Text(
-                      _menuItems[index],
+                      menuItems[index],
                       style: TextStyle(
                         color: isSelected ? const Color(0xFFDC2626) : Colors.grey[800],
                         fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                       ),
                     ),
-                    onTap: () {
-                      setState(() {
-                        _selectedIndex = index;
-                      });
-                      Navigator.pop(context);
+                    onTap: () async {
+                      if (index == 4) {
+                        Navigator.pop(context);
+                        await _handlePartenairesSelection();
+                      } else if (index == 8) {
+                        Navigator.pop(context);
+                        await _handleSuppressionsSelection();
+                      } else if (index == 9) {
+                        Navigator.pop(context);
+                        await _handleCorbeilleSelection();
+                      } else {
+                        setState(() {
+                          _selectedIndex = index;
+                        });
+                        Navigator.pop(context);
+                      }
                     },
                   ),
                 );
@@ -319,6 +387,8 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
   }
 
   Widget _buildSidebar() {
+    final l10n = AppLocalizations.of(context)!;
+    final menuItems = _getMenuItems(l10n);
     return Container(
       width: 280,
       decoration: BoxDecoration(
@@ -342,16 +412,16 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
                 end: Alignment.bottomRight,
               ),
             ),
-            child: const Center(
+            child: Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
+                  const Text(
                     '💸',
                     style: TextStyle(fontSize: 48),
                   ),
-                  SizedBox(height: 12),
-                  Text(
+                  const SizedBox(height: 12),
+                  const Text(
                     'UCASH Admin',
                     style: TextStyle(
                       color: Colors.white,
@@ -359,9 +429,9 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  SizedBox(height: 4),
+                  const SizedBox(height: 4),
                   Text(
-                    'Panneau d\'administration',
+                    l10n.adminPanel,
                     style: TextStyle(
                       color: Colors.white70,
                       fontSize: 12,
@@ -374,7 +444,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(vertical: 16),
-              itemCount: _menuItems.length,
+              itemCount: menuItems.length,
               itemBuilder: (context, index) {
                 final isSelected = _selectedIndex == index;
                 return Container(
@@ -398,17 +468,25 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
                       size: 22,
                     ),
                     title: Text(
-                      _menuItems[index],
+                      menuItems[index],
                       style: TextStyle(
                         color: isSelected ? Colors.white : Colors.grey[800],
                         fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
                         fontSize: 15,
                       ),
                     ),
-                    onTap: () {
-                      setState(() {
-                        _selectedIndex = index;
-                      });
+                    onTap: () async {
+                      if (index == 4) {
+                        await _handlePartenairesSelection();
+                      } else if (index == 8) {
+                        await _handleSuppressionsSelection();
+                      } else if (index == 9) {
+                        await _handleCorbeilleSelection();
+                      } else {
+                        setState(() {
+                          _selectedIndex = index;
+                        });
+                      }
                     },
                   ),
                 );
@@ -431,13 +509,17 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
       case 3:
         return _buildAgentsContent();
       case 4:
-        return _buildClientsContent();
+        return _isSyncingClients ? _buildSyncingClientsIndicator() : _buildClientsContent();
       case 5:
         return _buildTauxCommissionsContent();
       case 6:
         return _buildReportsContent();
       case 7:
         return _buildConfigurationContent();
+      case 8:
+        return _isSyncingDeletions ? _buildSyncingIndicator('Synchronisation des opérations...') : const AdminDeletionPage(); // Suppressions
+      case 9:
+        return _isSyncingTrash ? _buildSyncingIndicator('Chargement de la corbeille...') : const TrashBinWidget(); // Corbeille
       default:
         return _buildDashboardContent();
     }
@@ -607,6 +689,209 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
 
   Widget _buildClientsContent() {
     return const AdminClientsWidget();
+  }
+
+  Widget _buildSyncingClientsIndicator() {
+    return _buildSyncingIndicator('Synchronisation des partenaires...');
+  }
+
+  Widget _buildSyncingIndicator(String message) {
+    return Center(
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFDC2626)),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                message,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey[700],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handlePartenairesSelection() async {
+    setState(() {
+      _isSyncingClients = true;
+      _selectedIndex = 4;
+    });
+
+    try {
+      final connectivityService = ConnectivityService.instance;
+      final hasConnection = connectivityService.isOnline;
+
+      if (hasConnection) {
+        debugPrint('📥 Synchronisation des partenaires depuis le serveur...');
+        
+        // NE PAS vider - juste synchroniser
+        // Le serveur enverra les modifiés, LocalDB les mergera intelligemment
+        debugPrint('🔄 Téléchargement des partenaires et opérations depuis le serveur...');
+        
+        // 🗑️ IMPORTANT: Réinitialiser le timestamp operations pour forcer téléchargement complet
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('last_sync_operations');
+        debugPrint('🗑️ Timestamp operations réinitialisé - téléchargement complet');
+        
+        final syncService = SyncService();
+        
+        // Télécharger clients ET opérations (dépôts/retraits) pour calculer les soldes
+        await Future.wait([
+          syncService.downloadTableData('clients', 'admin', 'admin'),
+          syncService.downloadTableData('operations', 'admin', 'admin'),
+        ]);
+        
+        // Recharger en mémoire
+        final clientService = ClientService();
+        final operationService = Provider.of<OperationService>(context, listen: false);
+        await Future.wait([
+          clientService.loadClients(),
+          operationService.loadOperations(), // Charger TOUTES les opérations pour calculer soldes
+        ]);
+        
+        debugPrint('✅ ${clientService.clients.length} partenaires chargés');
+      } else {
+        debugPrint('ℹ️ Hors ligne - affichage des partenaires locaux');
+        // Charger depuis la base locale sans suppression
+        final clientService = ClientService();
+        await clientService.loadClients();
+      }
+    } catch (e) {
+      debugPrint('⚠️ Erreur lors de la synchronisation des partenaires: $e');
+      // En cas d'erreur, charger depuis la base locale
+      try {
+        final clientService = ClientService();
+        await clientService.loadClients();
+        debugPrint('💾 Partenaires chargés depuis la base locale');
+      } catch (localError) {
+        debugPrint('❌ Erreur chargement local: $localError');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSyncingClients = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _handleSuppressionsSelection() async {
+    setState(() {
+      _isSyncingDeletions = true;  // ✅ Activer le loader
+      _selectedIndex = 8;
+    });
+
+    try {
+      final connectivityService = ConnectivityService.instance;
+      final hasConnection = connectivityService.isOnline;
+
+      if (hasConnection) {
+        debugPrint('📥 Synchronisation des données pour suppressions...');
+        
+        // 🗑️ Réinitialiser le timestamp operations pour forcer téléchargement complet
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('last_sync_operations');
+        debugPrint('🗑️ Timestamp operations réinitialisé - téléchargement complet');
+        
+        final syncService = SyncService();
+        
+        // Télécharger TOUTES les opérations pour pouvoir les supprimer
+        debugPrint('🔄 Téléchargement de toutes les opérations...');
+        await syncService.downloadTableData('operations', 'admin', 'admin');
+        
+        // Recharger en mémoire
+        final operationService = Provider.of<OperationService>(context, listen: false);
+        await operationService.loadOperations(); // Charger TOUTES les opérations
+        
+        debugPrint('✅ ${operationService.operations.length} opérations chargées');
+      } else {
+        debugPrint('ℹ️ Hors ligne - affichage des opérations locales');
+        // Charger depuis la base locale (fallback)
+        final operationService = Provider.of<OperationService>(context, listen: false);
+        await operationService.loadOperations();
+      }
+    } catch (e) {
+      debugPrint('⚠️ Erreur lors de la synchronisation des opérations: $e');
+      // En cas d'erreur, charger depuis la base locale (fallback)
+      try {
+        final operationService = Provider.of<OperationService>(context, listen: false);
+        await operationService.loadOperations();
+        debugPrint('💾 Opérations chargées depuis la base locale');
+      } catch (localError) {
+        debugPrint('❌ Erreur chargement local: $localError');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSyncingDeletions = false;  // ✅ Désactiver le loader
+        });
+      }
+    }
+  }
+
+  Future<void> _handleCorbeilleSelection() async {
+    setState(() {
+      _isSyncingTrash = true;  // ✅ Activer le loader
+      _selectedIndex = 9;
+    });
+
+    try {
+      final connectivityService = ConnectivityService.instance;
+      final hasConnection = connectivityService.isOnline;
+
+      if (hasConnection) {
+        debugPrint('📥 Synchronisation de la corbeille...');
+        
+        // Réinitialiser le timestamp operations pour forcer téléchargement complet
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('last_sync_operations');
+        debugPrint('🗑️ Timestamp operations réinitialisé');
+        
+        final syncService = SyncService();
+        
+        // Télécharger TOUTES les opérations (incluant celles en corbeille)
+        debugPrint('🔄 Téléchargement des opérations...');
+        await syncService.downloadTableData('operations', 'admin', 'admin');
+        
+        // Recharger en mémoire
+        final operationService = Provider.of<OperationService>(context, listen: false);
+        await operationService.loadOperations();
+        
+        debugPrint('✅ Corbeille synchronisée');
+      } else {
+        debugPrint('ℹ️ Hors ligne - affichage de la corbeille locale');
+        // Charger depuis la base locale (fallback)
+        final operationService = Provider.of<OperationService>(context, listen: false);
+        await operationService.loadOperations();
+      }
+    } catch (e) {
+      debugPrint('⚠️ Erreur synchronisation corbeille: $e');
+      // Fallback local
+      try {
+        final operationService = Provider.of<OperationService>(context, listen: false);
+        await operationService.loadOperations();
+        debugPrint('💾 Corbeille chargée depuis la base locale');
+      } catch (localError) {
+        debugPrint('❌ Erreur chargement local: $localError');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSyncingTrash = false;  // ✅ Désactiver le loader
+        });
+      }
+    }
   }
 
   Widget _buildSimsContent() {
@@ -924,7 +1209,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
               title: 'Partenaires',
               icon: Icons.account_circle,
               color: const Color(0xFFF59E0B),
-              onTap: () => setState(() => _selectedIndex = 4),  // Index 4 = Partenaires
+              onTap: () => _handlePartenairesSelection(),  // Index 4 = Partenaires
             ),
             _buildFluidActionCard(
               title: 'Configuration',
@@ -1012,9 +1297,13 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
       ),
       child: BottomNavigationBar(
         currentIndex: _getMobileNavIndex(_selectedIndex),
-        onTap: (mobileIndex) {
+        onTap: (mobileIndex) async {
           final desktopIndex = _getDesktopIndexFromMobile(mobileIndex);
-          setState(() => _selectedIndex = desktopIndex);
+          if (desktopIndex == 4) {
+            await _handlePartenairesSelection();
+          } else {
+            setState(() => _selectedIndex = desktopIndex);
+          }
         },
         backgroundColor: Colors.white,
         selectedItemColor: const Color(0xFFDC2626),

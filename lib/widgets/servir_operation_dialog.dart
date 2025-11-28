@@ -7,7 +7,6 @@ import '../services/auth_service.dart';
 import '../services/sim_service.dart';
 import '../services/sync_service.dart';
 import '../models/operation_model.dart';
-import '../models/flot_model.dart' as flot_model;
 
 /// Dialog pour servir une opération de retrait Mobile Money
 /// Crée automatiquement une dette entre shop SIM et shop central
@@ -550,7 +549,7 @@ class _ServirOperationDialogState extends State<ServirOperationDialog> {
         shopDestinationDesignation: 'SHOP C',
         montant: _montantNetCalcule!, // Utiliser le montant net recalculé
         devise: widget.operation.devise,
-        modePaiement: _convertModePaiement(widget.operation.modePaiement),
+        modePaiement: widget.operation.modePaiement,
         agentEnvoyeurId: currentUser.id!,
         agentEnvoyeurUsername: currentUser.username,
         notes: 'Dette retrait Mobile Money - Réf: ${widget.operation.codeOps}',
@@ -629,17 +628,4 @@ class _ServirOperationDialogState extends State<ServirOperationDialog> {
     }
   }
   
-  /// Convertir ModePaiement d'opération vers ModePaiement de flot
-  flot_model.ModePaiement _convertModePaiement(ModePaiement mode) {
-    switch (mode) {
-      case ModePaiement.cash:
-        return flot_model.ModePaiement.cash;
-      case ModePaiement.airtelMoney:
-        return flot_model.ModePaiement.airtelMoney;
-      case ModePaiement.mPesa:
-        return flot_model.ModePaiement.mPesa;
-      case ModePaiement.orangeMoney:
-        return flot_model.ModePaiement.orangeMoney;
-    }
-  }
 }

@@ -164,6 +164,8 @@ class OperationNotificationService extends ChangeNotifier {
         return '📱 Retrait Mobile Money';
       case OperationType.virement:
         return '🔄 Virement';
+      case OperationType.flotShopToShop:
+        return '🚚 FLOT Shop-to-Shop';
     }
   }
   
@@ -185,6 +187,8 @@ class OperationNotificationService extends ChangeNotifier {
         return '$amount - Réf: ${operation.reference ?? "N/A"}';
       case OperationType.virement:
         return '$amount - Virement interne';
+      case OperationType.flotShopToShop:
+        return '$amount - ${operation.shopSourceDesignation ?? "Shop"} → ${operation.shopDestinationDesignation ?? "Shop"}';
     }
   }
   

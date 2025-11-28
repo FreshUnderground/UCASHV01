@@ -257,6 +257,8 @@ class AgentOperationsList extends StatelessWidget {
         return Icons.arrow_upward;
       case OperationType.virement:
         return Icons.swap_horiz;
+      case OperationType.flotShopToShop:
+        return Icons.local_shipping;
     }
   }
 
@@ -273,6 +275,8 @@ class AgentOperationsList extends StatelessWidget {
         return const Color(0xFFFF9800);
       case OperationType.virement:
         return const Color(0xFF9C27B0);
+      case OperationType.flotShopToShop:
+        return const Color(0xFF2563EB); // Blue for FLOTs
     }
   }
 
@@ -301,6 +305,8 @@ class AgentOperationsList extends StatelessWidget {
         return const Color(0xFFDC2626); // Rouge pour les sorties
       case OperationType.virement:
         return const Color(0xFF1976D2); // Bleu pour les virements
+      case OperationType.flotShopToShop:
+        return const Color(0xFF2563EB); // Blue for FLOTs (neutral - direction depends on source/destination)
     }
   }
 

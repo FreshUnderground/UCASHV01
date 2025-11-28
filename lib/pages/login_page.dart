@@ -2,8 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../services/local_db.dart';
+import '../services/connectivity_service.dart';
+import '../services/agent_service.dart';
+import '../services/shop_service.dart';
 import '../widgets/footer_widget.dart';
 import '../widgets/modern_widgets.dart';
+import '../widgets/language_selector.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import '../config/app_theme.dart';
 import '../utils/responsive_utils.dart';
 import '../theme/ucash_typography.dart';
@@ -37,6 +42,9 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _isLoading = true);
 
     try {
+      // Sync agents and shops before login if online
+      await _syncBeforeLogin();
+
       final authService = Provider.of<AuthService>(context, listen: false);
       final success = await authService.login(
         _usernameController.text.trim(),
@@ -51,6 +59,27 @@ class _LoginPageState extends State<LoginPage> {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  Future<void> _syncBeforeLogin() async {
+    try {
+      final connectivityService = ConnectivityService.instance;
+      if (connectivityService.isOnline) {
+        // Sync agents and shops silently
+        final agentService = AgentService.instance;
+        final shopService = ShopService.instance;
+
+        await Future.wait([
+          agentService.loadAgents(),
+          shopService.loadShops(),
+        ]);
+
+        debugPrint('✅ Agents et shops synchronisés avant login');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Erreur sync avant login: $e');
+      // Continue with login even if sync fails
     }
   }
 
@@ -80,18 +109,21 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppTheme.primaryRed,
-              AppTheme.primaryRedDark,
-            ],
-          ),
-        ),
+      body: Stack(
+        children: [
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppTheme.primaryRed,
+                  AppTheme.primaryRedDark,
+                ],
+              ),
+            ),
         child: SafeArea(
           child: Column(
             children: [
@@ -113,27 +145,27 @@ class _LoginPageState extends State<LoginPage> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              // Header moderne avec animation
+                              // Header moderne avec logo
                               TweenAnimationBuilder<double>(
                                 duration: const Duration(milliseconds: 800),
                                 tween: Tween(begin: 0.0, end: 1.0),
                                 curve: AppTheme.bounceCurve,
                                 builder: (context, value, child) {
-                                  final iconSize = context.fluidIcon(mobile: 64, tablet: 80, desktop: 100);
+                                  final logoSize = context.fluidIcon(mobile: 100, tablet: 120, desktop: 140);
                                   return Transform.scale(
                                     scale: value,
                                     child: Container(
-                                      width: iconSize,
-                                      height: iconSize,
+                                      width: logoSize,
+                                      height: logoSize,
                                       decoration: BoxDecoration(
-                                        gradient: AppTheme.primaryGradient,
+                                        color: Colors.white,
                                         borderRadius: BorderRadius.circular(context.fluidBorderRadius()),
                                         boxShadow: AppTheme.mediumShadow,
                                       ),
-                                      child: Icon(
-                                        Icons.account_balance_wallet,
-                                        color: Colors.white,
-                                        size: context.fluidIcon(mobile: 32, tablet: 40, desktop: 48),
+                                      padding: const EdgeInsets.all(8),
+                                      child: Image.asset(
+                                        'assets/images/logo.png',
+                                        fit: BoxFit.contain,
                                       ),
                                     ),
                                   );
@@ -163,7 +195,7 @@ class _LoginPageState extends State<LoginPage> {
                                           ),
                                           context.verticalSpace(mobile: 6, tablet: 8, desktop: 10),
                                           Text(
-                                            'Transfert d\'argent moderne et sécurisé',
+                                            l10n.modernSecureTransfer,
                                             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                                               color: AppTheme.textSecondary,
                                             ),
@@ -180,13 +212,13 @@ class _LoginPageState extends State<LoginPage> {
                               
                               // Champs de connexion modernes
                               ModernTextField(
-                                label: 'Nom d\'utilisateur',
-                                hint: 'Entrez votre nom d\'utilisateur',
+                                label: l10n.username,
+                                hint: l10n.enterUsername,
                                 controller: _usernameController,
                                 prefixIcon: Icons.person_outline,
                                 validator: (value) {
                                   if (value == null || value.isEmpty) {
-                                    return 'Veuillez saisir votre nom d\'utilisateur';
+                                    return l10n.pleaseEnterUsername;
                                   }
                                   return null;
                                 },
@@ -195,8 +227,8 @@ class _LoginPageState extends State<LoginPage> {
                               context.verticalSpace(mobile: 16, tablet: 18, desktop: 20),
                               
                               ModernTextField(
-                                label: 'Mot de passe',
-                                hint: 'Entrez votre mot de passe',
+                                label: l10n.password,
+                                hint: l10n.enterPassword,
                                 controller: _passwordController,
                                 obscureText: _obscurePassword,
                                 prefixIcon: Icons.lock_outline,
@@ -208,7 +240,7 @@ class _LoginPageState extends State<LoginPage> {
                                 },
                                 validator: (value) {
                                   if (value == null || value.isEmpty) {
-                                    return 'Veuillez saisir votre mot de passe';
+                                    return l10n.pleaseEnterPassword;
                                   }
                                   return null;
                                 },
@@ -236,7 +268,7 @@ class _LoginPageState extends State<LoginPage> {
                                   ),
                                   const SizedBox(width: AppTheme.spacing8),
                                   Text(
-                                    'Se souvenir de moi',
+                                    l10n.rememberMe,
                                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                       color: AppTheme.textSecondary,
                                     ),
@@ -250,7 +282,7 @@ class _LoginPageState extends State<LoginPage> {
                               SizedBox(
                                 width: double.infinity,
                                 child: ModernButton(
-                                  text: 'Se connecter',
+                                  text: l10n.login,
                                   onPressed: _isLoading ? null : _handleLogin,
                                   isLoading: _isLoading,
                                   icon: Icons.login,
@@ -267,7 +299,7 @@ class _LoginPageState extends State<LoginPage> {
                                     SizedBox(
                                       width: double.infinity,
                                       child: ModernButton(
-                                        text: 'Connexion Agent',
+                                        text: l10n.agentLogin,
                                         onPressed: () {
                                           Navigator.pushNamed(context, '/agent-login');
                                         },
@@ -278,7 +310,7 @@ class _LoginPageState extends State<LoginPage> {
                                     SizedBox(
                                       width: double.infinity,
                                       child: ModernButton(
-                                        text: 'Connexion Client',
+                                        text: l10n.clientLogin,
                                         onPressed: () {
                                           Navigator.pushNamed(context, '/client-login');
                                         },
@@ -294,7 +326,7 @@ class _LoginPageState extends State<LoginPage> {
                                   runSpacing: context.fluidSpacing(mobile: 8, tablet: 12, desktop: 16),
                                   children: [
                                     ModernButton(
-                                      text: 'Connexion Agent',
+                                      text: l10n.agentLogin,
                                       onPressed: () {
                                         Navigator.pushNamed(context, '/agent-login');
                                       },
@@ -302,7 +334,7 @@ class _LoginPageState extends State<LoginPage> {
                                       size: const Size(140, 40),
                                     ),
                                     ModernButton(
-                                      text: 'Connexion Client',
+                                      text: l10n.clientLogin,
                                       onPressed: () {
                                         Navigator.pushNamed(context, '/client-login');
                                       },
@@ -317,7 +349,7 @@ class _LoginPageState extends State<LoginPage> {
                                 TextButton(
                                   onPressed: _createDefaultAdmin,
                                   child: Text(
-                                    'Créer Admin par défaut',
+                                    l10n.createDefaultAdmin,
                                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                       color: AppTheme.textLight,
                                     ),
@@ -351,7 +383,7 @@ class _LoginPageState extends State<LoginPage> {
                                             ),
                                             child: Row(
                                               children: [
-                                                Icon(
+                                                const Icon(
                                                   Icons.error_outline,
                                                   color: AppTheme.error,
                                                   size: 20,
@@ -360,7 +392,7 @@ class _LoginPageState extends State<LoginPage> {
                                                 Expanded(
                                                   child: Text(
                                                     authService.errorMessage!,
-                                                    style: TextStyle(
+                                                    style: const TextStyle(
                                                       color: AppTheme.error,
                                                       fontWeight: FontWeight.w500,
                                                     ),
@@ -388,6 +420,15 @@ class _LoginPageState extends State<LoginPage> {
             ],
           ),
         ),
+          ),
+          
+          // Sélecteur de langue en haut à droite
+          const Positioned(
+            top: 16,
+            right: 16,
+            child: LanguageSelector(compact: true),
+          ),
+        ],
       ),
     );
   }

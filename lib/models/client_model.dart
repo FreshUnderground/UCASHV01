@@ -6,13 +6,15 @@ class ClientModel {
   final String? username;
   final String? password;
   final String? numeroCompte; // Nouveau champ
-  final int shopId;
+  final int? shopId;  // Changé de int à int? pour permettre null
   final double solde; // Solde du compte client (devise principale USD)
   final double? soldeDevise2; // Solde en devise secondaire (CDF/UGX)
   final bool isActive;
   final DateTime? createdAt;
   final DateTime? lastModifiedAt;
   final String? lastModifiedBy;
+  final bool? isSynced;
+  final DateTime? syncedAt;
 
   ClientModel({
     this.id,
@@ -22,13 +24,15 @@ class ClientModel {
     this.username,
     this.password,
     this.numeroCompte, // Nouveau champ
-    required this.shopId,
+    this.shopId,  // Changé de required int à int?
     this.solde = 0.0,
     this.soldeDevise2,
     this.isActive = true,
     this.createdAt,
     this.lastModifiedAt,
     this.lastModifiedBy,
+    this.isSynced = false,
+    this.syncedAt,
   });
 
   factory ClientModel.fromJson(Map<String, dynamic> json) {
@@ -51,7 +55,7 @@ class ClientModel {
       username: json['username'],
       password: json['password'],
       numeroCompte: json['numero_compte'], // Nouveau champ
-      shopId: parseId(shopIdValue) ?? 0,
+      shopId: parseId(shopIdValue),  // Permettre null
       solde: json['solde']?.toDouble() ?? 0.0,
       soldeDevise2: json['solde_devise2']?.toDouble(),
       isActive: json['is_active'] == 1 || json['is_active'] == true,
@@ -60,6 +64,9 @@ class ClientModel {
       lastModifiedAt: json['lastModifiedAt'] != null ? DateTime.parse(json['lastModifiedAt']) : 
                       (json['last_modified_at'] != null ? DateTime.parse(json['last_modified_at']) : null),
       lastModifiedBy: json['lastModifiedBy']?.toString() ?? json['last_modified_by']?.toString(),
+      isSynced: json['is_synced'] == 1 || json['is_synced'] == true,
+      syncedAt: json['syncedAt'] != null ? DateTime.parse(json['syncedAt']) : 
+               (json['synced_at'] != null ? DateTime.parse(json['synced_at']) : null),
     );
   }
 
@@ -72,13 +79,15 @@ class ClientModel {
       'username': username,
       'password': password,
       'numero_compte': numeroCompte, // Nouveau champ
-      'shop_id': shopId,
+      'shop_id': shopId,  // Permettre null
       'solde': solde,
       'solde_devise2': soldeDevise2,
       'is_active': isActive ? 1 : 0,
       'created_at': createdAt?.toString().split('.')[0].replaceFirst('T', ' '), // Format: YYYY-MM-DD HH:MM:SS
       'last_modified_at': lastModifiedAt?.toString().split('.')[0].replaceFirst('T', ' '), // Format: YYYY-MM-DD HH:MM:SS
       'last_modified_by': lastModifiedBy,
+      'is_synced': isSynced == true ? 1 : 0,
+      'synced_at': syncedAt?.toIso8601String(),
     };
   }
 
@@ -97,6 +106,8 @@ class ClientModel {
     DateTime? createdAt,
     DateTime? lastModifiedAt,
     String? lastModifiedBy,
+    bool? isSynced,
+    DateTime? syncedAt,
   }) {
     return ClientModel(
       id: id ?? this.id,
@@ -113,6 +124,8 @@ class ClientModel {
       createdAt: createdAt ?? this.createdAt,
       lastModifiedAt: lastModifiedAt ?? this.lastModifiedAt,
       lastModifiedBy: lastModifiedBy ?? this.lastModifiedBy,
+      isSynced: isSynced ?? this.isSynced,
+      syncedAt: syncedAt ?? this.syncedAt,
     );
   }
 }

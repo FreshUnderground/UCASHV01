@@ -12,6 +12,8 @@ import '../../models/operation_model.dart';
 import '../../models/shop_model.dart';
 import '../../services/shop_service.dart';
 import '../../services/auth_service.dart';
+import '../depot_dialog.dart';
+import '../retrait_dialog.dart';
 
 class ReleveCompteClientReport extends StatefulWidget {
   final int clientId;
@@ -176,66 +178,108 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
 
   Widget _buildSoldeActuel() {
     final soldeActuel = _reportData!['soldeActuel'] as double;
+    final client = _reportData!['client'] as Map<String, dynamic>;
     
-    return Card(
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          borderRadius: const BorderRadius.all(Radius.circular(12)),
-          gradient: LinearGradient(
-            colors: soldeActuel >= 0 
-                ? [Colors.green[400]!, Colors.green[600]!]
-                : [Colors.red[400]!, Colors.red[600]!],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              Icons.account_balance_wallet,
-              color: Colors.white,
-              size: 38,
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Solde Actuel',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Text(
-                    '${soldeActuel.toStringAsFixed(2)} USD',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    soldeActuel >= 0 ? 'Compte Créditeur' : 'Compte Débiteur',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.9),
-                      fontSize: 14,
-                    ),
-                  ),
-                ],
+    return Column(
+      children: [
+        Card(
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              borderRadius: const BorderRadius.all(Radius.circular(12)),
+              gradient: LinearGradient(
+                colors: soldeActuel >= 0 
+                    ? [Colors.green[400]!, Colors.green[600]!]
+                    : [Colors.red[400]!, Colors.red[600]!],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
             ),
-            Icon(
-              soldeActuel >= 0 ? Icons.trending_up : Icons.trending_down,
-              color: Colors.white,
-              size: 32,
+            child: Row(
+              children: [
+                Icon(
+                  Icons.account_balance_wallet,
+                  color: Colors.white,
+                  size: 38,
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Solde Actuel',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        '${soldeActuel.toStringAsFixed(2)} USD',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        soldeActuel >= 0 ? 'Compte Créditeur' : 'Compte Débiteur',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.9),
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  soldeActuel >= 0 ? Icons.trending_up : Icons.trending_down,
+                  color: Colors.white,
+                  size: 32,
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Boutons Dépôt et Retrait
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () => _showDepotDialog(client),
+                icon: const Icon(Icons.add_circle, size: 20),
+                label: const Text('Dépôt'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () => _showRetraitDialog(client),
+                icon: const Icon(Icons.remove_circle, size: 20),
+                label: const Text('Retrait'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
             ),
           ],
         ),
-      ),
+      ],
     );
   }
 
@@ -439,8 +483,8 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
                           ),
                           IconButton(
                             onPressed: _exportToPdf,
-                            icon: const Icon(Icons.download, size: 20),
-                            tooltip: 'Télécharger PDF',
+                            icon: const Icon(Icons.share, size: 20),
+                            tooltip: 'Partager relevé',
                             padding: const EdgeInsets.all(4),
                             constraints: const BoxConstraints(),
                           ),
@@ -476,8 +520,8 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
                       ),
                       IconButton(
                         onPressed: _exportToPdf,
-                        icon: const Icon(Icons.download),
-                        tooltip: 'Télécharger PDF',
+                        icon: const Icon(Icons.share),
+                        tooltip: 'Partager relevé',
                       ),
                       IconButton(
                         onPressed: _printReport,
@@ -703,6 +747,98 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
 
   String _formatDateTime(DateTime date) {
     return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  // Share PDF using Printing.sharePdf (cross-platform compatible)
+  Future<void> _partagerPDF() async {
+    if (_reportData == null) return;
+
+    try {
+      // Show loading indicator
+      if (!mounted) return;
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(content: Text('Génération du PDF en cours...')),
+      );
+
+      // Get required data
+      final clientData = _reportData!['client'] as Map<String, dynamic>;
+      final transactions = _reportData!['transactions'] as List<dynamic>;
+
+      // Create client model from data
+      final client = ClientModel.fromJson(clientData);
+
+      // Convert transaction data to OperationModel objects
+      final operationModels = <OperationModel>[];
+      for (var transaction in transactions) {
+        if (transaction is Map<String, dynamic>) {
+          final operation = OperationModel(
+            codeOps: '',
+            id: transaction['id'] as int?,
+            type: _mapStringToOperationType(transaction['type'] as String),
+            montantBrut: transaction['montant'] as double? ?? 0.0,
+            montantNet: transaction['montant'] as double? ?? 0.0,
+            commission: transaction['commission'] as double? ?? 0.0,
+            devise: 'USD',
+            statut: _mapStringToOperationStatus(transaction['statut'] as String? ?? 'terminee'),
+            dateOp: transaction['date'] as DateTime,
+            modePaiement: ModePaiement.cash,
+            clientId: client.id,
+            agentId: 1,
+            destinataire: transaction['destinataire'] as String?,
+            notes: transaction['notes'] as String?,
+            observation: transaction['observation'] as String?,
+          );
+          operationModels.add(operation);
+        }
+      }
+
+      // Get shop and agent data
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final shopService = Provider.of<ShopService>(context, listen: false);
+      
+      final agent = authService.currentUser!;
+      final shop = shopService.getShopById(agent.shopId ?? 0);
+
+      // Generate PDF
+      final pdfService = PdfService();
+      final pdf = await pdfService.generateClientStatementPdf(
+        client: client,
+        operations: operationModels,
+        shop: shop ?? ShopModel(
+          id: agent.shopId ?? 0,
+          designation: 'Shop Inconnu',
+          localisation: 'Localisation Inconnue',
+          capitalInitial: 0.0,
+          capitalActuel: 0.0,
+          capitalCash: 0.0,
+          capitalAirtelMoney: 0.0,
+          capitalMPesa: 0.0,
+          capitalOrangeMoney: 0.0,
+          createdAt: DateTime.now(),
+        ),
+        startDate: widget.startDate,
+        endDate: widget.endDate,
+      );
+
+      final pdfBytes = await pdf.save();
+      final fileName = 'releve_compte_${client.nom}_${DateTime.now().toString().split(' ')[0]}.pdf';
+      
+      // Utiliser Printing.sharePdf qui fonctionne sur toutes les plateformes
+      await Printing.sharePdf(bytes: pdfBytes, filename: fileName);
+
+      if (mounted) {
+        scaffoldMessenger.showSnackBar(
+          const SnackBar(content: Text('✅ PDF partagé avec succès')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('❌ Erreur partage PDF: $e')),
+        );
+      }
+    }
   }
 
   // Export the report to PDF
@@ -1046,11 +1182,7 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
                           icon: const Icon(Icons.share),
                           onPressed: (context, build, pageFormat) async {
                             // Partager le PDF
-                            final clientData = _reportData!['client'] as Map<String, dynamic>;
-                            await Printing.sharePdf(
-                              bytes: pdfBytes,
-                              filename: 'releve_compte_${clientData['nom']}_${DateTime.now().toString().split(' ')[0]}.pdf',
-                            );
+                            await _partagerPDF();
                           },
                         ),
                         PdfPreviewAction(
@@ -1259,5 +1391,49 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
         );
       }
     }
+  }
+
+  void _showDepotDialog(Map<String, dynamic> clientData) {
+    // Créer un ClientModel depuis les données du rapport
+    final client = ClientModel(
+      id: clientData['id'] as int,
+      nom: clientData['nom'] as String,
+      telephone: clientData['telephone']?.toString() ?? '',
+      adresse: clientData['adresse'] as String?,
+      shopId: clientData['shop_id'] as int?,
+      solde: clientData['solde'] as double? ?? 0.0,
+    );
+
+    showDialog(
+      context: context,
+      builder: (context) => DepotDialog(preselectedClient: client),
+    ).then((result) {
+      if (result == true) {
+        // Recharger le relevé après le dépôt
+        _loadReport();
+      }
+    });
+  }
+
+  void _showRetraitDialog(Map<String, dynamic> clientData) {
+    // Créer un ClientModel depuis les données du rapport
+    final client = ClientModel(
+      id: clientData['id'] as int,
+      nom: clientData['nom'] as String,
+      telephone: clientData['telephone']?.toString() ?? '',
+      adresse: clientData['adresse'] as String?,
+      shopId: clientData['shop_id'] as int?,
+      solde: clientData['solde'] as double? ?? 0.0,
+    );
+
+    showDialog(
+      context: context,
+      builder: (context) => RetraitDialog(preselectedClient: client),
+    ).then((result) {
+      if (result == true) {
+        // Recharger le relevé après le retrait
+        _loadReport();
+      }
+    });
   }
 }

@@ -5,18 +5,17 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/operation_model.dart';
 import '../models/journal_caisse_model.dart';
-import '../models/commission_model.dart';
 import '../models/shop_model.dart';
 import 'local_db.dart';
 import 'rates_service.dart';
 import 'sync_service.dart';
 import 'depot_retrait_sync_service.dart';
-import 'taux_change_service.dart';
 import 'agent_service.dart';
 import 'auth_service.dart';
 import 'compte_special_service.dart';
 import 'sim_service.dart';
 import '../config/app_config.dart';
+
 
 class OperationService extends ChangeNotifier {
   static final OperationService _instance = OperationService._internal();
@@ -79,7 +78,7 @@ class OperationService extends ChangeNotifier {
       if (excludeVirement) {
         final beforeExclusion = _operations.length;
         _operations = _operations.where((op) => op.type != OperationType.virement).toList();
-        debugPrint('🚫 Exclusion FLOT (virements): $beforeExclusion → ${_operations.length} opérations');
+        debugPrint('🚫 Exclusion FLOT (virements): $beforeExclusion → ${_operations.length}');
       }
       
       // Pas d'initialisation de données par défaut
@@ -142,7 +141,8 @@ class OperationService extends ChangeNotifier {
         debugPrint('✅ Agent enrichi depuis session: username "$agentUsername"');
       } else {
         // Fallback: chercher l'agent par ID (si disponible localement)
-        if (operation.agentId != null) {
+        // Since agentId is non-nullable, this check is always true
+        if (true) {
           // Vérifier si les agents sont chargés en mémoire
           if (AgentService.instance.agents.isEmpty) {
             debugPrint('⚠️ Liste des agents vide, rechargement depuis LocalDB...');
@@ -356,6 +356,11 @@ class OperationService extends ChangeNotifier {
         // Virements internes gratuits
         commission = 0.0;
         break;
+        
+      case OperationType.flotShopToShop:
+        // FLOTs shop-to-shop : TOUJOURS commission = 0
+        commission = 0.0;
+        break;
     }
     
     // montantNet = ce que le destinataire reçoit
@@ -387,6 +392,9 @@ class OperationService extends ChangeNotifier {
         break;
       case OperationType.virement:
         // Les virements internes ne changent pas les soldes globaux
+        break;
+      case OperationType.flotShopToShop:
+        // Les FLOTs sont gérés par FlotService (capital déjà mis à jour)
         break;
     }
   }
@@ -450,9 +458,10 @@ class OperationService extends ChangeNotifier {
           
           // 🔥 NOUVELLE LOGIQUE: Détection retrait cross-shop et création dette automatique
           // Si le client a été créé par un shop différent de celui qui effectue le retrait
-          if (client.shopId != operation.shopSourceId) {
+          final clientShopId = client.shopId;
+          if (clientShopId != null && clientShopId != operation.shopSourceId) {
             await _handleCrossShopDebt(
-              clientOriginalShopId: client.shopId,
+              clientOriginalShopId: clientShopId,
               withdrawalShopId: operation.shopSourceId!,
               amount: operation.montantNet,
               clientName: client.nom,
@@ -461,21 +470,15 @@ class OperationService extends ChangeNotifier {
           }
         }
       }
-
-      // 2. Diminuer le capital du shop selon le mode de paiement
-      if (operation.shopSourceId != null) {
-        final shop = await LocalDB.instance.getShopById(operation.shopSourceId!);
-        if (shop != null) {
-          final updatedShop = _updateShopCapital(shop, operation.modePaiement, operation.montantNet, false, devise: operation.devise);
-          await LocalDB.instance.saveShop(updatedShop);
-          debugPrint('🏪 Capital shop ${shop.designation} mis a jour (-${operation.montantNet} ${operation.devise})');
-        }
-      }
     } catch (e) {
       debugPrint('❌ Erreur mise à jour soldes retrait: $e');
       throw e;
     }
   }
+
+
+
+
 
   /// Gérer les soldes pour un retrait Mobile Money (Cash-Out)
   /// LOGIQUE: 
@@ -639,14 +642,39 @@ class OperationService extends ChangeNotifier {
             debugPrint('📝 Journal caisse: SORTIE de ${operation.montantNet} ${operation.devise} pour shop destination (international)');
           }
         }
+        
+        // Transferts internationaux SORTANTS : Logique spéciale
+        if (operation.shopSourceId != null && operation.type == OperationType.transfertInternationalSortant) {
+          final shopSource = await LocalDB.instance.getShopById(operation.shopSourceId!);
+          if (shopSource != null) {
+            // Le shop source GAGNE le montant brut (montant + commission)
+            final updatedShopSource = _updateShopCapital(shopSource, operation.modePaiement, operation.montantBrut, true, devise: operation.devise);
+            await LocalDB.instance.saveShop(updatedShopSource);
+            debugPrint('🏪 Shop source ${shopSource.designation}: +${operation.montantBrut} ${operation.devise} (transfert international sortant)');
+            
+            // CRÉER ENTRÉE JOURNAL DE CAISSE : ENTRÉE pour le shop source
+            final journalEntryEnvoi = JournalCaisseModel(
+              shopId: operation.shopSourceId!,
+              agentId: operation.agentId,
+              libelle: 'Transfert International ENVOYÉ - ${operation.destinataire} (Montant envoyé)',
+              montant: operation.montantBrut, // Montant envoyé (brut avec commission)
+              type: TypeMouvement.entree, // ENTRÉE de caisse
+              mode: operation.modePaiement,
+              dateAction: DateTime.now(), // Date d'envoi
+              operationId: operation.id,
+              notes: 'Transfert international envoyé depuis ${shopSource.designation}',
+              lastModifiedAt: DateTime.now(),
+              lastModifiedBy: 'agent_${operation.agentId}',
+            );
+            
+            await LocalDB.instance.saveJournalEntry(journalEntryEnvoi);
+            debugPrint('📝 Journal caisse: ENTRÉE de ${operation.montantBrut} ${operation.devise} pour shop source (international)');
+          }
+        }
       }
-
-      // 3. Pour les transferts internationaux sortants : shop source gagne à la création
-      // 4. Pour les transferts internationaux entrants : shop destination perd à la validation
-      
     } catch (e) {
       debugPrint('❌ Erreur mise à jour soldes transfert: $e');
-      throw e;
+      rethrow; // Utiliser rethrow au lieu de throw e
     }
   }
 
@@ -1157,11 +1185,12 @@ class OperationService extends ChangeNotifier {
   }
   
   /// Récupérer les transferts EN ATTENTE à servir (Shop Destination)
-  /// Retourne les transferts que ce shop doit servir
+  /// Retourne UNIQUEMENT les transferts que ce shop doit servir
+  /// EXCLUT les FLOTs (flotShopToShop) qui ont leur propre section de gestion
   /// SÉCURITÉ: Filtre UNIQUEMENT les transferts où ce shop est la DESTINATION
   List<OperationModel> getTransfertsAServir(int shopDestinationId) {
     return _operations.where((op) {
-      // Vérifier que c'est un transfert
+      // Vérifier que c'est un transfert (PAS un FLOT)
       final isTransfert = op.type == OperationType.transfertNational ||
                           op.type == OperationType.transfertInternationalSortant ||
                           op.type == OperationType.transfertInternationalEntrant;
@@ -1211,13 +1240,14 @@ class OperationService extends ChangeNotifier {
   }
   
   /// Vérifier si un agent/shop peut valider un transfert
+  /// EXCLUT les FLOTs (flotShopToShop) qui ont leur propre gestion
   /// Retourne true UNIQUEMENT si le shop est le DESTINATAIRE
   bool peutValiderTransfert(int operationId, int currentShopId) {
     final operation = _operations.where((op) => op.id == operationId).firstOrNull;
     
     if (operation == null) return false;
     
-    // Vérifier que c'est un transfert
+    // Vérifier que c'est un transfert (PAS un FLOT)
     final isTransfert = operation.type == OperationType.transfertNational ||
                         operation.type == OperationType.transfertInternationalSortant ||
                         operation.type == OperationType.transfertInternationalEntrant;
@@ -1363,6 +1393,11 @@ class OperationService extends ChangeNotifier {
             op.statut == OperationStatus.enAttente) {
           return true;
         }
+        // Pour les FLOTs: doit être EN ATTENTE
+        if (op.type == OperationType.flotShopToShop &&
+            op.statut == OperationStatus.enAttente) {
+          return true;
+        }
         // Pour les depot/retrait: peut être VALIDE ou TERMINE
         if ((op.type == OperationType.depot ||
              op.type == OperationType.retrait) &&
@@ -1372,13 +1407,14 @@ class OperationService extends ChangeNotifier {
         return false;
       }).toList();
       
-      // Filtrer par shop si nécessaire (seulement les transferts destinés à ce shop et depot/retrait provenant de ce shop)
+      // Filtrer par shop si nécessaire (transferts + FLOTs destinés à ce shop, depot/retrait provenant de ce shop)
       if (_activeShopFilter != null) {
         pendingOps = pendingOps.where((op) => 
-          // Pour les transferts, le shop doit être la destination
+          // Pour les transferts et FLOTs, le shop doit être la destination
           ((op.type == OperationType.transfertNational ||
             op.type == OperationType.transfertInternationalSortant ||
-            op.type == OperationType.transfertInternationalEntrant) &&
+            op.type == OperationType.transfertInternationalEntrant ||
+            op.type == OperationType.flotShopToShop) &&
            op.shopDestinationId == _activeShopFilter) ||
           // Pour les depot/retrait, le shop doit être la source
           ((op.type == OperationType.depot ||

@@ -20,9 +20,18 @@ class RatesService extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   
   // Charger tous les taux et commissions
-  Future<void> loadRatesAndCommissions() async {
+  Future<void> loadRatesAndCommissions({bool clearBeforeLoad = false}) async {
     _setLoading(true);
     try {
+      // Si clearBeforeLoad, supprimer toutes les données locales pour forcer le rechargement depuis le serveur
+      if (clearBeforeLoad) {
+        debugPrint('🗑️ [RatesService] Suppression des taux et commissions en local avant rechargement...');
+        await LocalDB.instance.clearAllTaux();
+        await LocalDB.instance.clearAllCommissions();
+        _taux.clear();
+        _commissions.clear();
+      }
+      
       final loadedTaux = await LocalDB.instance.getAllTaux();
       final loadedCommissions = await LocalDB.instance.getAllCommissions();
       

@@ -77,7 +77,7 @@ try {
             'telephone' => $client['telephone'],
             'adresse' => $client['adresse'],
             'solde' => (float)$client['solde'],
-            'shop_id' => (int)$client['shop_id'],
+            'shop_id' => $client['shop_id'] ? (int)$client['shop_id'] : null, // Permettre NULL pour clients admin
             'shop_designation' => $client['shop_designation'] ?? $client['shop_name'],
             'agent_id' => $client['agent_id'] ? (int)$client['agent_id'] : null,
             'agent_username' => $client['agent_username'] ?? $client['agent_name'],

@@ -291,7 +291,7 @@ class AuthService extends ChangeNotifier {
       // 1. Rafraîchir les services de données de base
       debugPrint('📊 Rafraîchissement des services de données...');
       
-      // Rafraîchir les taux et commissions
+      // Rafraîchir les taux et commissions (forceRefresh uniquement, pas de suppression)
       try {
         await RatesService.instance.loadRatesAndCommissions();
         debugPrint('✅ Taux et commissions rechargés');
@@ -299,7 +299,7 @@ class AuthService extends ChangeNotifier {
         debugPrint('⚠️ Erreur rechargement taux/commissions: $e');
       }
       
-      // Rafraîchir les shops
+      // Rafraîchir les shops (forceRefresh uniquement, pas de suppression)
       try {
         await ShopService.instance.loadShops(forceRefresh: true);
         debugPrint('✅ Shops rechargés');
@@ -312,7 +312,7 @@ class AuthService extends ChangeNotifier {
         final userId = _currentUser!.id;
         final username = _currentUser!.username;
         
-        // Recharger les agents depuis la base locale
+        // Recharger les agents depuis la base locale (forceRefresh uniquement, pas de suppression)
         await AgentService.instance.loadAgents(forceRefresh: true);
         
         // Recharger l'utilisateur depuis AgentService

@@ -512,12 +512,22 @@ class _ClotureAgentWidgetState extends State<ClotureAgentWidget> {
                           ],
                         ),
                       ),
-                      // Bouton supprimer
-                      IconButton(
-                        onPressed: () => _supprimerCloture(cloture),
-                        icon: const Icon(Icons.delete_outline),
-                        color: Colors.red,
-                        tooltip: 'Supprimer',
+                      // Bouton supprimer (Admin seulement)
+                      Consumer<AuthService>(
+                        builder: (context, authService, child) {
+                          final isAdmin = authService.currentUser?.role == 'admin';
+                          
+                          if (!isAdmin) {
+                            return const SizedBox.shrink();
+                          }
+                          
+                          return IconButton(
+                            onPressed: () => _supprimerCloture(cloture),
+                            icon: const Icon(Icons.delete_outline),
+                            color: Colors.red,
+                            tooltip: 'Supprimer (Admin)',
+                          );
+                        },
                       ),
                     ],
                   ),

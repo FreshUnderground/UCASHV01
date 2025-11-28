@@ -23,16 +23,31 @@ class ShopService extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
 
   // Charger tous les shops
-  Future<void> loadShops({bool forceRefresh = false}) async {
+  Future<void> loadShops({bool forceRefresh = false, bool clearBeforeLoad = false}) async {
     _setLoading(true);
     try {
+      // Si clearBeforeLoad, supprimer toutes les données locales pour forcer le rechargement depuis le serveur
+      // NOTE: Ceci est utilisé uniquement pendant la synchronisation pour garantir des données fraîches
+      if (clearBeforeLoad) {
+        debugPrint('🗑️ [ShopService] Suppression des shops en local avant rechargement...');
+        await LocalDB.instance.clearAllShops();
+        _shops.clear();
+      }
+      
       // Si forceRefresh, vider d'abord le cache
       if (forceRefresh) {
         _shops.clear();
         debugPrint('🗑️ [ShopService] Cache vidé - Rechargement forcé');
       }
       
+      // Charger depuis la base locale
       _shops = await LocalDB.instance.getAllShops();
+      
+      // Si clearBeforeLoad a été utilisé mais qu'il n'y a pas de données, log un avertissement
+      if (clearBeforeLoad && _shops.isEmpty) {
+        debugPrint('⚠️ [ShopService] Aucun shop chargé après clearBeforeLoad - Vérifiez la synchronisation');
+      }
+      
       _errorMessage = null;
       notifyListeners(); // Notifier les widgets après le chargement
     } catch (e) {

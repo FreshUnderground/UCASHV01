@@ -189,22 +189,24 @@ class RobustSyncService {
         errors.add('queue_flots');
       }
       
-      // ========== ÉTAPE 2: RETRY DES FLOTS NON SYNCHRONISÉS ==========
-      // Les flots en échec précédent sont retestés
-      if (await _syncWithRetry('retry_flots', () async {
-        debugPrint('  🔄 [PRIORITÉ 2] Retry flots en attente...');
-        await _flotService.retrySyncPendingFlots();
+      // ========== ÉTAPE 2: SYNC BIDIRECTIONNELLE DES FLOTS (via operations) ==========
+      // Les FLOTs utilisent maintenant la table operations avec type=flotShopToShop
+      if (await _syncWithRetry('flots', () async {
+        debugPrint('  🚚 [ÉTAPE 2] Sync FLOTS (via operations)...');
+        // Les FLOTs sont maintenant synchronisés via le endpoint operations
+        // Pas besoin de sync séparé car ils font partie des opérations
+        debugPrint('  ✅ FLOTs synchronisés via operations (type=flotShopToShop)');
       })) {
         successCount++;
       } else {
         errorCount++;
-        errors.add('retry_flots');
+        errors.add('flots');
       }
       
       // ========== ÉTAPE 3: SYNC BIDIRECTIONNELLE DES OPÉRATIONS ==========
       // Download les nouvelles opérations depuis le serveur
       if (await _syncWithRetry('operations', () async {
-        debugPrint('  📤📥 [PRIORITÉ 3] Sync opérations bidirectionnelle...');
+        debugPrint('  📤📥 [ÉTAPE 3] Sync opérations bidirectionnelle...');
         await _transferSync.syncTransfers();
       })) {
         successCount++;
@@ -213,23 +215,10 @@ class RobustSyncService {
         errors.add('operations');
       }
       
-      // ========== ÉTAPE 4: SYNC BIDIRECTIONNELLE DES FLOTS ==========
-      if (await _syncWithRetry('flots', () async {
-        debugPrint('  📤 Upload FLOTS...');
-        await _syncService.uploadTableData('flots', 'auto_fast_sync');
-        debugPrint('  📥 Download FLOTS...');
-        await _syncService.downloadTableData('flots', 'auto_fast_sync', 'admin');
-      })) {
-        successCount++;
-      } else {
-        errorCount++;
-        errors.add('flots');
-      }
-      
-      // ========== ÉTAPE 5: SYNC COMPTES SPÉCIAUX (Clients) ==========
+      // ========== ÉTAPE 4: SYNC COMPTES SPÉCIAUX (Clients) ==========
       if (await _syncWithRetry('comptes_speciaux', () async {
         debugPrint('  📤 Upload COMPTES SPÉCIAUX...');
-        await _syncService.uploadTableData('comptes_speciaux', 'auto_fast_sync');
+        await _syncService.uploadTableData('comptes_speciaux', 'auto_fast_sync', 'admin');
         debugPrint('  📥 Download COMPTES SPÉCIAUX...');
         await _syncService.downloadTableData('comptes_speciaux', 'auto_fast_sync', 'admin');
       })) {
@@ -239,10 +228,10 @@ class RobustSyncService {
         errors.add('comptes_speciaux');
       }
       
-      // ========== ÉTAPE 6: SYNC CLIENTS ==========
+      // ========== ÉTAPE 5: SYNC CLIENTS ==========
       if (await _syncWithRetry('clients', () async {
         debugPrint('  📤 Upload CLIENTS...');
-        await _syncService.uploadTableData('clients', 'auto_fast_sync');
+        await _syncService.uploadTableData('clients', 'auto_fast_sync', 'admin');
         debugPrint('  📥 Download CLIENTS...');
         await _syncService.downloadTableData('clients', 'auto_fast_sync', 'admin');
       })) {
@@ -252,10 +241,10 @@ class RobustSyncService {
         errors.add('clients');
       }
       
-      // ========== ÉTAPE 7: SYNC SIMS ==========
+      // ========== ÉTAPE 6: SYNC SIMS ==========
       if (await _syncWithRetry('sims', () async {
         debugPrint('  📱 Upload SIMS...');
-        await _syncService.uploadTableData('sims', 'auto_fast_sync');
+        await _syncService.uploadTableData('sims', 'auto_fast_sync', 'admin');
         debugPrint('  📥 Download SIMS...');
         await _syncService.downloadTableData('sims', 'auto_fast_sync', 'admin');
       })) {
@@ -265,10 +254,10 @@ class RobustSyncService {
         errors.add('sims');
       }
       
-      // ========== ÉTAPE 8: SYNC TRANSACTIONS VIRTUELLES ==========
+      // ========== ÉTAPE 7: SYNC TRANSACTIONS VIRTUELLES ==========
       if (await _syncWithRetry('virtual_transactions', () async {
         debugPrint('  💰 Upload VIRTUAL_TRANSACTIONS...');
-        await _syncService.uploadTableData('virtual_transactions', 'auto_fast_sync');
+        await _syncService.uploadTableData('virtual_transactions', 'auto_fast_sync', 'admin');
         debugPrint('  📥 Download VIRTUAL_TRANSACTIONS...');
         await _syncService.downloadTableData('virtual_transactions', 'auto_fast_sync', 'admin');
       })) {
@@ -278,10 +267,10 @@ class RobustSyncService {
         errors.add('virtual_transactions');
       }
       
-      // ========== ÉTAPE 9: SYNC AUDIT LOG ==========
+      // ========== ÉTAPE 8: SYNC AUDIT LOG ==========
       if (await _syncWithRetry('audit_log', () async {
         debugPrint('  📤 Upload AUDIT LOG...');
-        await _syncService.uploadTableData('audit_log', 'auto_fast_sync');
+        await _syncService.uploadTableData('audit_log', 'auto_fast_sync', 'admin');
         debugPrint('  📥 Download AUDIT LOG...');
         await _syncService.downloadTableData('audit_log', 'auto_fast_sync', 'admin');
       })) {
@@ -291,10 +280,10 @@ class RobustSyncService {
         errors.add('audit_log');
       }
       
-      // ========== ÉTAPE 8: SYNC RECONCILIATIONS ==========
+      // ========== ÉTAPE 9: SYNC RECONCILIATIONS ==========
       if (await _syncWithRetry('reconciliations', () async {
         debugPrint('  📤 Upload RECONCILIATIONS...');
-        await _syncService.uploadTableData('reconciliations', 'auto_fast_sync');
+        await _syncService.uploadTableData('reconciliations', 'auto_fast_sync', 'admin');
         debugPrint('  📥 Download RECONCILIATIONS...');
         await _syncService.downloadTableData('reconciliations', 'auto_fast_sync', 'admin');
       })) {
@@ -351,7 +340,7 @@ class RobustSyncService {
       // 1. SHOPS (prioritaire)
       if (await _syncWithRetry('shops', () async {
         debugPrint('  📤 Upload SHOPS...');
-        await _syncService.uploadTableData('shops', 'auto_slow_sync');
+        await _syncService.uploadTableData('shops', 'auto_slow_sync', 'admin');
         debugPrint('  📥 Download SHOPS...');
         await _syncService.downloadTableData('shops', 'auto_slow_sync', 'admin');
       })) {
@@ -364,7 +353,7 @@ class RobustSyncService {
       // 2. AGENTS (dépend de shops)
       if (await _syncWithRetry('agents', () async {
         debugPrint('  📤 Upload AGENTS...');
-        await _syncService.uploadTableData('agents', 'auto_slow_sync');
+        await _syncService.uploadTableData('agents', 'auto_slow_sync', 'admin');
         debugPrint('  📥 Download AGENTS...');
         await _syncService.downloadTableData('agents', 'auto_slow_sync', 'admin');
       })) {
@@ -377,7 +366,7 @@ class RobustSyncService {
       // 3. COMMISSIONS
       if (await _syncWithRetry('commissions', () async {
         debugPrint('  📤 Upload COMMISSIONS...');
-        await _syncService.uploadTableData('commissions', 'auto_slow_sync');
+        await _syncService.uploadTableData('commissions', 'auto_slow_sync', 'admin');
         debugPrint('  📥 Download COMMISSIONS...');
         await _syncService.downloadTableData('commissions', 'auto_slow_sync', 'admin');
       })) {
@@ -390,7 +379,7 @@ class RobustSyncService {
       // 4. CLÔTURE CAISSE
       if (await _syncWithRetry('cloture_caisse', () async {
         debugPrint('  📤 Upload CLÔTURES...');
-        await _syncService.uploadTableData('cloture_caisse', 'auto_slow_sync');
+        await _syncService.uploadTableData('cloture_caisse', 'auto_slow_sync', 'admin');
         debugPrint('  📥 Download CLÔTURES...');
         await _syncService.downloadTableData('cloture_caisse', 'auto_slow_sync', 'admin');
       })) {
@@ -403,7 +392,7 @@ class RobustSyncService {
       // 5. DOCUMENT HEADERS (EN-TÊTES)
       if (await _syncWithRetry('document_headers', () async {
         debugPrint('  📤 Upload DOCUMENT HEADERS...');
-        await _syncService.uploadTableData('document_headers', 'auto_slow_sync');
+        await _syncService.uploadTableData('document_headers', 'auto_slow_sync', 'admin');
         debugPrint('  📥 Download DOCUMENT HEADERS...');
         await _syncService.downloadTableData('document_headers', 'auto_slow_sync', 'admin');
       })) {

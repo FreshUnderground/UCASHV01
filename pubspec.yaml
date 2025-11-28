@@ -9,6 +9,10 @@ dependencies:
   flutter:
     sdk: flutter
   
+  # Localisation (support bilingue Français-Anglais)
+  flutter_localizations:
+    sdk: flutter
+  
   # Base de données locale
   sqflite: ^2.3.0
   path: ^1.8.3
@@ -67,6 +71,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  
+  # Enable generation of localizations
+  generate: true
   
   # Assets
   assets:

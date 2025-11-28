@@ -797,9 +797,9 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
     // FILTRE PAR SHOP: FLOTs envoyés depuis ce shop OU reçus vers ce shop
     final todayFlots = flotService.flots.where((flot) => 
       (flot.shopSourceId == shopId || flot.shopDestinationId == shopId) &&  // Changed filter to shopId
-      flot.dateEnvoi.year == today.year &&
-      flot.dateEnvoi.month == today.month &&
-      flot.dateEnvoi.day == today.day
+      flot.dateOp.year == today.year &&
+      flot.dateOp.month == today.month &&
+      flot.dateOp.day == today.day
     ).toList();
 
     // CALCUL DU CASH DISPONIBLE DU JOUR selon la formule:
@@ -849,18 +849,18 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
     // 3. FLOT Reçu (FLOTs vers nous: en cours + servis reçus aujourd'hui)
     final flotRecuUSD = todayFlots
         .where((flot) => flot.shopDestinationId == shopId && flot.devise == 'USD')
-        .fold<double>(0.0, (sum, flot) => sum + flot.montant);
+        .fold<double>(0.0, (sum, flot) => sum + flot.montantNet);
     final flotRecuDeviseLocale = todayFlots
         .where((flot) => flot.shopDestinationId == shopId && (flot.devise == 'CDF' || flot.devise == 'UGX'))
-        .fold<double>(0.0, (sum, flot) => sum + flot.montant);
+        .fold<double>(0.0, (sum, flot) => sum + flot.montantNet);
     
     // 4. FLOT Envoyé (FLOTs par nous: en cours + servis envoyés aujourd'hui)
     final flotEnvoyeUSD = todayFlots
         .where((flot) => flot.shopSourceId == shopId && flot.devise == 'USD')
-        .fold<double>(0.0, (sum, flot) => sum + flot.montant);
+        .fold<double>(0.0, (sum, flot) => sum + flot.montantNet);
     final flotEnvoyeDeviseLocale = todayFlots
         .where((flot) => flot.shopSourceId == shopId && (flot.devise == 'CDF' || flot.devise == 'UGX'))
-        .fold<double>(0.0, (sum, flot) => sum + flot.montant);
+        .fold<double>(0.0, (sum, flot) => sum + flot.montantNet);
     
     // 5. Transferts Reçus (client nous paie - ENTRÉE)
     final transfertRecuUSD = todayOperations
@@ -922,11 +922,11 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
     // Ajouter les montants des FLOTs
     for (final flot in todayFlots) {
       if (flot.devise == 'USD') {
-        totalMontantUSD += flot.montant;
+        totalMontantUSD += flot.montantNet;
       } else if (flot.devise == 'CDF') {
-        totalMontantCDF += flot.montant;
+        totalMontantCDF += flot.montantNet;
       } else if (flot.devise == 'UGX') {
-        totalMontantUGX += flot.montant;
+        totalMontantUGX += flot.montantNet;
       }
     }
     

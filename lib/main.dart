@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'services/auth_service.dart';
+import 'services/language_service.dart';
 import 'services/local_db.dart';
 import 'services/shop_service.dart';
 import 'services/agent_service.dart';
@@ -21,6 +24,7 @@ import 'services/robust_sync_service.dart';
 import 'services/connectivity_service.dart';
 import 'services/sim_service.dart';
 import 'services/virtual_transaction_service.dart';
+import 'services/deletion_service.dart';
 import 'pages/login_page.dart';
 import 'pages/agent_login_page.dart';
 import 'pages/client_login_page.dart';
@@ -30,6 +34,8 @@ import 'pages/dashboard_compte.dart';
 import 'pages/agent_dashboard_page.dart';
 import 'pages/client_dashboard_page.dart';
 import 'pages/reports_page.dart';
+import 'pages/language_settings_page.dart';
+import 'pages/bilingual_usage_example_page.dart';
 import 'config/app_config.dart';
 import 'config/app_theme.dart';
 import 'widgets/loading_screen.dart';
@@ -73,6 +79,11 @@ class _UCashAppState extends State<UCashApp> {
       // Update loading state
       _updateLoadingState('Initialisation de la base de données...', 0.1);
 
+      // Initialiser le service de langue (doit être fait en premier)
+      final languageService = LanguageService.instance;
+      await languageService.initialize();
+      debugPrint('✅ LanguageService initialisé - Langue: ${languageService.currentLanguageName}');
+
       // Initialiser et vérifier l'admin par défaut (PROTÉGÉ)
       await LocalDB.instance.initializeDefaultAdmin();
       await LocalDB.instance.ensureAdminExists();
@@ -96,6 +107,12 @@ class _UCashAppState extends State<UCashApp> {
       // Initialize ConnectivityService
       final connectivityService = ConnectivityService.instance;
       connectivityService.startMonitoring();
+      
+      // Initialize DeletionService et démarrer l'auto-sync (toutes les 2 minutes)
+      debugPrint('🗑️ Initialisation de DeletionService...');
+      final deletionService = DeletionService.instance;
+      deletionService.startAutoSync();
+      debugPrint('✅ DeletionService initialisé avec auto-sync activé');
       
       _updateLoadingState('Chargement des données initiales...', 0.5);
 
@@ -164,6 +181,7 @@ class _UCashAppState extends State<UCashApp> {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthService()),
+        ChangeNotifierProvider(create: (_) => LanguageService.instance),
         ChangeNotifierProvider(create: (_) => ShopService.instance),
         ChangeNotifierProvider(create: (_) => AgentService.instance),
         ChangeNotifierProvider(create: (_) => ClientService()),
@@ -180,10 +198,24 @@ class _UCashAppState extends State<UCashApp> {
         ChangeNotifierProvider(create: (_) => ConnectivityService.instance),
         ChangeNotifierProvider(create: (_) => SimService.instance),
         ChangeNotifierProvider(create: (_) => VirtualTransactionService.instance),
+        ChangeNotifierProvider(create: (_) => DeletionService.instance),
       ],
-      child: MaterialApp(
-        title: 'UCASH - Transfert d\'Argent Moderne',
-        debugShowCheckedModeBanner: false,
+      child: Builder(
+        builder: (context) {
+          return MaterialApp(
+            title: 'UCASH - Transfert d\'Argent Moderne',
+            debugShowCheckedModeBanner: false,
+            
+            // Configuration de la localisation
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: LanguageService.supportedLocales,
+            locale: context.watch<LanguageService>().currentLocale,
+        
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
         themeMode: ThemeMode.light, // Peut être changé dynamiquement
@@ -227,6 +259,8 @@ class _UCashAppState extends State<UCashApp> {
           '/agent-dashboard': (context) => const AgentDashboardPage(),
           '/client-dashboard': (context) => const ClientDashboardPage(),
           '/reports': (context) => const ReportsPage(),
+          '/language-settings': (context) => const LanguageSettingsPage(),
+          '/bilingual-example': (context) => const BilingualUsageExamplePage(),
           '/dashboard': (context) => Consumer<AuthService>(
             builder: (context, authService, child) {
               if (!authService.isAuthenticated) {
@@ -251,6 +285,8 @@ class _UCashAppState extends State<UCashApp> {
               }
             },
           ),
+        },
+          );
         },
       ),
     );

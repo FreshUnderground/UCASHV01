@@ -16,6 +16,9 @@ import '../widgets/flot_management_widget.dart';
 import '../widgets/comptes_speciaux_widget.dart';
 import '../widgets/sync_monitor_widget.dart';
 import '../widgets/virtual_transactions_widget.dart';
+import '../widgets/language_selector.dart';
+import '../widgets/agent_deletion_validation_widget.dart';
+import '../services/deletion_service.dart';
 
 class DashboardAgentPage extends StatefulWidget {
   const DashboardAgentPage({super.key});
@@ -34,6 +37,7 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
     'FLOT',
     'Frais',
     'VIRTUEL',
+    'Suppressions', // Nouvelle entrée
   ];
 
   final List<IconData> _menuIcons = [
@@ -43,6 +47,7 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
     Icons.local_shipping,
     Icons.account_balance,
     Icons.mobile_friendly,
+    Icons.delete_sweep, // Suppressions
   ];
 
   @override
@@ -208,6 +213,25 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
     return AppBar(
       title: Row(
         children: [
+          // Logo UCASH
+          Container(
+            height: 40,
+            width: 40,
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Image.asset(
+              'assets/images/logo.png',
+              fit: BoxFit.contain,
+            ),
+          ),
+          const SizedBox(width: 12),
+          if (!isMobile) const Text(
+            'UCASH Agent',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+          ),
         ],
       ),
       flexibleSpace: Container(
@@ -222,6 +246,10 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
       elevation: 4,
       shadowColor: Colors.black.withOpacity(0.3),
       actions: [
+        // Sélecteur de langue compact
+        const LanguageSelector(compact: true),
+        const SizedBox(width: 8),
+        
         // Bouton Sync Monitor
         IconButton(
           icon: const Icon(Icons.sync_alt, color: Colors.white),
@@ -342,9 +370,19 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    '💸',
-                    style: TextStyle(fontSize: isMobile ? 36 : 40),
+                  // Logo UCASH
+                  Container(
+                    height: isMobile ? 50 : 60,
+                    width: isMobile ? 50 : 60,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      fit: BoxFit.contain,
+                    ),
                   ),
                   SizedBox(height: isMobile ? 6 : 8),
                   Text(
@@ -417,11 +455,24 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
                 colors: [Color(0xFF48bb78), Color(0xFF38a169)],
               ),
             ),
-            child: const Column(
+            child: Column(
               children: [
-                Text('💸', style: TextStyle(fontSize: 48)),
-                SizedBox(height: 12),
-                Text(
+                // Logo UCASH
+                Container(
+                  height: 70,
+                  width: 70,
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Image.asset(
+                    'assets/images/logo.png',
+                    fit: BoxFit.contain,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
                   'UCASH Agent',
                   style: TextStyle(
                     color: Colors.white,
@@ -481,11 +532,19 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
   }
 
   Widget _buildBottomNavigation() {
+    // Bottom navigation avec seulement 4 items: Operations, Validation, Rapports, FLOT
+    final bottomNavItems = [
+      {'index': 0, 'icon': _menuIcons[0], 'label': _menuItems[0]}, // Opérations
+      {'index': 1, 'icon': _menuIcons[1], 'label': _menuItems[1]}, // Validations
+      {'index': 2, 'icon': _menuIcons[2], 'label': _menuItems[2]}, // Rapports
+      {'index': 3, 'icon': _menuIcons[3], 'label': _menuItems[3]}, // FLOT
+    ];
+
     return BottomNavigationBar(
-      currentIndex: _selectedIndex,
-      onTap: (index) {
+      currentIndex: bottomNavItems.indexWhere((item) => item['index'] == _selectedIndex),
+      onTap: (bottomIndex) {
         setState(() {
-          _selectedIndex = index;
+          _selectedIndex = bottomNavItems[bottomIndex]['index'] as int;
         });
       },
       type: BottomNavigationBarType.fixed,
@@ -493,14 +552,13 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
       unselectedItemColor: Colors.grey,
       selectedFontSize: 12,
       unselectedFontSize: 11,
-      items: _menuItems.asMap().entries.map((entry) {
-        final index = entry.key;
-        final label = entry.value;
+      items: bottomNavItems.map((item) {
+        final index = item['index'] as int;
         return BottomNavigationBarItem(
           icon: Stack(
             clipBehavior: Clip.none,
             children: [
-              Icon(_menuIcons[index]),
+              Icon(item['icon'] as IconData),
               if (index == 1) // Index 1 = Validations
                 Positioned(
                   right: -8,
@@ -509,7 +567,7 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
                 ),
             ],
           ),
-          label: label,
+          label: item['label'] as String,
         );
       }).toList(),
     );
@@ -552,7 +610,7 @@ Widget _buildMainContent() {
   final isMobile = size.width <= 768;
 
   // Widgets qui gèrent leur propre layout (ne pas les mettre dans SingleChildScrollView)
-  final widgetsWithOwnLayout = [0, 1, 2, 3, 4, 5]; // Opérations, Validations, Rapports, FLOT, Frais, VIRTUEL
+  final widgetsWithOwnLayout = [0, 1, 2, 3, 4, 5, 6]; // Opérations, Validations, Rapports, FLOT, Frais, VIRTUEL, Suppressions
 
   Widget content = switch (_selectedIndex) {
     0 => _buildOperationsContent(),   // Opérations
@@ -561,6 +619,7 @@ Widget _buildMainContent() {
     3 => _buildFlotContent(),         // Gestion FLOT
     4 => _buildFraisContent(),        // Frais
     5 => _buildVirtuelContent(),      // VIRTUEL
+    6 => const AgentDeletionValidationWidget(), // Suppressions
     _ => _buildOperationsContent(),
   };
 

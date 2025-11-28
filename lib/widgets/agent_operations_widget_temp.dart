@@ -417,7 +417,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
         final flotService = FlotService.instance;
         
         // Filter FLOTs by current shop (source or destination)
-        List<flot_model.FlotModel> shopFlots = [];
+        List<OperationModel> shopFlots = [];
         if (currentUser?.shopId != null) {
           shopFlots = flotService.flots.where((f) => 
             f.shopSourceId == currentUser!.shopId || 
@@ -751,7 +751,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
         final flotService = FlotService.instance;
         
         // Filter FLOTs by current shop (source or destination)
-        List<flot_model.FlotModel> shopFlots = [];
+        List<OperationModel> shopFlots = [];
         if (currentUser?.shopId != null) {
           shopFlots = flotService.flots.where((f) => 
             f.shopSourceId == currentUser!.shopId || 
@@ -877,6 +877,11 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
         typeColor = Colors.purple;
         typeIcon = Icons.swap_horiz;
         typeText = 'Virement';
+        break;
+      case OperationType.flotShopToShop:
+        typeColor = const Color(0xFF2563EB);
+        typeIcon = Icons.local_shipping;
+        typeText = 'FLOT Shop-to-Shop';
         break;
     }
 

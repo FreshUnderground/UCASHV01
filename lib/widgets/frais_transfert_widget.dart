@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/rates_service.dart';
 import '../services/shop_service.dart';
+import '../services/connectivity_service.dart';
 import '../models/commission_model.dart';
 import '../models/shop_model.dart';
 import '../utils/shop_designation_resolver.dart';
@@ -33,12 +34,27 @@ class _FraisTransfertWidgetState extends State<FraisTransfertWidget> {
     });
 
     try {
-      // Charger les commissions et les shops
-      await Future.wait([
-        RatesService.instance.loadRatesAndCommissions(),
-        ShopService.instance.loadShops(),
-      ]);
+      // Check internet connectivity
+      final connectivityService = ConnectivityService.instance;
+      final hasConnection = connectivityService.isOnline;
+
+      if (hasConnection) {
+        // Sync commissions and shops if online
+        await Future.wait([
+          RatesService.instance.loadRatesAndCommissions(),
+          ShopService.instance.loadShops(),
+        ]);
+        debugPrint('✅ Frais et shops synchronisés');
+      } else {
+        // Load from local cache if offline
+        await Future.wait([
+          RatesService.instance.loadRatesAndCommissions(),
+          ShopService.instance.loadShops(),
+        ]);
+        debugPrint('ℹ️ Pas de connexion - utilisation des données locales');
+      }
     } catch (e) {
+      debugPrint('⚠️ Erreur lors du chargement des frais: $e');
       setState(() {
         _errorMessage = 'Erreur lors du chargement: $e';
       });

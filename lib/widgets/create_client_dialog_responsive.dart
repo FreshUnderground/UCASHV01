@@ -268,11 +268,14 @@ class _CreateClientDialogResponsiveState extends State<CreateClientDialogRespons
     try {
       final clientService = Provider.of<ClientService>(context, listen: false);
       
+      // Pour l'admin, shopId peut être 0 (null dans le modèle)
+      final shopId = widget.shopId > 0 ? widget.shopId : null;
+      
       final success = await clientService.createClient(
         nom: _nomController.text.trim(),
         telephone: _telephoneController.text.trim(),
         adresse: _adresseController.text.trim().isEmpty ? null : _adresseController.text.trim(),
-        shopId: widget.shopId,
+        shopId: shopId, // Utiliser le shopId ajusté
         agentId: widget.agentId,
         username: _createAccount ? _usernameController.text.trim() : null,
         password: _createAccount ? _passwordController.text : null,

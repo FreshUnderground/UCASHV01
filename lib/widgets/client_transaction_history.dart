@@ -399,6 +399,8 @@ class _ClientTransactionHistoryState extends State<ClientTransactionHistory> {
         return Icons.call_received;
       case OperationType.virement:
         return Icons.swap_horiz;
+      case OperationType.flotShopToShop:
+        return Icons.local_shipping;
     }
   }
 
@@ -418,6 +420,8 @@ class _ClientTransactionHistoryState extends State<ClientTransactionHistory> {
         return 'Transfert International Entrant';
       case OperationType.virement:
         return 'Virement';
+      case OperationType.flotShopToShop:
+        return 'FLOT Shop-to-Shop';
     }
   }
 

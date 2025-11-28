@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/agent_auth_service.dart';
+import '../services/connectivity_service.dart';
+import '../services/agent_service.dart';
+import '../services/shop_service.dart';
 import 'agent_dashboard_page.dart';
 
 class AgentLoginPage extends StatefulWidget {
@@ -29,6 +32,9 @@ class _AgentLoginPageState extends State<AgentLoginPage> {
 
     setState(() => _isLoading = true);
 
+    // Sync agents and shops before login if online
+    await _syncBeforeLogin();
+
     final authService = Provider.of<AgentAuthService>(context, listen: false);
     final success = await authService.login(
       _usernameController.text.trim(),
@@ -48,6 +54,27 @@ class _AgentLoginPageState extends State<AgentLoginPage> {
           backgroundColor: Colors.red,
         ),
       );
+    }
+  }
+
+  Future<void> _syncBeforeLogin() async {
+    try {
+      final connectivityService = ConnectivityService.instance;
+      if (connectivityService.isOnline) {
+        // Sync agents and shops silently
+        final agentService = AgentService.instance;
+        final shopService = ShopService.instance;
+
+        await Future.wait([
+          agentService.loadAgents(),
+          shopService.loadShops(),
+        ]);
+
+        debugPrint('✅ Agents et shops synchronisés avant login agent');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Erreur sync avant login agent: $e');
+      // Continue with login even if sync fails
     }
   }
 

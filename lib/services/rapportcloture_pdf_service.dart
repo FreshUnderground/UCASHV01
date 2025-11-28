@@ -4,15 +4,16 @@ import 'package:intl/intl.dart';
 import 'package:flutter/foundation.dart';
 import '../models/rapport_cloture_model.dart';
 import '../models/shop_model.dart';
+import 'document_header_service.dart';
 
 /// Service pour générer le PDF du rapport de clôture
 Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopModel shop) async {
   final pdf = pw.Document();
   
-  // Configuration de l'entreprise (à personnaliser)
-  const companyName = 'UCASH';
-  const companyAddress = 'Avenue de la Liberté, Kinshasa, RDC';
-  const companyPhone = '+243 XX XXX XXXX';
+  // Charger le header depuis DocumentHeaderService (synchronisé avec MySQL)
+  final headerService = DocumentHeaderService();
+  await headerService.initialize();
+  final header = headerService.getHeaderOrDefault();
   
   final formattedDate = DateFormat('dd/MM/yyyy').format(rapport.dateRapport);
   
@@ -49,11 +50,13 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                     pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
-                        pw.Text(companyName, style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
-                        if (companyAddress.isNotEmpty)
-                          pw.Text(companyAddress, style: pw.TextStyle(fontSize: 10, color: PdfColors.white)),
-                        if (companyPhone.isNotEmpty)
-                          pw.Text(companyPhone, style: pw.TextStyle(fontSize: 10, color: PdfColors.white)),
+                        pw.Text(header.companyName, style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                        if (header.companySlogan?.isNotEmpty ?? false)
+                          pw.Text(header.companySlogan!, style: pw.TextStyle(fontSize: 9, color: PdfColors.white)),
+                        if (header.address?.isNotEmpty ?? false)
+                          pw.Text(header.address!, style: pw.TextStyle(fontSize: 10, color: PdfColors.white)),
+                        if (header.phone?.isNotEmpty ?? false)
+                          pw.Text(header.phone!, style: pw.TextStyle(fontSize: 10, color: PdfColors.white)),
                         pw.Text(shop.designation, style: pw.TextStyle(fontSize: 10, color: PdfColors.white)),
                       ],
                     ),

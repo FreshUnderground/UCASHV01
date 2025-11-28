@@ -384,7 +384,7 @@ class SyncService {
   }
 
   /// Valide les données d'une entité avant upload
-  bool _validateEntityData(String tableName, Map<String, dynamic> data) {
+  Future<bool> _validateEntityData(String tableName, Map<String, dynamic> data) async {
     switch (tableName) {
       case 'agents':
         if (data['username'] == null || data['username'].toString().isEmpty) {
@@ -402,10 +402,21 @@ class SyncService {
           debugPrint('❌ Validation: nom manquant pour client ${data['id']}');
           return false;
         }
-        if (data['shop_id'] == null || data['shop_id'] <= 0) {
-          debugPrint('❌ Validation: shop_id manquant pour client ${data['id']}');
+        // Permettre les clients globaux (shop_id = null) créés par les admins
+        // Si shop_id est null ou 0, c'est un client global - valide pour les admins
+        final shopId = data['shop_id'];
+        if (shopId == null) {
+          // Client global (admin) - valide
+          debugPrint('ℹ️ Client ${data['nom']} (ID: ${data['id']}): client global sans shop (shop_id = null)');
+          return true;
+        }
+        
+        // Si shop_id est fourni, il doit être > 0
+        if (shopId <= 0) {
+          debugPrint('❌ Validation: shop_id invalide ($shopId) pour client ${data['id']}');
           return false;
         }
+        
         return true;
       
       case 'operations':
@@ -451,42 +462,94 @@ class SyncService {
         }
         return true;
         
+      case 'taux':
+        // Validation des champs obligatoires pour les taux
+        if (data['devise_source'] == null || data['devise_source'].toString().isEmpty) {
+          debugPrint('❌ Validation: devise_source manquante pour taux ${data['id']}');
+          return false;
+        }
+        if (data['devise_cible'] == null || data['devise_cible'].toString().isEmpty) {
+          debugPrint('❌ Validation: devise_cible manquante pour taux ${data['id']}');
+          return false;
+        }
+        if (data['taux'] == null || data['taux'] <= 0) {
+          debugPrint('❌ Validation: taux invalide pour taux ${data['id']}');
+          return false;
+        }
+        return true;
+        
+      case 'commissions':
+        // Validation des champs obligatoires pour les commissions
+        if (data['type'] == null) {
+          debugPrint('❌ Validation: type manquant pour commission ${data['id']}');
+          return false;
+        }
+        if (data['taux'] == null || data['taux'] < 0) {
+          debugPrint('❌ Validation: taux invalide pour commission ${data['id']}');
+          return false;
+        }
+        return true;
+        
+      case 'document_headers':
+        // Validation des champs obligatoires pour les headers de document
+        if (data['entreprise_nom'] == null || data['entreprise_nom'].toString().isEmpty) {
+          debugPrint('❌ Validation: entreprise_nom manquant pour document_header ${data['id']}');
+          return false;
+        }
+        return true;
+        
+      case 'cloture_caisse':
+        // Validation des champs obligatoires pour les clôtures de caisse
+        if (data['shop_id'] == null || data['shop_id'] <= 0) {
+          debugPrint('❌ Validation: shop_id manquant pour cloture_caisse ${data['id']}');
+          return false;
+        }
+        if (data['date_cloture'] == null) {
+          debugPrint('❌ Validation: date_cloture manquante pour cloture_caisse ${data['id']}');
+          return false;
+        }
+        return true;
+        
+      case 'sims':
+        // Validation des champs obligatoires pour les SIMs
+        if (data['numero'] == null || data['numero'].toString().isEmpty) {
+          debugPrint('❌ Validation: numero manquant pour sim ${data['id']}');
+          return false;
+        }
+        if (data['operateur'] == null || data['operateur'].toString().isEmpty) {
+          debugPrint('❌ Validation: operateur manquant pour sim ${data['id']}');
+          return false;
+        }
+        return true;
+        
+      case 'virtual_transactions':
+        // Validation des champs obligatoires pour les transactions virtuelles
+        if (data['reference'] == null || data['reference'].toString().isEmpty) {
+          debugPrint('❌ Validation: reference manquante pour virtual_transaction ${data['id']}');
+          return false;
+        }
+        if (data['montant_virtuel'] == null || data['montant_virtuel'] <= 0) {
+          debugPrint('❌ Validation: montant_virtuel invalide pour virtual_transaction ${data['id']}');
+          return false;
+        }
+        return true;
+        
       default:
-        // Autres tables: validation minimale (ID présent)
-        return data['id'] != null;
+        debugPrint('⚠️ Validation non implémentée pour $tableName');
+        return true; // Par défaut, accepter les données non validées
     }
   }
 
-  /// Upload des données d'une table spécifique (version publique pour RobustSyncService)
-  Future<void> uploadTableData(String tableName, String userId, [String userRole = 'admin']) async {
-    return await _uploadTableData(tableName, userId, userRole);
-  }
-  
-  /// Download des données d'une table spécifique (version publique pour RobustSyncService)
-  Future<void> downloadTableData(String tableName, String userId, String userRole) async {
-    return await _downloadTableData(tableName, userId, userRole);
-  }
-  
-  /// Upload des données d'une table spécifique
+  /// Upload des données d'une table spécifique vers le serveur
   Future<void> _uploadTableData(String tableName, String userId, [String userRole = 'admin']) async {
     try {
-      final lastSync = await _getLastSyncTimestamp(tableName);
-      final localData = await _getLocalChanges(tableName, lastSync);
-      
-      if (localData.isEmpty) {
-        debugPrint('📤 $tableName: Aucune donnée locale à uploader');
-        return;
-      }
-
+      // Obtenir les données locales à uploader
+      final localData = await _getLocalChanges(tableName, null);
       debugPrint('📤 $tableName: ${localData.length} éléments à uploader');
       
-      // LOGS DÉTAILLÉS pour commissions
-      if (tableName == 'commissions' && localData.isNotEmpty) {
-        debugPrint('🔍 Détail des commissions à uploader:');
-        for (var comm in localData) {
-          debugPrint('   ID: ${comm['id']}, Type: ${comm['type']}, Taux: ${comm['taux']}%, isSynced: ${comm['is_synced']}');
-          debugPrint('   ShopId: ${comm['shop_id']}, SourceId: ${comm['shop_source_id']}, DestId: ${comm['shop_destination_id']}');
-        }
+      if (localData.isEmpty) {
+        debugPrint('📭 $tableName: Aucune donnée à uploader');
+        return;
       }
       
       // VALIDATION: Vérifier les données AVANT upload
@@ -494,7 +557,8 @@ class SyncService {
       final invalidData = <Map<String, dynamic>>[];
       
       for (var data in localData) {
-        if (_validateEntityData(tableName, data)) {
+        final isValid = await _validateEntityData(tableName, data);
+        if (isValid) {
           validatedData.add(data);
         } else {
           invalidData.add(data);
@@ -574,6 +638,16 @@ class SyncService {
     }
   }
 
+  /// Upload des données d'une table spécifique (version publique pour RobustSyncService)
+  Future<void> uploadTableData(String tableName, String userId, [String userRole = 'admin']) async {
+    return await _uploadTableData(tableName, userId, userRole);
+  }
+  
+  /// Download des données d'une table spécifique (version publique pour RobustSyncService)
+  Future<void> downloadTableData(String tableName, String userId, String userRole) async {
+    return await _downloadTableData(tableName, userId, userRole);
+  }
+  
   /// Download des changements du serveur vers l'app
   Future<void> _downloadRemoteChanges(String userId, String userRole) async {
     // NOTE: 'operations' géré par TransferSyncService
@@ -700,13 +774,15 @@ class SyncService {
             await _processRemoteChanges(tableName, remoteData, userId);
             
             // CRITIQUE: Recharger les données en mémoire après le traitement
+            // NOTE: NE PAS utiliser clearBeforeLoad ici car les données sont déjà insérées dans LocalDB
+            // On veut juste recharger en mémoire ce qui est déjà en base locale
             debugPrint('🔄 Rechargement des données $tableName en mémoire après download...');
             switch (tableName) {
               case 'shops':
-                await ShopService.instance.loadShops();
+                await ShopService.instance.loadShops(forceRefresh: true);
                 break;
               case 'agents':
-                await AgentService.instance.loadAgents();
+                await AgentService.instance.loadAgents(forceRefresh: true);
                 break;
               case 'clients':
                 await ClientService().loadClients();
@@ -815,13 +891,15 @@ class SyncService {
     debugPrint('✅ $tableName: $inserted insérés, $updated mis à jour, $conflicts conflits, $errors erreurs');
     
     // CRITIQUE: Recharger les services en mémoire après traitement
+    // NOTE: NE PAS utiliser clearBeforeLoad ici car les données sont déjà insérées dans LocalDB
+    // On veut juste recharger en mémoire ce qui est déjà en base locale
     debugPrint('🔄 Rechargement du service $tableName en mémoire après traitement...');
     switch (tableName) {
       case 'shops':
-        await ShopService.instance.loadShops();
+        await ShopService.instance.loadShops(forceRefresh: true);
         break;
       case 'agents':
-        await AgentService.instance.loadAgents();
+        await AgentService.instance.loadAgents(forceRefresh: true);
         break;
       case 'clients':
         await ClientService().loadClients();
@@ -1426,7 +1504,8 @@ class SyncService {
           }
           
           // Résoudre shop_id depuis shop_designation
-          int shopId = 1;
+          // IMPORTANT: Pour les clients admin, shop_id peut être NULL
+          int? shopId;
           final shopDesignation = data['shop_designation'];
           if (shopDesignation != null && shopDesignation.isNotEmpty) {
             final shops = ShopService.instance.shops;
@@ -1435,12 +1514,16 @@ class SyncService {
               shopId = shop.id!;
               debugPrint('🔍 Client: shop_designation "$shopDesignation" → shop_id $shopId');
             } else {
-              debugPrint('⚠️ Shop "$shopDesignation" non trouvé, utilise shop_id par défaut');
+              debugPrint('⚠️ Shop "$shopDesignation" non trouvé');
             }
+          } else if (data['shop_id'] != null && data['shop_id'] > 0) {
+            // Utiliser shop_id directement si fourni et valide
+            shopId = data['shop_id'];
           }
+          // Si shopId est toujours null, c'est un client admin global (OK)
           
           // Résoudre agent_id depuis agent_username
-          int agentId = 1;
+          int? agentId;
           final agentUsername = data['agent_username'];
           if (agentUsername != null && agentUsername.isNotEmpty) {
             final agents = AgentService.instance.agents;
@@ -1449,14 +1532,17 @@ class SyncService {
               agentId = agent.id!;
               debugPrint('🔍 Client: agent_username "$agentUsername" → agent_id $agentId');
             } else {
-              debugPrint('⚠️ Agent "$agentUsername" non trouvé, utilise agent_id par défaut');
+              debugPrint('⚠️ Agent "$agentUsername" non trouvé');
             }
+          } else if (data['agent_id'] != null && data['agent_id'] > 0) {
+            // Utiliser agent_id directement si fourni et valide
+            agentId = data['agent_id'];
           }
           
           // IMPORTANT: Créer le client avec l'ID MySQL et les IDs résolus
           final clientData = {
             ...data,
-            'shop_id': shopId,
+            'shop_id': shopId,  // Peut être null pour clients admin
             'agent_id': agentId,
           };
           final client = ClientModel.fromJson(clientData);
@@ -1627,8 +1713,11 @@ class SyncService {
           final flot = flot_model.FlotModel.fromJson(flotData);
           
           // Sauvegarder le flot
-          await LocalDB.instance.saveFlot(flot);
-          debugPrint('✅ Flot ID ${flot.id} sauvegardé: ${flot.shopSourceDesignation} → ${flot.shopDestinationDesignation} - ${flot.montant} ${flot.devise}');
+          // DEPRECATED: Les FLOTs sont maintenant des OperationModel avec type=flotShopToShop
+          // Ils sont synchronisés via la table 'operations', donc on ignore cette entrée
+          debugPrint('⚠️ Flot ID ${flot.id} ignoré - Les FLOTs sont maintenant synchronisés via table operations');
+          // await LocalDB.instance.saveFlot(flot); // <-- COMMENTÉ pour éviter les doublons
+          // debugPrint('✅ Flot ID ${flot.id} sauvegardé: ${flot.shopSourceDesignation} → ${flot.shopDestinationDesignation} - ${flot.montant} ${flot.devise}');
           break;
           
         case 'sims':
@@ -1848,8 +1937,11 @@ class SyncService {
             'shop_destination_designation': shopDestinationDesignation,
           };
           final flot = flot_model.FlotModel.fromJson(flotData);
-          await LocalDB.instance.saveFlot(flot);
-          debugPrint('✅ Flot ID ${flot.id} mis à jour');
+          // DEPRECATED: Les FLOTs sont maintenant des OperationModel avec type=flotShopToShop
+          // Ils sont synchronisés via la table 'operations', donc on ignore cette mise à jour
+          debugPrint('⚠️ Flot ID ${flot.id} ignoré - Les FLOTs sont maintenant synchronisés via table operations');
+          // await LocalDB.instance.saveFlot(flot); // <-- COMMENTÉ pour éviter les doublons
+          // debugPrint('✅ Flot ID ${flot.id} mis à jour');
           break;
           
         case 'sims':
@@ -2684,8 +2776,11 @@ class SyncService {
                     isSynced: true,
                     syncedAt: DateTime.now(),
                   );
-                  await LocalDB.instance.saveFlot(syncedFlot);
-                  debugPrint('💾 Flot reference=$reference marqué comme synchronisé dans LocalDB');
+                  // DEPRECATED: Les FLOTs sont maintenant des OperationModel avec type=flotShopToShop
+                  // Ils sont synchronisés via la table 'operations', donc on ignore ce marquage
+                  debugPrint('⚠️ Flot reference=$reference ignoré - Les FLOTs sont maintenant synchronisés via table operations');
+                  // await LocalDB.instance.saveFlot(syncedFlot); // <-- COMMENTÉ pour éviter les doublons
+                  // debugPrint('💾 Flot reference=$reference marqué comme synchronisé dans LocalDB');
                 } else {
                   debugPrint('⚠️ Flot reference=$reference non trouvé dans LocalDB');
                 }

@@ -86,7 +86,7 @@ class _RapportClotureState extends State<RapportCloture> {
     }
   }
 
-  Future<void> _telechargerPDF() async {
+  Future<void> _partagerPDF() async {
     if (_rapport == null) return;
 
     try {
@@ -107,6 +107,44 @@ class _RapportClotureState extends State<RapportCloture> {
       final pdfBytes = await pdf.save();
       final fileName = 'rapportcloture_${shop.designation}_${DateFormat('yyyy-MM-dd').format(_selectedDate)}.pdf';
       
+      // Utiliser Printing.sharePdf qui fonctionne sur toutes les plateformes
+      await Printing.sharePdf(bytes: pdfBytes, filename: fileName);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ PDF partagé avec succès')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('❌ Erreur partage PDF: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _telechargerPDF() async {
+    if (_rapport == null) return;
+
+    try {
+      // Obtenir le shop actuel
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final shopService = Provider.of<ShopService>(context, listen: false);
+      final shopId = widget.shopId ?? authService.currentUser?.shopId ?? 1;
+      final shop = shopService.getShopById(shopId);
+      
+      if (shop == null) {
+        throw Exception('Shop non trouvé');
+      }
+
+      // Générer le PDF avec le nouveau service
+      final pdf = await genererRapportCloturePDF(_rapport!, shop);
+
+      // Sauvegarder ou partager le PDF
+      final pdfBytes = await pdf.save();
+      final fileName = 'rapportcloture_${shop.designation}_${DateFormat('yyyy-MM-dd').format(_selectedDate)}.pdf';
+
       // Utiliser Printing pour sauvegarder ou partager
       await Printing.sharePdf(bytes: pdfBytes, filename: fileName);
       
@@ -183,10 +221,10 @@ class _RapportClotureState extends State<RapportCloture> {
                       canDebug: false,
                       actions: [
                         PdfPreviewAction(
-                          icon: const Icon(Icons.download),
+                          icon: const Icon(Icons.share),
                           onPressed: (context, build, pageFormat) async {
                             Navigator.pop(context);
-                            await _telechargerPDF();
+                            await _partagerPDF();
                           },
                         ),
                         PdfPreviewAction(

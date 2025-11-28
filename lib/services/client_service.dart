@@ -22,9 +22,16 @@ class ClientService extends ChangeNotifier {
   }
 
   // Charger tous les clients (GLOBAUX - visibles dans tous les shops)
-  Future<void> loadClients({int? shopId}) async {
+  Future<void> loadClients({int? shopId, bool clearBeforeLoad = false}) async {
     _setLoading(true);
     try {
+      // Si clearBeforeLoad, supprimer toutes les données locales pour forcer le rechargement depuis le serveur
+      if (clearBeforeLoad) {
+        debugPrint('🗑️ [ClientService] Suppression des clients en local avant rechargement...');
+        await LocalDB.instance.clearAllClients();
+        _clients.clear();
+      }
+      
       // IMPORTANT: Toujours charger TOUS les clients (globaux)
       // Le paramètre shopId est ignoré - les clients sont accessibles partout
       _clients = await LocalDB.instance.getAllClients();
@@ -50,7 +57,7 @@ class ClientService extends ChangeNotifier {
     String? adresse,
     String? username,
     String? password,
-    required int shopId,  // Shop de création (informatif uniquement)
+    int? shopId,  // Changé de required int à int? pour permettre null
     required int agentId,
   }) async {
     try {
@@ -69,7 +76,8 @@ class ClientService extends ChangeNotifier {
       }
 
       // Générer un numéro de compte unique
-      final numeroCompte = _generateAccountNumber(shopId);
+      // Utiliser 0 si shopId est null pour la génération du numéro
+      final numeroCompte = _generateAccountNumber(shopId ?? 0);
 
       final newClient = ClientModel(
         nom: nom,
@@ -78,7 +86,7 @@ class ClientService extends ChangeNotifier {
         username: username,
         password: password,
         numeroCompte: numeroCompte,
-        shopId: shopId,  // Shop de création (pour traçabilité)
+        shopId: shopId,  // Shop de création (pour traçabilité) - peut être null
         createdAt: DateTime.now(),
         lastModifiedAt: DateTime.now(),
         lastModifiedBy: 'agent_$agentId',
@@ -102,11 +110,12 @@ class ClientService extends ChangeNotifier {
   }
 
   // Générer un numéro de compte unique
-  String _generateAccountNumber(int shopId) {
+  String _generateAccountNumber(int? shopId) {  // Changé int à int?
     final now = DateTime.now();
     final dateStr = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
     final randomDigits = (1000 + (DateTime.now().millisecondsSinceEpoch % 9000)).toString().substring(0, 4);
-    return '${shopId.toString().padLeft(3, '0')}$dateStr$randomDigits';
+    // Utiliser 0 si shopId est null
+    return '${(shopId ?? 0).toString().padLeft(3, '0')}$dateStr$randomDigits';
   }
 
   // Mettre à jour un client

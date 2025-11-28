@@ -41,9 +41,9 @@ require_once __DIR__ . '/../../../classes/Database.php';
 
 // Fonctions de conversion des index d'enum Flutter vers valeurs SQL
 function _convertOperationType($index) {
-    // Flutter enum: transfertNational=0, transfertInternationalSortant=1, transfertInternationalEntrant=2, depot=3, retrait=4, virement=5, retraitMobileMoney=6
-    // MySQL ENUM: 'depot', 'retrait', 'transfertNational', 'transfertInternationalSortant', 'transfertInternationalEntrant', 'virement', 'retraitMobileMoney'
-    $types = ['transfertNational', 'transfertInternationalSortant', 'transfertInternationalEntrant', 'depot', 'retrait', 'virement', 'retraitMobileMoney'];
+    // Flutter enum: transfertNational=0, transfertInternationalSortant=1, transfertInternationalEntrant=2, depot=3, retrait=4, virement=5, retraitMobileMoney=6, flotShopToShop=7
+    // MySQL ENUM: 'depot', 'retrait', 'transfertNational', 'transfertInternationalSortant', 'transfertInternationalEntrant', 'virement', 'retraitMobileMoney', 'flotShopToShop'
+    $types = ['transfertNational', 'transfertInternationalSortant', 'transfertInternationalEntrant', 'depot', 'retrait', 'virement', 'retraitMobileMoney', 'flotShopToShop'];
     return $types[$index] ?? 'depot';
 }
 
@@ -110,8 +110,16 @@ try {
                 error_log("[SYNC OP] montant_brut={$entity['montant_brut']}, montant_net={$entity['montant_net']}");
                 
                 // Convertir les index d'enum Flutter en valeurs SQL
-                $type = _convertOperationType($entity['type'] ?? 0);
+                $typeIndex = $entity['type'] ?? null;
+                if ($typeIndex === null) {
+                    throw new Exception("Type obligatoire manquant pour opération ID {$entity['id']}, code_ops={$entity['code_ops']}");
+                }
+                
+                $type = _convertOperationType($typeIndex);
                 $modePaiement = _convertModePaiement($entity['mode_paiement'] ?? 0);
+                
+                // Logger la conversion du type pour débogage
+                error_log("✅ TYPE: index={$typeIndex} -> type={$type}" . ($type === 'flotShopToShop' ? ' (FLOT SHOP-TO-SHOP)' : ''));
                 
                 // CRITIQUE: Le statut est OBLIGATOIRE - rejeter si manquant
                 if (!isset($entity['statut']) && $entity['statut'] !== 0) {
@@ -123,7 +131,7 @@ try {
                 error_log("✅ STATUT: index={$statutIndex} -> value={$statut}");
                 
                 // Logger les données converties
-                error_log("Conversion: type_index={$entity['type']} -> type={$type}, mode_index={$entity['mode_paiement']} -> mode={$modePaiement}, statut_index={$statutIndex} -> statut={$statut}");
+                error_log("Conversion complète: type_index={$typeIndex} -> type={$type}, mode_index={$entity['mode_paiement']} -> mode={$modePaiement}, statut_index={$statutIndex} -> statut={$statut}");
             
             // Résoudre client_id depuis client nom POUR TOUTES LES OPÉRATIONS
             $clientId = null;

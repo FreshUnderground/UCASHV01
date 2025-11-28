@@ -5,6 +5,9 @@ import 'transfer_destination_dialog.dart';
 import '../services/auth_service.dart';
 import '../services/shop_service.dart';
 import '../services/printer_service.dart';
+import '../services/connectivity_service.dart';
+import '../services/rates_service.dart';
+import '../services/sync_service.dart';
 import '../models/operation_model.dart';
 import '../models/agent_model.dart';
 import '../utils/responsive_utils.dart';
@@ -380,15 +383,94 @@ class _AgentTransfersWidgetState extends State<AgentTransfersWidget> {
     );
   }
 
-  void _showTransfertDestinationDialog() {
+  void _showTransfertDestinationDialog() async {
+    // Show loading indicator
     showDialog(
       context: context,
-      builder: (context) => const TransferDestinationDialog(),
-    ).then((result) {
-      if (result == true) {
-        _loadOperations();
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Synchronisation des données...'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    try {
+      // Check internet connectivity
+      final connectivityService = ConnectivityService.instance;
+      final hasConnection = connectivityService.isOnline;
+
+      if (hasConnection) {
+        debugPrint('📥 Synchronisation commissions et shops pour transfert...');
+        
+        // NE PAS vider - juste synchroniser depuis le serveur
+        // Le serveur enverra les modifiés, LocalDB les mergera
+        debugPrint('🔄 Téléchargement depuis le serveur...');
+        final syncService = SyncService();
+        await Future.wait([
+          syncService.downloadTableData('commissions', 'admin', 'admin'),
+          syncService.downloadTableData('shops', 'admin', 'admin'),
+        ]);
+        
+        // Recharger en mémoire
+        final ratesService = RatesService.instance;
+        final shopService = Provider.of<ShopService>(context, listen: false);
+        await Future.wait([
+          ratesService.loadRatesAndCommissions(),
+          shopService.loadShops(),
+        ]);
+
+        debugPrint('✅ ${shopService.shops.length} shops et ${ratesService.commissions.length} commissions chargés');
+      } else {
+        debugPrint('ℹ️ Hors ligne - utilisation des données locales');
+        // Charger depuis la base locale
+        final ratesService = RatesService.instance;
+        final shopService = Provider.of<ShopService>(context, listen: false);
+        await Future.wait([
+          ratesService.loadRatesAndCommissions(),
+          shopService.loadShops(),
+        ]);
       }
-    });
+    } catch (e) {
+      debugPrint('⚠️ Erreur lors de la synchronisation: $e');
+      // En cas d'erreur, charger depuis la base locale
+      try {
+        final ratesService = RatesService.instance;
+        final shopService = Provider.of<ShopService>(context, listen: false);
+        await Future.wait([
+          ratesService.loadRatesAndCommissions(),
+          shopService.loadShops(),
+        ]);
+        debugPrint('💾 Données chargées depuis la base locale');
+      } catch (localError) {
+        debugPrint('❌ Erreur chargement local: $localError');
+      }
+    }
+
+    // Close loading dialog
+    if (mounted) Navigator.of(context).pop();
+
+    // Show transfer dialog
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => const TransferDestinationDialog(),
+      ).then((result) {
+        if (result == true) {
+          _loadOperations();
+        }
+      });
+    }
   }
 
   Widget _buildStats(List<OperationModel> transfers) {

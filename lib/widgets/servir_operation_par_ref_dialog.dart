@@ -4,7 +4,6 @@ import '../services/operation_service.dart';
 import '../services/flot_service.dart';
 import '../services/auth_service.dart';
 import '../models/operation_model.dart';
-import '../models/flot_model.dart' as flot_model;
 
 /// Dialog pour servir une opération de retrait Mobile Money par référence
 /// Si la référence n'existe pas, crée d'abord le retrait avant de le servir
@@ -207,7 +206,7 @@ class _ServirOperationParRefDialogState extends State<ServirOperationParRefDialo
             shopDestinationDesignation: 'SHOP C',
             montant: updatedOperation.montantNet,
             devise: updatedOperation.devise,
-            modePaiement: _convertModePaiement(updatedOperation.modePaiement),
+            modePaiement: updatedOperation.modePaiement,
             agentEnvoyeurId: currentUser.id!,
             agentEnvoyeurUsername: currentUser.username,
             notes: 'Dette retrait Mobile Money - Réf: ${updatedOperation.codeOps}',
@@ -300,7 +299,7 @@ class _ServirOperationParRefDialogState extends State<ServirOperationParRefDialo
         shopDestinationDesignation: 'SHOP C',
         montant: _montantNetCalcule!, // Utiliser le montant net recalculé
         devise: updatedOperation.devise,
-        modePaiement: _convertModePaiement(updatedOperation.modePaiement),
+        modePaiement: updatedOperation.modePaiement,
         agentEnvoyeurId: currentUser.id!,
         agentEnvoyeurUsername: currentUser.username,
         notes: 'Dette retrait Mobile Money - Réf: ${updatedOperation.codeOps}',
@@ -343,20 +342,6 @@ class _ServirOperationParRefDialogState extends State<ServirOperationParRefDialo
     if (montant < 100) return 2.0;
     if (montant < 500) return 5.0;
     return montant * 0.02; // 2%
-  }
-
-  /// Convertir ModePaiement d'opération vers ModePaiement de flot
-  flot_model.ModePaiement _convertModePaiement(ModePaiement mode) {
-    switch (mode) {
-      case ModePaiement.cash:
-        return flot_model.ModePaiement.cash;
-      case ModePaiement.airtelMoney:
-        return flot_model.ModePaiement.airtelMoney;
-      case ModePaiement.mPesa:
-        return flot_model.ModePaiement.mPesa;
-      case ModePaiement.orangeMoney:
-        return flot_model.ModePaiement.orangeMoney;
-    }
   }
 
   @override

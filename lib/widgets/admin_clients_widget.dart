@@ -45,7 +45,7 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
     await Future.wait([
       clientService.loadClients(),
       shopService.loadShops(),
-      operationService.loadOperations(),  // Charger les opérations pour calculer les soldes
+      operationService.loadOperations(),  // Charger TOUTES les opérations (admin n'a pas de filtre par shop)
     ]);
   }
 
@@ -383,7 +383,8 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
                     Text('📞 ${client.telephone}'),
                     if (client.numeroCompte != null)
                       Text('💳 ${client.numeroCompte}'),
-                    Text('🏪 ${shop.designation}'),
+                    // ❌ NE PAS afficher le shop pour l'admin
+                    // Text('🏪 ${shop.designation}'),
                     const SizedBox(height: 4),
                     Row(
                       children: [
@@ -475,7 +476,7 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
     showDialog(
       context: context,
       builder: (context) => CreateClientDialogResponsive(
-        shopId: currentUser.shopId ?? 0,
+        shopId: currentUser.shopId ?? 0, // Peut être 0 pour l'admin
         agentId: currentUser.id ?? 0,
       ),
     ).then((result) {

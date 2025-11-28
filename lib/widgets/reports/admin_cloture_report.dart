@@ -97,7 +97,7 @@ class _AdminClotureReportState extends State<AdminClotureReport> {
     }
   }
 
-  Future<void> _telechargerPDF(RapportClotureModel rapport) async {
+  Future<void> _partagerPDF(RapportClotureModel rapport) async {
     try {
       final shop = _shops.firstWhere((s) => s.id == rapport.shopId);
       
@@ -107,6 +107,33 @@ class _AdminClotureReportState extends State<AdminClotureReport> {
       final pdfBytes = await pdf.save();
       final fileName = 'rapportcloture_${shop.designation}_${DateFormat('yyyy-MM-dd').format(_selectedDate)}.pdf';
       
+      // Utiliser Printing.sharePdf qui fonctionne sur toutes les plateformes
+      await Printing.sharePdf(bytes: pdfBytes, filename: fileName);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ PDF partagé avec succès')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('❌ Erreur partage: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _telechargerPDF(RapportClotureModel rapport) async {
+    try {
+      final shop = _shops.firstWhere((s) => s.id == rapport.shopId);
+      
+      // Générer le PDF avec le nouveau service
+      final pdf = await genererRapportCloturePDF(rapport, shop);
+
+      final pdfBytes = await pdf.save();
+      final fileName = 'rapportcloture_${shop.designation}_${DateFormat('yyyy-MM-dd').format(_selectedDate)}.pdf';
+
       await Printing.sharePdf(bytes: pdfBytes, filename: fileName);
       
       if (mounted) {
@@ -173,10 +200,10 @@ class _AdminClotureReportState extends State<AdminClotureReport> {
                       canDebug: false,
                       actions: [
                         PdfPreviewAction(
-                          icon: const Icon(Icons.download),
+                          icon: const Icon(Icons.share),
                           onPressed: (context, build, pageFormat) async {
                             Navigator.pop(context);
-                            await _telechargerPDF(rapport);
+                            await _partagerPDF(rapport);
                           },
                         ),
                         PdfPreviewAction(

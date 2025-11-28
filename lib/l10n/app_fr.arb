@@ -1,0 +1,138 @@
+{
+  "@@locale": "fr",
+  
+  "appTitle": "UCASH - Transfert d'Argent Moderne",
+  "@appTitle": {
+    "description": "Titre de l'application"
+  },
+  
+  "welcome": "Bienvenue",
+  "@welcome": {
+    "description": "Message de bienvenue"
+  },
+  
+  "login": "Connexion",
+  "logout": "Déconnexion",
+  "username": "Nom d'utilisateur",
+  "password": "Mot de passe",
+  "enterUsername": "Entrez votre nom d'utilisateur",
+  "enterPassword": "Entrez votre mot de passe",
+  "forgotPassword": "Mot de passe oublié ?",
+  "rememberMe": "Se souvenir de moi",
+  
+  "dashboard": "Tableau de bord",
+  "operations": "Opérations",
+  "clients": "Clients",
+  "agents": "Agents",
+  "shops": "Boutiques",
+  "reports": "Rapports",
+  "settings": "Paramètres",
+  "synchronization": "Synchronisation",
+  
+  "deposit": "Dépôt",
+  "withdrawal": "Retrait",
+  "transfer": "Transfert",
+  "payment": "Paiement",
+  
+  "amount": "Montant",
+  "balance": "Solde",
+  "commission": "Commission",
+  "total": "Total",
+  "date": "Date",
+  "status": "Statut",
+  "reference": "Référence",
+  
+  "pending": "En attente",
+  "completed": "Terminé",
+  "cancelled": "Annulé",
+  "failed": "Échoué",
+  
+  "search": "Rechercher",
+  "filter": "Filtrer",
+  "export": "Exporter",
+  "print": "Imprimer",
+  "refresh": "Actualiser",
+  
+  "add": "Ajouter",
+  "edit": "Modifier",
+  "delete": "Supprimer",
+  "save": "Enregistrer",
+  "cancel": "Annuler",
+  "confirm": "Confirmer",
+  
+  "firstName": "Prénom",
+  "lastName": "Nom",
+  "phone": "Téléphone",
+  "email": "Email",
+  "address": "Adresse",
+  
+  "online": "En ligne",
+  "offline": "Hors ligne",
+  "syncing": "Synchronisation en cours...",
+  "syncSuccess": "Synchronisation réussie",
+  "syncFailed": "Échec de la synchronisation",
+  "lastSync": "Dernière synchronisation",
+  
+  "error": "Erreur",
+  "success": "Succès",
+  "warning": "Avertissement",
+  "info": "Information",
+  
+  "loading": "Chargement...",
+  "noData": "Aucune donnée disponible",
+  "retry": "Réessayer",
+  
+  "languageSettings": "Paramètres de langue",
+  "selectLanguage": "Sélectionner la langue",
+  "french": "Français",
+  "english": "Anglais",
+  "languageChanged": "Langue changée avec succès",
+  
+  "yes": "Oui",
+  "no": "Non",
+  "ok": "OK",
+  
+  "starting": "Démarrage de l'application...",
+  "initializingDatabase": "Initialisation de la base de données...",
+  "initializingServices": "Initialisation des services de base...",
+  "startingSync": "Démarrage de la synchronisation...",
+  "initializingConnectivity": "Initialisation du service de connectivité...",
+  "loadingInitialData": "Chargement des données initiales...",
+  "loadingShops": "Chargement des boutiques...",
+  "loadingAgents": "Chargement des agents...",
+  "loadingRates": "Chargement des taux...",
+  "finalizing": "Finalisation...",
+  "ready": "Prêt !",
+  
+  "invalidCredentials": "Nom d'utilisateur ou mot de passe invalide",
+  "networkError": "Erreur réseau. Veuillez vérifier votre connexion.",
+  "serverError": "Erreur serveur. Veuillez réessayer plus tard.",
+  
+  "confirmLogout": "Êtes-vous sûr de vouloir vous déconnecter ?",
+  "confirmDelete": "Êtes-vous sûr de vouloir supprimer cet élément ?",
+  
+  "adminDashboard": "Tableau de bord Administrateur",
+  "agentDashboard": "Tableau de bord Agent",
+  "clientDashboard": "Tableau de bord Client",
+  
+  "expenses": "Dépenses",
+  "partners": "Partenaires",
+  "ratesAndCommissions": "Taux & Commissions",
+  "configuration": "Configuration",
+  "flot": "FLOT",
+  "fees": "Frais",
+  "virtual": "VIRTUEL",
+  "validations": "Validations",
+  
+  "operationDataSynced": "Données des opérations synchronisées",
+  "syncError": "Erreur lors de la synchronisation",
+  "modernSecureTransfer": "Transfert d'argent moderne et sécurisé",
+  
+  "pleaseEnterUsername": "Veuillez saisir votre nom d'utilisateur",
+  "pleaseEnterPassword": "Veuillez saisir votre mot de passe",
+  "agentLogin": "Connexion Agent",
+  "clientLogin": "Connexion Client",
+  "createDefaultAdmin": "Créer Admin par défaut",
+  
+  "adminPanel": "Panneau d'administration"
+}

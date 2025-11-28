@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../models/cloture_virtuelle_model.dart';
 import '../services/cloture_virtuelle_service.dart';
 import '../services/cloture_virtuelle_pdf_service.dart';
@@ -257,10 +258,10 @@ class _ClotureVirtuelleWidgetState extends State<ClotureVirtuelleWidget> {
                       canDebug: false,
                       actions: [
                         PdfPreviewAction(
-                          icon: const Icon(Icons.download),
+                          icon: const Icon(Icons.share),
                           onPressed: (context, build, pageFormat) async {
                             Navigator.pop(context);
-                            await _telechargerPDF();
+                            await _partagerPDF();
                           },
                         ),
                         PdfPreviewAction(
@@ -292,6 +293,52 @@ class _ClotureVirtuelleWidgetState extends State<ClotureVirtuelleWidget> {
     }
   }
 
+  Future<void> _partagerPDF() async {
+    if (_rapport == null) return;
+
+    try {
+      final shopService = Provider.of<ShopService>(context, listen: false);
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final shopId = widget.shopId ?? authService.currentUser?.shopId ?? 1;
+      
+      final shop = shopService.shops.firstWhere(
+        (s) => s.id == shopId,
+        orElse: () => throw Exception('Shop non trouvé'),
+      );
+
+      // Générer le PDF
+      final pdf = await genererClotureVirtuellePDF(
+        _rapport!,
+        shop.designation,
+        _selectedDate,
+      );
+
+      final pdfBytes = await pdf.save();
+      final fileName = 'cloture_virtuelle_${shop.designation}_${DateFormat('yyyy-MM-dd').format(_selectedDate)}.pdf';
+      
+      // Utiliser Printing.sharePdf qui fonctionne sur toutes les plateformes (web, mobile, desktop)
+      await Printing.sharePdf(bytes: pdfBytes, filename: fileName);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ PDF partagé avec succès'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Erreur partage PDF: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _telechargerPDF() async {
     if (_rapport == null) return;
 
@@ -315,7 +362,7 @@ class _ClotureVirtuelleWidgetState extends State<ClotureVirtuelleWidget> {
       final pdfBytes = await pdf.save();
       final fileName = 'cloture_virtuelle_${shop.designation}_${DateFormat('yyyy-MM-dd').format(_selectedDate)}.pdf';
 
-      // Partager le PDF
+      // Utiliser Printing pour sauvegarder ou partager
       await Printing.sharePdf(bytes: pdfBytes, filename: fileName);
 
       if (mounted) {

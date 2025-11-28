@@ -34,8 +34,7 @@ class _AgentReportsWidgetState extends State<AgentReportsWidget> with SingleTick
   final List<Map<String, dynamic>> _tabsData = [
     {'icon': Icons.account_balance, 'text': 'Caisse'},
     {'icon': Icons.lock, 'text': 'Clôtures'},
-    {'icon': Icons.local_shipping, 'text': 'FLOT'},
-    {'icon': Icons.percent, 'text': 'Frais'}, // Add Frais tab
+    {'icon': Icons.percent, 'text': 'Frais'},
   ];
 
   @override
@@ -202,11 +201,6 @@ class _AgentReportsWidgetState extends State<AgentReportsWidget> with SingleTick
                           // Gestion des clôtures
                           user.shopId != null
                             ? ClotureAgentWidget(shopId: user.shopId!)
-                            : _buildNoShopAssignedError(),
-                              
-                          // FLOT - Menu complet
-                          user.shopId != null
-                            ? FlotManagementWidget()
                             : _buildNoShopAssignedError(),
                               
                           // Frais - Liste des frais de transfert

@@ -1253,7 +1253,7 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
 
     if (confirmed == true && client.id != null) {
       final clientService = Provider.of<ClientService>(context, listen: false);
-      final success = await clientService.deleteClient(client.id!, client.shopId);
+      final success = await clientService.deleteClient(client.id!, client.shopId!);
       
       if (success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
