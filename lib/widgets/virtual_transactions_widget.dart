@@ -48,7 +48,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _loadData();
   }
 
@@ -101,11 +101,15 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
               tabs: [
                 Tab(
                   icon: Icon(Icons.swap_horiz, size: isMobile ? 18 : 22),
-                  text: 'Trans.',
+                  text: 'Captures',
                 ),
                 Tab(
                   icon: Icon(Icons.send, size: isMobile ? 18 : 22),
-                  text: 'Flot',
+                  text: 'Flots',
+                ),
+                Tab(
+                  icon: Icon(Icons.account_balance, size: isMobile ? 18 : 22),
+                  text: 'Dépôt',
                 ),
                 Tab(
                   icon: Icon(Icons.receipt_long, size: isMobile ? 18 : 22),
@@ -125,6 +129,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
         children: [
           _buildTransactionsTab(),
           _buildFlotTab(),
+          _buildDepotTab(),
           _buildClotureTab(),
           _buildRapportTab(),
         ],
@@ -153,7 +158,16 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                 ),
               ],
             )
-          : null,
+          : _tabController.index == 2
+            ? FloatingActionButton.extended(
+                heroTag: 'btn_depot',
+                onPressed: _creerDepot,
+                icon: const Icon(Icons.add),
+                label: Text(isMobile ? 'Dépôt' : 'Nouveau Dépôt'),
+                backgroundColor: const Color(0xFF48bb78),
+                elevation: 3,
+              )
+            : null,
     );
   }
 
@@ -1088,13 +1102,13 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                         Text(
                           'Dépôts Clients',
                           style: TextStyle(
-                            fontSize: 18,
+                            fontSize: 10,
                             fontWeight: FontWeight.bold,
                             color: Colors.grey[800],
                           ),
                         ),
                         Text(
-                          'Cash reçu → Virtuel envoyé',
+                          'Cash → Virtuel',
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.grey[600],
@@ -1230,10 +1244,6 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.edit, color: Colors.blue),
-                                    onPressed: () {},
-                                  ),
                                   IconButton(
                                     icon: const Icon(Icons.delete, color: Colors.red),
                                     onPressed: () => _confirmerSuppressionDepot(depot),
@@ -1926,240 +1936,247 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
     final isMobile = size.width < 600;
     final isTablet = size.width >= 600 && size.width < 900;
     
-    return Container(
-      margin: EdgeInsets.only(bottom: isMobile ? 8 : 12),
-      padding: EdgeInsets.all(isMobile ? 10 : 14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(isMobile ? 8 : 12),
-        border: Border.all(
-          color: solde > 0 
-            ? Colors.orange.withOpacity(0.4)
-            : solde < 0 
-              ? Colors.red.withOpacity(0.4) 
-              : Colors.green.withOpacity(0.4),
-          width: isMobile ? 1.5 : 2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: (solde > 0 ? Colors.orange : solde < 0 ? Colors.red : Colors.green).withOpacity(0.08),
-            blurRadius: isMobile ? 6 : 10,
-            offset: const Offset(0, 3),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Container(
+          margin: EdgeInsets.only(bottom: isMobile ? 8 : 12),
+          padding: EdgeInsets.all(isMobile ? 10 : 14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(isMobile ? 8 : 12),
+            border: Border.all(
+              color: solde > 0 
+                ? Colors.orange.withOpacity(0.4)
+                : solde < 0 
+                  ? Colors.red.withOpacity(0.4) 
+                  : Colors.green.withOpacity(0.4),
+              width: isMobile ? 1.5 : 2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: (solde > 0 ? Colors.orange : solde < 0 ? Colors.red : Colors.green).withOpacity(0.08),
+                blurRadius: isMobile ? 6 : 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header avec nom du shop et solde
-          Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                padding: EdgeInsets.all(isMobile ? 5 : 7),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: solde > 0 
-                      ? [Colors.orange.withOpacity(0.2), Colors.orange.withOpacity(0.1)]
-                      : solde < 0
-                        ? [Colors.red.withOpacity(0.2), Colors.red.withOpacity(0.1)]
-                        : [Colors.green.withOpacity(0.2), Colors.green.withOpacity(0.1)],
-                  ),
-                  borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
-                ),
-                child: Icon(
-                  solde > 0 ? Icons.trending_up : solde < 0 ? Icons.trending_down : Icons.check_circle_outline,
-                  color: solde > 0 ? Colors.orange[700] : solde < 0 ? Colors.red[700] : Colors.green[700],
-                  size: isMobile ? 16 : 20,
-                ),
-              ),
-              SizedBox(width: isMobile ? 8 : 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      shopName,
-                      style: TextStyle(
-                        fontSize: isMobile ? 13 : 15,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[900],
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (!isMobile || isTablet)
-                      Text(
-                        '${retraitsEnAttente + retraitsRembourses} retrait(s) • ${flotsRecus + flotsEnvoyesCount} FLOT(s)',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.grey[600],
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
+              // Header avec nom du shop et solde
+              Row(
                 children: [
                   Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: isMobile ? 6 : 8,
-                      vertical: isMobile ? 2 : 3,
-                    ),
+                    padding: EdgeInsets.all(isMobile ? 5 : 7),
                     decoration: BoxDecoration(
-                      color: (solde > 0 ? Colors.orange : solde < 0 ? Colors.red : Colors.green).withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(isMobile ? 8 : 10),
-                    ),
-                    child: Text(
-                      solde > 0 ? 'À recevoir' : solde < 0 ? 'À payer' : 'OK',
-                      style: TextStyle(
-                        fontSize: isMobile ? 8 : 9,
-                        color: solde > 0 ? Colors.orange[800] : solde < 0 ? Colors.red[800] : Colors.green[800],
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
+                      gradient: LinearGradient(
+                        colors: solde > 0 
+                          ? [Colors.orange.withOpacity(0.2), Colors.orange.withOpacity(0.1)]
+                          : solde < 0
+                            ? [Colors.red.withOpacity(0.2), Colors.red.withOpacity(0.1)]
+                            : [Colors.green.withOpacity(0.2), Colors.green.withOpacity(0.1)],
                       ),
+                      borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
                     ),
-                  ),
-                  SizedBox(height: isMobile ? 2 : 4),
-                  Text(
-                    '\$${solde.abs().toStringAsFixed(2)}',
-                    style: TextStyle(
-                      fontSize: isMobile ? 17 : 20,
-                      fontWeight: FontWeight.w900,
+                    child: Icon(
+                      solde > 0 ? Icons.trending_up : solde < 0 ? Icons.trending_down : Icons.check_circle_outline,
                       color: solde > 0 ? Colors.orange[700] : solde < 0 ? Colors.red[700] : Colors.green[700],
+                      size: isMobile ? 16 : 20,
                     ),
                   ),
-                ],
-              ),
-            ],
-          ),
-          
-          SizedBox(height: isMobile ? 8 : 12),
-          
-          // Stats grid
-          Row(
-            children: [
-              Expanded(
-                child: _buildShopStat('Retraits', totalRetraits, Colors.orange, isMobile),
-              ),
-              SizedBox(width: isMobile ? 4 : 6),
-              Expanded(
-                child: _buildShopStat('Reçu', totalFlotsPhysiques, Colors.green, isMobile),
-              ),
-            ],
-          ),
-          SizedBox(height: isMobile ? 4 : 6),
-          Row(
-            children: [
-              Expanded(
-                child: _buildShopStat('Envoyé', flotsEnvoyes, Colors.red, isMobile),
-              ),
-              SizedBox(width: isMobile ? 4 : 6),
-              Expanded(
-                child: Container(
-                  padding: EdgeInsets.all(isMobile ? 6 : 8),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
-                    border: Border.all(color: Colors.grey[300]!, width: 1),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.swap_vert, size: isMobile ? 10 : 12, color: Colors.grey[700]),
-                          SizedBox(width: isMobile ? 2 : 4),
+                  SizedBox(width: isMobile ? 8 : 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          shopName,
+                          style: TextStyle(
+                            fontSize: isMobile ? 13 : 15,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[900],
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (!isMobile || isTablet)
                           Text(
-                            'Balance',
+                            '${retraitsEnAttente + retraitsRembourses} retrait(s) • ${flotsRecus + flotsEnvoyesCount} FLOT(s)',
                             style: TextStyle(
-                              fontSize: isMobile ? 8 : 9,
-                              color: Colors.grey[700],
-                              fontWeight: FontWeight.w600,
+                              fontSize: 10,
+                              color: Colors.grey[600],
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
-                        ],
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: isMobile ? 6 : 8,
+                          vertical: isMobile ? 2 : 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: (solde > 0 ? Colors.orange : solde < 0 ? Colors.red : Colors.green).withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(isMobile ? 8 : 10),
+                        ),
+                        child: Text(
+                          solde > 0 ? 'À recevoir' : solde < 0 ? 'À payer' : 'OK',
+                          style: TextStyle(
+                            fontSize: isMobile ? 8 : 9,
+                            color: solde > 0 ? Colors.orange[800] : solde < 0 ? Colors.red[800] : Colors.green[800],
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
                       ),
-                      SizedBox(height: isMobile ? 2 : 3),
+                      SizedBox(height: isMobile ? 2 : 4),
                       Text(
-                        '${flotsRecus}↓ ${flotsEnvoyesCount}↑',
+                        '\$${solde.abs().toStringAsFixed(2)}',
                         style: TextStyle(
-                          fontSize: isMobile ? 11 : 13,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey[900],
+                          fontSize: isMobile ? 17 : 20,
+                          fontWeight: FontWeight.w900,
+                          color: solde > 0 ? Colors.orange[700] : solde < 0 ? Colors.red[700] : Colors.green[700],
                         ),
                       ),
                     ],
                   ),
-                ),
+                ],
               ),
-            ],
-          ),
-          
-          // Status row - masqué sur mobile
-          if (!isMobile) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.orange[50],
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: Colors.orange[200]!, width: 1),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.pending, size: 12, color: Colors.orange[700]),
-                        const SizedBox(width: 4),
-                        Text(
-                          '$retraitsEnAttente',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.orange[800],
+              
+              SizedBox(height: isMobile ? 8 : 12),
+              
+              // Stats grid
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildShopStat('Retraits', totalRetraits, Colors.orange, isMobile),
+                  ),
+                  SizedBox(width: isMobile ? 4 : 6),
+                  Expanded(
+                    child: _buildShopStat('Reçu', totalFlotsPhysiques, Colors.green, isMobile),
+                  ),
+                ],
+              ),
+              SizedBox(height: isMobile ? 4 : 6),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildShopStat('Envoyé', flotsEnvoyes, Colors.red, isMobile),
+                  ),
+                  SizedBox(width: isMobile ? 4 : 6),
+                  Expanded(
+                    child: Container(
+                      padding: EdgeInsets.all(isMobile ? 6 : 8),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
+                        border: Border.all(color: Colors.grey[300]!, width: 1),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.swap_vert, size: isMobile ? 10 : 12, color: Colors.grey[700]),
+                              SizedBox(width: isMobile ? 2 : 4),
+                              Text(
+                                'Balance',
+                                style: TextStyle(
+                                  fontSize: isMobile ? 8 : 9,
+                                  color: Colors.grey[700],
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
+                          SizedBox(height: isMobile ? 2 : 3),
+                          Text(
+                            '${flotsRecus}↓ ${flotsEnvoyesCount}↑',
+                            style: TextStyle(
+                              fontSize: isMobile ? 11 : 13,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey[900],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.green[50],
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: Colors.green[200]!, width: 1),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.check_circle, size: 12, color: Colors.green[700]),
-                        const SizedBox(width: 4),
-                        Text(
-                          '$retraitsRembourses',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green[800],
-                          ),
+                ],
+              ),
+              
+              // Status row - masqué sur mobile
+              if (!isMobile) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.orange[50],
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.orange[200]!, width: 1),
                         ),
-                      ],
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.pending, size: 12, color: Colors.orange[700]),
+                            const SizedBox(width: 4),
+                            Text(
+                              '$retraitsEnAttente',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.orange[800],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.green[50],
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.green[200]!, width: 1),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.check_circle, size: 12, color: Colors.green[700]),
+                            const SizedBox(width: 4),
+                            Text(
+                              '$retraitsRembourses',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green[800],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
-            ),
-          ],
-        ],
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
   

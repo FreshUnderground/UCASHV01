@@ -6,6 +6,7 @@ import '../models/sim_model.dart';
 import '../services/auth_service.dart';
 import '../services/sim_service.dart';
 import '../services/local_db.dart';
+import '../services/sync_service.dart';
 
 class CreateDepotClientDialog extends StatefulWidget {
   final DepotClientModel? depotToEdit;
@@ -73,11 +74,6 @@ class _CreateDepotClientDialogState extends State<CreateDepotClientDialog> {
       if (isEditing) {
         final diff = montant - _montantOriginal!;
         
-        // Vérifier que la SIM a assez de solde pour la différence
-        if (diff > 0 && _selectedSim!.soldeActuel < diff) {
-          throw Exception('Solde virtuel insuffisant pour cette modification');
-        }
-        
         // Mettre à jour le dépôt
         final depotUpdated = widget.depotToEdit!.copyWith(
           montant: montant,
@@ -106,11 +102,6 @@ class _CreateDepotClientDialogState extends State<CreateDepotClientDialog> {
         }
       } else {
         // Mode création
-        // Vérifier que la SIM a assez de solde virtuel
-        if (_selectedSim!.soldeActuel < montant) {
-          throw Exception('Solde virtuel insuffisant sur cette SIM');
-        }
-
         // Créer le modèle de dépôt
         final depot = DepotClientModel(
           shopId: shopId,
@@ -144,6 +135,9 @@ class _CreateDepotClientDialogState extends State<CreateDepotClientDialog> {
 
       // Recharger les SIMs
       await SimService.instance.loadSims(shopId: shopId);
+      
+      // Déclencher la synchronisation en arrière-plan
+      _syncInBackground(userId.toString());
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -159,254 +153,220 @@ class _CreateDepotClientDialogState extends State<CreateDepotClientDialog> {
       }
     }
   }
+  
+  /// Synchronisation en arrière-plan (non bloquante)
+  void _syncInBackground(String userId) {
+    Future.delayed(const Duration(milliseconds: 500), () async {
+      try {
+        debugPrint('🔄 [DEPOT CLIENT] Déclenchement sync en arrière-plan...');
+        final syncService = SyncService();
+        await syncService.uploadTableData('depot_clients', userId);
+        debugPrint('✅ [DEPOT CLIENT] Synchronisation terminée');
+      } catch (e) {
+        debugPrint('❌ [DEPOT CLIENT] Erreur sync: $e');
+        // Ne pas bloquer l'utilisateur en cas d'erreur
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 500),
-        padding: const EdgeInsets.all(24),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // En-tête
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF48bb78).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.account_balance,
-                      color: Color(0xFF48bb78),
-                      size: 28,
-                    ),
+      child: SingleChildScrollView(
+        child: Container(
+          width: 500,
+          padding: const EdgeInsets.all(24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // En-tête simple
+                Text(
+                  widget.depotToEdit != null ? 'Éditer le Dépôt Client' : 'Nouveau Dépôt Client',
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Cash reçu → Virtuel envoyé',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey[600],
+                    fontStyle: FontStyle.italic,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+
+                // Sélection de la SIM
+                Consumer<SimService>(
+                  builder: (context, simService, child) {
+                    final authService = Provider.of<AuthService>(context, listen: false);
+                    final shopId = authService.currentUser?.shopId;
+                    final sims = shopId != null
+                        ? simService.sims.where((s) => s.shopId == shopId).toList()
+                        : simService.sims;
+
+                    // En mode édition, définir la SIM sélectionnée si pas encore définie
+                    if (widget.depotToEdit != null && _selectedSim == null) {
+                      _selectedSim = sims.where((s) => s.numero == widget.depotToEdit!.simNumero).firstOrNull;
+                    }
+
+                    return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          widget.depotToEdit != null ? 'Éditer le Dépôt Client' : 'Dépôt Client',
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
                         const Text(
-                          'Cash reçu → Virtuel envoyé',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey,
-                            fontStyle: FontStyle.italic,
+                          'SIM',
+                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                        ),
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<SimModel>(
+                          value: _selectedSim,
+                          decoration: InputDecoration(
+                            hintText: 'Sélectionner la SIM',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            filled: true,
+                            fillColor: Colors.grey[50],
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                           ),
+                          isExpanded: true,
+                          items: sims.map((sim) {
+                            return DropdownMenuItem(
+                              value: sim,
+                              child: Text(
+                                '${sim.numero} (${sim.operateur}',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
+                          }).toList(),
+                          onChanged: widget.depotToEdit != null ? null : (sim) {
+                            setState(() => _selectedSim = sim);
+                          },
+                          validator: (value) {
+                            if (value == null) return 'Veuillez sélectionner une SIM';
+                            return null;
+                          },
                         ),
                       ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 20),
+
+                // Montant
+                const Text(
+                  'Montant (USD)',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _montantController,
+                  decoration: InputDecoration(
+                    hintText: '0.00',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
+                    filled: true,
+                    fillColor: Colors.grey[50],
+                    prefixText: r'$ ',
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   ),
-                ],
-              ),
-              const SizedBox(height: 24),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+                  ],
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Veuillez entrer le montant';
+                    }
+                    final montant = double.tryParse(value);
+                    if (montant == null || montant <= 0) {
+                      return 'Montant invalide';
+                    }
+                    return null;
+                  },
+                  onChanged: (value) {
+                    _formKey.currentState?.validate();
+                  },
+                ),
+                const SizedBox(height: 20),
 
-              // Sélection de la SIM
-              Consumer<SimService>(
-                builder: (context, simService, child) {
-                  final authService = Provider.of<AuthService>(context, listen: false);
-                  final shopId = authService.currentUser?.shopId;
-                  final sims = shopId != null
-                      ? simService.sims.where((s) => s.shopId == shopId).toList()
-                      : simService.sims;
-
-                  // En mode édition, définir la SIM sélectionnée si pas encore définie
-                  if (widget.depotToEdit != null && _selectedSim == null) {
-                    _selectedSim = sims.where((s) => s.numero == widget.depotToEdit!.simNumero).firstOrNull;
-                  }
-
-                  return DropdownButtonFormField<SimModel>(
-                    value: _selectedSim,
-                    decoration: InputDecoration(
-                      labelText: 'Sélectionner la SIM',
-                      prefixIcon: const Icon(Icons.sim_card, color: Color(0xFF48bb78)),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      filled: true,
-                      fillColor: Colors.grey[50],
+                // Numéro de téléphone
+                const Text(
+                  'Téléphone Client',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _telephoneController,
+                  decoration: InputDecoration(
+                    hintText: '+243...',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    items: sims.map((sim) {
-                      return DropdownMenuItem(
-                        value: sim,
-                        child: Row(
-                          children: [
-                            Text(
-                              sim.numero,
-                              style: const TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '(${sim.operateur})',
-                              style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                            ),
-                            const Spacer(),
-                            Text(
-                              '\$${sim.soldeActuel.toStringAsFixed(2)}',
-                              style: TextStyle(
-                                color: sim.soldeActuel > 0 ? Colors.green : Colors.red,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: widget.depotToEdit != null ? null : (sim) { // Désactiver en mode édition
-                      setState(() => _selectedSim = sim);
-                    },
-                    validator: (value) {
-                      if (value == null) return 'Veuillez sélectionner une SIM';
-                      return null;
-                    },
-                  );
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Montant
-              TextFormField(
-                controller: _montantController,
-                decoration: InputDecoration(
-                  labelText: 'Montant (USD)',
-                  prefixIcon: const Icon(Icons.attach_money, color: Color(0xFF48bb78)),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    filled: true,
+                    fillColor: Colors.grey[50],
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   ),
-                  filled: true,
-                  fillColor: Colors.grey[50],
-                  hintText: '0.00',
+                  keyboardType: TextInputType.phone,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
+                  ],
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Veuillez entrer le numéro de téléphone';
+                    }
+                    if (value.length < 10) {
+                      return 'Numéro de téléphone invalide';
+                    }
+                    return null;
+                  },
                 ),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
-                ],
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Veuillez entrer le montant';
-                  }
-                  final montant = double.tryParse(value);
-                  if (montant == null || montant <= 0) {
-                    return 'Montant invalide';
-                  }
-                  if (_selectedSim != null && montant > _selectedSim!.soldeActuel) {
-                    return 'Solde virtuel insuffisant';
-                  }
-                  return null;
-                },
-                onChanged: (value) {
-                  // Revalider quand le montant change
-                  _formKey.currentState?.validate();
-                },
-              ),
-              const SizedBox(height: 16),
+                const SizedBox(height: 24),
 
-              // Numéro de téléphone
-              TextFormField(
-                controller: _telephoneController,
-                decoration: InputDecoration(
-                  labelText: 'Numéro de téléphone du client',
-                  prefixIcon: const Icon(Icons.phone, color: Color(0xFF48bb78)),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.grey[50],
-                  hintText: '+243...',
-                ),
-                keyboardType: TextInputType.phone,
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
-                ],
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Veuillez entrer le numéro de téléphone';
-                  }
-                  if (value.length < 10) {
-                    return 'Numéro de téléphone invalide';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 24),
 
-              // Info box
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue[50],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue[200]!),
-                ),
-                child: Row(
+                // Boutons
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    Icon(Icons.info_outline, color: Colors.blue[700], size: 20),
+                    TextButton(
+                      onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
+                      child: const Text('Annuler'),
+                    ),
                     const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Le dépôt va diminuer le virtuel de la SIM et augmenter le cash disponible',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.blue[900],
+                    ElevatedButton(
+                      onPressed: _isLoading ? null : _enregistrerDepot,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF48bb78),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
                       ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : Text(widget.depotToEdit != null ? 'Modifier' : 'Enregistrer'),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 24),
-
-              // Boutons
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
-                    child: const Text('Annuler'),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton.icon(
-                    onPressed: _isLoading ? null : _enregistrerDepot,
-                    icon: _isLoading
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          )
-                        : const Icon(Icons.save),
-                    label: Text(_isLoading 
-                        ? (widget.depotToEdit != null ? 'Modification...' : 'Enregistrement...') 
-                        : (widget.depotToEdit != null ? 'Modifier' : 'Enregistrer')),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF48bb78),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
