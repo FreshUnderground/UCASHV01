@@ -57,6 +57,11 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
   String _flotSearchQuery = ''; // Pour recherche par code
   DateTime? _flotDateFilter; // Pour filtrage par date
   
+  // 🔍 NOUVEAU: Filtres pour Dépôt
+  bool _showDepotFilters = false; // Masquer les filtres par défaut
+  final TextEditingController _depotSearchController = TextEditingController();
+  String _depotSearchQuery = ''; // Pour recherche par numéro de téléphone
+  
   @override
   void initState() {
     super.initState();
@@ -69,6 +74,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
     _tabController.dispose();
     _searchController.dispose();
     _flotSearchController.dispose();
+    _depotSearchController.dispose();
     super.dispose();
   }
 
@@ -152,16 +158,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
           _buildRapportTab(),
         ],
       ),
-      floatingActionButton: _tabController.index == 2
-          ? FloatingActionButton.extended(
-              heroTag: 'btn_depot',
-              onPressed: _creerDepot,
-              icon: const Icon(Icons.add),
-              label: const Text('Nouveau Dépôt'),
-              backgroundColor: const Color(0xFF48bb78),
-              elevation: 3,
-            )
-          : null,
+
     );
   }
 
@@ -1313,69 +1310,140 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
           return const Center(child: CircularProgressIndicator());
         }
         
-        final depots = snapshot.data ?? [];
+        // Appliquer les filtres
+        final allDepots = snapshot.data ?? [];
+        var filteredDepots = allDepots;
+        
+        // Filtrer par numéro de téléphone
+        if (_depotSearchQuery.isNotEmpty) {
+          filteredDepots = filteredDepots.where((d) => 
+            d.telephoneClient.contains(_depotSearchQuery)
+          ).toList();
+        }
         
         return Column(
           children: [
-            // En-tête avec bouton
+            // Bouton pour afficher/masquer les filtres + Bouton Nouveau Dépôt
             Container(
-              padding: const EdgeInsets.all(16),
-              color: Colors.grey[100],
+              color: Colors.grey[200],
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
               child: Row(
                 children: [
-                  Icon(Icons.account_balance, color: Colors.grey[700]),
-                  const SizedBox(width: 12),
+                  // ✨ Bouton Nouveau Dépôt (moderne et joli)
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Dépôts Clients',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey[800],
-                          ),
+                    child: ElevatedButton.icon(
+                      onPressed: () => _creerDepot(),
+                      icon: const Icon(Icons.add_circle_outline, size: 22),
+                      label: const Text(
+                        'Nouveau Dépôt',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.5,
                         ),
-                        Text(
-                          'Cash → Virtuel',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                            fontStyle: FontStyle.italic,
-                          ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF48bb78),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                        elevation: 2,
+                        shadowColor: const Color.fromARGB(255, 126, 204, 84).withOpacity(0.5),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                      ],
+                      ),
                     ),
                   ),
-                  ElevatedButton.icon(
-                    onPressed: () => _creerDepot(),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Nouveau'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF48bb78),
-                      foregroundColor: Colors.white,
+                  const SizedBox(width: 8),
+                  // Bouton filtres
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _showDepotFilters = !_showDepotFilters;
+                      });
+                    },
+                    icon: Icon(
+                      _showDepotFilters ? Icons.filter_alt_off : Icons.filter_alt,
+                      size: 20,
+                    ),
+                    label: Text(
+                      _showDepotFilters ? 'Masquer' : 'Filtres',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF48bb78),
+                      side: const BorderSide(color: Color(0xFF48bb78), width: 1.5),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
+            // 🔍 Barre de recherche et filtres (affichables/masquables)
+            if (_showDepotFilters)
+              Container(
+                color: Colors.grey[100],
+                padding: const EdgeInsets.all(8),
+                child: Column(
+                  children: [
+                    // Barre de recherche par numéro de téléphone
+                    TextField(
+                      controller: _depotSearchController,
+                      decoration: InputDecoration(
+                        hintText: 'Rechercher par numéro de téléphone...',
+                        prefixIcon: const Icon(Icons.search, color: Color(0xFF48bb78)),
+                        suffixIcon: _depotSearchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear),
+                                onPressed: () {
+                                  setState(() {
+                                    _depotSearchController.clear();
+                                    _depotSearchQuery = '';
+                                  });
+                                },
+                              )
+                            : null,
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      ),
+                      onChanged: (value) {
+                        setState(() {
+                          _depotSearchQuery = value.trim();
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
             
             // Liste des dépôts
             Expanded(
-              child: depots.isEmpty
+              child: filteredDepots.isEmpty
                   ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
-                            Icons.account_balance_outlined,
+                            _depotSearchQuery.isNotEmpty ? Icons.search_off : Icons.account_balance_outlined,
                             size: 80,
                             color: Colors.grey[400],
                           ),
                           const SizedBox(height: 20),
                           Text(
-                            'Aucun dépôt client',
+                            _depotSearchQuery.isNotEmpty 
+                                ? 'Aucun résultat pour "$_depotSearchQuery"'
+                                : 'Aucun dépôt client',
                             style: TextStyle(
                               fontSize: 18,
                               color: Colors.grey[600],
@@ -1383,7 +1451,9 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Cliquez sur "Nouveau" pour enregistrer un dépôt',
+                            _depotSearchQuery.isNotEmpty
+                                ? 'Essayez une autre recherche'
+                                : 'Cliquez sur "Nouveau Dépôt" pour enregistrer un dépôt',
                             style: TextStyle(
                               fontSize: 14,
                               color: Colors.grey[500],
@@ -1397,12 +1467,12 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                         setState(() {}); // Recharger
                       },
                       child: ListView.builder(
-                        padding: const EdgeInsets.all(8),
-                        itemCount: depots.length,
+                        padding: const EdgeInsets.all(4),
+                        itemCount: filteredDepots.length,
                         itemBuilder: (context, index) {
-                          final depot = depots[index];
+                          final depot = filteredDepots[index];
                           return Card(
-                            margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                            margin: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
                             child: ListTile(
                               leading: CircleAvatar(
                                 backgroundColor: const Color(0xFF48bb78).withOpacity(0.1),
@@ -5578,6 +5648,8 @@ const SizedBox(height: 16),
       await _loadData();
     }
   }
+  
+
 
   /// Générer et prévisualiser le rapport PDF
   Future<void> _previewRapportPdf(

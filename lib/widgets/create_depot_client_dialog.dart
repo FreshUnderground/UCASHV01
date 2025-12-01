@@ -176,7 +176,7 @@ class _CreateDepotClientDialogState extends State<CreateDepotClientDialog> {
       child: SingleChildScrollView(
         child: Container(
           width: 500,
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(12),
           child: Form(
             key: _formKey,
             child: Column(
@@ -187,12 +187,12 @@ class _CreateDepotClientDialogState extends State<CreateDepotClientDialog> {
                 Text(
                   widget.depotToEdit != null ? 'Éditer le Dépôt Client' : 'Nouveau Dépôt Client',
                   style: const TextStyle(
-                    fontSize: 22,
+                    fontSize: 20,
                     fontWeight: FontWeight.bold,
                   ),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 2),
                 Text(
                   'Cash reçu → Virtuel envoyé',
                   style: TextStyle(
@@ -202,7 +202,7 @@ class _CreateDepotClientDialogState extends State<CreateDepotClientDialog> {
                   ),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 12),
 
                 // Sélection de la SIM
                 Consumer<SimService>(
@@ -259,7 +259,7 @@ class _CreateDepotClientDialogState extends State<CreateDepotClientDialog> {
                     );
                   },
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 10),
 
                 // Montant
                 const Text(
@@ -297,7 +297,7 @@ class _CreateDepotClientDialogState extends State<CreateDepotClientDialog> {
                     _formKey.currentState?.validate();
                   },
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 10),
 
                 // Numéro de téléphone
                 const Text(
@@ -330,7 +330,7 @@ class _CreateDepotClientDialogState extends State<CreateDepotClientDialog> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 12),
 
 
                 // Boutons
