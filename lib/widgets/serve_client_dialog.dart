@@ -225,7 +225,7 @@ class _ServeClientDialogState extends State<ServeClientDialog> {
         constraints: const BoxConstraints(maxWidth: 500),
         child: SingleChildScrollView(
           child: Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(15),
             child: Form(
               key: _formKey,
               child: Column(
@@ -235,11 +235,11 @@ class _ServeClientDialogState extends State<ServeClientDialog> {
                   Row(
                     children: [
                       const Icon(Icons.person_add, color: Colors.green),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 5),
                       const Expanded(
                         child: Text(
                           'Servir Client',
-                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                         ),
                       ),
                       IconButton(
@@ -248,11 +248,11 @@ class _ServeClientDialogState extends State<ServeClientDialog> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 4),
                   
                   // Informations transaction
                   Container(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(5),
                     decoration: BoxDecoration(
                       color: Colors.grey[100],
                       borderRadius: BorderRadius.circular(8),
@@ -305,13 +305,13 @@ class _ServeClientDialogState extends State<ServeClientDialog> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 12),
                   
                   const Text(
                     'Informations Client',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 15),
                   
                   // Nom client
                   TextFormField(
@@ -330,7 +330,7 @@ class _ServeClientDialogState extends State<ServeClientDialog> {
                     },
                     autofocus: true,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 15),
                   
                   // Téléphone client
                   TextFormField(
@@ -349,7 +349,7 @@ class _ServeClientDialogState extends State<ServeClientDialog> {
                       return null;
                     },
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 15),
                   
                   // Pourcentage de frais (à saisir par l'agent)
                   TextFormField(
@@ -379,11 +379,11 @@ class _ServeClientDialogState extends State<ServeClientDialog> {
                     },
                     onChanged: (value) => _calculateFromPercentage(),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 12),
                   
                   // Avertissement
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(5),
                     decoration: BoxDecoration(
                       color: Colors.orange.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(8),
@@ -395,14 +395,14 @@ class _ServeClientDialogState extends State<ServeClientDialog> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            'Assurez-vous que le client a bien montré sa capture avant de valider.',
+                            'Assurez-vous que le client a montré sa capture.',
                             style: TextStyle(color: Colors.grey[800], fontSize: 12),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 12),
                   
                   // Boutons
                   Row(
@@ -430,7 +430,7 @@ class _ServeClientDialogState extends State<ServeClientDialog> {
                                     color: Colors.white,
                                   ),
                                 )
-                              : const Text('Servir Client'),
+                              : const Text('Servir'),
                         ),
                       ),
                     ],
