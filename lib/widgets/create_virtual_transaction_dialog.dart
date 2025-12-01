@@ -109,6 +109,24 @@ class _CreateVirtualTransactionDialogState extends State<CreateVirtualTransactio
       return;
     }
 
+    // Vérifier l'unicité de la référence
+    final reference = _referenceController.text.trim();
+    final vtService = Provider.of<VirtualTransactionService>(context, listen: false);
+    final existingTransaction = vtService.transactions.where((t) => t.reference == reference).firstOrNull;
+    
+    if (existingTransaction != null) {
+      if (!_isDisposed && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Cette référence existe déjà!\nRÉF: $reference déjà utilisée'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+      return;
+    }
+
     if (!_isDisposed && mounted) {
       setState(() => _isLoading = true);
     }
@@ -124,14 +142,14 @@ class _CreateVirtualTransactionDialogState extends State<CreateVirtualTransactio
       final montantVirtuel = double.parse(_montantController.text);
 
       debugPrint('📦 [CreateVirtualTransaction] Création transaction...');
-      debugPrint('   Référence: ${_referenceController.text.trim()}');
+      debugPrint('   Référence: $reference');
       debugPrint('   Montant virtuel: $montantVirtuel');
       debugPrint('   SIM: ${_selectedSim!.numero}');
       debugPrint('   Shop ID: ${currentUser.shopId}');
       debugPrint('   Agent: ${currentUser.username}');
 
       final transaction = await VirtualTransactionService.instance.createTransaction(
-        reference: _referenceController.text.trim(),
+        reference: reference,
         montantVirtuel: montantVirtuel,
         frais: 0.0, // Frais = 0, commission saisie lors du service
         simNumero: _selectedSim!.numero,

@@ -24,6 +24,7 @@ import 'create_depot_client_dialog.dart';
 import 'cloture_virtuelle_moderne_widget.dart';
 import 'modern_transaction_card.dart';
 import 'pdf_viewer_dialog.dart';
+import 'flot_management_widget.dart';
 
 
 /// Widget pour la gestion des transactions virtuelles par les agents
@@ -75,18 +76,6 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.account_balance_wallet, size: 24),
-            ),
-          ],
-        ),
         flexibleSpace: Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
@@ -96,16 +85,8 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
             ),
           ),
         ),
-        elevation: 0,
-        actions: [
-          IconButton(
-            onPressed: _loadData,
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Actualiser',
-          ),
-        ],
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
+          preferredSize: const Size.fromHeight(20),
           child: Container(
             color: Colors.white.withOpacity(0.1),
             child: TabBar(
@@ -176,10 +157,10 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
     );
   }
 
-  /// Onglet Transactions (avec sous-onglets: Tout, En Attente, Servies, Retrait, Dépôt)
+  /// Onglet Transactions (avec sous-onglets: Tout, En Attente, Servies)
   Widget _buildTransactionsTab() {
     return DefaultTabController(
-      length: 5,
+      length: 3,
       child: Column(
         children: [
           Container(
@@ -193,8 +174,6 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                 Tab(text: 'Tout', icon: Icon(Icons.list, size: 18)),
                 Tab(text: 'En Attente', icon: Icon(Icons.hourglass_empty, size: 18)),
                 Tab(text: 'Servies', icon: Icon(Icons.check_circle, size: 18)),
-                Tab(text: 'Retrait', icon: Icon(Icons.remove_circle, size: 18)),
-                Tab(text: 'Dépôt', icon: Icon(Icons.account_balance, size: 18)),
               ],
             ),
           ),
@@ -204,8 +183,6 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                 _buildHistoriqueTab(), // Tout
                 _buildEnAttenteTab(),  // En Attente
                 _buildServiesTab(),    // Servies
-                _buildRetraitsTab(),   // Retrait
-                _buildDepotTab(),      // Dépôt
               ],
             ),
           ),
@@ -244,6 +221,19 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
               .where((t) => t.dateEnregistrement.isBefore(_dateFinFilter!))
               .toList();
         }
+        
+        // Supprimer les doublons par référence (garder la plus récente)
+        final Map<String, VirtualTransactionModel> uniqueTransactions = {};
+        for (var transaction in filteredTransactions) {
+          final key = transaction.reference;
+          if (!uniqueTransactions.containsKey(key) || 
+              transaction.dateEnregistrement.isAfter(uniqueTransactions[key]!.dateEnregistrement)) {
+            uniqueTransactions[key] = transaction;
+          }
+        }
+        filteredTransactions = uniqueTransactions.values.toList();
+        // Trier par date (plus récents en premier)
+        filteredTransactions.sort((a, b) => b.dateEnregistrement.compareTo(a.dateEnregistrement));
 
         if (service.isLoading) {
           return const Center(child: CircularProgressIndicator());
@@ -272,12 +262,33 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
 
         return Column(
           children: [
-            _buildFilters(),
+            // Bouton pour afficher/masquer les filtres
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _showFilters = !_showFilters;
+                      });
+                    },
+                    icon: Icon(_showFilters ? Icons.filter_alt_off : Icons.filter_alt),
+                    label: Text(_showFilters ? 'Masquer filtres' : 'Afficher filtres'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF48bb78),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (_showFilters) _buildFilters(),
             Expanded(
               child: RefreshIndicator(
                 onRefresh: _loadData,
                 child: ListView.builder(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(4),
                   itemCount: filteredTransactions.length,
                   itemBuilder: (context, index) {
                     return ModernTransactionCard(
@@ -325,6 +336,19 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
               .where((t) => t.dateValidation != null && t.dateValidation!.isBefore(_dateFinFilter!))
               .toList();
         }
+        
+        // Supprimer les doublons par référence (garder la plus récente)
+        final Map<String, VirtualTransactionModel> uniqueTransactions = {};
+        for (var transaction in transactions) {
+          final key = transaction.reference;
+          if (!uniqueTransactions.containsKey(key) || 
+              transaction.dateEnregistrement.isAfter(uniqueTransactions[key]!.dateEnregistrement)) {
+            uniqueTransactions[key] = transaction;
+          }
+        }
+        transactions = uniqueTransactions.values.toList();
+        // Trier par date (plus récents en premier)
+        transactions.sort((a, b) => b.dateEnregistrement.compareTo(a.dateEnregistrement));
 
         if (transactions.isEmpty) {
           return const Center(child: Text('Aucune transaction servie'));
@@ -332,10 +356,31 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
 
         return Column(
           children: [
-            _buildFilters(),
+            // Bouton pour afficher/masquer les filtres
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _showFilters = !_showFilters;
+                      });
+                    },
+                    icon: Icon(_showFilters ? Icons.filter_alt_off : Icons.filter_alt),
+                    label: Text(_showFilters ? 'Masquer filtres' : 'Afficher filtres'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF48bb78),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (_showFilters) _buildFilters(),
             Expanded(
               child: ListView.builder(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(4),
                 itemCount: transactions.length,
                 itemBuilder: (context, index) {
                   return ModernTransactionCard(
@@ -354,12 +399,19 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
 
   /// Onglet Retraits Virtuels
   Widget _buildRetraitsTab() {
-    return FutureBuilder<List<RetraitVirtuelModel>>(
-      key: _retraitsTabKey, // Utiliser la clé pour forcer le rechargement
-      future: LocalDB.instance.getAllRetraitsVirtuels(
-        shopSourceId: Provider.of<AuthService>(context, listen: false).currentUser?.shopId,
-      ),
-      builder: (BuildContext context, snapshot) {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final shopId = authService.currentUser?.shopId;
+    final isAdmin = authService.currentUser?.role == 'ADMIN';
+    
+    return FutureBuilder<List<dynamic>>(
+      key: _retraitsTabKey,
+      future: Future.wait([
+        LocalDB.instance.getAllRetraitsVirtuels(
+          shopSourceId: shopId,
+        ),
+        LocalDB.instance.getAllOperations(), // Charger toutes les opérations
+      ]),
+      builder: (BuildContext context, AsyncSnapshot<List<dynamic>> snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -370,18 +422,60 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
           );
         }
 
-        final retraits = snapshot.data ?? [];
+        final retraits = (snapshot.data?[0] as List<RetraitVirtuelModel>?) ?? [];
+        var allOperations = (snapshot.data?[1] as List<OperationModel>?) ?? [];
+        
+        // Filtrer pour obtenir uniquement les FLOTs (type = flotShopToShop)
+        // et seulement ceux REÇUS par ce shop (Paiement des retraits)
+        var flots = allOperations.where((op) => 
+          op.type == OperationType.flotShopToShop
+        ).toList();
+        
+        // Filtrer les FLOTs: seulement ceux REÇUS par ce shop (Paiement des retraits)
+        // Logique: On fait un retrait → On reçoit un FLOT en paiement
+        if (shopId != null) {
+          flots = flots.where((f) => f.shopDestinationId == shopId).toList();
+        }
+        
+        // Créer une liste de mouvements combinés avec type et date
+        final List<Map<String, dynamic>> mouvements = [];
+        
+        // Ajouter les retraits
+        for (var retrait in retraits) {
+          mouvements.add({
+            'type': 'retrait',
+            'data': retrait,
+            'date': retrait.dateRetrait,
+          });
+        }
+        
+        // Ajouter les FLOTs
+        for (var flot in flots) {
+          mouvements.add({
+            'type': 'flot',
+            'data': flot,
+            'date': flot.dateOp, // OperationModel utilise dateOp
+          });
+        }
+        
+        // Trier par date (plus récents en premier)
+        mouvements.sort((a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
 
-        if (retraits.isEmpty) {
+        if (mouvements.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.remove_circle_outline, size: 64, color: Colors.grey[400]),
+                Icon(Icons.swap_horiz, size: 64, color: Colors.grey[400]),
                 const SizedBox(height: 16),
                 Text(
-                  'Aucun retrait virtuel',
+                  'Aucun mouvement',
                   style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Les Flots virtuels et FLOTs apparaîtront ici',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                 ),
               ],
             ),
@@ -389,13 +483,229 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
         }
 
         return ListView.builder(
-          padding: const EdgeInsets.all(8),
-          itemCount: retraits.length,
+          padding: const EdgeInsets.all(4),
+          itemCount: mouvements.length + 1, // +1 pour le header
           itemBuilder: (context, index) {
-            return _buildRetraitCard(retraits[index]);
+            // Premier item = Header statistiques
+            if (index == 0) {
+              return Container(
+                margin: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF48bb78), Color(0xFF38a169)],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildStatChip(
+                      icon: Icons.remove_circle,
+                      label: 'Retraits',
+                      count: retraits.length,
+                      color: Colors.white,
+                    ),
+                    Container(width: 1, height: 30, color: Colors.white38),
+                    _buildStatChip(
+                      icon: Icons.send,
+                      label: 'FLOTs',
+                      count: flots.length,
+                      color: Colors.white,
+                    ),
+                    Container(width: 1, height: 30, color: Colors.white38),
+                    _buildStatChip(
+                      icon: Icons.list,
+                      label: 'Total',
+                      count: mouvements.length,
+                      color: Colors.white,
+                    ),
+                  ],
+                ),
+              );
+            }
+            
+            // Items suivants = mouvements
+            final mouvement = mouvements[index - 1];
+            if (mouvement['type'] == 'retrait') {
+              return _buildRetraitCard(mouvement['data'] as RetraitVirtuelModel);
+            } else {
+              return _buildFlotOperationCard(mouvement['data'] as OperationModel, shopId);
+            }
           },
         );
       },
+    );
+  }
+  
+  Widget _buildStatChip({
+    required IconData icon,
+    required String label,
+    required int count,
+    required Color color,
+  }) {
+    return Column(
+      children: [
+        Icon(icon, color: color, size: 20),
+        const SizedBox(height: 4),
+        Text(
+          count.toString(),
+          style: TextStyle(
+            color: color,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            color: color.withOpacity(0.9),
+            fontSize: 11,
+          ),
+        ),
+      ],
+    );
+  }
+  
+  /// Card pour afficher un FLOT (OperationModel avec type flotShopToShop)
+  Widget _buildFlotOperationCard(OperationModel flot, int? currentShopId) {
+    final shopService = Provider.of<ShopService>(context, listen: false);
+    
+    // Helper pour résoudre le nom du shop
+    String getShopDesignation(int shopId, String? designation) {
+      if (designation != null && designation.isNotEmpty) return designation;
+      try {
+        final shop = shopService.shops.firstWhere((s) => s.id == shopId);
+        return shop.designation;
+      } catch (e) {
+        return 'Shop #$shopId';
+      }
+    }
+    
+    // Déterminer direction
+    final bool isSource = flot.shopSourceId == currentShopId;
+    final bool isDestination = flot.shopDestinationId == currentShopId;
+    final bool isServi = flot.statut == OperationStatus.validee || flot.statut == OperationStatus.terminee;
+    final bool isEnRoute = flot.statut == OperationStatus.enAttente;
+    
+    final Color statusColor = isServi ? Colors.green : isEnRoute ? Colors.orange : Colors.grey;
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isSource ? Colors.red.withOpacity(0.3) : Colors.green.withOpacity(0.3),
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(
+                  isSource ? Icons.arrow_upward : Icons.arrow_downward,
+                  size: 16,
+                  color: isSource ? Colors.red : Colors.green,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isSource 
+                        ? 'FLOT ENVOYÉ à ${getShopDesignation(flot.shopDestinationId ?? 0, flot.shopDestinationDesignation)}'
+                        : 'FLOT REÇU de ${getShopDesignation(flot.shopSourceId ?? 0, flot.shopSourceDesignation)}',
+                      style: TextStyle(
+                        fontSize: 13, 
+                        fontWeight: FontWeight.bold,
+                        color: isSource ? Colors.red : Colors.green,
+                      ),
+                    ),
+                    Text(
+                      'Code: ${flot.codeOps}',
+                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '\$${flot.montantNet.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: statusColor,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: statusColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      isServi ? 'Servi' : isEnRoute ? 'En route' : 'Annulé',
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: statusColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(Icons.calendar_today, size: 12, color: Colors.grey[500]),
+              const SizedBox(width: 4),
+              Text(
+                'Envoyé: ${DateFormat('dd/MM/yyyy HH:mm').format(flot.dateOp)}',
+                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+              ),
+              if (isServi && flot.dateValidation != null) ...[
+                const SizedBox(width: 12),
+                Icon(Icons.check, size: 12, color: Colors.green[700]),
+                const SizedBox(width: 4),
+                Text(
+                  'Reçu: ${DateFormat('dd/MM/yyyy HH:mm').format(flot.dateValidation!)}',
+                  style: TextStyle(fontSize: 11, color: Colors.green[700]),
+                ),
+              ],
+            ],
+          ),
+          if (flot.destinataire != null && flot.destinataire!.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              flot.destinataire!,
+              style: TextStyle(fontSize: 11, color: Colors.grey[700], fontStyle: FontStyle.italic),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -428,13 +738,47 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
               .where((t) => t.dateEnregistrement.isBefore(_dateFinFilter!))
               .toList();
         }
+        
+        // Supprimer les doublons par référence (garder la plus récente)
+        final Map<String, VirtualTransactionModel> uniqueTransactions = {};
+        for (var transaction in transactions) {
+          final key = transaction.reference;
+          if (!uniqueTransactions.containsKey(key) || 
+              transaction.dateEnregistrement.isAfter(uniqueTransactions[key]!.dateEnregistrement)) {
+            uniqueTransactions[key] = transaction;
+          }
+        }
+        transactions = uniqueTransactions.values.toList();
+        // Trier par date (plus récents en premier)
+        transactions.sort((a, b) => b.dateEnregistrement.compareTo(a.dateEnregistrement));
 
         return Column(
           children: [
-            _buildFilters(),
+            // Bouton pour afficher/masquer les filtres
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _showFilters = !_showFilters;
+                      });
+                    },
+                    icon: Icon(_showFilters ? Icons.filter_alt_off : Icons.filter_alt),
+                    label: Text(_showFilters ? 'Masquer filtres' : 'Afficher filtres'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF48bb78),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (_showFilters) _buildFilters(),
             Expanded(
               child: ListView.builder(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(4),
                 itemCount: transactions.length,
                 itemBuilder: (context, index) {
                   return ModernTransactionCard(
@@ -461,7 +805,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
     final isAdmin = currentUser?.isAdmin ?? false;
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(7),
       decoration: BoxDecoration(
         color: Colors.grey[100],
         borderRadius: BorderRadius.circular(8),
@@ -974,6 +1318,74 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
     final authService = Provider.of<AuthService>(context, listen: false);
     final shopId = authService.currentUser?.shopId;
     final isAdmin = authService.currentUser?.role == 'ADMIN';
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width < 600;
+    final isTablet = size.width >= 600 && size.width < 900;
+    
+    return DefaultTabController(
+      length: 3,
+      child: Column(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: TabBar(
+              labelColor: const Color(0xFF48bb78),
+              unselectedLabelColor: Colors.grey[600],
+              indicatorColor: const Color(0xFF48bb78),
+              indicatorWeight: 3,
+              isScrollable: true,
+              labelStyle: TextStyle(
+                fontSize: isMobile ? 12 : 14,
+                fontWeight: FontWeight.w600,
+              ),
+              unselectedLabelStyle: TextStyle(
+                fontSize: isMobile ? 11 : 13,
+                fontWeight: FontWeight.w500,
+              ),
+              tabs: [
+                Tab(
+                  text: isMobile ? 'Vue' : 'Vue d\'ensemble',
+                  icon: Icon(Icons.dashboard, size: isMobile ? 16 : 18),
+                  iconMargin: EdgeInsets.only(bottom: isMobile ? 2 : 4),
+                ),
+                Tab(
+                  text: 'Retraits',
+                  icon: Icon(Icons.remove_circle, size: isMobile ? 16 : 18),
+                  iconMargin: EdgeInsets.only(bottom: isMobile ? 2 : 4),
+                ),
+                Tab(
+                  text: 'FLOTs',
+                  icon: Icon(Icons.send, size: isMobile ? 16 : 18),
+                  iconMargin: EdgeInsets.only(bottom: isMobile ? 2 : 4),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                _buildFlotVueEnsembleTab(shopId, isAdmin),
+                _buildRetraitsTab(),
+                _buildFlotsPhysiquesTab(shopId, isAdmin),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  /// Vue d'ensemble avec soldes par shop
+  Widget _buildFlotVueEnsembleTab(int? shopId, bool isAdmin) {
     
     return FutureBuilder<List<RetraitVirtuelModel>>(
       // IMPORTANT: Charger TOUS les retraits (pas de filtre ici)
@@ -986,17 +1398,22 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
         
         final retraits = retraitsSnapshot.data ?? [];
         
-        return FutureBuilder<List<flot_model.FlotModel>>(
-          future: LocalDB.instance.getAllFlots(),
-          builder: (builderContext2, flotsSnapshot) {
-            final allFlots = flotsSnapshot.data ?? [];
+        return FutureBuilder<List<OperationModel>>(
+          future: LocalDB.instance.getAllOperations(),
+          builder: (builderContext2, operationsSnapshot) {
+            final allOperations = operationsSnapshot.data ?? [];
+            
+            // Filtrer pour obtenir uniquement les FLOTs (type = flotShopToShop)
+            var flots = allOperations.where((op) => 
+              op.type == OperationType.flotShopToShop
+            ).toList();
             
             // Filtrer les FLOTs pertinents pour ce shop
-            final flots = shopId != null
-                ? allFlots.where((f) => 
-                    f.shopSourceId == shopId || f.shopDestinationId == shopId
-                  ).toList()
-                : allFlots;
+            if (shopId != null) {
+              flots = flots.where((f) => 
+                f.shopSourceId == shopId || f.shopDestinationId == shopId
+              ).toList();
+            }
             
             return _buildFlotContent(retraits, flots, shopId, isAdmin);
           },
@@ -1007,7 +1424,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
   
   Widget _buildFlotContent(
     List<RetraitVirtuelModel> retraits,
-    List<flot_model.FlotModel> flots,
+    List<OperationModel> flots, // Changé de FlotModel à OperationModel
     int? shopId,
     bool isAdmin,
   ) {
@@ -1105,8 +1522,8 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
     if (shopId != null) {
       for (final flot in flots) {
         // CAS 1: On a REÇU un FLOT (on est destination) → L'autre shop nous a payé
-        if (flot.shopDestinationId == shopId && flot.statut == flot_model.StatutFlot.servi) {
-          final autreShopId = flot.shopSourceId;
+        if (flot.shopDestinationId == shopId && (flot.statut == OperationStatus.validee || flot.statut == OperationStatus.terminee)) {
+          final autreShopId = flot.shopSourceId ?? 0;
           
           if (!soldesParShop.containsKey(autreShopId)) {
             soldesParShop[autreShopId] = {
@@ -1125,13 +1542,13 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
           }
           
           // On a REÇU du cash → réduit ce qu'ils nous doivent
-          soldesParShop[autreShopId]!['totalFlotsPhysiques'] += flot.montant;
+          soldesParShop[autreShopId]!['totalFlotsPhysiques'] += flot.montantNet;
           soldesParShop[autreShopId]!['flotsRecus'] += 1;
         }
         
         // CAS 2: On a ENVOYÉ un FLOT (on est source) → On leur a donné du cash
-        if (flot.shopSourceId == shopId && flot.statut == flot_model.StatutFlot.servi) {
-          final autreShopId = flot.shopDestinationId;
+        if (flot.shopSourceId == shopId && (flot.statut == OperationStatus.validee || flot.statut == OperationStatus.terminee)) {
+          final autreShopId = flot.shopDestinationId ?? 0;
           
           if (!soldesParShop.containsKey(autreShopId)) {
             soldesParShop[autreShopId] = {
@@ -1150,7 +1567,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
           }
           
           // On leur a ENVOYÉ du cash → augmente ce qu'ils nous doivent
-          soldesParShop[autreShopId]!['flotsEnvoyes'] += flot.montant;
+          soldesParShop[autreShopId]!['flotsEnvoyes'] += flot.montantNet;
           soldesParShop[autreShopId]!['flotsEnvoyesCount'] += 1;
         }
       }
@@ -1192,12 +1609,12 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
     var flotsFiltres = flots;
     if (_dateDebutFilter != null) {
       flotsFiltres = flotsFiltres.where((f) => 
-        f.dateEnvoi.isAfter(_dateDebutFilter!)
+        f.dateOp.isAfter(_dateDebutFilter!)
       ).toList();
     }
     if (_dateFinFilter != null) {
       flotsFiltres = flotsFiltres.where((f) => 
-        f.dateEnvoi.isBefore(_dateFinFilter!)
+        f.dateOp.isBefore(_dateFinFilter!)
       ).toList();
     }
     if (isAdmin && _selectedShopFilter != null) {
@@ -1250,19 +1667,11 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Retraits Virtuels & Flots',
+                                'Flots Virtuels & Flots',
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              SizedBox(height: 4),
-                              Text(
-                                'Solde = Retraits + FLOTs envoyés - FLOTs reçus',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 12,
                                 ),
                               ),
                             ],
@@ -1271,21 +1680,21 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                       ],
                     ),
                     if (!isAdmin) ...[
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 10),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
                           onPressed: _createRetraitVirtuel,
                           icon: const Icon(Icons.remove_circle, size: 20),
                           label: const Text(
-                            'Créer un Retrait Virtuel',
+                            'Initier Flot Virtuel',
                             style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                           ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
                             foregroundColor: const Color(0xFF48bb78),
                             elevation: 0,
-                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 22),
+                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 15),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -1321,12 +1730,134 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Séparer les soldes en deux catégories
                       const Text(
                         '💰 Soldes par Shop',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
-                      const SizedBox(height: 12),
-                      ...soldesParShopList.map((shopData) => _buildShopBalanceCard(shopData)),
+                      const SizedBox(height: 16),
+                      
+                      // Section: Ils nous doivent (solde > 0)
+                      ...() {
+                        final ilsDoivent = soldesParShopList.where((s) => (s['solde'] as double) > 0).toList();
+                        if (ilsDoivent.isEmpty) return <Widget>[];
+                        
+                        return [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Icon(Icons.arrow_downward, color: Colors.orange, size: 18),
+                              ),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Ils nous doivent',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.orange),
+                              ),
+                              const Spacer(),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  '${ilsDoivent.length} shop(s)',
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.orange),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          ...ilsDoivent.map((shopData) => _buildShopBalanceCard(shopData)),
+                          const SizedBox(height: 24),
+                        ];
+                      }(),
+                      
+                      // Section: Nous leur devons (solde < 0)
+                      ...() {
+                        final nousDevons = soldesParShopList.where((s) => (s['solde'] as double) < 0).toList();
+                        if (nousDevons.isEmpty) return <Widget>[];
+                        
+                        return [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Icon(Icons.arrow_upward, color: Colors.red, size: 18),
+                              ),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Nous leur devons',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.red),
+                              ),
+                              const Spacer(),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  '${nousDevons.length} shop(s)',
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.red),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          ...nousDevons.map((shopData) => _buildShopBalanceCard(shopData)),
+                          const SizedBox(height: 24),
+                        ];
+                      }(),
+                      
+                      // Section: Équilibrés (solde == 0)
+                      ...() {
+                        final equilibres = soldesParShopList.where((s) => (s['solde'] as double) == 0).toList();
+                        if (equilibres.isEmpty) return <Widget>[];
+                        
+                        return [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Icon(Icons.check_circle, color: Colors.green, size: 18),
+                              ),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Comptes équilibrés',
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.green),
+                              ),
+                              const Spacer(),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  '${equilibres.length} shop(s)',
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.green),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          ...equilibres.map((shopData) => _buildShopBalanceCard(shopData)),
+                        ];
+                      }(),
                     ],
                   ),
                 ),
@@ -1341,7 +1872,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        '📋 Historique des Retraits Virtuels',
+                        '📋 Historique des Flots Virtuels',
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 12),
@@ -1363,7 +1894,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 12),
-                      ...flotsFiltres.map((flot) => _buildFlotCard(flot, shopId)),
+                      ...flotsFiltres.map((flot) => _buildFlotOperationCard(flot, shopId)),
                     ],
                   ),
                 ),
@@ -1374,174 +1905,190 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
         );
   }
   
+  /// Onglet FLOTs Physiques uniquement - Affiche le widget de gestion complet
+  Widget _buildFlotsPhysiquesTab(int? shopId, bool isAdmin) {
+    return const FlotManagementWidget();
+  }
+  
   Widget _buildShopBalanceCard(Map<String, dynamic> shopData) {
     final solde = shopData['solde'] as double;
     final totalRetraits = shopData['totalRetraits'] as double;
     final totalFlotRecu = shopData['totalFlotRecu'] as double;
     final totalFlotsPhysiques = shopData['totalFlotsPhysiques'] as double;
-    final flotsEnvoyes = shopData['flotsEnvoyes'] ?? 0.0;  // NOUVEAU
+    final flotsEnvoyes = shopData['flotsEnvoyes'] ?? 0.0;
     final retraitsEnAttente = shopData['retraitsEnAttente'] as int;
     final retraitsRembourses = shopData['retraitsRembourses'] as int;
     final flotsRecus = shopData['flotsRecus'] as int;
-    final flotsEnvoyesCount = shopData['flotsEnvoyesCount'] ?? 0;  // NOUVEAU
+    final flotsEnvoyesCount = shopData['flotsEnvoyesCount'] ?? 0;
     final shopName = shopData['shopName'] as String;
     
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width < 600;
+    final isTablet = size.width >= 600 && size.width < 900;
+    
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
+      margin: EdgeInsets.only(bottom: isMobile ? 8 : 12),
+      padding: EdgeInsets.all(isMobile ? 10 : 14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(isMobile ? 8 : 12),
         border: Border.all(
-          color: solde > 0 ? Colors.orange.withOpacity(0.3) : Colors.green.withOpacity(0.3),
-          width: 2,
+          color: solde > 0 
+            ? Colors.orange.withOpacity(0.4)
+            : solde < 0 
+              ? Colors.red.withOpacity(0.4) 
+              : Colors.green.withOpacity(0.4),
+          width: isMobile ? 1.5 : 2,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: (solde > 0 ? Colors.orange : solde < 0 ? Colors.red : Colors.green).withOpacity(0.08),
+            blurRadius: isMobile ? 6 : 10,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header avec nom du shop et solde
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: EdgeInsets.all(isMobile ? 5 : 7),
                 decoration: BoxDecoration(
-                  color: solde > 0 ? Colors.orange.withOpacity(0.1) : Colors.green.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
+                  gradient: LinearGradient(
+                    colors: solde > 0 
+                      ? [Colors.orange.withOpacity(0.2), Colors.orange.withOpacity(0.1)]
+                      : solde < 0
+                        ? [Colors.red.withOpacity(0.2), Colors.red.withOpacity(0.1)]
+                        : [Colors.green.withOpacity(0.2), Colors.green.withOpacity(0.1)],
+                  ),
+                  borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
                 ),
                 child: Icon(
-                  solde > 0 ? Icons.arrow_upward : Icons.check_circle,
-                  color: solde > 0 ? Colors.orange : Colors.green,
-                  size: 20,
+                  solde > 0 ? Icons.trending_up : solde < 0 ? Icons.trending_down : Icons.check_circle_outline,
+                  color: solde > 0 ? Colors.orange[700] : solde < 0 ? Colors.red[700] : Colors.green[700],
+                  size: isMobile ? 16 : 20,
                 ),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: isMobile ? 8 : 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       shopName,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: isMobile ? 13 : 15,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[900],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    Text(
-                      '${retraitsEnAttente + retraitsRembourses} retrait(s) | ${flotsRecus + flotsEnvoyesCount} FLOT(s)',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    ),
+                    if (!isMobile || isTablet)
+                      Text(
+                        '${retraitsEnAttente + retraitsRembourses} retrait(s) • ${flotsRecus + flotsEnvoyesCount} FLOT(s)',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                   ],
                 ),
               ),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(
-                    solde > 0 ? 'Ils doivent' : solde < 0 ? 'Vous devez' : 'Équilibré',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: solde > 0 ? Colors.orange : solde < 0 ? Colors.red : Colors.green,
-                      fontWeight: FontWeight.w600,
+                  Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isMobile ? 6 : 8,
+                      vertical: isMobile ? 2 : 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: (solde > 0 ? Colors.orange : solde < 0 ? Colors.red : Colors.green).withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(isMobile ? 8 : 10),
+                    ),
+                    child: Text(
+                      solde > 0 ? 'À recevoir' : solde < 0 ? 'À payer' : 'OK',
+                      style: TextStyle(
+                        fontSize: isMobile ? 8 : 9,
+                        color: solde > 0 ? Colors.orange[800] : solde < 0 ? Colors.red[800] : Colors.green[800],
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
                     ),
                   ),
+                  SizedBox(height: isMobile ? 2 : 4),
                   Text(
                     '\$${solde.abs().toStringAsFixed(2)}',
                     style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: solde > 0 ? Colors.orange : Colors.green,
+                      fontSize: isMobile ? 17 : 20,
+                      fontWeight: FontWeight.w900,
+                      color: solde > 0 ? Colors.orange[700] : solde < 0 ? Colors.red[700] : Colors.green[700],
                     ),
                   ),
                 ],
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          
+          SizedBox(height: isMobile ? 8 : 12),
+          
+          // Stats grid
           Row(
             children: [
               Expanded(
-                child: _buildShopStat('Retraits', totalRetraits, Colors.orange),
+                child: _buildShopStat('Retraits', totalRetraits, Colors.orange, isMobile),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: isMobile ? 4 : 6),
               Expanded(
-                child: _buildShopStat('FLOT Reçu', totalFlotsPhysiques, Colors.green),
+                child: _buildShopStat('Reçu', totalFlotsPhysiques, Colors.green, isMobile),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: isMobile ? 4 : 6),
           Row(
             children: [
               Expanded(
-                child: _buildShopStat('FLOT Envoyé', flotsEnvoyes, Colors.red),
+                child: _buildShopStat('Envoyé', flotsEnvoyes, Colors.red, isMobile),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: isMobile ? 4 : 6),
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: EdgeInsets.all(isMobile ? 6 : 8),
                   decoration: BoxDecoration(
-                    color: Colors.grey.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
+                    border: Border.all(color: Colors.grey[300]!, width: 1),
                   ),
                   child: Column(
                     children: [
-                      Text(
-                        'Balance',
-                        style: TextStyle(fontSize: 11, color: Colors.grey[700], fontWeight: FontWeight.w600),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.swap_vert, size: isMobile ? 10 : 12, color: Colors.grey[700]),
+                          SizedBox(width: isMobile ? 2 : 4),
+                          Text(
+                            'Balance',
+                            style: TextStyle(
+                              fontSize: isMobile ? 8 : 9,
+                              color: Colors.grey[700],
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 4),
+                      SizedBox(height: isMobile ? 2 : 3),
                       Text(
-                        '${flotsRecus}↓ / ${flotsEnvoyesCount}↑',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey[800]),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.hourglass_empty, size: 14, color: Colors.orange),
-                      const SizedBox(width: 4),
-                      Text(
-                        '$retraitsEnAttente en attente',
-                        style: const TextStyle(fontSize: 11, color: Colors.orange),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.check_circle, size: 14, color: Colors.green),
-                      const SizedBox(width: 4),
-                      Text(
-                        '$retraitsRembourses remboursés',
-                        style: const TextStyle(fontSize: 11, color: Colors.green),
+                        '${flotsRecus}↓ ${flotsEnvoyesCount}↑',
+                        style: TextStyle(
+                          fontSize: isMobile ? 11 : 13,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey[900],
+                        ),
                       ),
                     ],
                   ),
@@ -1549,28 +2096,110 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
               ),
             ],
           ),
+          
+          // Status row - masqué sur mobile
+          if (!isMobile) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.orange[50],
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.orange[200]!, width: 1),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.pending, size: 12, color: Colors.orange[700]),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$retraitsEnAttente',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.orange[800],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.green[50],
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.green[200]!, width: 1),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.check_circle, size: 12, color: Colors.green[700]),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$retraitsRembourses',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green[800],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
   }
   
-  Widget _buildShopStat(String label, double value, Color color) {
+  Widget _buildShopStat(String label, double value, Color color, bool isMobile) {
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: EdgeInsets.all(isMobile ? 6 : 8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            color.withOpacity(0.15),
+            color.withOpacity(0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
+        border: Border.all(
+          color: color.withOpacity(0.3),
+          width: 1,
+        ),
       ),
       child: Column(
         children: [
           Text(
             label,
-            style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              fontSize: isMobile ? 8 : 9,
+              color: color,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.3,
+            ),
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: isMobile ? 2 : 3),
           Text(
-            '\$${value.toStringAsFixed(2)}',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color),
+            '\$${value.toStringAsFixed(isMobile ? 0 : 2)}',
+            style: TextStyle(
+              fontSize: isMobile ? 12 : 14,
+              fontWeight: FontWeight.w900,
+              color: color,
+            ),
           ),
         ],
       ),
@@ -2943,10 +3572,10 @@ const SizedBox(height: 16),
                           const SizedBox(height: 16),
 
                           // Statistiques par opérateur
-                          Card(
+                          const Card(
                             elevation: 3,
                             child: Padding(
-                              padding: const EdgeInsets.all(16),
+                              padding: EdgeInsets.all(16),
                               child: Column(
 // ... existing code ...
                               ),
@@ -3391,7 +4020,7 @@ const SizedBox(height: 16),
                     ),
                     children: [
                       Padding(
-                        padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.all(7),
                         child: Column(
                           children: [
                             _buildSimStatRow('Transactions Total', '${stats['nb_total']}', Icons.receipt_long, Colors.blue),
@@ -4265,13 +4894,34 @@ const SizedBox(height: 16),
               ],
               if (isEnAttente) ...[
                 const SizedBox(height: 8),
-                ElevatedButton.icon(
-                  onPressed: () => _serveClient(transaction),
-                  icon: const Icon(Icons.check, size: 18),
-                  label: const Text('Servir Client'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => _serveClient(transaction),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green[600],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.check_circle, size: 18),
+                        SizedBox(width: 8),
+                        Text(
+                          'Servir Client',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -4625,7 +5275,7 @@ const SizedBox(height: 16),
               children: [
                 // EN-TÊTE
                 pw.Container(
-                  padding: const pw.EdgeInsets.all(20),
+                  padding: const pw.EdgeInsets.all(10),
                   decoration: pw.BoxDecoration(
                     color: const PdfColor.fromInt(0xFF48bb78),
                     borderRadius: pw.BorderRadius.circular(8),
