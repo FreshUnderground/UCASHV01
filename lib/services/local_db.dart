@@ -1726,6 +1726,37 @@ class LocalDB {
   /// Sauvegarder une transaction virtuelle
   Future<VirtualTransactionModel> saveVirtualTransaction(VirtualTransactionModel transaction) async {
     final prefs = await database;
+    
+    // 🔍 PROTECTION ANTI-DOUBLON: Vérifier si une transaction avec cette référence existe déjà
+    final existingTransaction = await getVirtualTransactionByReference(transaction.reference);
+    
+    if (existingTransaction != null) {
+      // Si c'est la même transaction (même ID), mettre à jour
+      if (transaction.id != null && existingTransaction.id == transaction.id) {
+        debugPrint('🔄 Mise à jour transaction virtuelle: ID=${transaction.id}, REF=${transaction.reference}');
+        await prefs.setString('virtual_transaction_${transaction.id}', jsonEncode(transaction.toJson()));
+        return transaction;
+      }
+      
+      // Si c'est un doublon (référence identique mais ID différent)
+      debugPrint('⚠️ DOUBLON DÉTECTÉ: REF=${transaction.reference} existe déjà (ID=${existingTransaction.id})');
+      debugPrint('   Transaction existante: ID=${existingTransaction.id}, Statut=${existingTransaction.statut.name}');
+      debugPrint('   Nouvelle tentative: ID=${transaction.id}, Statut=${transaction.statut.name}');
+      
+      // Si la transaction existante est plus récente ou validée, la garder
+      if (existingTransaction.statut == VirtualTransactionStatus.validee || 
+          (existingTransaction.lastModifiedAt?.isAfter(transaction.lastModifiedAt ?? DateTime.now()) ?? false)) {
+        debugPrint('   ✅ Conservation de la transaction existante (plus récente ou validée)');
+        return existingTransaction;
+      } else {
+        // Sinon, remplacer par la nouvelle version
+        debugPrint('   🔄 Remplacement par la nouvelle version');
+        // Supprimer l'ancienne
+        await prefs.remove('virtual_transaction_${existingTransaction.id}');
+        // Continuer avec la sauvegarde de la nouvelle
+      }
+    }
+    
     final transactionId = transaction.id ?? DateTime.now().millisecondsSinceEpoch;
     final updatedTransaction = transaction.id == null 
         ? transaction.copyWith(
@@ -1872,6 +1903,81 @@ class LocalDB {
     final prefs = await database;
     await prefs.remove('virtual_transaction_$transactionId');
     debugPrint('🗑️ Transaction virtuelle supprimée: ID=$transactionId');
+  }
+
+  /// Nettoyer les doublons de transactions virtuelles
+  /// Retourne le nombre de doublons supprimés
+  Future<int> cleanDuplicateVirtualTransactions() async {
+    debugPrint('🧹 NETTOYAGE DES DOUBLONS - Début...');
+    
+    final prefs = await database;
+    final keys = prefs.getKeys();
+    final transactions = <VirtualTransactionModel>[];
+    
+    // Charger toutes les transactions
+    for (String key in keys) {
+      if (key.startsWith('virtual_transaction_')) {
+        try {
+          final transactionData = prefs.getString(key);
+          if (transactionData != null) {
+            transactions.add(VirtualTransactionModel.fromJson(jsonDecode(transactionData)));
+          }
+        } catch (e) {
+          debugPrint('⚠️ Erreur chargement $key: $e');
+        }
+      }
+    }
+    
+    debugPrint('📊 Total transactions chargées: ${transactions.length}');
+    
+    // Grouper par référence (insensible à la casse)
+    final groupedByReference = <String, List<VirtualTransactionModel>>{};
+    for (var transaction in transactions) {
+      final normalizedRef = transaction.reference.trim().toLowerCase();
+      groupedByReference[normalizedRef] ??= [];
+      groupedByReference[normalizedRef]!.add(transaction);
+    }
+    
+    int duplicatesRemoved = 0;
+    
+    // Nettoyer les doublons
+    for (var entry in groupedByReference.entries) {
+      final transactionsWithSameRef = entry.value;
+      
+      if (transactionsWithSameRef.length > 1) {
+        debugPrint('⚠️ DOUBLON TROUVÉ: RÉF="${entry.key}" - ${transactionsWithSameRef.length} occurrences');
+        
+        // Trier: valider d'abord, puis par date de modification la plus récente
+        transactionsWithSameRef.sort((a, b) {
+          // Priorité 1: Transactions validées en premier
+          if (a.statut == VirtualTransactionStatus.validee && b.statut != VirtualTransactionStatus.validee) {
+            return -1;
+          }
+          if (b.statut == VirtualTransactionStatus.validee && a.statut != VirtualTransactionStatus.validee) {
+            return 1;
+          }
+          
+          // Priorité 2: Date de modification la plus récente
+          final aDate = a.lastModifiedAt ?? a.dateEnregistrement;
+          final bDate = b.lastModifiedAt ?? b.dateEnregistrement;
+          return bDate.compareTo(aDate);
+        });
+        
+        // Garder la première (meilleure), supprimer les autres
+        final toKeep = transactionsWithSameRef.first;
+        debugPrint('   ✅ Conservation: ID=${toKeep.id}, Statut=${toKeep.statut.name}, Date=${toKeep.lastModifiedAt ?? toKeep.dateEnregistrement}');
+        
+        for (int i = 1; i < transactionsWithSameRef.length; i++) {
+          final toRemove = transactionsWithSameRef[i];
+          debugPrint('   🗑️ Suppression: ID=${toRemove.id}, Statut=${toRemove.statut.name}, Date=${toRemove.lastModifiedAt ?? toRemove.dateEnregistrement}');
+          await prefs.remove('virtual_transaction_${toRemove.id}');
+          duplicatesRemoved++;
+        }
+      }
+    }
+    
+    debugPrint('✅ NETTOYAGE TERMINÉ: $duplicatesRemoved doublons supprimés');
+    return duplicatesRemoved;
   }
 
   // === CRUD FLOTS ===

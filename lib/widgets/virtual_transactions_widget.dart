@@ -45,6 +45,11 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
   Key _retraitsTabKey = UniqueKey(); // Pour forcer le rechargement
   bool _showFilters = false; // Masquer les filtres par défaut
   
+  // 🔍 NOUVEAU: Filtres de recherche
+  VirtualTransactionStatus? _statusFilter = VirtualTransactionStatus.enAttente; // Par défaut: En Attente
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = ''; // Pour recherche par référence ou téléphone
+  
   @override
   void initState() {
     super.initState();
@@ -55,6 +60,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
   @override
   void dispose() {
     _tabController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -63,7 +69,11 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
     final currentUser = authService.currentUser;
     
     if (currentUser?.shopId != null) {
-      await VirtualTransactionService.instance.loadTransactions(shopId: currentUser!.shopId);
+      // 🧹 Nettoyer les doublons au démarrage (une seule fois)
+      await VirtualTransactionService.instance.loadTransactions(
+        shopId: currentUser!.shopId,
+        cleanDuplicates: true, // Activer le nettoyage au premier chargement
+      );
       await SimService.instance.loadSims(shopId: currentUser.shopId);
     }
   }
@@ -134,74 +144,286 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
           _buildRapportTab(),
         ],
       ),
-      floatingActionButton: _tabController.index == 0
-          ? Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (!isMobile) ...[
-                  FloatingActionButton(
-                    heroTag: 'btn_search',
-                    onPressed: _searchByReference,
-                    backgroundColor: Colors.blue,
-                    elevation: 4,
-                    child: const Icon(Icons.search),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                FloatingActionButton.extended(
-                  heroTag: 'btn_create',
-                  onPressed: _createTransaction,
-                  icon: const Icon(Icons.add_circle_outline),
-                  label: Text(isMobile ? 'Capture' : 'Nouvelle Capture'),
-                  backgroundColor: const Color(0xFF48bb78),
-                  elevation: 4,
-                ),
-              ],
+      floatingActionButton: _tabController.index == 2
+          ? FloatingActionButton.extended(
+              heroTag: 'btn_depot',
+              onPressed: _creerDepot,
+              icon: const Icon(Icons.add),
+              label: const Text('Nouveau Dépôt'),
+              backgroundColor: const Color(0xFF48bb78),
+              elevation: 3,
             )
-          : _tabController.index == 2
-            ? FloatingActionButton.extended(
-                heroTag: 'btn_depot',
-                onPressed: _creerDepot,
-                icon: const Icon(Icons.add),
-                label: Text(isMobile ? 'Dépôt' : 'Nouveau Dépôt'),
-                backgroundColor: const Color(0xFF48bb78),
-                elevation: 3,
-              )
-            : null,
+          : null,
     );
   }
 
   /// Onglet Transactions (avec sous-onglets: Tout, En Attente, Servies)
   Widget _buildTransactionsTab() {
-    return DefaultTabController(
-      length: 3,
-      child: Column(
-        children: [
+    return Column(
+      children: [
+        // Bouton pour afficher/masquer les filtres + Bouton Nouvelle Capture
+        Container(
+          color: Colors.grey[200],
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+          child: Row(
+            children: [
+              // ✨ Bouton Nouvelle Capture (moderne et joli)
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _createTransaction,
+                  icon: const Icon(Icons.add_circle_outline, size: 22),
+                  label: const Text(
+                    'Nouvelle Capture',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF48bb78),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                    elevation: 2,
+                    shadowColor: const Color.fromARGB(255, 126, 204, 84).withOpacity(0.5),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Bouton filtres
+              OutlinedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _showFilters = !_showFilters;
+                  });
+                },
+                icon: Icon(
+                  _showFilters ? Icons.filter_alt_off : Icons.filter_alt,
+                  size: 20,
+                ),
+                label: Text(
+                  _showFilters ? 'Masquer' : 'Filtres',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF48bb78),
+                  side: const BorderSide(color: Color(0xFF48bb78), width: 1.5),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        // 🔍 Barre de recherche et filtres (affichables/masquables)
+        if (_showFilters)
           Container(
-            color: Colors.grey[200],
-            child: const TabBar(
-              labelColor: Color(0xFF48bb78),
-              unselectedLabelColor: Colors.grey,
-              indicatorColor: Color(0xFF48bb78),
-              isScrollable: true,
-              tabs: [
-                Tab(text: 'Tout', icon: Icon(Icons.list, size: 18)),
-                Tab(text: 'En Attente', icon: Icon(Icons.hourglass_empty, size: 18)),
-                Tab(text: 'Servies', icon: Icon(Icons.check_circle, size: 18)),
-              ],
-            ),
-          ),
-          Expanded(
-            child: TabBarView(
+            color: Colors.grey[100],
+            padding: const EdgeInsets.all(8),
+            child: Column(
               children: [
-                _buildHistoriqueTab(), // Tout
-                _buildEnAttenteTab(),  // En Attente
-                _buildServiesTab(),    // Servies
+                // Barre de recherche
+                TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Rechercher par référence ou téléphone...',
+                    prefixIcon: const Icon(Icons.search, color: Color(0xFF48bb78)),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              setState(() {
+                                _searchController.clear();
+                                _searchQuery = '';
+                              });
+                            },
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                  onChanged: (value) {
+                    setState(() {
+                      _searchQuery = value.toLowerCase().trim();
+                    });
+                  },
+                ),
+                const SizedBox(height: 8),
+                // Filtres de statut
+                Row(
+                  children: [
+                    Expanded(
+                      child: ChoiceChip(
+                        label: const Text('Tout'),
+                        selected: _statusFilter == null,
+                        onSelected: (selected) {
+                          setState(() {
+                            _statusFilter = selected ? null : _statusFilter;
+                          });
+                        },
+                        selectedColor: const Color(0xFF48bb78),
+                        labelStyle: TextStyle(
+                          color: _statusFilter == null ? Colors.white : Colors.black87,
+                          fontWeight: _statusFilter == null ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ChoiceChip(
+                        label: const Text('En Attente'),
+                        selected: _statusFilter == VirtualTransactionStatus.enAttente,
+                        onSelected: (selected) {
+                          setState(() {
+                            _statusFilter = selected ? VirtualTransactionStatus.enAttente : null;
+                          });
+                        },
+                        selectedColor: Colors.orange,
+                        labelStyle: TextStyle(
+                          color: _statusFilter == VirtualTransactionStatus.enAttente ? Colors.white : Colors.black87,
+                          fontWeight: _statusFilter == VirtualTransactionStatus.enAttente ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ChoiceChip(
+                        label: const Text('Servies'),
+                        selected: _statusFilter == VirtualTransactionStatus.validee,
+                        onSelected: (selected) {
+                          setState(() {
+                            _statusFilter = selected ? VirtualTransactionStatus.validee : null;
+                          });
+                        },
+                        selectedColor: Colors.green,
+                        labelStyle: TextStyle(
+                          color: _statusFilter == VirtualTransactionStatus.validee ? Colors.white : Colors.black87,
+                          fontWeight: _statusFilter == VirtualTransactionStatus.validee ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
-        ],
-      ),
+        // Liste des transactions
+        Expanded(
+          child: _buildFilteredTransactionsList(),
+        ),
+      ],
+    );
+  }
+
+  /// Liste filtrée des transactions avec recherche
+  Widget _buildFilteredTransactionsList() {
+    return Consumer<VirtualTransactionService>(
+      builder: (BuildContext context, service, child) {
+        final authService = Provider.of<AuthService>(context, listen: false);
+        final currentShopId = authService.currentUser?.shopId;
+        
+        if (currentShopId == null) {
+          return const Center(child: Text('Shop ID non disponible'));
+        }
+
+        // Filtrer par shop
+        var transactions = service.transactions
+            .where((t) => t.shopId == currentShopId)
+            .toList();
+
+        // Filtrer par statut si sélectionné
+        if (_statusFilter != null) {
+          transactions = transactions.where((t) => t.statut == _statusFilter).toList();
+        }
+
+        // Filtrer par recherche (référence ou téléphone)
+        if (_searchQuery.isNotEmpty) {
+          transactions = transactions.where((t) {
+            final reference = t.reference.toLowerCase();
+            final telephone = (t.clientTelephone ?? '').toLowerCase();
+            return reference.contains(_searchQuery) || telephone.contains(_searchQuery);
+          }).toList();
+        }
+        
+        // Supprimer les doublons par référence (garder la plus récente)
+        final Map<String, VirtualTransactionModel> uniqueTransactions = {};
+        for (var transaction in transactions) {
+          final key = transaction.reference;
+          if (!uniqueTransactions.containsKey(key) || 
+              transaction.dateEnregistrement.isAfter(uniqueTransactions[key]!.dateEnregistrement)) {
+            uniqueTransactions[key] = transaction;
+          }
+        }
+        transactions = uniqueTransactions.values.toList();
+        
+        // Trier par date (plus récents en premier)
+        transactions.sort((a, b) => b.dateEnregistrement.compareTo(a.dateEnregistrement));
+
+        if (service.isLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (transactions.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  _searchQuery.isNotEmpty ? Icons.search_off : Icons.inbox_outlined,
+                  size: 64,
+                  color: Colors.grey[400],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  _searchQuery.isNotEmpty 
+                      ? 'Aucun résultat pour "$_searchQuery"'
+                      : 'Aucune transaction',
+                  style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _searchQuery.isNotEmpty
+                      ? 'Essayez une autre recherche'
+                      : 'Les captures apparaitront ici',
+                  style: TextStyle(color: Colors.grey[500]),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return RefreshIndicator(
+          onRefresh: _loadData,
+          child: ListView.builder(
+            padding: const EdgeInsets.all(4),
+            itemCount: transactions.length,
+            itemBuilder: (context, index) {
+              final transaction = transactions[index];
+              final isEnAttente = transaction.statut == VirtualTransactionStatus.enAttente;
+              
+              return ModernTransactionCard(
+                transaction: transaction,
+                isEnAttente: isEnAttente,
+                onTap: () => _showTransactionDetails(transaction),
+                onServe: isEnAttente ? () => _serveClient(transaction) : null,
+              );
+            },
+          ),
+        );
+      },
     );
   }
 

@@ -26,6 +26,7 @@ class VirtualTransactionService extends ChangeNotifier {
     DateTime? dateDebut,
     DateTime? dateFin,
     VirtualTransactionStatus? statut,
+    bool cleanDuplicates = false, // Nouveau paramètre pour forcer le nettoyage
   }) async {
     _setLoading(true);
     try {
@@ -35,6 +36,14 @@ class VirtualTransactionService extends ChangeNotifier {
       debugPrint('   Filtre dateDebut: $dateDebut');
       debugPrint('   Filtre dateFin: $dateFin');
       debugPrint('   Filtre statut: $statut');
+      
+      // Nettoyer les doublons si demandé
+      if (cleanDuplicates) {
+        final duplicatesCount = await LocalDB.instance.cleanDuplicateVirtualTransactions();
+        if (duplicatesCount > 0) {
+          debugPrint('🧹 $duplicatesCount doublons nettoyés');
+        }
+      }
       
       _transactions = await LocalDB.instance.getAllVirtualTransactions(
         shopId: shopId,

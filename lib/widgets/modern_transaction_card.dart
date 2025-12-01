@@ -195,29 +195,58 @@ class ModernTransactionCard extends StatelessWidget {
                     ),
                   ],
                   
-                  // Bouton servir compact pour transactions en attente
+                  // Bouton servir moderne et joli pour transactions en attente
                   if (isEnAttente && onServe != null) ...[
-                    const SizedBox(height: 10),
-                    SizedBox(
+                    const SizedBox(height: 12),
+                    Container(
                       width: double.infinity,
-                      height: 32,
-                      child: ElevatedButton.icon(
-                        onPressed: onServe,
-                        icon: const Icon(Icons.check_circle_outline, size: 16),
-                        label: const Text(
-                          'Servir Client',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
+                      height: 25,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF48bb78), Color(0xFF38a169)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF48bb78).withOpacity(0.4),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
                           ),
-                          elevation: 0,
+                        ],
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: onServe,
+                          borderRadius: BorderRadius.circular(10),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.check_circle,
+                                size: 20,
+                                color: Colors.white,
+                              ),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Servir Client',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.arrow_forward_rounded,
+                                size: 18,
+                                color: Colors.white.withOpacity(0.9),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),

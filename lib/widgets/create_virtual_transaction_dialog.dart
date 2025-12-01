@@ -218,7 +218,7 @@ class _CreateVirtualTransactionDialogState extends State<CreateVirtualTransactio
         constraints: const BoxConstraints(maxWidth: 500),
         child: SingleChildScrollView(
           child: Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(15),
             child: Form(
               key: _formKey,
               child: Column(
@@ -232,7 +232,7 @@ class _CreateVirtualTransactionDialogState extends State<CreateVirtualTransactio
                       const Expanded(
                         child: Text(
                           'Enregistrer Capture Client',
-                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                         ),
                       ),
                       IconButton(
@@ -241,7 +241,7 @@ class _CreateVirtualTransactionDialogState extends State<CreateVirtualTransactio
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 10),
                   
                   // Référence
                   TextFormField(
@@ -259,7 +259,7 @@ class _CreateVirtualTransactionDialogState extends State<CreateVirtualTransactio
                       return null;
                     },
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   
                   // SIM
                   if (_isLoadingSims)
@@ -344,7 +344,7 @@ class _CreateVirtualTransactionDialogState extends State<CreateVirtualTransactio
                         );
                       },
                     ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   
                   // Montant
                   TextFormField(
@@ -368,7 +368,7 @@ class _CreateVirtualTransactionDialogState extends State<CreateVirtualTransactio
                       return null;
                     },
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   
                   // Notes
                   TextFormField(
@@ -381,7 +381,7 @@ class _CreateVirtualTransactionDialogState extends State<CreateVirtualTransactio
                     ),
                     maxLines: 2,
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 15),
                   
                   // Boutons
                   Consumer<SimService>(
@@ -399,7 +399,7 @@ class _CreateVirtualTransactionDialogState extends State<CreateVirtualTransactio
                               child: const Text('Annuler'),
                             ),
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: 10),
                           Expanded(
                             child: ElevatedButton(
                               onPressed: (_isLoading || !hasActiveSims) ? null : _submit,

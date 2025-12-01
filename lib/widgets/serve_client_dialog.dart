@@ -176,14 +176,19 @@ class _ServeClientDialogState extends State<ServeClientDialog> {
             montantCash: montantCash,
           );
           
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('✅ Client servi!\nFrais: \$${commission.toStringAsFixed(2)} (${_calculatePercentageVirtuel().toStringAsFixed(2)}%)\nCash remis: \$${montantCash.toStringAsFixed(2)}'),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 4),
-            ),
-          );
-          Navigator.pop(context, true);
+          // IMPORTANT: Attendre un court délai pour que les données se propagent
+          await Future.delayed(const Duration(milliseconds: 500));
+          
+          if (!_isDisposed && mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('✅ Client servi!\nFrais: \$${commission.toStringAsFixed(2)} (${_calculatePercentageVirtuel().toStringAsFixed(2)}%)\nCash remis: \$${montantCash.toStringAsFixed(2)}'),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 4),
+              ),
+            );
+            Navigator.pop(context, true);
+          }
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
