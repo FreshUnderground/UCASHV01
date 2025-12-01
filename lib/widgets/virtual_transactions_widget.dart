@@ -50,6 +50,13 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = ''; // Pour recherche par référence ou téléphone
   
+  // 🔍 NOUVEAU: Filtres pour Flots
+  bool _showFlotFilters = false; // Masquer les filtres par défaut
+  String? _flotTabFilter; // 'vue', 'retraits', 'flots'
+  final TextEditingController _flotSearchController = TextEditingController();
+  String _flotSearchQuery = ''; // Pour recherche par code
+  DateTime? _flotDateFilter; // Pour filtrage par date
+  
   @override
   void initState() {
     super.initState();
@@ -61,6 +68,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
   void dispose() {
     _tabController.dispose();
     _searchController.dispose();
+    _flotSearchController.dispose();
     super.dispose();
   }
 
@@ -1554,65 +1562,240 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
     final isMobile = size.width < 600;
     final isTablet = size.width >= 600 && size.width < 900;
     
-    return DefaultTabController(
-      length: 3,
-      child: Column(
-        children: [
+    // Déterminer quel contenu afficher selon le filtre
+    Widget content;
+    if (_flotTabFilter == 'vue' || _flotTabFilter == null) {
+      content = _buildFlotVueEnsembleTab(shopId, isAdmin);
+    } else if (_flotTabFilter == 'retraits') {
+      content = _buildRetraitsTab();
+    } else if (_flotTabFilter == 'flots') {
+      content = _buildFlotsPhysiquesTab(shopId, isAdmin);
+    } else {
+      content = _buildFlotVueEnsembleTab(shopId, isAdmin);
+    }
+    
+    return Column(
+      children: [
+        // Bouton Nouveau Flot Virtuel (uniquement dans Vue) + Bouton Filtres
+        Container(
+          color: Colors.grey[200],
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Row(
+            children: [
+              // ✨ Bouton Nouveau Flot Virtuel (seulement si Vue est sélectionné)
+              if (_flotTabFilter == null || _flotTabFilter == 'vue') ...[
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _createRetraitVirtuel,
+                    icon: const Icon(Icons.add_circle_outline, size: 22),
+                    label: Text(
+                      isMobile ? 'Flot Virtuel' : 'Nouveau Flot Virtuel',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF48bb78),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      elevation: 3,
+                      shadowColor: const Color(0xFF48bb78).withOpacity(0.5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              // Bouton filtres
+              OutlinedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _showFlotFilters = !_showFlotFilters;
+                  });
+                },
+                icon: Icon(
+                  _showFlotFilters ? Icons.filter_alt_off : Icons.filter_alt,
+                  size: 20,
+                ),
+                label: Text(
+                  _showFlotFilters ? 'Masquer' : 'Filtres',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF48bb78),
+                  side: const BorderSide(color: Color(0xFF48bb78), width: 1.5),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        // 🔍 Filtres (affichables/masquables)
+        if (_showFlotFilters)
           Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: TabBar(
-              labelColor: const Color(0xFF48bb78),
-              unselectedLabelColor: Colors.grey[600],
-              indicatorColor: const Color(0xFF48bb78),
-              indicatorWeight: 3,
-              isScrollable: true,
-              labelStyle: TextStyle(
-                fontSize: isMobile ? 12 : 14,
-                fontWeight: FontWeight.w600,
-              ),
-              unselectedLabelStyle: TextStyle(
-                fontSize: isMobile ? 11 : 13,
-                fontWeight: FontWeight.w500,
-              ),
-              tabs: [
-                Tab(
-                  text: isMobile ? 'Vue' : 'Vue d\'ensemble',
-                  icon: Icon(Icons.dashboard, size: isMobile ? 16 : 18),
-                  iconMargin: EdgeInsets.only(bottom: isMobile ? 2 : 4),
-                ),
-                Tab(
-                  text: 'Retraits',
-                  icon: Icon(Icons.remove_circle, size: isMobile ? 16 : 18),
-                  iconMargin: EdgeInsets.only(bottom: isMobile ? 2 : 4),
-                ),
-                Tab(
-                  text: 'FLOTs',
-                  icon: Icon(Icons.send, size: isMobile ? 16 : 18),
-                  iconMargin: EdgeInsets.only(bottom: isMobile ? 2 : 4),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: TabBarView(
+            color: Colors.grey[100],
+            padding: const EdgeInsets.all(8),
+            child: Column(
               children: [
-                _buildFlotVueEnsembleTab(shopId, isAdmin),
-                _buildRetraitsTab(),
-                _buildFlotsPhysiquesTab(shopId, isAdmin),
+                // Barre de recherche par code
+                TextField(
+                  controller: _flotSearchController,
+                  decoration: InputDecoration(
+                    hintText: 'Rechercher par code/référence...',
+                    prefixIcon: const Icon(Icons.search, color: Color(0xFF48bb78)),
+                    suffixIcon: _flotSearchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              setState(() {
+                                _flotSearchController.clear();
+                                _flotSearchQuery = '';
+                              });
+                            },
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                  onChanged: (value) {
+                    setState(() {
+                      _flotSearchQuery = value.toLowerCase().trim();
+                    });
+                  },
+                ),
+                const SizedBox(height: 8),
+                // Filtres par section + Date sur une seule ligne
+                Row(
+                  children: [
+                    // Chip Vue
+                    Expanded(
+                      child: ChoiceChip(
+                        label: const Text('Vue', style: TextStyle(fontSize: 12)),
+                        selected: _flotTabFilter == null || _flotTabFilter == 'vue',
+                        onSelected: (selected) {
+                          setState(() {
+                            _flotTabFilter = 'vue';
+                          });
+                        },
+                        selectedColor: Colors.blue,
+                        labelStyle: TextStyle(
+                          color: (_flotTabFilter == null || _flotTabFilter == 'vue') ? Colors.white : Colors.black87,
+                          fontWeight: (_flotTabFilter == null || _flotTabFilter == 'vue') ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Chip Retraits
+                    Expanded(
+                      child: ChoiceChip(
+                        label: const Text('Retraits', style: TextStyle(fontSize: 12)),
+                        selected: _flotTabFilter == 'retraits',
+                        onSelected: (selected) {
+                          setState(() {
+                            _flotTabFilter = selected ? 'retraits' : 'vue';
+                          });
+                        },
+                        selectedColor: Colors.orange,
+                        labelStyle: TextStyle(
+                          color: _flotTabFilter == 'retraits' ? Colors.white : Colors.black87,
+                          fontWeight: _flotTabFilter == 'retraits' ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Chip FLOTs
+                    Expanded(
+                      child: ChoiceChip(
+                        label: const Text('FLOTs', style: TextStyle(fontSize: 12)),
+                        selected: _flotTabFilter == 'flots',
+                        onSelected: (selected) {
+                          setState(() {
+                            _flotTabFilter = selected ? 'flots' : 'vue';
+                          });
+                        },
+                        selectedColor: Colors.purple,
+                        labelStyle: TextStyle(
+                          color: _flotTabFilter == 'flots' ? Colors.white : Colors.black87,
+                          fontWeight: _flotTabFilter == 'flots' ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Sélecteur de date
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          final date = await showDatePicker(
+                            context: context,
+                            initialDate: _flotDateFilter ?? DateTime.now(),
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime.now().add(const Duration(days: 365)),
+                          );
+                          if (date != null) {
+                            setState(() {
+                              _flotDateFilter = date;
+                            });
+                          }
+                        },
+                        icon: Icon(
+                          _flotDateFilter != null ? Icons.event_available : Icons.event,
+                          size: 18,
+                        ),
+                        label: Text(
+                          _flotDateFilter != null
+                              ? DateFormat('dd/MM/yy').format(_flotDateFilter!)
+                              : 'Date',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _flotDateFilter != null ? const Color(0xFF48bb78) : Colors.grey[700],
+                          side: BorderSide(
+                            color: _flotDateFilter != null ? const Color(0xFF48bb78) : Colors.grey[400]!,
+                            width: 1.5,
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        ),
+                      ),
+                    ),
+                    if (_flotDateFilter != null) ...[
+                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 18),
+                        onPressed: () {
+                          setState(() {
+                            _flotDateFilter = null;
+                          });
+                        },
+                        color: Colors.red,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ],
+                ),
               ],
             ),
           ),
-        ],
-      ),
+        // Contenu filtré
+        Expanded(
+          child: content,
+        ),
+      ],
     );
   }
   
@@ -1857,87 +2040,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
     
     return SingleChildScrollView(
       child: Column(
-        children: [
-          // NOUVEAU: Filtres de dates
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: _buildDateFilters(),
-          ),
-          
-          // Header avec bouton créer retrait
-          Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF48bb78), Color(0xFF38a169)],
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF48bb78).withOpacity(0.3),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(Icons.send, color: Colors.white, size: 24),
-                        ),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Flots Virtuels & Flots',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (!isAdmin) ...[
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: _createRetraitVirtuel,
-                          icon: const Icon(Icons.remove_circle, size: 20),
-                          label: const Text(
-                            'Initier Flot Virtuel',
-                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: const Color(0xFF48bb78),
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 15),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              
+        children: [             
               // Soldes par shop
               if (soldesParShopList.isEmpty)
                 Padding(
