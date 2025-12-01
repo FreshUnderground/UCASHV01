@@ -24,7 +24,7 @@ class ClotureVirtuelleModel {
   final int nombreAnnulees;
   final double montantVirtuelAnnulees;
   
-  // === RETRAITS VIRTUELS ===
+  // === FLOTS ===
   final int nombreRetraits;
   final double montantTotalRetraits;
   final int nombreRetraitsRembourses;

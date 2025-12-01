@@ -480,6 +480,182 @@ class SyncManager {
     }
     
     /**
+     * Sauvegarde une transaction virtuelle avec gestion des conflits
+     */
+    public function saveVirtualTransaction($data) {
+        try {
+            // Log incoming data for debugging
+            error_log("SyncManager::saveVirtualTransaction - Data: " . json_encode(array_slice($data, 0, 10)));
+            
+            // Validation basique
+            if (empty($data['reference'])) {
+                throw new Exception('Référence manquante pour la transaction virtuelle');
+            }
+            
+            // Vérifier si la transaction existe déjà par reference
+            $stmt = $this->pdo->prepare("SELECT * FROM virtual_transactions WHERE reference = ? LIMIT 1");
+            $stmt->execute([$data['reference'] ?? '']);
+            $existing = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($existing) {
+                // UPDATE
+                $conflict = $this->detectConflict($existing, $data);
+                if ($conflict) {
+                    $resolved = $this->resolveConflict($existing, $data);
+                    return $this->updateVirtualTransaction($resolved);
+                } else {
+                    return $this->updateVirtualTransaction($data);
+                }
+            } else {
+                // INSERT
+                return $this->insertVirtualTransaction($data);
+            }
+            
+        } catch (Exception $e) {
+            error_log("Erreur dans saveVirtualTransaction: " . $e->getMessage());
+            throw new Exception("Erreur sauvegarde virtual_transaction: " . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Insère une nouvelle transaction virtuelle
+     */
+    private function insertVirtualTransaction($data) {
+        try {
+            $sql = "INSERT INTO virtual_transactions (
+                reference, montant_virtuel, frais, montant_cash, devise,
+                sim_numero, shop_id, shop_designation,
+                agent_id, agent_username,
+                client_nom, client_telephone,
+                statut, date_enregistrement, date_validation, notes,
+                last_modified_at, last_modified_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            
+            $stmt = $this->pdo->prepare($sql);
+            $result = $stmt->execute([
+                $data['reference'],
+                $data['montant_virtuel'],
+                $data['frais'] ?? 0,
+                $data['montant_cash'],
+                $data['devise'] ?? 'USD',
+                $data['sim_numero'],
+                $data['shop_id'],
+                $data['shop_designation'] ?? null,
+                $data['agent_id'],
+                $data['agent_username'] ?? null,
+                $data['client_nom'] ?? null,
+                $data['client_telephone'] ?? null,
+                $data['statut'] ?? 'enAttente',
+                $data['date_enregistrement'] ?? date('Y-m-d H:i:s'),
+                $data['date_validation'] ?? null,
+                $data['notes'] ?? null,
+                $data['last_modified_at'] ?? date('Y-m-d H:i:s'),
+                $data['last_modified_by'] ?? 'system'
+            ]);
+            
+            if ($result) {
+                $insertId = $this->pdo->lastInsertId();
+                
+                // Marquer comme synchronisé seulement après insertion réussie
+                if ($insertId > 0) {
+                    $syncedAt = $data['synced_at'] ?? date('c');
+                    $updateSql = "UPDATE virtual_transactions SET is_synced = 1, synced_at = ? WHERE id = ?";
+                    $updateStmt = $this->pdo->prepare($updateSql);
+                    $updateStmt->execute([$syncedAt, $insertId]);
+                }
+                
+                return $insertId;
+            }
+            
+            throw new Exception("Échec insertion virtual_transaction - aucune ligne insérée");
+            
+        } catch (PDOException $e) {
+            error_log("PDOException in insertVirtualTransaction: " . $e->getMessage());
+            error_log("Data: " . json_encode(array_slice($data, 0, 10)));
+            throw new Exception("Erreur base de données: " . $e->getMessage());
+        } catch (Exception $e) {
+            error_log("Exception in insertVirtualTransaction: " . $e->getMessage());
+            throw new Exception("Erreur insertion virtual_transaction: " . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Met à jour une transaction virtuelle existante
+     */
+    private function updateVirtualTransaction($data) {
+        try {
+            $sql = "UPDATE virtual_transactions SET
+                montant_virtuel = ?,
+                frais = ?,
+                montant_cash = ?,
+                devise = ?,
+                sim_numero = ?,
+                shop_id = ?,
+                shop_designation = ?,
+                agent_id = ?,
+                agent_username = ?,
+                client_nom = ?,
+                client_telephone = ?,
+                statut = ?,
+                date_enregistrement = ?,
+                date_validation = ?,
+                notes = ?,
+                last_modified_at = ?,
+                last_modified_by = ?
+            WHERE reference = ?";
+            
+            $stmt = $this->pdo->prepare($sql);
+            $result = $stmt->execute([
+                $data['montant_virtuel'],
+                $data['frais'] ?? 0,
+                $data['montant_cash'],
+                $data['devise'] ?? 'USD',
+                $data['sim_numero'],
+                $data['shop_id'],
+                $data['shop_designation'] ?? null,
+                $data['agent_id'],
+                $data['agent_username'] ?? null,
+                $data['client_nom'] ?? null,
+                $data['client_telephone'] ?? null,
+                $data['statut'] ?? 'enAttente',
+                $data['date_enregistrement'] ?? date('Y-m-d H:i:s'),
+                $data['date_validation'] ?? null,
+                $data['notes'] ?? null,
+                $data['last_modified_at'] ?? date('Y-m-d H:i:s'),
+                $data['last_modified_by'] ?? 'system',
+                $data['reference']
+            ]);
+            
+            if ($result) {
+                // Récupérer l'ID de la transaction
+                $stmt = $this->pdo->prepare("SELECT id FROM virtual_transactions WHERE reference = ?");
+                $stmt->execute([$data['reference']]);
+                $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                
+                if ($row) {
+                    // Marquer comme synchronisé seulement après mise à jour réussie
+                    $syncedAt = $data['synced_at'] ?? date('c');
+                    $updateSql = "UPDATE virtual_transactions SET is_synced = 1, synced_at = ? WHERE id = ?";
+                    $updateStmt = $this->pdo->prepare($updateSql);
+                    $updateStmt->execute([$syncedAt, $row['id']]);
+                    
+                    return $row['id'];
+                }
+            }
+            
+            throw new Exception("Échec mise à jour virtual_transaction - aucune ligne modifiée");
+            
+        } catch (PDOException $e) {
+            error_log("PDOException in updateVirtualTransaction: " . $e->getMessage());
+            error_log("Data: " . json_encode(array_slice($data, 0, 10)));
+            throw new Exception("Erreur base de données: " . $e->getMessage());
+        } catch (Exception $e) {
+            error_log("Exception in updateVirtualTransaction: " . $e->getMessage());
+            throw new Exception("Erreur mise à jour virtual_transaction: " . $e->getMessage());
+        }
+    }
+    
+    /**
      * Résout un conflit (last modified wins)
      */
     private function resolveConflict($existing, $new) {

@@ -10,17 +10,20 @@ import '../services/auth_service.dart';
 import '../services/rapportcloture_pdf_service.dart';
 import '../services/shop_service.dart';
 import '../services/operation_service.dart';
+import '../services/transfer_sync_service.dart';
 
 /// Widget pour afficher et générer le Rapport de Clôture Journalière
 /// Nom du fichier: rapportcloture.dart
 class RapportCloture extends StatefulWidget {
   final int? shopId;
   final bool isAdminView; // Si true, masque le bouton de clôture (admin ne peut pas clôturer)
+  final DateTime? dateInitiale; // Date initiale à afficher (pour forcer une clôture)
   
   const RapportCloture({
     super.key,
     this.shopId,
     this.isAdminView = false,
+    this.dateInitiale,
   });
 
   @override
@@ -28,7 +31,7 @@ class RapportCloture extends StatefulWidget {
 }
 
 class _RapportClotureState extends State<RapportCloture> {
-  DateTime _selectedDate = DateTime.now();
+  late DateTime _selectedDate;
   RapportClotureModel? _rapport;
   bool _isLoading = false;
   bool _journeeCloturee = false;
@@ -37,6 +40,8 @@ class _RapportClotureState extends State<RapportCloture> {
   @override
   void initState() {
     super.initState();
+    // Utiliser la date initiale si fournie, sinon utiliser aujourd'hui
+    _selectedDate = widget.dateInitiale ?? DateTime.now();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _genererRapport();
     });
@@ -55,19 +60,28 @@ class _RapportClotureState extends State<RapportCloture> {
       final operationService = Provider.of<OperationService>(context, listen: false);
       final shopId = widget.shopId ?? authService.currentUser?.shopId ?? 1;
       
-      // Vérifier si la journée est déjà clôturée
+      // 1️⃣ D'ABORD: Synchroniser depuis l'API pour obtenir toutes les opérations fraîches
+      if (!mounted) return;
+      
+      final transferSync = Provider.of<TransferSyncService>(context, listen: false);
+      debugPrint('🔄 [RAPPORT CLÔTURE] Synchronisation des opérations depuis l\'API...');
+      await transferSync.forceRefreshFromAPI();
+      debugPrint('✅ [RAPPORT CLÔTURE] Synchronisation terminée');
+      
+      // 2️⃣ Vérifier si la journée est déjà clôturée
       final estCloturee = await RapportClotureService.instance.journeeEstCloturee(shopId, _selectedDate);
       if (!mounted) return;
       
-      // Charger les opérations de "Mes Ops" pour ce shop
+      // 3️⃣ Charger les opérations de "Mes Ops" pour ce shop (IMPORTANT: pour agent ET admin)
       await operationService.loadOperations(shopId: shopId);
       if (!mounted) return;
       
+      // 4️⃣ Générer le rapport avec les opérations chargées
       final rapport = await RapportClotureService.instance.genererRapport(
         shopId: shopId,
         date: _selectedDate,
         generePar: authService.currentUser?.username ?? 'Admin',
-        operations: operationService.operations, // Utiliser les données de "Mes Ops"
+        operations: operationService.operations, // Utiliser les données de "Mes Ops" (pour agent ET admin)
       );
       if (!mounted) return;
 
@@ -817,10 +831,24 @@ class _RapportClotureState extends State<RapportCloture> {
         _buildSection(
           '4️⃣ Compte FRAIS',
           [
-            _buildCashRow('Frais du jour', rapport.commissionsFraisDuJour),
-            _buildCashRow('Retraits du jour', -rapport.retraitsFraisDuJour),  // Négatif car c'est une sortie
+            _buildCashRow('Frais Antérieur', rapport.soldeFraisAnterieur),
+            _buildCashRow('+ Frais encaissés', rapport.commissionsFraisDuJour),
+            // Détail des frais par shop
+            if (rapport.fraisGroupesParShop.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Text('  Détail par Shop :', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              const Divider(),
+              ...rapport.fraisGroupesParShop.entries.map((entry) => _buildFlotDetailRow(
+                entry.key, // Nom du shop source
+                'Frais',
+                entry.value, // Montant des frais
+                Colors.green,
+              )).toList(),
+            ],
+            const SizedBox(height: 8),
+            _buildCashRow('- Sortie Frais du jour', -rapport.retraitsFraisDuJour),  // Négatif car c'est une sortie
             const Divider(),
-            _buildTotalRow('Solde FRAIS total', rapport.soldeFraisTotal, color: Colors.green),
+            _buildTotalRow('= Solde Frais du jour', rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour, color: Colors.green, bold: true),
           ],
           Colors.green,
         ),
@@ -933,23 +961,24 @@ class _RapportClotureState extends State<RapportCloture> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
-            Text(
-              '${rapport.capitalNet.toStringAsFixed(2)} USD',
+                        Text(
+              '${(rapport.capitalNet - (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour)).toStringAsFixed(2)} USD',
               style: TextStyle(
                 fontSize: 32,
                 fontWeight: FontWeight.bold,
-                color: rapport.capitalNet >= 0 ? Colors.blue : Colors.red,
+                color: (rapport.capitalNet - (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour)) >= 0 ? Colors.blue : Colors.red,
               ),
             ),
-            const Divider(color: Colors.blue),
+                        const Divider(color: Colors.blue),
             const SizedBox(height: 8),
             _buildCashRow('Cash Disponible', rapport.cashDisponibleTotal),
             _buildCashRow('+ Partenaires Servis', rapport.totalClientsNousDoivent),
-            _buildCashRow('+ Shops Qui nous Doivent (DIFF. DETTES)', rapport.totalShopsNousDoivent),
+            _buildCashRow('+ DIFF. DETTES', rapport.totalShopsNousDoivent),
             _buildCashRow('- Dépôts Partenaires', rapport.totalClientsNousDevons),
             _buildCashRow('- Shops Que Nous Devons', rapport.totalShopsNousDevons),
+            _buildCashRow('- Solde Frais du jour', rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour),
             const Divider(thickness: 2, color: Colors.blue),
-            _buildTotalRow('= CAPITAL NET', rapport.capitalNet, bold: true, color: rapport.capitalNet >= 0 ? Colors.blue : Colors.red),
+            _buildTotalRow('= CAPITAL NET', rapport.capitalNet - (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour), bold: true, color: (rapport.capitalNet - (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour)) >= 0 ? Colors.blue : Colors.red),
           ],
         ),
       ),

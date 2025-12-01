@@ -549,7 +549,7 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
               }
             }
             
-            // 2.5 NOUVEAU: RETRAITS VIRTUELS EN ATTENTE (Autres shops nous doivent)
+            // 2.5 NOUVEAU: FLOTS EN ATTENTE (Autres shops nous doivent)
             if (retraitsSnapshot.hasData) {
               final retraitsVirtuels = retraitsSnapshot.data!;
               for (final retrait in retraitsVirtuels) {

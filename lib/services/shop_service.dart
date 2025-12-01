@@ -23,7 +23,13 @@ class ShopService extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
 
   // Charger tous les shops
-  Future<void> loadShops({bool forceRefresh = false, bool clearBeforeLoad = false}) async {
+  Future<void> loadShops({bool forceRefresh = false, bool clearBeforeLoad = false, int? excludeShopId}) async {
+    // ✅ OPTIMISATION: Si les shops sont déjà chargés et pas de forceRefresh, ne rien faire
+    if (!forceRefresh && !clearBeforeLoad && _shops.isNotEmpty) {
+      debugPrint('✅ [ShopService] Utilisation du cache (${_shops.length} shops)');
+      return;
+    }
+    
     _setLoading(true);
     try {
       // Si clearBeforeLoad, supprimer toutes les données locales pour forcer le rechargement depuis le serveur
@@ -34,14 +40,33 @@ class ShopService extends ChangeNotifier {
         _shops.clear();
       }
       
-      // Si forceRefresh, vider d'abord le cache
-      if (forceRefresh) {
+      // Si forceRefresh, vider le cache SAUF le shop à exclure
+      if (forceRefresh && excludeShopId != null) {
+        // Préserver le shop de l'utilisateur actuel
+        final currentShop = _shops.firstWhere(
+          (s) => s.id == excludeShopId,
+          orElse: () => _shops.first,
+        );
         _shops.clear();
-        debugPrint('🗑️ [ShopService] Cache vidé - Rechargement forcé');
+        _shops.add(currentShop); // Garder le shop actuel en cache
+        debugPrint('✅ [ShopService] Shop ID $excludeShopId préservé dans le cache');
+      } else if (forceRefresh) {
+        _shops.clear();
       }
       
       // Charger depuis la base locale
-      _shops = await LocalDB.instance.getAllShops();
+      final allShops = await LocalDB.instance.getAllShops();
+      
+      // Si on a exclu un shop, fusionner sans doublon
+      if (forceRefresh && excludeShopId != null) {
+        for (final shop in allShops) {
+          if (shop.id != excludeShopId) {
+            _shops.add(shop);
+          }
+        }
+      } else {
+        _shops = allShops;
+      }
       
       // Si clearBeforeLoad a été utilisé mais qu'il n'y a pas de données, log un avertissement
       if (clearBeforeLoad && _shops.isEmpty) {
@@ -98,16 +123,15 @@ class ShopService extends ChangeNotifier {
       // Créer une clôture de la veille comme solde antérieur au lieu d'une opération de dépôt
       await _createInitialClosureAsAnterieur(shopId, capitalCash, capitalAirtelMoney, capitalMPesa, capitalOrangeMoney, designation);
       
-      // Recharger la liste
-      await loadShops();
-      
-      // Attendre un peu pour s'assurer que l'opération est bien enregistrée
-      await Future.delayed(const Duration(milliseconds: 100));
+      // ✅ OPTIMISATION: Ajouter directement au cache au lieu de recharger tout
+      _shops.add(newShop);
+      notifyListeners();
       
       // Synchronisation en arrière-plan
       _syncInBackground();
       
       _errorMessage = null;
+      _setLoading(false);
       debugPrint('✅ Shop créé localement: $designation');
       return true;
     } catch (e) {
@@ -130,12 +154,19 @@ class ShopService extends ChangeNotifier {
       );
       
       await LocalDB.instance.updateShop(updatedShop);
-      await loadShops(forceRefresh: true);
+      
+      // ✅ OPTIMISATION: Mettre à jour directement dans le cache
+      final index = _shops.indexWhere((s) => s.id == updatedShop.id);
+      if (index != -1) {
+        _shops[index] = updatedShop;
+        notifyListeners();
+      }
       
       // Synchronisation en arrière-plan
       _syncInBackground();
       
       _errorMessage = null;
+      _setLoading(false);
       debugPrint('✅ Shop mis à jour localement: ${updatedShop.designation}');
       return true;
     } catch (e) {
@@ -151,8 +182,13 @@ class ShopService extends ChangeNotifier {
     _setLoading(true);
     try {
       await LocalDB.instance.deleteShop(shopId);
-      await loadShops();
+      
+      // ✅ OPTIMISATION: Supprimer directement du cache
+      _shops.removeWhere((s) => s.id == shopId);
+      notifyListeners();
+      
       _errorMessage = null;
+      _setLoading(false);
       return true;
     } catch (e) {
       _errorMessage = 'Erreur lors de la suppression du shop: $e';
@@ -251,27 +287,7 @@ class ShopService extends ChangeNotifier {
       
       await LocalDB.instance.saveClotureCaisse(cloture);
       
-      debugPrint('✅ Clôture initiale créée pour la veille (${dateVeilleNormalisee.toIso8601String().split('T')[0]})');
-      debugPrint('   Solde Total: ${totalCapital.toStringAsFixed(2)} USD');
-      debugPrint('   - Cash: ${capitalCash.toStringAsFixed(2)} USD');
-      debugPrint('   - Airtel Money: ${capitalAirtel.toStringAsFixed(2)} USD');
-      debugPrint('   - M-Pesa: ${capitalMPesa.toStringAsFixed(2)} USD');
-      debugPrint('   - Orange Money: ${capitalOrange.toStringAsFixed(2)} USD');
-      debugPrint("   Cette clôture servira de solde antérieur pour commencer les transactions aujourd'hui");
-      
-      // Synchronisation de la clôture vers le serveur
-      try {
-        final syncService = SyncService();
-        if (syncService.isOnline) {
-          debugPrint('📤 Synchronisation clôture initiale vers le serveur...');
-          await syncService.syncAll(userId: 'system');
-          debugPrint('✅ Clôture initiale synchronisée');
-        } else {
-          debugPrint('📋 Clôture initiale sera synchronisée plus tard (offline)');
-        }
-      } catch (e) {
-        debugPrint('⚠️ Erreur sync clôture initiale: $e (sera retentée plus tard)');
-      }
+      debugPrint('✅ Clôture initiale créée pour $shopName - ${totalCapital.toStringAsFixed(2)} USD');
     } catch (e) {
       debugPrint('❌ Erreur création clôture initiale: $e');
       rethrow;

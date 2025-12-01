@@ -33,15 +33,38 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
   DateTime? _startDate;
   DateTime? _endDate;
   int? _selectedShopId;
-  bool _showFilters = true; // Afficher les filtres par défaut
+  bool _showFilters = false; // MODIFIÉ: Masquer les filtres par défaut
 
   @override
   void initState() {
     super.initState();
-    _selectedShopId = widget.shopId;
+    // MODIFIÉ: Ne pas initialiser les dates par défaut (afficher toutes les données)
     _startDate = widget.startDate;
     _endDate = widget.endDate;
+    
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      
+      // Logique d'initialisation du shopId:
+      // - Si widget.shopId est fourni, l'utiliser (cas admin qui navigue)
+      // - Sinon, utiliser le shop de l'utilisateur connecté (cas agent)
+      // - Pour l'admin sans shopId spécifié, laisser null pour voir tous les shops
+      if (widget.shopId != null) {
+        _selectedShopId = widget.shopId;
+      } else if (!widget.isAdmin) {
+        // Agent: TOUJOURS utiliser son propre shopId
+        _selectedShopId = authService.currentUser?.shopId;
+      } else {
+        // Admin: null par défaut (tous les shops)
+        _selectedShopId = null;
+      }
+      
+      debugPrint('🏪 ComptesSpeciauxWidget initialisé:');
+      debugPrint('   isAdmin: ${widget.isAdmin}');
+      debugPrint('   shopId sélectionné: $_selectedShopId');
+      debugPrint('   User shopId: ${authService.currentUser?.shopId}');
+      debugPrint('   Période par défaut: ${_startDate?.toString().split(" ")[0]} au ${_endDate?.toString().split(" ")[0]}');
+      
       _loadData();
     });
   }
@@ -55,54 +78,62 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
   Widget build(BuildContext context) {
     return Consumer<CompteSpecialService>(
       builder: (context, service, child) {
-        final stats = service.getStatistics(
-          shopId: _selectedShopId,
-          startDate: _startDate,
-          endDate: _endDate,
-        );
-
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            final isWide = constraints.maxWidth > 900;
-            final isMedium = constraints.maxWidth > 600;
+        return FutureBuilder<Map<String, dynamic>>(
+          key: ValueKey('$_selectedShopId-$_startDate-$_endDate'), // NOUVEAU: Force rebuild quand les filtres changent
+          future: service.getStatistics(
+            shopId: _selectedShopId,
+            startDate: _startDate,
+            endDate: _endDate,
+          ),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
             
-            return SingleChildScrollView(
-              child: Padding(
-                padding: EdgeInsets.all(isMedium ? 5 : 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // En-tête avec titre et filtres
-                    _buildHeader(context),
-                    const SizedBox(height: 16),
-                    
-                    // Sélecteur de shop (admin seulement)
-                    if (widget.isAdmin && _showFilters) ...[
-                      _buildShopSelector(context, isWide),
-                      const SizedBox(height: 16),
-                    ],
-                    
-                    // Filtres de date
-                    if (_showFilters) ...[
-                      _buildDateFilters(context, isWide),
-                      const SizedBox(height: 24),
-                    ],
-                    
-                    // Cartes de résumé - Affichables/Masquables
-                    if (_showFilters) ...[
-                      _buildSummaryCards(stats, isWide, isMedium),
-                      const SizedBox(height: 32),
-                    ],
-                    
-                    // Boutons d'action - Responsive
-                    _buildActionButtons(context, isWide, isMedium),
-                    const SizedBox(height: 24),
-                    
-                    // Liste des transactions avec tabs
-                    _buildTransactionsList(service, isWide),
-                  ],
-                ),
-              ),
+            final stats = snapshot.data!;
+
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth > 900;
+                final isMedium = constraints.maxWidth > 600;
+                
+                return SingleChildScrollView(
+                  child: Padding(
+                    padding: EdgeInsets.all(isMedium ? 5 : 3),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // En-tête avec titre et filtres
+                        _buildHeader(context),
+                        const SizedBox(height: 16),
+                        
+                        // Sélecteur de shop (admin seulement)
+                        if (widget.isAdmin && _showFilters) ...[
+                          _buildShopSelector(context, isWide),
+                          const SizedBox(height: 16),
+                        ],
+                        
+                        // Filtres de date
+                        if (_showFilters) ...[
+                          _buildDateFilters(context, isWide),
+                          const SizedBox(height: 24),
+                        ],
+                        
+                        // Cartes de résumé - Toujours visibles
+                        _buildSummaryCards(stats, isWide, isMedium),
+                        const SizedBox(height: 32),
+                        
+                        // Boutons d'action - Responsive
+                        _buildActionButtons(context, isWide, isMedium),
+                        const SizedBox(height: 24),
+                        
+                        // Liste des transactions avec tabs
+                        _buildTransactionsList(service, isWide, stats),
+                      ],
+                    ),
+                  ),
+                );
+              },
             );
           },
         );
@@ -178,7 +209,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
             side: BorderSide(color: Colors.grey.shade300),
           ),
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(4),
             child: Row(
               children: [
                 Icon(Icons.store, color: Colors.grey.shade600),
@@ -229,7 +260,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
         side: BorderSide(color: Colors.grey.shade300),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(4),
         child: isWide ? Row(
           children: [
             Icon(Icons.date_range, color: Colors.grey.shade600),
@@ -384,16 +415,18 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
             children: [
               _buildModernCard(
                 title: 'Compte FRAIS',
-                amount: stats['solde_frais'],
-                count: stats['nombre_frais'],
+                amount: stats['solde_frais_jour'] ?? stats['solde_frais'], // MODIFIÉ: Utiliser solde du jour
+                count: stats['nombre_commissions'], // MODIFIÉ: Nombre de transferts servis
                 icon: Icons.trending_up,
                 gradient: const LinearGradient(
                   colors: [Color(0xFF10B981), Color(0xFF059669)],
                 ),
                 details: [
-                  {'label': 'Commissions', 'value': stats['commissions_auto']},
-                  {'label': 'Retraits', 'value': stats['retraits_frais']},
+                  {'label': 'Frais Antérieur', 'value': stats['frais_anterieur'] ?? 0.0},
+                  {'label': '+ Frais encaissés', 'value': stats['frais_encaisses_jour'] ?? stats['commissions_auto']},
+                  {'label': '- Sortie Frais', 'value': stats['sortie_frais_jour'] ?? stats['retraits_frais']},
                 ],
+                onTap: null, // TODO: Ajouter détails plus tard
               ),
               const SizedBox(height: 16),
               _buildModernCard(
@@ -421,16 +454,18 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
             Expanded(
               child: _buildModernCard(
                 title: 'Compte FRAIS',
-                amount: stats['solde_frais'],
-                count: stats['nombre_frais'],
+                amount: stats['solde_frais_jour'] ?? stats['solde_frais'], // MODIFIÉ: Utiliser solde du jour
+                count: stats['nombre_commissions'], // MODIFIÉ: Nombre de transferts servis
                 icon: Icons.trending_up,
                 gradient: const LinearGradient(
                   colors: [Color(0xFF10B981), Color(0xFF059669)],
                 ),
                 details: [
-                  {'label': 'Commissions', 'value': stats['commissions_auto']},
-                  {'label': 'Retraits', 'value': stats['retraits_frais']},
+                  {'label': 'Frais Antérieur', 'value': stats['frais_anterieur'] ?? 0.0},
+                  {'label': '+ Frais encaissés', 'value': stats['frais_encaisses_jour'] ?? stats['commissions_auto']},
+                  {'label': '- Sortie Frais', 'value': stats['sortie_frais_jour'] ?? stats['retraits_frais']},
                 ],
+                onTap: null, // TODO: Ajouter détails plus tard
               ),
             ),
             const SizedBox(width: 16),
@@ -479,6 +514,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
     required IconData icon,
     required Gradient gradient,
     List<Map<String, dynamic>>? details,
+    VoidCallback? onTap, // NOUVEAU: Callback pour afficher détails
   }) {
     return Card(
       elevation: 0,
@@ -622,11 +658,19 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
       },
       // PDF DÉPENSES
       {
-        'label': 'Rapp. Dépemses',
+        'label': 'Rapp. Dépenses',
         'icon': Icons.picture_as_pdf,
         'gradient': const LinearGradient(colors: [Color(0xFFEC4899), Color(0xFFDB2777)]),
         'onPressed': () => _generatePdfDepenses(context),
       },
+      // PDF PAR ROUTE (admin uniquement)
+      if (widget.isAdmin)
+        {
+          'label': 'Frais/Route',
+          'icon': Icons.route,
+          'gradient': const LinearGradient(colors: [Color(0xFF10B981), Color(0xFF059669)]),
+          'onPressed': () => _generatePdfFraisParRoute(context),
+        },
     ];
 
     return Column(
@@ -713,7 +757,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
     );
   }
 
-  Widget _buildTransactionsList(CompteSpecialService service, bool isWide) {
+  Widget _buildTransactionsList(CompteSpecialService service, bool isWide, Map<String, dynamic> stats) {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -721,20 +765,25 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
         side: BorderSide(color: Colors.grey.shade200),
       ),
       child: DefaultTabController(
-        length: 3,
+        length: widget.isAdmin ? 5 : 3, // 5 tabs pour admin, 3 pour les autres
         child: Column(
           children: [
-            const Material(
+            Material(
               color: Colors.transparent,
               child: TabBar(
-                labelColor: Color(0xFFDC2626),
+                labelColor: const Color(0xFFDC2626),
                 unselectedLabelColor: Colors.grey,
-                indicatorColor: Color(0xFFDC2626),
+                indicatorColor: const Color(0xFFDC2626),
                 indicatorWeight: 3,
+                isScrollable: widget.isAdmin, // Scrollable si 5 tabs
                 tabs: [
-                  Tab(icon: Icon(Icons.list), text: 'Toutes'),
-                  Tab(icon: Icon(Icons.trending_up), text: 'FRAIS'),
-                  Tab(icon: Icon(Icons.receipt_long), text: 'DÉPENSE'),
+                  const Tab(icon: Icon(Icons.list), text: 'Toutes'),
+                  const Tab(icon: Icon(Icons.trending_up), text: 'FRAIS'),
+                  const Tab(icon: Icon(Icons.receipt_long), text: 'DÉPENSE'),
+                  if (widget.isAdmin)
+                    const Tab(icon: Icon(Icons.route), text: 'Par Route'),
+                  if (widget.isAdmin)
+                    const Tab(icon: Icon(Icons.store), text: 'Par Shop'),
                 ],
               ),
             ),
@@ -743,43 +792,17 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
               height: 400, // Set a fixed height to prevent layout issues
               child: TabBarView(
                 children: [
-                  _buildTransactionsListView(
-                    service.transactions.where((t) {
-                      // Filtre par shop
-                      if (_selectedShopId != null && t.shopId != _selectedShopId) {
-                        return false;
-                      }
-                      
-                      // Filtre par date de début (inclure les transactions >= startDate)
-                      if (_startDate != null) {
-                        final startOfDay = DateTime(_startDate!.year, _startDate!.month, _startDate!.day);
-                        if (t.dateTransaction.isBefore(startOfDay)) {
-                          return false;
-                        }
-                      }
-                      
-                      // Filtre par date de fin (inclure les transactions <= endDate + 23:59:59)
-                      if (_endDate != null) {
-                        final endOfDay = DateTime(_endDate!.year, _endDate!.month, _endDate!.day, 23, 59, 59);
-                        if (t.dateTransaction.isAfter(endOfDay)) {
-                          return false;
-                        }
-                      }
-                      
-                      return true;
-                    }).toList(),
-                    isWide
-                  ),
-                  _buildTransactionsListView(service.getFrais(
-                    shopId: _selectedShopId,
-                    startDate: _startDate,
-                    endDate: _endDate,
-                  ), isWide),
+                  _buildMixedTransactionsView(service, stats, isWide), // MODIFIÉ: Vue mixte avec transferts servis
+                  _buildFraisOperationsView(stats, isWide), // MODIFIÉ: Afficher transferts servis
                   _buildTransactionsListView(service.getDepenses(
                     shopId: _selectedShopId,
                     startDate: _startDate,
                     endDate: _endDate,
                   ), isWide),
+                  if (widget.isAdmin)
+                    _buildFraisParRouteView(service, isWide),
+                  if (widget.isAdmin)
+                    _buildFraisParShopView(service, isWide),
                 ],
               ),
             ),
@@ -957,6 +980,807 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
     );
   }
 
+  /// NOUVEAU: Afficher les opérations (transferts servis) qui ont généré les frais
+  Widget _buildFraisOperationsView(Map<String, dynamic> stats, bool isWide) {
+    final operations = stats['operations_frais'] as List<dynamic>? ?? [];
+    
+    if (operations.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.inbox_outlined, size: 64, color: Colors.grey.shade300),
+              const SizedBox(height: 16),
+              Text(
+                'Aucun transfert servi',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Les frais s\'afficheront ici quand vous servez des transferts',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade500,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.all(8),
+      itemCount: operations.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        final operation = operations[index] as Map<String, dynamic>;
+        final commission = operation['commission'] as double;
+        final date = operation['date'] as DateTime;
+        final type = operation['type'] as String;
+        
+        // Convertir le type en label lisible
+        String typeLabel;
+        switch (type) {
+          case 'transfertNational':
+            typeLabel = 'Transfert National';
+            break;
+          case 'transfertInternationalEntrant':
+            typeLabel = 'Intl. Entrant';
+            break;
+          case 'transfertInternationalSortant':
+            typeLabel = 'Intl. Sortant';
+            break;
+          default:
+            typeLabel = type;
+        }
+        
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade200),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.02),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              // Icon avec gradient
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF10B981), Color(0xFF059669)],
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.attach_money,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 16),
+              
+              // Détails
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      typeLabel, // MODIFIÉ: Afficher le label lisible
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.access_time,
+                          size: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          DateFormat('dd/MM/yyyy HH:mm').format(date),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Montant
+              Text(
+                '+${_numberFormat.format(commission)}',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF10B981),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// NOUVEAU: Vue mixte avec transactions de comptes spéciaux ET transferts servis
+  Widget _buildMixedTransactionsView(CompteSpecialService service, Map<String, dynamic> stats, bool isWide) {
+    debugPrint('🔍 _buildMixedTransactionsView - stats keys: ${stats.keys}');
+    debugPrint('   operations_frais: ${stats['operations_frais']}');
+    
+    // Récupérer les transactions filtrées
+    final transactions = service.transactions.where((t) {
+      // Filtre par shop
+      if (_selectedShopId != null && t.shopId != _selectedShopId) {
+        return false;
+      }
+      
+      // Filtre par date de début
+      if (_startDate != null) {
+        final startOfDay = DateTime(_startDate!.year, _startDate!.month, _startDate!.day);
+        if (t.dateTransaction.isBefore(startOfDay)) {
+          return false;
+        }
+      }
+      
+      // Filtre par date de fin
+      if (_endDate != null) {
+        final endOfDay = DateTime(_endDate!.year, _endDate!.month, _endDate!.day, 23, 59, 59);
+        if (t.dateTransaction.isAfter(endOfDay)) {
+          return false;
+        }
+      }
+      
+      return true;
+    }).toList();
+    
+    // Récupérer les opérations de transferts
+    final operations = stats['operations_frais'] as List<dynamic>? ?? [];
+    
+    if (transactions.isEmpty && operations.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.inbox_outlined, size: 64, color: Colors.grey.shade300),
+              const SizedBox(height: 16),
+              Text(
+                'Aucune transaction',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
+    // Créer une liste mixte
+    final mixedList = <Map<String, dynamic>>[];
+    
+    // Ajouter les transactions
+    for (var t in transactions) {
+      mixedList.add({
+        'type': 'transaction',
+        'data': t,
+        'date': t.dateTransaction,
+      });
+    }
+    
+    // Ajouter les opérations
+    for (var op in operations) {
+      final opMap = op as Map<String, dynamic>;
+      mixedList.add({
+        'type': 'operation',
+        'data': opMap,
+        'date': opMap['date'] as DateTime,
+      });
+    }
+    
+    // Trier par date décroissante
+    mixedList.sort((a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
+    
+    return ListView.separated(
+      padding: const EdgeInsets.all(8),
+      itemCount: mixedList.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        final item = mixedList[index];
+        
+        if (item['type'] == 'transaction') {
+          // Afficher une transaction de compte spécial
+          final transaction = item['data'] as CompteSpecialModel;
+          final isPositive = transaction.montant >= 0;
+          
+          return InkWell(
+            onTap: widget.isAdmin ? () => _showTransactionDetails(context, transaction) : null,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade200),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.02),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: transaction.type == TypeCompteSpecial.FRAIS
+                            ? [const Color(0xFF10B981), const Color(0xFF059669)]
+                            : [const Color(0xFF3B82F6), const Color(0xFF2563EB)],
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      transaction.typeTransaction.icon,
+                      style: const TextStyle(fontSize: 20),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          transaction.description,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          DateFormat('dd/MM/yyyy HH:mm').format(transaction.dateTransaction),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    '${isPositive ? '+' : ''}${_numberFormat.format(transaction.montant)}',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: isPositive ? const Color(0xFF10B981) : const Color(0xFFDC2626),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        } else {
+          // Afficher un transfert servi
+          final operation = item['data'] as Map<String, dynamic>;
+          final commission = operation['commission'] as double;
+          final date = operation['date'] as DateTime;
+          final type = operation['type'] as String;
+          
+          String typeLabel;
+          switch (type) {
+            case 'transfertNational':
+              typeLabel = 'Transfert National';
+              break;
+            case 'transfertInternationalEntrant':
+              typeLabel = 'Intl. Entrant';
+              break;
+            case 'transfertInternationalSortant':
+              typeLabel = 'Intl. Sortant';
+              break;
+            default:
+              typeLabel = type;
+          }
+          
+          return Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.02),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF10B981), Color(0xFF059669)],
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.attach_money,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        typeLabel,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        DateFormat('dd/MM/yyyy HH:mm').format(date),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  '+${_numberFormat.format(commission)}',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF10B981),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+      },
+    );
+  }
+
+  Widget _buildTransactionsListViewAsync(Future<List<CompteSpecialModel>> transactionsFuture, bool isWide) {
+    return FutureBuilder<List<CompteSpecialModel>>(
+      future: transactionsFuture,
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        return _buildTransactionsListView(snapshot.data!, isWide);
+      },
+    );
+  }
+
+  Widget _buildFraisParRouteView(CompteSpecialService service, bool isWide) {
+    return FutureBuilder<Map<String, Map<String, dynamic>>>(
+      future: service.getFraisParRoute(
+        shopId: _selectedShopId,
+        startDate: _startDate,
+        endDate: _endDate,
+      ),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final fraisParRoute = snapshot.data!;
+        if (fraisParRoute.isEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(2),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.inbox_outlined, size: 64, color: Colors.grey.shade300),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Aucune route trouvée',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return ListView.separated(
+          padding: const EdgeInsets.all(3),
+          itemCount: fraisParRoute.length,
+          separatorBuilder: (context, index) => const SizedBox(height: 12),
+          itemBuilder: (context, index) {
+            final entry = fraisParRoute.entries.elementAt(index);
+            final route = entry.key;
+            final data = entry.value;
+            final montant = data['montant'] as double;
+            final count = data['count'] as int;
+            final details = data['details'] as List;
+
+            return Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Colors.green.shade200, width: 1.5),
+              ),
+              child: Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  childrenPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  leading: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF10B981), Color(0xFF059669)],
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.route, color: Colors.white, size: 24),
+                  ),
+                  title: Text(
+                    route,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      '$count transfert(s)',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ),
+                  trailing: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '\$${_numberFormat.format(montant)}',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF10B981),
+                        ),
+                      ),
+                      const Text(
+                        'Frais total',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Détails des transferts:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          ...details.map((detail) {
+                            final destinataire = detail['destinataire'] as String;
+                            final montantNet = detail['montantNet'] as double;
+                            final commission = detail['commission'] as double;
+                            final date = detail['date'] as DateTime;
+
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    flex: 3,
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          destinataire,
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        Text(
+                                          DateFormat('dd/MM/yyyy HH:mm').format(date),
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 2,
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        Text(
+                                          '\$${montantNet.toStringAsFixed(2)}',
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        Text(
+                                          'Frais: \$${commission.toStringAsFixed(2)}',
+                                          style: const TextStyle(
+                                            fontSize: 10,
+                                            color: Color(0xFF10B981),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildFraisParShopView(CompteSpecialService service, bool isWide) {
+    return FutureBuilder<Map<String, Map<String, dynamic>>>(
+      future: service.getFraisParShopDestination(
+        shopId: _selectedShopId,
+        startDate: _startDate,
+        endDate: _endDate,
+      ),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final fraisParShop = snapshot.data!;
+        if (fraisParShop.isEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.inbox_outlined, size: 64, color: Colors.grey.shade300),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Aucun frais encaissé',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return ListView.separated(
+          padding: const EdgeInsets.all(4),
+          itemCount: fraisParShop.length,
+          separatorBuilder: (context, index) => const SizedBox(height: 12),
+          itemBuilder: (context, index) {
+            final entry = fraisParShop.entries.elementAt(index);
+            final shopName = entry.key;
+            final data = entry.value;
+            final montant = data['montant'] as double;
+            final count = data['count'] as int;
+            final details = data['details'] as List;
+
+            return Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Colors.green.shade200, width: 1.5),
+              ),
+              child: Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  childrenPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  leading: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF10B981), Color(0xFF059669)],
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.store, color: Colors.white, size: 24),
+                  ),
+                  title: Text(
+                    shopName,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      '$count transfert(s) servi(s)',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ),
+                  trailing: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '\$${_numberFormat.format(montant)}',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF10B981),
+                        ),
+                      ),
+                      const Text(
+                        'Frais encaissés',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Détails des transferts:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          ...details.map((detail) {
+                            final destinataire = detail['destinataire'] as String;
+                            final montantNet = detail['montantNet'] as double;
+                            final commission = detail['commission'] as double;
+                            final date = detail['date'] as DateTime;
+
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    flex: 3,
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          destinataire,
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        Text(
+                                          DateFormat('dd/MM/yyyy HH:mm').format(date),
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 2,
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      children: [
+                                        Text(
+                                          '\$${montantNet.toStringAsFixed(2)}',
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        Text(
+                                          'Frais: \$${commission.toStringAsFixed(2)}',
+                                          style: const TextStyle(
+                                            fontSize: 10,
+                                            color: Color(0xFF10B981),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showDepotDepenseDialog(BuildContext context) {
     final montantController = TextEditingController();
     final descriptionController = TextEditingController();
@@ -1022,9 +1846,27 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
     );
   }
 
-  void _showSortieDepenseDialog(BuildContext context) {
+  void _showSortieDepenseDialog(BuildContext context) async {
     final montantController = TextEditingController();
     final descriptionController = TextEditingController();
+    
+    // NOUVEAU: Récupérer le solde disponible
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final shopId = widget.shopId ?? authService.currentUser?.shopId;
+    
+    debugPrint('\n🔍 Chargement dialogue Sortie DÉPENSE');
+    debugPrint('   Shop ID: $shopId');
+    
+    final stats = await CompteSpecialService.instance.getStatistics(shopId: shopId);
+    final soldeDisponible = stats['solde_depense'] ?? 0.0;
+    
+    debugPrint('   Stats reçues:');
+    debugPrint('   - solde_depense: ${stats['solde_depense']}');
+    debugPrint('   - depots_boss: ${stats['depots_boss']}');
+    debugPrint('   - sorties: ${stats['sorties']}');
+    debugPrint('   - Solde affiché: \$${soldeDisponible.toStringAsFixed(2)}');
+    
+    if (!context.mounted) return;
     
     showDialog(
       context: context,
@@ -1033,6 +1875,44 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // NOUVEAU: Afficher le solde disponible
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.account_balance_wallet, color: Colors.blue.shade700),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Solde disponible',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                        Text(
+                          '\$${_numberFormat.format(soldeDisponible)}',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
             TextField(
               controller: montantController,
               decoration: const InputDecoration(
@@ -1094,9 +1974,29 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
     );
   }
 
-  void _showRetraitFraisDialog(BuildContext context) {
+  void _showRetraitFraisDialog(BuildContext context) async {
     final montantController = TextEditingController();
     final descriptionController = TextEditingController();
+    
+    // NOUVEAU: Récupérer le solde disponible
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final shopId = widget.shopId ?? authService.currentUser?.shopId;
+    
+    debugPrint('\n🔍 Chargement dialogue Retrait FRAIS');
+    debugPrint('   Shop ID: $shopId');
+    
+    final stats = await CompteSpecialService.instance.getStatistics(shopId: shopId);
+    
+    // MODIFIÉ: Utiliser la même logique que retraitFrais()
+    final soldeDisponible = stats['solde_frais_jour'] ?? stats['solde_frais'] ?? 0.0;
+    
+    debugPrint('   Stats reçues:');
+    debugPrint('   - solde_frais_jour: ${stats['solde_frais_jour']}');
+    debugPrint('   - solde_frais: ${stats['solde_frais']}');
+    debugPrint('   - frais_encaisses_jour: ${stats['frais_encaisses_jour']}');
+    debugPrint('   - Solde affiché: \$${soldeDisponible.toStringAsFixed(2)}');
+    
+    if (!context.mounted) return;
     
     showDialog(
       context: context,
@@ -1105,6 +2005,44 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // NOUVEAU: Afficher le solde disponible
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.account_balance_wallet, color: Colors.green.shade700),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Solde disponible',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                        Text(
+                          '\$${_numberFormat.format(soldeDisponible)}',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
             TextField(
               controller: montantController,
               decoration: const InputDecoration(
@@ -1267,7 +2205,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
 
   Future<void> _generatePdfFrais(BuildContext context) async {
     final service = CompteSpecialService.instance;
-    final frais = service.getFrais(
+    final frais = await service.getFraisAsync(
       shopId: _selectedShopId,
       startDate: _startDate,
       endDate: _endDate,
@@ -1294,11 +2232,11 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(40),
+        margin: const pw.EdgeInsets.all(10),
         build: (context) => [
           // En-tête moderne
           pw.Container(
-            padding: const pw.EdgeInsets.all(20),
+            padding: const pw.EdgeInsets.all(10),
             decoration: pw.BoxDecoration(
               gradient: const pw.LinearGradient(
                 colors: [PdfColor.fromInt(0xFF10B981), PdfColor.fromInt(0xFF059669)],
@@ -1330,7 +2268,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                   ],
                 ),
                 pw.Container(
-                  padding: const pw.EdgeInsets.all(12),
+                  padding: const pw.EdgeInsets.all(4),
                   decoration: pw.BoxDecoration(
                     color: PdfColors.white,
                     borderRadius: pw.BorderRadius.circular(8),
@@ -1348,7 +2286,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
           // Informations de période
           if (_startDate != null || _endDate != null)
             pw.Container(
-              padding: const pw.EdgeInsets.all(12),
+              padding: const pw.EdgeInsets.all(4),
               decoration: pw.BoxDecoration(
                 color: const PdfColor.fromInt(0xFFF3F4F6),
                 borderRadius: pw.BorderRadius.circular(8),
@@ -1430,7 +2368,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
           
           // Résumé final
           pw.Container(
-            padding: const pw.EdgeInsets.all(16),
+            padding: const pw.EdgeInsets.all(4),
             decoration: pw.BoxDecoration(
               gradient: const pw.LinearGradient(
                 colors: [PdfColor.fromInt(0xFF10B981), PdfColor.fromInt(0xFF059669)],
@@ -1502,7 +2440,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
   // Méthodes helper pour les PDFs
   pw.Widget _buildTableHeader(String text, {pw.TextAlign align = pw.TextAlign.left}) {
     return pw.Container(
-      padding: const pw.EdgeInsets.all(8),
+      padding: const pw.EdgeInsets.all(4),
       child: pw.Text(
         text,
         style: pw.TextStyle(
@@ -1564,11 +2502,11 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(40),
+        margin: const pw.EdgeInsets.all(10),
         build: (context) => [
           // En-tête moderne
           pw.Container(
-            padding: const pw.EdgeInsets.all(20),
+            padding: const pw.EdgeInsets.all(10),
             decoration: pw.BoxDecoration(
               gradient: const pw.LinearGradient(
                 colors: [PdfColor.fromInt(0xFF3B82F6), PdfColor.fromInt(0xFF2563EB)],
@@ -1600,7 +2538,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                   ],
                 ),
                 pw.Container(
-                  padding: const pw.EdgeInsets.all(12),
+                  padding: const pw.EdgeInsets.all(4),
                   decoration: pw.BoxDecoration(
                     color: PdfColors.white,
                     borderRadius: pw.BorderRadius.circular(8),
@@ -1618,7 +2556,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
           // Informations de période
           if (_startDate != null || _endDate != null)
             pw.Container(
-              padding: const pw.EdgeInsets.all(12),
+              padding: const pw.EdgeInsets.all(4),
               decoration: pw.BoxDecoration(
                 color: const PdfColor.fromInt(0xFFF3F4F6),
                 borderRadius: pw.BorderRadius.circular(8),
@@ -1700,7 +2638,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
           
           // Résumé final
           pw.Container(
-            padding: const pw.EdgeInsets.all(16),
+            padding: const pw.EdgeInsets.all(4),
             decoration: pw.BoxDecoration(
               gradient: pw.LinearGradient(
                 colors: solde >= 0
@@ -1764,6 +2702,454 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
               canChangeOrientation: false,
               canDebug: false,
               pdfFileName: 'Rapport_Depenses_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+            ),
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _generatePdfFraisParRoute(BuildContext context) async {
+    final service = CompteSpecialService.instance;
+    final fraisParRoute = await service.getFraisParRoute(
+      shopId: _selectedShopId,
+      startDate: _startDate,
+      endDate: _endDate,
+    );
+
+    if (fraisParRoute.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('⚠️ Aucune route trouvée')),
+        );
+      }
+      return;
+    }
+
+    final pdf = pw.Document();
+    
+    // Calculer le total global
+    double totalGlobal = 0;
+    int totalTransferts = 0;
+    for (final data in fraisParRoute.values) {
+      totalGlobal += data['montant'] as double;
+      totalTransferts += data['count'] as int;
+    }
+    
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(10),
+        build: (context) => [
+          // En-tête moderne
+          pw.Container(
+            padding: const pw.EdgeInsets.all(10),
+            decoration: pw.BoxDecoration(
+              gradient: const pw.LinearGradient(
+                colors: [PdfColor.fromInt(0xFF10B981), PdfColor.fromInt(0xFF059669)],
+              ),
+              borderRadius: pw.BorderRadius.circular(10),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'RAPPORT FRAIS PAR ROUTE',
+                      style: pw.TextStyle(
+                        fontSize: 22,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.white,
+                      ),
+                    ),
+                    pw.SizedBox(height: 8),
+                    pw.Text(
+                      'Routes de transfert et frais encaissés',
+                      style: const pw.TextStyle(
+                        fontSize: 11,
+                        color: PdfColors.white,
+                      ),
+                    ),
+                  ],
+                ),
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(4),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.white,
+                    borderRadius: pw.BorderRadius.circular(8),
+                  ),
+                  child: pw.Text(
+                    '🛣️',
+                    style: const pw.TextStyle(fontSize: 28),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 20),
+          
+          // Informations de période
+          if (_startDate != null || _endDate != null)
+            pw.Container(
+              padding: const pw.EdgeInsets.all(4),
+              decoration: pw.BoxDecoration(
+                color: const PdfColor.fromInt(0xFFF3F4F6),
+                borderRadius: pw.BorderRadius.circular(8),
+              ),
+              child: pw.Row(
+                children: [
+                  pw.Icon(const pw.IconData(0xe878), size: 16),
+                  pw.SizedBox(width: 8),
+                  pw.Text(
+                    'Période: ${_startDate != null ? DateFormat('dd/MM/yyyy').format(_startDate!) : 'Début'} - ${_endDate != null ? DateFormat('dd/MM/yyyy').format(_endDate!) : 'Fin'}',
+                    style: pw.TextStyle(
+                      fontSize: 11,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          pw.SizedBox(height: 20),
+          
+          // Résumé global
+          pw.Container(
+            padding: const pw.EdgeInsets.all(4),
+            decoration: pw.BoxDecoration(
+              color: const PdfColor.fromInt(0xFFD1FAE5),
+              borderRadius: pw.BorderRadius.circular(8),
+              border: pw.Border.all(color: const PdfColor.fromInt(0xFF10B981), width: 1),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+              children: [
+                pw.Column(
+                  children: [
+                    pw.Text(
+                      '${fraisParRoute.length}',
+                      style: pw.TextStyle(
+                        fontSize: 18,
+                        fontWeight: pw.FontWeight.bold,
+                        color: const PdfColor.fromInt(0xFF059669),
+                      ),
+                    ),
+                    pw.Text(
+                      'Routes',
+                      style: const pw.TextStyle(
+                        fontSize: 9,
+                        color: PdfColors.grey700,
+                      ),
+                    ),
+                  ],
+                ),
+                pw.Column(
+                  children: [
+                    pw.Text(
+                      '$totalTransferts',
+                      style: pw.TextStyle(
+                        fontSize: 18,
+                        fontWeight: pw.FontWeight.bold,
+                        color: const PdfColor.fromInt(0xFF059669),
+                      ),
+                    ),
+                    pw.Text(
+                      'Transferts',
+                      style: const pw.TextStyle(
+                        fontSize: 9,
+                        color: PdfColors.grey700,
+                      ),
+                    ),
+                  ],
+                ),
+                pw.Column(
+                  children: [
+                    pw.Text(
+                      '\$${_numberFormat.format(totalGlobal)}',
+                      style: pw.TextStyle(
+                        fontSize: 18,
+                        fontWeight: pw.FontWeight.bold,
+                        color: const PdfColor.fromInt(0xFF059669),
+                      ),
+                    ),
+                    pw.Text(
+                      'Total Frais',
+                      style: const pw.TextStyle(
+                        fontSize: 9,
+                        color: PdfColors.grey700,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 20),
+          
+          // Liste des routes avec détails
+          ...fraisParRoute.entries.map((entry) {
+            final route = entry.key;
+            final data = entry.value;
+            final montant = data['montant'] as double;
+            final count = data['count'] as int;
+            final details = data['details'] as List;
+            
+            return pw.Container(
+              margin: const pw.EdgeInsets.only(bottom: 16),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: const PdfColor.fromInt(0xFF10B981), width: 1.5),
+                borderRadius: pw.BorderRadius.circular(8),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  // En-tête de la route
+                  pw.Container(
+                    padding: const pw.EdgeInsets.all(4),
+                    decoration: const pw.BoxDecoration(
+                      color: PdfColor.fromInt(0xFF10B981),
+                      borderRadius: pw.BorderRadius.only(
+                        topLeft: pw.Radius.circular(7),
+                        topRight: pw.Radius.circular(7),
+                      ),
+                    ),
+                    child: pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Expanded(
+                          child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            children: [
+                              pw.Text(
+                                route,
+                                style: pw.TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: pw.FontWeight.bold,
+                                  color: PdfColors.white,
+                                ),
+                              ),
+                              pw.SizedBox(height: 2),
+                              pw.Text(
+                                '$count transfert(s)',
+                                style: const pw.TextStyle(
+                                  fontSize: 9,
+                                  color: PdfColors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        pw.Text(
+                          '\$${_numberFormat.format(montant)}',
+                          style: pw.TextStyle(
+                            fontSize: 14,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  
+                  // Détails des transferts
+                  pw.Container(
+                    padding: const pw.EdgeInsets.all(4),
+                    color: const PdfColor.fromInt(0xFFF0FDF4),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          'Détails:',
+                          style: pw.TextStyle(
+                            fontSize: 9,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        ),
+                        pw.SizedBox(height: 6),
+                        pw.Table(
+                          border: pw.TableBorder.all(
+                            color: const PdfColor.fromInt(0xFFD1FAE5),
+                            width: 0.5,
+                          ),
+                          columnWidths: {
+                            0: const pw.FlexColumnWidth(3),
+                            1: const pw.FlexColumnWidth(2),
+                            2: const pw.FlexColumnWidth(1.5),
+                            3: const pw.FlexColumnWidth(1.5),
+                          },
+                          children: [
+                            // En-tête du tableau
+                            pw.TableRow(
+                              decoration: const pw.BoxDecoration(
+                                color: PdfColor.fromInt(0xFFD1FAE5),
+                              ),
+                              children: [
+                                pw.Padding(
+                                  padding: const pw.EdgeInsets.all(4),
+                                  child: pw.Text(
+                                    'Destinataire',
+                                    style: pw.TextStyle(
+                                      fontSize: 8,
+                                      fontWeight: pw.FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                pw.Padding(
+                                  padding: const pw.EdgeInsets.all(4),
+                                  child: pw.Text(
+                                    'Date',
+                                    style: pw.TextStyle(
+                                      fontSize: 8,
+                                      fontWeight: pw.FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                pw.Padding(
+                                  padding: const pw.EdgeInsets.all(4),
+                                  child: pw.Text(
+                                    'Montant',
+                                    style: pw.TextStyle(
+                                      fontSize: 8,
+                                      fontWeight: pw.FontWeight.bold,
+                                    ),
+                                    textAlign: pw.TextAlign.right,
+                                  ),
+                                ),
+                                pw.Padding(
+                                  padding: const pw.EdgeInsets.all(4),
+                                  child: pw.Text(
+                                    'Frais',
+                                    style: pw.TextStyle(
+                                      fontSize: 8,
+                                      fontWeight: pw.FontWeight.bold,
+                                    ),
+                                    textAlign: pw.TextAlign.right,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            // Lignes de données
+                            ...details.map((detail) {
+                              final destinataire = detail['destinataire'] as String;
+                              final montantNet = detail['montantNet'] as double;
+                              final commission = detail['commission'] as double;
+                              final date = detail['date'] as DateTime;
+                              
+                              return pw.TableRow(
+                                children: [
+                                  pw.Padding(
+                                    padding: const pw.EdgeInsets.all(4),
+                                    child: pw.Text(
+                                      destinataire,
+                                      style: const pw.TextStyle(fontSize: 8),
+                                    ),
+                                  ),
+                                  pw.Padding(
+                                    padding: const pw.EdgeInsets.all(4),
+                                    child: pw.Text(
+                                      DateFormat('dd/MM HH:mm').format(date),
+                                      style: const pw.TextStyle(fontSize: 8),
+                                    ),
+                                  ),
+                                  pw.Padding(
+                                    padding: const pw.EdgeInsets.all(4),
+                                    child: pw.Text(
+                                      '\$${montantNet.toStringAsFixed(2)}',
+                                      style: const pw.TextStyle(fontSize: 8),
+                                      textAlign: pw.TextAlign.right,
+                                    ),
+                                  ),
+                                  pw.Padding(
+                                    padding: const pw.EdgeInsets.all(4),
+                                    child: pw.Text(
+                                      '\$${commission.toStringAsFixed(2)}',
+                                      style: pw.TextStyle(
+                                        fontSize: 8,
+                                        color: const PdfColor.fromInt(0xFF10B981),
+                                        fontWeight: pw.FontWeight.bold,
+                                      ),
+                                      textAlign: pw.TextAlign.right,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            }).toList(),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+          
+          pw.SizedBox(height: 20),
+          
+          // Total final
+          pw.Container(
+            padding: const pw.EdgeInsets.all(16),
+            decoration: pw.BoxDecoration(
+              gradient: const pw.LinearGradient(
+                colors: [PdfColor.fromInt(0xFF10B981), PdfColor.fromInt(0xFF059669)],
+              ),
+              borderRadius: pw.BorderRadius.circular(8),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  'TOTAL FRAIS',
+                  style: pw.TextStyle(
+                    fontSize: 16,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.white,
+                  ),
+                ),
+                pw.Text(
+                  '\$${_numberFormat.format(totalGlobal)}',
+                  style: pw.TextStyle(
+                    fontSize: 20,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          pw.SizedBox(height: 20),
+          
+          // Pied de page
+          pw.Container(
+            alignment: pw.Alignment.center,
+            child: pw.Text(
+              'Généré le ${DateFormat('dd/MM/yyyy à HH:mm').format(DateTime.now())}',
+              style: const pw.TextStyle(
+                fontSize: 8,
+                color: PdfColors.grey600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    // Afficher la prévisualisation dans un dialog avec PdfPreview
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => Dialog(
+          child: SizedBox(
+            width: MediaQuery.of(context).size.width * 0.9,
+            height: MediaQuery.of(context).size.height * 0.9,
+            child: PdfPreview(
+              build: (format) => pdf.save(),
+              canChangePageFormat: false,
+              canChangeOrientation: false,
+              canDebug: false,
+              pdfFileName: 'Rapport_Frais_Par_Route_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
             ),
           ),
         ),

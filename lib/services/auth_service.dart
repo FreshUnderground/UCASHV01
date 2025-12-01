@@ -311,8 +311,31 @@ class AuthService extends ChangeNotifier {
       if (_currentUser != null) {
         final userId = _currentUser!.id;
         final username = _currentUser!.username;
+        final currentRole = _currentUser!.role; // Préserver le rôle actuel
         
-        // Recharger les agents depuis la base locale (forceRefresh uniquement, pas de suppression)
+        // Si c'est un admin, vérifier d'abord l'admin par défaut
+        if (currentRole == 'ADMIN') {
+          // Vérifier si c'est l'admin par défaut
+          if (username == 'admin') {
+            final admin = await LocalDB.instance.getDefaultAdmin();
+            if (admin != null) {
+              _currentUser = admin;
+              debugPrint('✅ Admin par défaut rechargé: ${admin.username}');
+              
+              // Mettre à jour la session sauvegardée
+              await LocalDB.instance.saveUserSession(_currentUser!);
+              
+              // Notifier les listeners pour mettre à jour l'interface
+              notifyListeners();
+              
+              debugPrint('✅ Données admin rafraîchies avec succès');
+              // Pas besoin de shop pour l'admin
+              return;
+            }
+          }
+        }
+        
+        // Pour les agents ou admins dans la table agents, recharger depuis AgentService
         await AgentService.instance.loadAgents(forceRefresh: true);
         
         // Recharger l'utilisateur depuis AgentService
@@ -328,24 +351,25 @@ class AuthService extends ChangeNotifier {
               (agent) => agent.username == username,
             );
           } catch (e) {
-            debugPrint('⚠️ Agent non trouvé par username: $username');
+            debugPrint('⚠️ Agent/Admin non trouvé par username: $username');
           }
         }
         
         if (updatedAgent != null) {
-          // Convertir AgentModel en UserModel
+          // Convertir AgentModel en UserModel en PRÉSERVANT le rôle original
+          // (AgentModel.role contient le bon rôle depuis la BDD)
           _currentUser = UserModel(
             id: updatedAgent.id,
             username: updatedAgent.username,
             password: updatedAgent.password,
-            role: 'AGENT',
+            role: updatedAgent.role, // Utiliser le rôle depuis la BDD au lieu de hardcoder 'AGENT'
             shopId: updatedAgent.shopId,
             nom: updatedAgent.nom,
             telephone: updatedAgent.telephone,
             createdAt: updatedAgent.createdAt,
           );
           
-          debugPrint('✅ Utilisateur rechargé: ${updatedAgent.username}');
+          debugPrint('✅ Utilisateur rechargé: ${updatedAgent.username} (Rôle: ${updatedAgent.role})');
           
           // Rafraîchir le shop si l'utilisateur a un shopId
           if (updatedAgent.shopId != null) {

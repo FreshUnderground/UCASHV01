@@ -17,7 +17,7 @@ Vous devez exécuter le script d'initialisation sur votre serveur de production 
 
 1. **Créez un fichier temporaire** sur votre serveur:
    ```
-   https://shops.investee-group.com/server/run_init_sims.php
+   https://mahanaim.investee-group.com/server/run_init_sims.php
    ```
 
 2. **Contenu du fichier `run_init_sims.php`**:
@@ -31,7 +31,7 @@ Vous devez exécuter le script d'initialisation sur votre serveur de production 
 
 3. **Accédez au fichier dans votre navigateur**:
    ```
-   https://shops.investee-group.com/server/run_init_sims.php
+   https://mahanaim.investee-group.com/server/run_init_sims.php
    ```
 
 4. **Vérifiez la sortie** - Vous devriez voir:

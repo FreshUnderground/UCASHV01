@@ -49,6 +49,7 @@ try {
             if ($exists) {
                 // UPDATE
                 $sql = "UPDATE cloture_caisse SET 
+                        solde_frais_anterieur = ?,
                         solde_saisi_cash = ?,
                         solde_saisi_airtel_money = ?,
                         solde_saisi_mpesa = ?,
@@ -73,6 +74,7 @@ try {
                 
                 $stmt = $pdo->prepare($sql);
                 $stmt->execute([
+                    $entity['solde_frais_anterieur'] ?? 0,
                     $entity['solde_saisi_cash'] ?? 0,
                     $entity['solde_saisi_airtel_money'] ?? 0,
                     $entity['solde_saisi_mpesa'] ?? 0,
@@ -101,19 +103,20 @@ try {
             } else {
                 // INSERT avec l'ID de l'app pour éviter les erreurs de contrainte foreign key
                 $sql = "REPLACE INTO cloture_caisse 
-                        (id, shop_id, date_cloture, 
+                        (id, shop_id, date_cloture, solde_frais_anterieur,
                          solde_saisi_cash, solde_saisi_airtel_money, solde_saisi_mpesa, solde_saisi_orange_money, solde_saisi_total,
                          solde_calcule_cash, solde_calcule_airtel_money, solde_calcule_mpesa, solde_calcule_orange_money, solde_calcule_total,
                          ecart_cash, ecart_airtel_money, ecart_mpesa, ecart_orange_money, ecart_total,
                          cloture_par, date_enregistrement, notes, 
                          created_at, last_modified_at, last_modified_by, is_synced, synced_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)";
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)";
                 
                 $stmt = $pdo->prepare($sql);
                 $stmt->execute([
                     $entity['id'] ?? null,  // Utiliser l'ID de l'app si fourni
                     $entity['shop_id'],
                     date('Y-m-d', strtotime($entity['date_cloture'])),
+                    $entity['solde_frais_anterieur'] ?? 0,
                     $entity['solde_saisi_cash'] ?? 0,
                     $entity['solde_saisi_airtel_money'] ?? 0,
                     $entity['solde_saisi_mpesa'] ?? 0,

@@ -416,12 +416,41 @@ class _CreateRetraitDialogState extends State<CreateRetraitDialog> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Erreur: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        // Check if it's a day closed error
+        final errorMessage = e.toString();
+        if (errorMessage.contains('clôturée')) {
+          // Show a prominent alert dialog for day closed
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Row(
+                children: const [
+                  Icon(Icons.lock_clock, color: Colors.orange, size: 28),
+                  SizedBox(width: 12),
+                  Text('Journée Clôturée'),
+                ],
+              ),
+              content: Text(
+                errorMessage.replaceAll('Exception: ', ''),
+                style: const TextStyle(fontSize: 16),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('OK', style: TextStyle(fontSize: 16)),
+                ),
+              ],
+            ),
+          );
+        } else {
+          // Show regular error snackbar
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ Erreur: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     } finally {
       if (mounted) {

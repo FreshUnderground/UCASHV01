@@ -96,11 +96,31 @@ class SimModel {
   }
 
   factory SimModel.fromJson(Map<String, dynamic> json) {
+    // Ensure shop_id is properly handled
+    int shopId = 0;
+    if (json['shop_id'] != null) {
+      if (json['shop_id'] is int) {
+        shopId = json['shop_id'];
+      } else if (json['shop_id'] is String) {
+        shopId = int.tryParse(json['shop_id']) ?? 0;
+      }
+    }
+    
+    // Gérer is_synced qui peut être bool (serveur) ou int (local)
+    bool isSynced = false;
+    if (json['is_synced'] != null) {
+      if (json['is_synced'] is bool) {
+        isSynced = json['is_synced'] as bool;
+      } else if (json['is_synced'] is int) {
+        isSynced = (json['is_synced'] as int) == 1;
+      }
+    }
+    
     return SimModel(
       id: json['id'] as int?,
       numero: (json['numero'] as String?) ?? '',
       operateur: (json['operateur'] as String?) ?? '',
-      shopId: (json['shop_id'] as int?) ?? 0,
+      shopId: shopId,
       shopDesignation: json['shop_designation'] as String?,
       soldeInitial: (json['solde_initial'] as num?)?.toDouble() ?? 0.0,
       soldeActuel: (json['solde_actuel'] as num?)?.toDouble() ?? 0.0,
@@ -120,7 +140,7 @@ class SimModel {
           ? DateTime.parse(json['last_modified_at'] as String)
           : null,
       lastModifiedBy: json['last_modified_by'] as String?,
-      isSynced: (json['is_synced'] as int?) == 1,
+      isSynced: isSynced,
       syncedAt: json['synced_at'] != null
           ? DateTime.parse(json['synced_at'] as String)
           : null,
@@ -139,6 +159,15 @@ class SimModel {
         return 'Désactivée';
     }
   }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is SimModel && other.id == id;
+  }
+
+  @override
+  int get hashCode => id.hashCode;
 }
 
 enum SimStatus {

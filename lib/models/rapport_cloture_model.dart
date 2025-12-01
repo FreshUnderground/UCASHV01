@@ -57,8 +57,10 @@ class RapportClotureModel {
   final List<CompteShopResume> shopsNousDevons;
   
   // NOUVEAU: Comptes spéciaux (FRAIS et DÉPENSE)
+  final double soldeFraisAnterieur;       // NOUVEAU: Solde FRAIS antérieur (jour précédent)
   final double retraitsFraisDuJour;      // Retraits FRAIS du jour
-  final double commissionsFraisDuJour;   // Commissions FRAIS du jour
+  final double commissionsFraisDuJour;   // FRAIS encaissés sur les transferts que nous avons servis (shop destination)
+  final Map<String, double> fraisGroupesParShop; // Frais groupés par shop source (qui a envoyé le transfert)
   final double soldeFraisTotal;          // Solde total du compte FRAIS
   final double sortiesDepenseDuJour;     // Sorties DÉPENSE du jour
   final double depotsDepenseDuJour;      // Dépôts DÉPENSE du jour
@@ -138,8 +140,10 @@ class RapportClotureModel {
     required this.clientsNousDevons,
     required this.shopsNousDoivent,
     required this.shopsNousDevons,
+    this.soldeFraisAnterieur = 0.0,
     this.retraitsFraisDuJour = 0.0,
     this.commissionsFraisDuJour = 0.0,
+    this.fraisGroupesParShop = const {},
     this.soldeFraisTotal = 0.0,
     this.sortiesDepenseDuJour = 0.0,
     this.depotsDepenseDuJour = 0.0,

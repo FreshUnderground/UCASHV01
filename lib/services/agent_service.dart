@@ -21,6 +21,12 @@ class AgentService extends ChangeNotifier {
 
   // Charger tous les agents
   Future<void> loadAgents({bool forceRefresh = false, bool clearBeforeLoad = false}) async {
+    // ✅ OPTIMISATION: Si les agents sont déjà chargés et pas de forceRefresh, ne rien faire
+    if (!forceRefresh && !clearBeforeLoad && _agents.isNotEmpty) {
+      debugPrint('✅ [AgentService] Utilisation du cache (${_agents.length} agents)');
+      return;
+    }
+    
     _setLoading(true);
     try {
       // Si clearBeforeLoad, supprimer toutes les données locales pour forcer le rechargement depuis le serveur
@@ -33,7 +39,6 @@ class AgentService extends ChangeNotifier {
       // Si forceRefresh, vider d'abord le cache
       if (forceRefresh) {
         _agents.clear();
-        debugPrint('🗑️ [AgentService] Cache vidé - Rechargement forcé');
       }
       
       // S'assurer que l'admin existe
@@ -43,7 +48,6 @@ class AgentService extends ChangeNotifier {
       await LocalDB.instance.cleanCorruptedAgentData();
       
       _agents = await LocalDB.instance.getAllAgents();
-      debugPrint('📋 Agents chargés: ${_agents.length}');
       _errorMessage = null;
       notifyListeners(); // Notifier les widgets après le chargement
     } catch (e) {
@@ -91,8 +95,9 @@ class AgentService extends ChangeNotifier {
       final savedAgent = await LocalDB.instance.saveAgent(newAgent);
       debugPrint('✅ Agent sauvegardé avec ID: ${savedAgent.id}, Shop: $shopDesignation');
       
-      // Recharger la liste
-      await loadAgents();
+      // ✅ OPTIMISATION: Ajouter directement au cache au lieu de recharger tout
+      _agents.add(savedAgent);
+      notifyListeners();
       
       // Synchronisation en arrière-plan
       _syncInBackground();
@@ -123,8 +128,12 @@ class AgentService extends ChangeNotifier {
       await LocalDB.instance.updateAgent(agent);
       debugPrint('✅ Agent mis à jour avec succès');
       
-      // Recharger complètement avec cache vidé
-      await loadAgents(forceRefresh: true);
+      // ✅ OPTIMISATION: Mettre à jour directement dans le cache
+      final index = _agents.indexWhere((a) => a.id == agent.id);
+      if (index != -1) {
+        _agents[index] = agent;
+        notifyListeners();
+      }
       
       // Synchronisation en arrière-plan
       _syncInBackground();
@@ -147,8 +156,9 @@ class AgentService extends ChangeNotifier {
     try {
       await LocalDB.instance.deleteAgent(agentId);
       
-      // Recharger la liste
-      await loadAgents();
+      // ✅ OPTIMISATION: Supprimer directement du cache
+      _agents.removeWhere((a) => a.id == agentId);
+      notifyListeners();
       
       _errorMessage = null;
       _setLoading(false);

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../models/sim_model.dart';
 import '../models/sim_movement_model.dart';
 import '../models/operation_model.dart';
+import '../models/virtual_transaction_model.dart';
 import 'local_db.dart';
 import 'sync_service.dart';
 import 'operation_service.dart';
@@ -30,10 +31,33 @@ class SimService extends ChangeNotifier {
       foundation.debugPrint('🔍 [SimService.loadSims] Début chargement...');
       foundation.debugPrint('   Paramètre shopId: $shopId');
       
-      _sims = await LocalDB.instance.getAllSims(shopId: shopId);
+      final allSims = await LocalDB.instance.getAllSims(shopId: shopId);
+      
+      // CRITICAL: Remove duplicates by ID to prevent dropdown assertion errors
+      // AND validate SIM data to prevent invalid SIMs from causing sync errors
+      final simsMap = <int, SimModel>{};
+      int invalidSimCount = 0;
+      for (var sim in allSims) {
+        // Validation: Check that SIM has valid data
+        if (sim.id != null && sim.numero.isNotEmpty && sim.shopId > 0) {
+          simsMap[sim.id!] = sim; // Keep the last occurrence if duplicates
+        } else {
+          invalidSimCount++;
+          foundation.debugPrint('⚠️ SIM ignorée: ID=${sim.id}, Numéro="${sim.numero}", Shop=${sim.shopId}');
+        }
+      }
+      _sims = simsMap.values.toList();
+      
+      if (invalidSimCount > 0) {
+        foundation.debugPrint('⚠️ $invalidSimCount SIMs invalides ignorées');
+      }
       
       foundation.debugPrint('📊 [SimService.loadSims] Résultats:');
-      foundation.debugPrint('   Total SIMs chargées: ${_sims.length}');
+      foundation.debugPrint('   Total SIMs brutes: ${allSims.length}');
+      foundation.debugPrint('   Total SIMs uniques: ${_sims.length}');
+      if (allSims.length != _sims.length) {
+        foundation.debugPrint('   ⚠️ ${allSims.length - _sims.length} doublons supprimés!');
+      }
       
       if (_sims.isNotEmpty) {
         foundation.debugPrint('   Liste des SIMs:');
@@ -372,34 +396,59 @@ class SimService extends ChangeNotifier {
     return _sims.where((sim) => sim.operateur == operateur).toList();
   }
 
-  /// Calculer automatiquement le solde d'une SIM basé sur les opérations
-  /// Le solde initial - somme des opérations servies (retraits)
+  /// Calculer automatiquement le solde d'une SIM basé sur les captures, retraits et transferts virtuels
+  /// FORMULE: Solde = Solde Initial + TOUTES les Captures (même en attente) - Flots - Transferts
+  /// NOTE: On compte les captures dès leur enregistrement, car l'argent est déjà reçu sur la SIM
   Future<double> calculateAutomaticSolde(SimModel sim) async {
     try {
-      // Obtenir toutes les opérations liées à cette SIM
-      final operationService = OperationService();
-      await operationService.loadOperations();
-      
-      // Filtrer les opérations de retrait terminées pour cette SIM
-      final relatedOperations = operationService.operations
-          .where((op) => 
-            op.type == OperationType.retrait &&
-            op.statut == OperationStatus.terminee &&
-            op.simNumero == sim.numero)
-          .toList();
-      
-      // Calculer la somme des montants nets servis
-      final totalServis = relatedOperations.fold<double>(
-        0, 
-        (sum, op) => sum + op.montantNet
+      // 1. Obtenir TOUTES les captures pour cette SIM (en attente + validées, sauf annulées)
+      final toutesCaptures = await LocalDB.instance.getAllVirtualTransactions(
+        simNumero: sim.numero,
       );
       
-      // Le solde actuel = solde initial - total des opérations servies
-      // (car chaque retrait diminue le solde de la SIM)
-      final calculatedSolde = sim.soldeInitial - totalServis;
+      // Filtrer: Exclure uniquement les captures annulées
+      final capturesActives = toutesCaptures
+          .where((t) => t.statut != VirtualTransactionStatus.annulee)
+          .toList();
       
-      foundation.debugPrint('💰 [SIM Solde Auto] ${sim.numero}: Initial=${sim.soldeInitial}, Servis=$totalServis, Calculé=$calculatedSolde');
-      foundation.debugPrint('   Opérations trouvées: ${relatedOperations.length}');
+      // Calculer la somme des captures (montant virtuel encaissé)
+      final totalCaptures = capturesActives.fold<double>(
+        0, 
+        (sum, trans) => sum + trans.montantVirtuel
+      );
+      
+      // 2. Obtenir les retraits virtuels pour cette SIM
+      final retraitsVirtuels = await LocalDB.instance.getAllRetraitsVirtuels(
+        simNumero: sim.numero
+      );
+      
+      // Calculer la somme des retraits virtuels
+      final totalRetraitsVirtuels = retraitsVirtuels.fold<double>(
+        0, 
+        (sum, retrait) => sum + retrait.montant
+      );
+      
+      // 3. Obtenir les transferts (notes contenant "Dépot" ou "Transfert")
+      final transferts = retraitsVirtuels
+          .where((r) => (r.notes?.contains('Dépot') ?? false) || (r.notes?.contains('Transfert') ?? false))
+          .toList();
+      
+      final totalTransferts = transferts.fold<double>(
+        0,
+        (sum, trans) => sum + trans.montant
+      );
+      
+      // FORMULE CORRECTE: Solde = Initial + Captures - Retraits - Transferts
+      // Note: totalRetraitsVirtuels inclut déjà les transferts, donc on ne les soustrait pas deux fois
+      final calculatedSolde = sim.soldeInitial + totalCaptures - totalRetraitsVirtuels;
+      
+      foundation.debugPrint('💰 [SIM Solde Auto] ${sim.numero}:');
+      foundation.debugPrint('   Solde Initial: ${sim.soldeInitial}');
+      foundation.debugPrint('   + Captures (en attente + validées): $totalCaptures (${capturesActives.length} transactions)');
+      foundation.debugPrint('   - Flots: $totalRetraitsVirtuels (${retraitsVirtuels.length} retraits)');
+      foundation.debugPrint('   dont Transferts: $totalTransferts (${transferts.length} transferts)');
+      foundation.debugPrint('   = Solde Calculé: $calculatedSolde');
+      foundation.debugPrint('   Solde Actuel (BD): ${sim.soldeActuel}');
       
       return calculatedSolde;
     } catch (e) {

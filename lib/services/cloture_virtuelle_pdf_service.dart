@@ -80,6 +80,60 @@ Future<pw.Document> genererClotureVirtuellePDF(
         
         pw.SizedBox(height: 12),
         
+        // === SOLDE ANTÉRIEUR CASH ===
+        pw.Container(
+          padding: const pw.EdgeInsets.all(10),
+          decoration: pw.BoxDecoration(
+            color: PdfColors.green50,
+            border: pw.Border.all(color: PdfColors.green700, width: 1.5),
+            borderRadius: pw.BorderRadius.circular(6),
+          ),
+          child: pw.Column(
+            children: [
+              pw.Text(
+                'SOLDE ANTÉRIEUR CASH',
+                style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.green700),
+              ),
+              pw.SizedBox(height: 8),
+              _buildAmountRow('Cash au début de la journée', rapport['soldeAnterieurCash'] ?? 0.0, PdfColors.green700, bold: true, fontSize: 10),
+              pw.SizedBox(height: 4),
+              pw.Text(
+                '(Solde cash de la dernière clôture)',
+                style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700),
+              ),
+            ],
+          ),
+        ),
+        
+        pw.SizedBox(height: 12),
+        
+        // === SOLDE ANTÉRIEUR VIRTUEL ===
+        pw.Container(
+          padding: const pw.EdgeInsets.all(10),
+          decoration: pw.BoxDecoration(
+            color: PdfColors.purple50,
+            border: pw.Border.all(color: PdfColors.purple700, width: 1.5),
+            borderRadius: pw.BorderRadius.circular(6),
+          ),
+          child: pw.Column(
+            children: [
+              pw.Text(
+                'SOLDE ANTÉRIEUR VIRTUEL',
+                style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.purple700),
+              ),
+              pw.SizedBox(height: 8),
+              _buildAmountRow('Solde virtuel au début de la journée', rapport['soldeAnterieurVirtuel'] ?? 0.0, PdfColors.purple, bold: true, fontSize: 10),
+              pw.SizedBox(height: 4),
+              pw.Text(
+                '(Solde total des SIMs à la dernière clôture)',
+                style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700),
+              ),
+            ],
+          ),
+        ),
+        
+        pw.SizedBox(height: 12),
+        
         // === TRANSACTIONS VIRTUELLES ===
         _buildSection(
           'TRANSACTIONS VIRTUELLES',
@@ -103,22 +157,123 @@ Future<pw.Document> genererClotureVirtuellePDF(
           pw.SizedBox(height: 10),
         ],
         
-        // === RETRAITS VIRTUELS ===
-        _buildSection(
-          'RETRAITS VIRTUELS',
-          [
-            _buildRow('Retraits effectués', rapport['nombreRetraits'], rapport['montantTotalRetraits']),
-            _buildRow('Remboursés', rapport['nombreRetraitsRembourses'], rapport['montantRetraitsRembourses'], PdfColors.green),
-            _buildRow('En attente', rapport['nombreRetraitsEnAttente'], rapport['montantRetraitsEnAttente'], PdfColors.orange),
-          ],
-          PdfColors.orange,
+        // === FLOTS ===
+        pw.Container(
+          padding: const pw.EdgeInsets.all(8),
+          decoration: pw.BoxDecoration(
+            color: PdfColors.orange50,
+            border: pw.Border.all(color: PdfColors.orange700, width: 1.5),
+            borderRadius: pw.BorderRadius.circular(6),
+          ),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                'FLOTS',
+                style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.orange700),
+              ),
+              pw.SizedBox(height: 8),
+              _buildRow('Flots effectués', rapport['nombreRetraits'], rapport['montantTotalRetraits'], PdfColors.orange700),
+              _buildRow('Remboursés', rapport['nombreRetraitsRembourses'], rapport['montantRetraitsRembourses'], PdfColors.green),
+              _buildRow('En attente', rapport['nombreRetraitsEnAttente'], rapport['montantRetraitsEnAttente'], PdfColors.orange),
+              pw.SizedBox(height: 6),
+              pw.Container(
+                padding: const pw.EdgeInsets.all(6),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.yellow50,
+                  borderRadius: pw.BorderRadius.circular(4),
+                ),
+                child: pw.Text(
+                  '⚠️ Les flots diminuent le solde virtuel des SIMs',
+                  style: const pw.TextStyle(fontSize: 7, color: PdfColors.orange900),
+                ),
+              ),
+            ],
+          ),
         ),
         
         pw.SizedBox(height: 10),
         
-        // Détails par SIM - Retraits
+        // === TRANSFERTS VIRTUELS ===
+        pw.Container(
+          padding: const pw.EdgeInsets.all(8),
+          decoration: pw.BoxDecoration(
+            color: PdfColors.purple50,
+            border: pw.Border.all(color: PdfColors.purple700, width: 1.5),
+            borderRadius: pw.BorderRadius.circular(6),
+          ),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                'FLOTS VIRTUELS (DÉPOTS)',
+                style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.purple700),
+              ),
+              pw.SizedBox(height: 8),
+              _buildRow('Dépots effectués', rapport['nombreTransferts'] ?? 0, rapport['montantTotalTransferts'] ?? 0.0, PdfColors.purple700),
+              pw.SizedBox(height: 6),
+              pw.Container(
+                padding: const pw.EdgeInsets.all(6),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.blue50,
+                  borderRadius: pw.BorderRadius.circular(4),
+                ),
+                child: pw.Text(
+                  'ℹ️ Dépot (Virtuel → Cash) - opération interne',
+                  style: const pw.TextStyle(fontSize: 7, color: PdfColors.purple900),
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        pw.SizedBox(height: 10),
+        
+        // === FLOTs PHYSIQUES (entre shops) ===
+        pw.Container(
+          padding: const pw.EdgeInsets.all(8),
+          decoration: pw.BoxDecoration(
+            color: PdfColors.blue50,
+            border: pw.Border.all(color: PdfColors.blue700, width: 1.5),
+            borderRadius: pw.BorderRadius.circular(6),
+          ),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                'FLOTs PHYSIQUES (entre shops)',
+                style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.blue700),
+              ),
+              pw.SizedBox(height: 8),
+              _buildRow('FLOTs reçus', rapport['nombreFlotsRecus'] ?? 0, rapport['montantFlotsRecus'] ?? 0.0, PdfColors.green),
+              _buildRow('FLOTs envoyés', rapport['nombreFlotsEnvoyes'] ?? 0, rapport['montantFlotsEnvoyes'] ?? 0.0, PdfColors.orange),
+              pw.SizedBox(height: 6),
+              pw.Container(
+                padding: const pw.EdgeInsets.all(6),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.blue50,
+                  borderRadius: pw.BorderRadius.circular(4),
+                ),
+                child: pw.Text(
+                  'ℹ️ Mouvements de cash physique entre shops',
+                  style: const pw.TextStyle(fontSize: 7, color: PdfColors.blue900),
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        pw.SizedBox(height: 10),
+        
+        // Détails par SIM - Flots
         if ((rapport['retraitsParSim'] as Map<String, Map<String, dynamic>>).isNotEmpty) ...[
-          _buildDetailsParSimRetraits(rapport['retraitsParSim'] as Map<String, Map<String, dynamic>>),
+          _buildDetailsParSimFlots(rapport['retraitsParSim'] as Map<String, Map<String, dynamic>>),
+          pw.SizedBox(height: 10),
+        ],
+                
+        // Détails par SIM - Dépôts
+        if ((rapport['depotsParSim'] as Map<String, Map<String, dynamic>>?)?.isNotEmpty ?? false) ...[
+          _buildDetailsParSimDepots(rapport['depotsParSim'] as Map<String, Map<String, dynamic>>),
           pw.SizedBox(height: 10),
         ],
         
@@ -184,7 +339,10 @@ Future<pw.Document> genererClotureVirtuellePDF(
               ),
               pw.SizedBox(height: 8),
               _buildAmountRow('Cash sorti (captures)', rapport['cashSortiCaptures'], PdfColors.red),
-              _buildAmountRow('Cash entrant (retraits remboursés)', rapport['cashEntrantRetraitsRembourses'], PdfColors.green),
+              _buildAmountRow('Cash entrant (flots remboursés)', rapport['cashEntrantRetraitsRembourses'], PdfColors.green),
+              _buildAmountRow('Cash entrant (dépôts)', rapport['montantTotalTransferts'] ?? 0.0, PdfColors.green),
+              _buildAmountRow('FLOTs reçus', rapport['montantFlotsRecus'] ?? 0.0, PdfColors.green),
+              _buildAmountRow('FLOTs envoyés', rapport['montantFlotsEnvoyes'] ?? 0.0, PdfColors.red),
               pw.Divider(),
               _buildAmountRow('Mouvement net de cash', rapport['mouvementNetCash'], 
                 rapport['mouvementNetCash'] >= 0 ? PdfColors.green : PdfColors.red, bold: true, fontSize: 10),
@@ -204,11 +362,32 @@ Future<pw.Document> genererClotureVirtuellePDF(
                     ),
                     pw.SizedBox(height: 3),
                     pw.Text(
+                      'CASH SORTANT:',
+                      style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold, color: PdfColors.red),
+                    ),
+                    pw.Text(
                       '• Capture: Client donne VIRTUEL → Nous donnons CASH',
                       style: const pw.TextStyle(fontSize: 6, color: PdfColors.red),
                     ),
                     pw.Text(
-                      '• Retrait remboursé: Via FLOT → Nous recevons CASH',
+                      '• FLOT envoyé: Nous envoyons CASH vers autre shop',
+                      style: const pw.TextStyle(fontSize: 6, color: PdfColors.red),
+                    ),
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      'CASH ENTRANT:',
+                      style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold, color: PdfColors.green),
+                    ),
+                    pw.Text(
+                      '• Flot remboursé: Via FLOT → Nous recevons CASH',
+                      style: const pw.TextStyle(fontSize: 6, color: PdfColors.green),
+                    ),
+                    pw.Text(
+                      '• Dépôt (Virtuel → Cash): Conversion interne',
+                      style: const pw.TextStyle(fontSize: 6, color: PdfColors.green),
+                    ),
+                    pw.Text(
+                      '• FLOT reçu: Nous recevons CASH d\'autre shop',
                       style: const pw.TextStyle(fontSize: 6, color: PdfColors.green),
                     ),
                   ],
@@ -372,7 +551,7 @@ pw.Widget _buildDetailsParSimTransactions(Map<String, Map<String, dynamic>> tran
   );
 }
 
-pw.Widget _buildDetailsParSimRetraits(Map<String, Map<String, dynamic>> retraitsParSim) {
+pw.Widget _buildDetailsParSimFlots(Map<String, Map<String, dynamic>> retraitsParSim) {
   return pw.Container(
     padding: const pw.EdgeInsets.all(6),
     decoration: pw.BoxDecoration(
@@ -383,7 +562,7 @@ pw.Widget _buildDetailsParSimRetraits(Map<String, Map<String, dynamic>> retraits
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Text(
-          'Détails par SIM - Retraits',
+          'Détails par SIM - Flots',
           style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.orange700),
         ),
         pw.SizedBox(height: 4),
@@ -401,11 +580,50 @@ pw.Widget _buildDetailsParSimRetraits(Map<String, Map<String, dynamic>> retraits
               children: [
                 pw.Text('SIM ${data['simNumero']}', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
                 pw.SizedBox(height: 2),
-                _buildMiniRow('Retraits', data['nombreRetraits'], data['montantRetraits']),
+                _buildMiniRow('Flots', data['nombreRetraits'], data['montantRetraits']),
                 if (data['nombreRembourses'] > 0)
                   _buildMiniRow('Remboursés', data['nombreRembourses'], data['montantRembourses']),
                 if (data['nombreEnAttente'] > 0)
                   _buildMiniRow('En attente', data['nombreEnAttente'], data['montantEnAttente']),
+              ],
+            ),
+          );
+        }).toList(),
+      ],
+    ),
+  );
+}
+
+pw.Widget _buildDetailsParSimDepots(Map<String, Map<String, dynamic>> depotsParSim) {
+  return pw.Container(
+    padding: const pw.EdgeInsets.all(6),
+    decoration: pw.BoxDecoration(
+      color: PdfColors.purple50,
+      borderRadius: pw.BorderRadius.circular(4),
+    ),
+    child: pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(
+          'Détails par SIM - Dépôts (Virtuel → Cash)',
+          style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.purple700),
+        ),
+        pw.SizedBox(height: 4),
+        ...depotsParSim.entries.map((entry) {
+          final data = entry.value;
+          return pw.Container(
+            margin: const pw.EdgeInsets.only(bottom: 4),
+            padding: const pw.EdgeInsets.all(4),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: PdfColors.purple200),
+              borderRadius: pw.BorderRadius.circular(2),
+            ),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text('SIM ${data['simNumero']}', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 2),
+                _buildMiniRow('Dépôts', data['nombreDepots'], data['montantDepots']),
               ],
             ),
           );

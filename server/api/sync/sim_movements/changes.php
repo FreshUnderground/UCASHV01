@@ -1,76 +1,98 @@
 <?php
-header('Content-Type: application/json');
+
+header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, Accept');
+header('Access-Control-Max-Age: 86400');
 
+// Gestion des requêtes OPTIONS (preflight)
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
 }
 
-require_once __DIR__ . '/../../config/database.php';
+if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+    http_response_code(405);
+    echo json_encode(['success' => false, 'message' => 'Méthode non autorisée']);
+    exit();
+}
+
+// Enable error reporting for debugging
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
 
 try {
-    $db = new Database();
-    $conn = $db->getConnection();
+    require_once '../../../config/database.php';
     
-    // Récupérer le paramètre 'since' (timestamp de dernière sync)
-    $since = $_GET['since'] ?? '2020-01-01T00:00:00.000';
+    $since = $_GET['since'] ?? null;
+    $userId = $_GET['user_id'] ?? 'unknown';
     
-    error_log("📝 [SIM Movements Changes] Requête depuis: $since");
+    // Debug: Log input parameters
+    error_log("SIM Movements changes request - since: " . ($since ?? 'null') . ", userId: " . $userId);
     
-    // Récupérer tous les mouvements modifiés depuis le timestamp
-    $stmt = $conn->prepare("
-        SELECT 
-            id,
-            sim_id,
-            sim_numero,
-            ancien_shop_id,
-            ancien_shop_designation,
-            nouveau_shop_id,
-            nouveau_shop_designation,
-            admin_responsable,
-            motif,
-            date_movement,
-            last_modified_at,
-            last_modified_by,
-            is_synced,
-            synced_at
-        FROM sim_movements
-        WHERE last_modified_at >= ?
-        ORDER BY date_movement DESC
-    ");
+    // Construire la requête SQL
+    $sql = "SELECT * FROM sim_movements WHERE 1=1";
+    $params = [];
     
-    $stmt->execute([$since]);
-    $movements = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    if ($since && $since !== '') {
+        $sql .= " AND last_modified_at > ?";
+        $params[] = $since;
+    }
     
-    error_log("📝 [SIM Movements Changes] " . count($movements) . " mouvements trouvés");
+    $sql .= " ORDER BY date_movement DESC";
     
-    echo json_encode([
+    // Debug: Log SQL query
+    error_log("SIM Movements SQL query: " . $sql . " with params: " . print_r($params, true));
+    
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $movementsData = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Debug: Log number found
+    error_log("SIM Movements found: " . count($movementsData));
+    
+    // Convertir les données pour Flutter
+    $entities = [];
+    foreach ($movementsData as $mvt) {
+        $entities[] = [
+            'id' => (int)$mvt['id'],
+            'sim_id' => (int)$mvt['sim_id'],
+            'sim_numero' => $mvt['sim_numero'],
+            'ancien_shop_id' => isset($mvt['ancien_shop_id']) ? (int)$mvt['ancien_shop_id'] : null,
+            'ancien_shop_designation' => $mvt['ancien_shop_designation'] ?? null,
+            'nouveau_shop_id' => (int)$mvt['nouveau_shop_id'],
+            'nouveau_shop_designation' => $mvt['nouveau_shop_designation'],
+            'admin_responsable' => $mvt['admin_responsable'],
+            'motif' => $mvt['motif'] ?? null,
+            'date_movement' => $mvt['date_movement'],
+            'last_modified_at' => $mvt['last_modified_at'],
+            'last_modified_by' => $mvt['last_modified_by'] ?? null,
+            'is_synced' => (bool)($mvt['is_synced'] ?? false),
+            'synced_at' => $mvt['synced_at'] ?? null
+        ];
+    }
+    
+    $response = [
         'success' => true,
-        'entities' => $movements,
-        'count' => count($movements),
+        'entities' => $entities,
+        'count' => count($entities),
         'since' => $since,
         'timestamp' => date('c')
-    ]);
+    ];
     
-} catch (PDOException $e) {
-    error_log("❌ [SIM Movements Changes] Erreur de base de données: " . $e->getMessage());
-    http_response_code(500);
-    echo json_encode([
-        'success' => false,
-        'message' => 'Erreur de base de données: ' . $e->getMessage(),
-        'entities' => [],
-        'timestamp' => date('c')
-    ]);
+    // Debug: Log response
+    error_log("SIM Movements response count: " . count($entities));
+    
+    echo json_encode($response);
+    
 } catch (Exception $e) {
-    error_log("❌ [SIM Movements Changes] Erreur: " . $e->getMessage());
+    error_log("SIM Movements error: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
     http_response_code(500);
     echo json_encode([
         'success' => false,
-        'message' => $e->getMessage(),
-        'entities' => [],
+        'message' => 'Erreur serveur: ' . $e->getMessage(),
         'timestamp' => date('c')
     ]);
 }
+?>

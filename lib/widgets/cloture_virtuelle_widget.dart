@@ -34,49 +34,76 @@ class _ClotureVirtuelleWidgetState extends State<ClotureVirtuelleWidget> {
   bool _isLoading = false;
   bool _journeeCloturee = false;
   String? _errorMessage;
+  bool _isDisposed = false; // Track disposal state
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadClotures();
-      _genererRapport();
+      if (!_isDisposed && mounted) {
+        _loadClotures();
+        _genererRapport();
+      }
     });
+  }
+  
+  @override
+  void dispose() {
+    _isDisposed = true;
+    super.dispose();
   }
 
   Future<void> _loadClotures() async {
-    if (!mounted) return;
+    if (_isDisposed || !mounted) return;
     
     setState(() {
       _isLoading = true;
+      _errorMessage = null;
     });
 
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
       final shopId = widget.shopId ?? authService.currentUser?.shopId ?? 1;
       
-      final clotures = await LocalDB.instance.getAllCloturesVirtuelles(shopId: shopId);
+      // Filtrer par la date sélectionnée
+      final dateDebut = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+      final dateFin = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, 23, 59, 59);
       
-      if (!mounted) return;
+      final clotures = await LocalDB.instance.getAllCloturesVirtuelles(
+        shopId: shopId,
+        dateDebut: dateDebut,
+        dateFin: dateFin,
+      );
+      
+      if (!mounted || _isDisposed) return;
       
       setState(() {
         _clotures = clotures;
         _isLoading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      debugPrint('❌ [ClotureVirtuelleWidget] Erreur chargement clôtures: $e');
+      
+      if (!mounted || _isDisposed) return;
       
       setState(() {
         _isLoading = false;
+        _errorMessage = e.toString();
       });
       
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('❌ Erreur: $e')),
+        SnackBar(
+          content: Text('❌ Erreur: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
       );
     }
   }
 
   Future<void> _genererRapport() async {
+    if (_isDisposed || !mounted) return;
+    
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -97,12 +124,18 @@ class _ClotureVirtuelleWidgetState extends State<ClotureVirtuelleWidget> {
         date: _selectedDate,
       );
 
+      if (!mounted || _isDisposed) return;
+
       setState(() {
         _rapport = rapport;
         _journeeCloturee = estCloturee;
         _isLoading = false;
       });
     } catch (e) {
+      debugPrint('❌ [ClotureVirtuelleWidget] Erreur génération rapport: $e');
+      
+      if (!mounted || _isDisposed) return;
+      
       setState(() {
         _errorMessage = e.toString();
         _isLoading = false;
@@ -111,6 +144,8 @@ class _ClotureVirtuelleWidgetState extends State<ClotureVirtuelleWidget> {
   }
 
   Future<void> _cloturerJournee() async {
+    if (_isDisposed || !mounted) return;
+    
     if (_journeeCloturee) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -123,6 +158,7 @@ class _ClotureVirtuelleWidgetState extends State<ClotureVirtuelleWidget> {
 
     final confirm = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('Confirmer la clôture'),
         content: Column(
@@ -151,7 +187,7 @@ class _ClotureVirtuelleWidgetState extends State<ClotureVirtuelleWidget> {
       ),
     );
 
-    if (confirm != true) return;
+    if (confirm != true || !mounted || _isDisposed) return;
 
     setState(() => _isLoading = true);
 
@@ -169,35 +205,42 @@ class _ClotureVirtuelleWidgetState extends State<ClotureVirtuelleWidget> {
         cloturePar: authService.currentUser?.username ?? 'Unknown',
       );
 
-      if (mounted) {
+      if (mounted && !_isDisposed) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('✅ Journée clôturée avec succès'),
             backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
           ),
         );
-        _genererRapport();
+        await _genererRapport();
+        await _loadClotures();
       }
     } catch (e) {
-      if (mounted) {
+      debugPrint('❌ [ClotureVirtuelleWidget] Erreur clôture: $e');
+      
+      if (mounted && !_isDisposed) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('❌ Erreur: $e'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
           ),
         );
       }
     } finally {
-      if (mounted) {
+      if (mounted && !_isDisposed) {
         setState(() => _isLoading = false);
       }
     }
   }
 
   Future<void> _previsualiserPDF() async {
-    if (_rapport == null) return;
+    if (_rapport == null || _isDisposed || !mounted) return;
 
     try {
+      setState(() => _isLoading = true);
+      
       final shopService = Provider.of<ShopService>(context, listen: false);
       final authService = Provider.of<AuthService>(context, listen: false);
       final shopId = widget.shopId ?? authService.currentUser?.shopId ?? 1;
@@ -215,9 +258,13 @@ class _ClotureVirtuelleWidgetState extends State<ClotureVirtuelleWidget> {
       );
 
       final pdfBytes = await pdf.save();
+      
+      if (!mounted || _isDisposed) return;
+      
+      setState(() => _isLoading = false);
 
       // Afficher le PDF dans une boîte de dialogue de prévisualisation
-      if (mounted) {
+      if (mounted && !_isDisposed) {
         showDialog(
           context: context,
           builder: (context) => Dialog(
@@ -282,11 +329,18 @@ class _ClotureVirtuelleWidgetState extends State<ClotureVirtuelleWidget> {
         );
       }
     } catch (e) {
-      if (mounted) {
+      debugPrint('❌ [ClotureVirtuelleWidget] Erreur prévisualisation PDF: $e');
+      
+      if (!mounted || _isDisposed) return;
+      
+      setState(() => _isLoading = false);
+      
+      if (mounted && !_isDisposed) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('❌ Erreur: $e'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
           ),
         );
       }

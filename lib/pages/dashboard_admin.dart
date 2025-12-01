@@ -23,7 +23,7 @@ import '../widgets/comptes_speciaux_widget.dart';
 import '../widgets/sync_monitor_widget.dart';
 import '../widgets/audit_history_widget.dart';
 import '../widgets/reconciliation_report_widget.dart';
-import '../widgets/virtual_transactions_widget.dart';
+import '../widgets/virtual_transactions_widget.dart' as virtual_widget;
 import '../widgets/admin_sim_management_widget.dart';
 import '../widgets/language_selector.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
@@ -34,6 +34,7 @@ import '../services/transfer_sync_service.dart';
 import '../widgets/admin_deletion_widget.dart';
 import '../widgets/trash_bin_widget.dart';
 import '../services/deletion_service.dart';
+import '../widgets/partner_net_position_widget.dart';
 
 class DashboardAdminPage extends StatefulWidget {
   const DashboardAdminPage({super.key});
@@ -688,7 +689,43 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
   }
 
   Widget _buildClientsContent() {
-    return const AdminClientsWidget();
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width <= 768;
+    
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          Container(
+            color: Colors.white,
+            child: TabBar(
+              labelColor: const Color(0xFFDC2626),
+              unselectedLabelColor: Colors.grey,
+              indicatorColor: const Color(0xFFDC2626),
+              indicatorWeight: 3,
+              tabs: [
+                Tab(
+                  icon: Icon(Icons.people, size: isMobile ? 20 : 24),
+                  text: 'Liste Partenaires',
+                ),
+                Tab(
+                  icon: Icon(Icons.balance, size: isMobile ? 20 : 24),
+                  text: 'Situation Nette',
+                ),
+              ],
+            ),
+          ),
+          const Expanded(
+            child: TabBarView(
+              children: [
+                AdminClientsWidget(),
+                PartnerNetPositionWidget(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildSyncingClientsIndicator() {
@@ -1031,7 +1068,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
   }
 
   Widget _buildVirtuelContent() {
-    return const VirtualTransactionsWidget();
+    return const virtual_widget.VirtualTransactionsWidget();
   }
 
 
@@ -1283,6 +1320,10 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
   }
 
   Widget _buildBottomNavigation() {
+    // S'assurer que currentIndex est valide
+    final mobileIndex = _getMobileNavIndex(_selectedIndex);
+    final validMobileIndex = mobileIndex.clamp(0, 5); // 6 items = indices 0-5
+    
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1296,7 +1337,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
         ],
       ),
       child: BottomNavigationBar(
-        currentIndex: _getMobileNavIndex(_selectedIndex),
+        currentIndex: validMobileIndex,
         onTap: (mobileIndex) async {
           final desktopIndex = _getDesktopIndexFromMobile(mobileIndex);
           if (desktopIndex == 4) {

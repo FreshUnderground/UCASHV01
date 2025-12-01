@@ -56,17 +56,6 @@ class _CreateRetraitVirtuelDialogState extends State<CreateRetraitVirtuelDialog>
     }
 
     final montant = double.parse(_montantController.text);
-    
-    // Vérifier que le solde de la SIM est suffisant
-    if (_selectedSim!.soldeActuel < montant) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ Solde insuffisant. Solde disponible: \$${_selectedSim!.soldeActuel.toStringAsFixed(2)}'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
 
     // Confirmation
     final confirm = await showDialog<bool>(
@@ -121,15 +110,15 @@ class _CreateRetraitVirtuelDialogState extends State<CreateRetraitVirtuelDialog>
         throw Exception('Utilisateur non connecté');
       }
 
-      // Diminuer le solde de la SIM
+      // Calculer le nouveau solde (pour le tracking, même si on recalculera automatiquement)
       final nouveauSolde = _selectedSim!.soldeActuel - montant;
       
-      await SimService.instance.updateSimSolde(
-        sim: _selectedSim!,
-        nouveauSolde: nouveauSolde,
-        modifiePar: currentUser.username,
-      );
-
+      debugPrint('💰 [Flot] AVANT:');
+      debugPrint('   SIM: ${_selectedSim!.numero}');
+      debugPrint('   Solde actuel: ${_selectedSim!.soldeActuel}');
+      debugPrint('   Montant retrait: $montant');
+      debugPrint('   Nouveau solde (calculé): $nouveauSolde');
+      
       // Obtenir la désignation du shop source
       final shopService = Provider.of<ShopService>(context, listen: false);
       final currentShop = shopService.shops.firstWhere(
@@ -147,7 +136,7 @@ class _CreateRetraitVirtuelDialogState extends State<CreateRetraitVirtuelDialog>
         shopDebiteurDesignation: _shopDestinataire!.designation,
         montant: montant,
         soldeAvant: _selectedSim!.soldeActuel,
-        soldeApres: nouveauSolde,
+        soldeApres: nouveauSolde,  // Note: Ce sera recalculé automatiquement après
         agentId: currentUser.id!,
         agentUsername: currentUser.username,
         notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
@@ -158,12 +147,31 @@ class _CreateRetraitVirtuelDialogState extends State<CreateRetraitVirtuelDialog>
       );
 
       await LocalDB.instance.saveRetraitVirtuel(retrait);
+      debugPrint('✅ Flot sauvegardé: ID=${retrait.id}');
+      
+      // IMPORTANT: Recalculer le solde automatiquement basé sur toutes les captures et retraits
+      final wasUpdated = await SimService.instance.updateSoldeAutomatiquement(_selectedSim!);
+      if (wasUpdated) {
+        debugPrint('✅ Solde de la SIM ${_selectedSim!.numero} recalculé automatiquement');
+      } else {
+        debugPrint('ℹ️ Solde de la SIM ${_selectedSim!.numero} déjà à jour');
+      }
+      
+      // Vérifier le solde après recalcul
+      final simApres = await LocalDB.instance.getSimByNumero(_selectedSim!.numero);
+      if (simApres != null) {
+        debugPrint('💰 [Flot] APRÈS:');
+        debugPrint('   Solde dans BD: ${simApres.soldeActuel}');
+      }
+      
+      // CRITICAL: Attendre que le service notifie tous les listeners
+      await Future.delayed(const Duration(milliseconds: 100));
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '✅ Retrait virtuel effectué!\n'
+              '✅ Flot effectué!\n'
               'Montant: \$${montant.toStringAsFixed(2)}\n'
               '${_shopDestinataire!.designation} vous doit cet argent.\n'
               'Un flot devra être créé pour le remboursement.',
@@ -210,7 +218,7 @@ class _CreateRetraitVirtuelDialogState extends State<CreateRetraitVirtuelDialog>
                       const SizedBox(width: 12),
                       const Expanded(
                         child: Text(
-                          'Retrait Virtuel',
+                          'Flot',
                           style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                         ),
                       ),
@@ -246,6 +254,24 @@ class _CreateRetraitVirtuelDialogState extends State<CreateRetraitVirtuelDialog>
                           ),
                         );
                       }
+                      
+                      // IMPORTANT: Si la SIM sélectionnée existe dans la nouvelle liste, mettre à jour sa référence
+                      if (_selectedSim != null) {
+                        final updatedSim = activeSims.firstWhere(
+                          (s) => s.numero == _selectedSim!.numero,
+                          orElse: () => _selectedSim!,
+                        );
+                        // Mettre à jour si le solde a changé
+                        if (updatedSim.soldeActuel != _selectedSim!.soldeActuel) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) {
+                              setState(() {
+                                _selectedSim = updatedSim;
+                              });
+                            }
+                          });
+                        }
+                      }
 
                       return DropdownButtonFormField<SimModel>(
                         value: _selectedSim,
@@ -257,7 +283,7 @@ class _CreateRetraitVirtuelDialogState extends State<CreateRetraitVirtuelDialog>
                         items: activeSims.map((sim) {
                           return DropdownMenuItem(
                             value: sim,
-                            child: Text('${sim.numero} (${sim.operateur}) - Solde: \$${sim.soldeActuel.toStringAsFixed(2)}'),
+                            child: Text('${sim.numero} (${sim.operateur})'),
                           );
                         }).toList(),
                         onChanged: (value) {
@@ -275,15 +301,12 @@ class _CreateRetraitVirtuelDialogState extends State<CreateRetraitVirtuelDialog>
                   // Montant
                   TextFormField(
                     controller: _montantController,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Montant du retrait *',
                       hintText: '100.00',
-                      border: const OutlineInputBorder(),
-                      prefixIcon: const Icon(Icons.attach_money),
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.attach_money),
                       suffixText: 'USD',
-                      helperText: _selectedSim != null 
-                          ? 'Solde disponible: \$${_selectedSim!.soldeActuel.toStringAsFixed(2)}'
-                          : null,
                     ),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     validator: (value) {
@@ -293,9 +316,6 @@ class _CreateRetraitVirtuelDialogState extends State<CreateRetraitVirtuelDialog>
                       final montant = double.tryParse(value);
                       if (montant == null || montant <= 0) {
                         return 'Montant invalide';
-                      }
-                      if (_selectedSim != null && montant > _selectedSim!.soldeActuel) {
-                        return 'Solde insuffisant';
                       }
                       return null;
                     },

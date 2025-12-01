@@ -23,52 +23,88 @@ class _ServeClientDialogState extends State<ServeClientDialog> {
   final _formKey = GlobalKey<FormState>();
   final _clientNomController = TextEditingController();
   final _clientTelephoneController = TextEditingController();
-  final _commissionPercentController = TextEditingController();
+  final _pourcentageController = TextEditingController();  // Saisir le pourcentage
   
   bool _isLoading = false;
-  double _montantCashCalcule = 0.0;
-  double _commissionCalculee = 0.0;
+  bool _isDisposed = false; // Track disposal state
+  double _montantCashCalcule = 0.0;  // Calculé à partir du %
+  double _commissionCalculee = 0.0;  // Calculée à partir du %
 
   @override
   void initState() {
     super.initState();
-    // Calculer le % initial à partir des frais existants
-    if (widget.transaction.montantVirtuel > 0) {
-      final percentInitial = (widget.transaction.frais / widget.transaction.montantVirtuel) * 100;
-      _commissionPercentController.text = percentInitial.toStringAsFixed(2);
-    } else {
-      _commissionPercentController.text = '0';
-    }
-    _calculateMontantCash();
+    // Par défaut, le pourcentage = 0
+    _pourcentageController.text = '0';
+    _calculateFromPercentage();
   }
 
   @override
   void dispose() {
+    _isDisposed = true;
     _clientNomController.dispose();
     _clientTelephoneController.dispose();
-    _commissionPercentController.dispose();
+    _pourcentageController.dispose();
     super.dispose();
   }
 
-  void _calculateMontantCash() {
-    final percent = double.tryParse(_commissionPercentController.text) ?? 0.0;
-    final commission = (widget.transaction.montantVirtuel * percent) / 100;
+  /// Calculer le montant cash et la commission à partir du pourcentage
+  /// Formule: Montant Cash = Montant Virtuel - (Montant Virtuel * Pourcentage / 100)
+  /// Commission = Montant Virtuel * Pourcentage / 100
+  void _calculateFromPercentage() {
+    if (_isDisposed || !mounted) return;
+    
+    final pourcentage = double.tryParse(_pourcentageController.text) ?? 0.0;
+    final montantVirtuel = widget.transaction.montantVirtuel;
+    
+    // Calculer la commission basée sur le pourcentage du montant virtuel
+    final commission = (montantVirtuel * pourcentage) / 100;
+    // Montant cash = Montant virtuel - Commission
+    final montantCash = montantVirtuel - commission;
+    
     setState(() {
       _commissionCalculee = commission;
-      _montantCashCalcule = widget.transaction.montantVirtuel - commission;
+      _montantCashCalcule = montantCash;
     });
+  }
+  
+  /// Calculer le pourcentage des frais par rapport au montant virtuel
+  double _calculatePercentageVirtuel() {
+    if (widget.transaction.montantVirtuel == 0) return 0.0;
+    return (_commissionCalculee / widget.transaction.montantVirtuel) * 100;
+  }
+  
+  /// Calculer le pourcentage des frais par rapport au montant cash
+  double _calculatePercentageCash() {
+    if (_montantCashCalcule == 0) return 0.0;
+    return (_commissionCalculee / _montantCashCalcule) * 100;
   }
 
   Future<void> _submit() async {
+    if (_isDisposed || !mounted) return;
+    
     if (!_formKey.currentState!.validate()) return;
 
-    final percent = double.parse(_commissionPercentController.text);
-    final commission = (widget.transaction.montantVirtuel * percent) / 100;
-    final montantCash = widget.transaction.montantVirtuel - commission;
+    final pourcentage = double.parse(_pourcentageController.text);
+    final montantCash = _montantCashCalcule;
+    final commission = _commissionCalculee;
+    final percentVirtuel = pourcentage;
+    final percentCash = montantCash > 0 ? (commission / montantCash) * 100 : 0.0;
+    
+    // Vérification: le pourcentage ne peut pas être négatif ou > 100
+    if (pourcentage < 0 || pourcentage > 100) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Le pourcentage doit être entre 0 et 100'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     // Confirmation
     final confirm = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('Confirmation'),
         content: Column(
@@ -81,8 +117,11 @@ class _ServeClientDialogState extends State<ServeClientDialog> {
             Text('Téléphone: ${_clientTelephoneController.text}'),
             const SizedBox(height: 8),
             Text('Montant Virtuel: \$${widget.transaction.montantVirtuel.toStringAsFixed(2)}'),
-            Text('Commission: ${percent.toStringAsFixed(2)}% = \$${commission.toStringAsFixed(2)}', 
+            Text('Frais: \$${commission.toStringAsFixed(2)} (${percentVirtuel.toStringAsFixed(2)}% saisi)', 
               style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.w600)),
+            if (montantCash > 0)
+              Text('  = ${percentCash.toStringAsFixed(2)}% du cash servi',
+                style: const TextStyle(color: Colors.orange, fontSize: 12)),
             const Divider(),
             Text(
               'Cash à remettre: \$${montantCash.toStringAsFixed(2)}',
@@ -104,9 +143,11 @@ class _ServeClientDialogState extends State<ServeClientDialog> {
       ),
     );
 
-    if (confirm != true) return;
+    if (confirm != true || _isDisposed || !mounted) return;
 
-    setState(() => _isLoading = true);
+    if (!_isDisposed && mounted) {
+      setState(() => _isLoading = true);
+    }
 
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
@@ -124,7 +165,7 @@ class _ServeClientDialogState extends State<ServeClientDialog> {
         modifiedBy: currentUser.username,
       );
 
-      if (mounted) {
+      if (!_isDisposed && mounted) {
         if (success) {
           // Imprimer le bordereau de retrait
           await _printWithdrawalReceipt(
@@ -137,7 +178,7 @@ class _ServeClientDialogState extends State<ServeClientDialog> {
           
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('✅ Client servi!\nCommission: ${percent.toStringAsFixed(2)}% (\$${commission.toStringAsFixed(2)})\nCash remis: \$${montantCash.toStringAsFixed(2)}'),
+              content: Text('✅ Client servi!\nFrais: \$${commission.toStringAsFixed(2)} (${_calculatePercentageVirtuel().toStringAsFixed(2)}%)\nCash remis: \$${montantCash.toStringAsFixed(2)}'),
               backgroundColor: Colors.green,
               duration: const Duration(seconds: 4),
             ),
@@ -148,18 +189,25 @@ class _ServeClientDialogState extends State<ServeClientDialog> {
             SnackBar(
               content: Text('❌ ${VirtualTransactionService.instance.errorMessage ?? "Erreur"}'),
               backgroundColor: Colors.red,
+              duration: const Duration(seconds: 4),
             ),
           );
         }
       }
     } catch (e) {
-      if (mounted) {
+      debugPrint('❌ [ServeClientDialog] Erreur: $e');
+      
+      if (!_isDisposed && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ Erreur: $e')),
+          SnackBar(
+            content: Text('❌ Erreur: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
         );
       }
     } finally {
-      if (mounted) {
+      if (!_isDisposed && mounted) {
         setState(() => _isLoading = false);
       }
     }
@@ -213,19 +261,39 @@ class _ServeClientDialogState extends State<ServeClientDialog> {
                         ),
                         const SizedBox(height: 8),
                         _buildInfoRow('SIM', widget.transaction.simNumero),
-                        _buildInfoRow('Virtuel', '\$${widget.transaction.montantVirtuel.toStringAsFixed(2)}'),
+                        _buildInfoRow('Montant Virtuel', '\$${widget.transaction.montantVirtuel.toStringAsFixed(2)}'),
                         const Divider(height: 16),
                         Row(
                           children: [
-                            const Text('Cash à servir:', style: TextStyle(fontWeight: FontWeight.w600)),
+                            const Text('Frais calculés:', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.orange)),
                             const Spacer(),
-                            Text(
-                              '\$${_montantCashCalcule.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.green,
-                              ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  '\$${_commissionCalculee.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.orange,
+                                  ),
+                                ),
+                                Text(
+                                  '${_calculatePercentageVirtuel().toStringAsFixed(2)}% saisi',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.orange,
+                                  ),
+                                ),
+                                if (_calculatePercentageCash() > 0)
+                                  Text(
+                                    '${_calculatePercentageCash().toStringAsFixed(2)}% du cash',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.orange,
+                                    ),
+                                  ),
+                              ],
                             ),
                           ],
                         ),
@@ -278,33 +346,33 @@ class _ServeClientDialogState extends State<ServeClientDialog> {
                   ),
                   const SizedBox(height: 16),
                   
-                  // Commission en pourcentage (modifiable)
+                  // Pourcentage de frais (à saisir par l'agent)
                   TextFormField(
-                    controller: _commissionPercentController,
+                    controller: _pourcentageController,
                     decoration: InputDecoration(
-                      labelText: 'Commission (%) *',
-                      hintText: '0.00',
+                      labelText: 'Pourcentage de frais (%) *',
+                      hintText: '2.0',
                       border: const OutlineInputBorder(),
                       prefixIcon: const Icon(Icons.percent),
                       suffixText: '%',
-                      helperText: 'Commission = ${_commissionCalculee.toStringAsFixed(2)} USD',
-                      helperStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
+                      helperText: 'Cash calculé: ${_montantCashCalcule.toStringAsFixed(2)} USD | Frais: ${_commissionCalculee.toStringAsFixed(2)} USD',
+                      helperStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green),
                     ),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
-                        return 'La commission est requise';
+                        return 'Le pourcentage est requis';
                       }
-                      final percent = double.tryParse(value);
-                      if (percent == null || percent < 0) {
+                      final pourcentage = double.tryParse(value);
+                      if (pourcentage == null || pourcentage < 0) {
                         return 'Pourcentage invalide';
                       }
-                      if (percent > 100) {
-                        return 'Maximum 100%';
+                      if (pourcentage > 100) {
+                        return 'Le pourcentage ne peut pas dépasser 100%';
                       }
                       return null;
                     },
-                    onChanged: (value) => _calculateMontantCash(),
+                    onChanged: (value) => _calculateFromPercentage(),
                   ),
                   const SizedBox(height: 24),
                   
@@ -438,8 +506,8 @@ class _ServeClientDialogState extends State<ServeClientDialog> {
         codeOps: transaction.reference, // Utiliser la référence comme code
         modePaiement: ModePaiement.cash,
         statut: OperationStatus.validee,
-        notes: 'Retrait Virtuel (${transaction.simNumero})\nTél: $clientTelephone',
-        observation: 'Mobile Money - SIM: ${transaction.simNumero}',
+        notes: 'Flot (${transaction.simNumero})\nTél: $clientTelephone',
+        observation: 'SIM: ${transaction.simNumero}',
         dateOp: DateTime.now(),
         createdAt: transaction.dateEnregistrement,
         lastModifiedAt: DateTime.now(),

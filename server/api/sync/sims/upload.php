@@ -1,72 +1,70 @@
 <?php
-// Désactiver l'affichage des erreurs pour éviter de corrompre le JSON
-ini_set('display_errors', '0');
-error_reporting(E_ALL);
-
-// Capturer TOUTES les erreurs et les convertir en JSON
-set_error_handler(function($errno, $errstr, $errfile, $errline) {
-    throw new ErrorException($errstr, 0, $errno, $errfile, $errline);
-});
-
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, Accept');
+header('Access-Control-Max-Age: 86400');
 
+// Gestion des requêtes OPTIONS (preflight)
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
 }
 
-require_once __DIR__ . '/../../config/database.php';
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    echo json_encode(['success' => false, 'message' => 'Méthode non autorisée']);
+    exit();
+}
+
+require_once '../../../config/database.php';
 
 try {
-    $db = new Database();
-    $conn = $db->getConnection();
+    // Récupération des données JSON
+    $input = file_get_contents('php://input');
+    $data = json_decode($input, true);
     
-    // Lire les données JSON
-    $json = file_get_contents('php://input');
-    $data = json_decode($json, true);
-    
-    if (!$data || !isset($data['entities']) || !is_array($data['entities'])) {
-        throw new Exception('Format de données invalide');
+    if (!$data || !isset($data['entities'])) {
+        throw new Exception('Données JSON invalides');
     }
     
     $entities = $data['entities'];
-    $successCount = 0;
-    $errorCount = 0;
+    $userId = $data['user_id'] ?? 'unknown';
+    $timestamp = $data['timestamp'] ?? date('c');
+    
+    $uploaded = 0;
+    $updated = 0;
     $errors = [];
     
-    error_log("📱 [SIMs Upload] Réception de " . count($entities) . " SIMs");
+    error_log("SIMs upload - received: " . count($entities) . " entities");
     
-    foreach ($entities as $index => $sim) {
+    foreach ($entities as $entity) {
         try {
+            // Ajouter les métadonnées de synchronisation
+            $entity['last_modified_at'] = $timestamp;
+            $entity['last_modified_by'] = $userId;
+            
             // Validation des champs obligatoires
-            if (empty($sim['numero'])) {
-                throw new Exception("Numéro de SIM manquant pour l'entité $index");
+            if (empty($entity['numero'])) {
+                throw new Exception("Numéro de SIM manquant");
             }
-            if (empty($sim['operateur'])) {
-                throw new Exception("Opérateur manquant pour l'entité $index");
+            if (empty($entity['operateur'])) {
+                throw new Exception("Opérateur manquant pour {$entity['numero']}");
             }
-            if (empty($sim['shop_id'])) {
-                throw new Exception("shop_id manquant pour l'entité $index");
+            if (!isset($entity['shop_id']) || $entity['shop_id'] <= 0) {
+                throw new Exception("shop_id manquant ou invalide pour {$entity['numero']}");
             }
             
-            $simId = $sim['id'] ?? null;
+            $shopId = (int)$entity['shop_id'];
             
-            // Vérifier si la SIM existe déjà
-            $checkStmt = $conn->prepare("SELECT id FROM sims WHERE numero = ? LIMIT 1");
-            $checkStmt->execute([$sim['numero']]);
+            // Vérifier si la SIM existe déjà (par numero)
+            $checkStmt = $pdo->prepare("SELECT id FROM sims WHERE numero = ? LIMIT 1");
+            $checkStmt->execute([$entity['numero']]);
             $existing = $checkStmt->fetch(PDO::FETCH_ASSOC);
             
-            if ($existing && (!$simId || $existing['id'] != $simId)) {
-                // SIM existe déjà avec un autre ID - UPDATE
-                $simId = $existing['id'];
-            }
-            
-            if ($simId && $existing) {
+            if ($existing) {
                 // UPDATE
-                $stmt = $conn->prepare("
+                $stmt = $pdo->prepare("
                     UPDATE sims SET
                         numero = ?,
                         operateur = ?,
@@ -87,26 +85,27 @@ try {
                 ");
                 
                 $stmt->execute([
-                    $sim['numero'],
-                    $sim['operateur'],
-                    $sim['shop_id'],
-                    $sim['shop_designation'] ?? null,
-                    $sim['solde_initial'] ?? 0,
-                    $sim['solde_actuel'] ?? 0,
-                    $sim['statut'] ?? 'active',
-                    $sim['motif_suspension'] ?? null,
-                    $sim['date_creation'] ?? date('Y-m-d H:i:s'),
-                    $sim['date_suspension'] ?? null,
-                    $sim['cree_par'] ?? null,
-                    $sim['last_modified_at'] ?? date('Y-m-d H:i:s'),
-                    $sim['last_modified_by'] ?? null,
-                    $simId
+                    $entity['numero'],
+                    $entity['operateur'],
+                    $shopId,
+                    $entity['shop_designation'] ?? null,
+                    $entity['solde_initial'] ?? 0,
+                    $entity['solde_actuel'] ?? 0,
+                    $entity['statut'] ?? 'active',
+                    $entity['motif_suspension'] ?? null,
+                    $entity['date_creation'] ?? date('Y-m-d H:i:s'),
+                    $entity['date_suspension'] ?? null,
+                    $entity['cree_par'] ?? null,
+                    $entity['last_modified_at'],
+                    $entity['last_modified_by'],
+                    $existing['id']
                 ]);
                 
-                error_log("✏️ SIM mis à jour: {$sim['numero']} (ID: $simId)");
+                $updated++;
+                error_log("SIM updated: {$entity['numero']}");
             } else {
                 // INSERT
-                $stmt = $conn->prepare("
+                $stmt = $pdo->prepare("
                     INSERT INTO sims (
                         numero, operateur, shop_id, shop_designation,
                         solde_initial, solde_actuel, statut, motif_suspension,
@@ -117,50 +116,55 @@ try {
                 ");
                 
                 $stmt->execute([
-                    $sim['numero'],
-                    $sim['operateur'],
-                    $sim['shop_id'],
-                    $sim['shop_designation'] ?? null,
-                    $sim['solde_initial'] ?? 0,
-                    $sim['solde_actuel'] ?? 0,
-                    $sim['statut'] ?? 'active',
-                    $sim['motif_suspension'] ?? null,
-                    $sim['date_creation'] ?? date('Y-m-d H:i:s'),
-                    $sim['date_suspension'] ?? null,
-                    $sim['cree_par'] ?? null,
-                    $sim['last_modified_at'] ?? date('Y-m-d H:i:s'),
-                    $sim['last_modified_by'] ?? null
+                    $entity['numero'],
+                    $entity['operateur'],
+                    $shopId,
+                    $entity['shop_designation'] ?? null,
+                    $entity['solde_initial'] ?? 0,
+                    $entity['solde_actuel'] ?? 0,
+                    $entity['statut'] ?? 'active',
+                    $entity['motif_suspension'] ?? null,
+                    $entity['date_creation'] ?? date('Y-m-d H:i:s'),
+                    $entity['date_suspension'] ?? null,
+                    $entity['cree_par'] ?? null,
+                    $entity['last_modified_at'],
+                    $entity['last_modified_by']
                 ]);
                 
-                $simId = $conn->lastInsertId();
-                error_log("➕ Nouvelle SIM insérée: {$sim['numero']} (ID: $simId)");
+                $uploaded++;
+                error_log("SIM inserted: {$entity['numero']}");
             }
             
-            $successCount++;
-            
         } catch (Exception $e) {
-            $errorCount++;
-            $errorMsg = "Erreur SIM {$sim['numero']}: " . $e->getMessage();
-            $errors[] = $errorMsg;
-            error_log("❌ $errorMsg");
+            $errors[] = [
+                'entity_id' => $entity['id'] ?? 'unknown',
+                'error' => $e->getMessage()
+            ];
+            error_log("SIM error: " . $e->getMessage());
         }
     }
     
-    error_log("✅ Upload SIMs terminé: $successCount succès, $errorCount erreurs");
-    
-    echo json_encode([
+    $response = [
         'success' => true,
-        'message' => "Upload terminé: $successCount SIMs synchronisées",
-        'uploaded' => $successCount,
-        'errors' => $errorCount,
-        'error_details' => $errors
-    ]);
+        'message' => 'Upload terminé',
+        'uploaded' => $uploaded,
+        'updated' => $updated,
+        'total' => count($entities),
+        'errors' => $errors,
+        'timestamp' => date('c')
+    ];
+    
+    error_log("SIMs upload complete: $uploaded inserted, $updated updated");
+    
+    echo json_encode($response);
     
 } catch (Exception $e) {
-    error_log("❌ [SIMs Upload] Erreur: " . $e->getMessage());
+    error_log("SIMs upload error: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
     http_response_code(500);
     echo json_encode([
         'success' => false,
-        'message' => $e->getMessage()
+        'message' => 'Erreur serveur: ' . $e->getMessage(),
+        'timestamp' => date('c')
     ]);
 }
+?>

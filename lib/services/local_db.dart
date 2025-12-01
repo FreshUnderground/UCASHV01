@@ -18,6 +18,7 @@ import '../models/sim_movement_model.dart';
 import '../models/virtual_transaction_model.dart';
 import '../models/retrait_virtuel_model.dart';
 import '../models/cloture_virtuelle_model.dart';
+import '../models/depot_client_model.dart';
 
 class LocalDB {
   static final LocalDB _instance = LocalDB._internal();
@@ -472,22 +473,18 @@ class LocalDB {
     final keys = prefs.getKeys();
     final shopKeys = keys.where((key) => key.startsWith('shop_')).toList();
     
-    debugPrint('🔍 getAllShops: ${shopKeys.length} clés shop_ trouvées dans SharedPreferences');
-    
     for (String key in shopKeys) {
       final shopData = prefs.getString(key);
       if (shopData != null) {
         try {
           final shop = ShopModel.fromJson(jsonDecode(shopData));
           shops.add(shop);
-          debugPrint('   ✅ Shop chargé: ${shop.designation} (ID: ${shop.id})');
         } catch (e) {
-          debugPrint('   ❌ Erreur parsing shop $key: $e');
+          debugPrint('❌ Erreur parsing shop $key: $e');
         }
       }
     }
     
-    debugPrint('🏪 getAllShops: ${shops.length} shops chargés au total');
     return shops;
   }
 
@@ -562,13 +559,11 @@ class LocalDB {
               agents.add(AgentModel.fromJson(agentJson));
             } else {
               // Supprimer les données corrompues
-              debugPrint('Suppression de données agent corrompues: $key');
               await prefs.remove(key);
             }
           }
         } catch (e) {
           // En cas d'erreur de parsing, supprimer la donnée corrompue
-          debugPrint('Erreur lors du parsing de l\'agent $key: $e');
           await prefs.remove(key);
         }
       }
@@ -1554,12 +1549,16 @@ class LocalDB {
 
   /// Récupérer la clôture de caisse d'une date spécifique pour un shop
   Future<ClotureCaisseModel?> getClotureCaisseByDate(int shopId, DateTime date) async {
+    debugPrint('🔍 [getClotureCaisseByDate] Recherche clôture pour shop $shopId, date: ${date.toIso8601String().split('T')[0]}');
+    
     final clotures = await getCloturesCaisseByShop(shopId);
+    debugPrint('📊 [getClotureCaisseByDate] ${clotures.length} clôtures trouvées pour le shop $shopId');
     
     // Chercher la clôture qui correspond à cette date exacte
     for (var cloture in clotures) {
+      debugPrint('🔎 [getClotureCaisseByDate] Comparaison avec clôture date: ${cloture.dateCloture.toIso8601String().split('T')[0]}');
       if (_isSameDay(cloture.dateCloture, date)) {
-        debugPrint('📊 Clôture trouvée pour le ${date.toIso8601String().split('T')[0]}');
+        debugPrint('✅ Clôture trouvée pour le ${date.toIso8601String().split('T')[0]}');
         debugPrint('   Solde Saisi: ${cloture.soldeSaisiTotal} USD');
         debugPrint('   Solde Calculé: ${cloture.soldeCalculeTotal} USD');
         debugPrint('   Écart: ${cloture.ecartTotal} USD');
@@ -1616,6 +1615,20 @@ class LocalDB {
   Future<void> updateSim(SimModel sim) async {
     if (sim.id == null) throw Exception('SIM ID is required for update');
     await saveSim(sim);
+  }
+  
+  /// Mettre à jour uniquement le solde d'une SIM
+  Future<void> updateSimSolde(String simNumero, double nouveauSolde) async {
+    final sims = await getAllSims();
+    final sim = sims.where((s) => s.numero == simNumero).firstOrNull;
+    
+    if (sim == null) {
+      throw Exception('SIM $simNumero non trouvée');
+    }
+    
+    final simUpdated = sim.copyWith(soldeActuel: nouveauSolde);
+    await updateSim(simUpdated);
+    debugPrint('💰 Solde SIM mis à jour: $simNumero = \$${nouveauSolde.toStringAsFixed(2)}');
   }
 
   /// Récupérer toutes les SIMs
@@ -1743,6 +1756,8 @@ class LocalDB {
     final transactions = <VirtualTransactionModel>[];
     
     final keys = prefs.getKeys();
+    debugPrint('🔍 [LocalDB] getAllVirtualTransactions - Found ${keys.where((k) => k.startsWith('virtual_transaction_')).length} virtual transaction keys');
+    
     for (String key in keys) {
       if (key.startsWith('virtual_transaction_')) {
         try {
@@ -1750,31 +1765,46 @@ class LocalDB {
           if (transactionData != null) {
             final transaction = VirtualTransactionModel.fromJson(jsonDecode(transactionData));
             
+            debugPrint('🔍 [LocalDB] Found transaction: ${transaction.reference} (shop: ${transaction.shopId} (${transaction.shopId.runtimeType}), status: ${transaction.statut.name})');
+            
             // Appliquer les filtres
             bool matches = true;
             
-            if (shopId != null && transaction.shopId != shopId) {
-              matches = false;
+            if (shopId != null) {
+              debugPrint('🔍 [LocalDB] Checking shopId filter: expected $shopId (${shopId.runtimeType}), got ${transaction.shopId} (${transaction.shopId.runtimeType})');
+              if (transaction.shopId != shopId) {
+                debugPrint('  ❌ Filtered out - shopId mismatch: expected $shopId, got ${transaction.shopId}');
+                matches = false;
+              } else {
+                debugPrint('  ✅ shopId matches: ${transaction.shopId}');
+              }
             }
             
             if (simNumero != null && transaction.simNumero != simNumero) {
+              debugPrint('  ❌ Filtered out - simNumero mismatch: expected $simNumero, got ${transaction.simNumero}');
               matches = false;
             }
             
             if (statut != null && transaction.statut != statut) {
+              debugPrint('  ❌ Filtered out - statut mismatch: expected ${statut.name}, got ${transaction.statut.name}');
               matches = false;
             }
             
             if (dateDebut != null && transaction.dateEnregistrement.isBefore(dateDebut)) {
+              debugPrint('  ❌ Filtered out - dateDebut mismatch: ${transaction.dateEnregistrement} is before $dateDebut');
               matches = false;
             }
             
             if (dateFin != null && transaction.dateEnregistrement.isAfter(dateFin)) {
+              debugPrint('  ❌ Filtered out - dateFin mismatch: ${transaction.dateEnregistrement} is after $dateFin');
               matches = false;
             }
             
             if (matches) {
+              debugPrint('  ✅ Included transaction: ${transaction.reference}');
               transactions.add(transaction);
+            } else {
+              debugPrint('  ❌ Excluded transaction: ${transaction.reference}');
             }
           }
         } catch (e) {
@@ -1782,6 +1812,8 @@ class LocalDB {
         }
       }
     }
+    
+    debugPrint('📊 [LocalDB] getAllVirtualTransactions returning ${transactions.length} transactions');
     
     // Trier par date (plus récents en premier)
     transactions.sort((a, b) => b.dateEnregistrement.compareTo(a.dateEnregistrement));
@@ -1798,10 +1830,13 @@ class LocalDB {
     return null;
   }
 
-  /// Récupérer une transaction virtuelle par référence
+  /// Récupérer une transaction virtuelle par référence (insensible à la casse et aux espaces)
   Future<VirtualTransactionModel?> getVirtualTransactionByReference(String reference) async {
     final prefs = await database;
     final keys = prefs.getKeys();
+    
+    // Normaliser la référence recherchée
+    final normalizedReference = reference.trim().toLowerCase();
     
     for (String key in keys) {
       if (key.startsWith('virtual_transaction_')) {
@@ -1809,7 +1844,8 @@ class LocalDB {
           final transactionData = prefs.getString(key);
           if (transactionData != null) {
             final transaction = VirtualTransactionModel.fromJson(jsonDecode(transactionData));
-            if (transaction.reference == reference) {
+            // Comparaison insensible à la casse et aux espaces
+            if (transaction.reference.trim().toLowerCase() == normalizedReference) {
               return transaction;
             }
           }
@@ -1838,7 +1874,7 @@ class LocalDB {
     debugPrint('🗑️ Transaction virtuelle supprimée: ID=$transactionId');
   }
 
-  // === CRUD RETRAITS VIRTUELS ===
+  // === CRUD FLOTS ===
   
   /// Sauvegarder un retrait virtuel
   Future<RetraitVirtuelModel> saveRetraitVirtuel(RetraitVirtuelModel retrait) async {
@@ -1851,7 +1887,7 @@ class LocalDB {
           )
         : retrait;
     await prefs.setString('retrait_virtuel_$retraitId', jsonEncode(updatedRetrait.toJson()));
-    debugPrint('Retrait virtuel sauvegarde: ID=$retraitId, Montant=\$${updatedRetrait.montant}');
+    debugPrint('Flot sauvegarde: ID=$retraitId, Montant=\$${updatedRetrait.montant}');
     return updatedRetrait;
   }
 
@@ -1927,7 +1963,7 @@ class LocalDB {
   Future<void> deleteRetraitVirtuel(int retraitId) async {
     final prefs = await database;
     await prefs.remove('retrait_virtuel_$retraitId');
-    debugPrint('Retrait virtuel supprime: ID=$retraitId');
+    debugPrint('Flot supprime: ID=$retraitId');
   }
 
   // === CRUD CLOTURES VIRTUELLES ===
@@ -2023,6 +2059,104 @@ class LocalDB {
     final prefs = await database;
     await prefs.remove('cloture_virtuelle_$clotureId');
     debugPrint('Cloture virtuelle supprimee: ID=$clotureId');
+  }
+
+  // === CRUD DÉPÔTS CLIENTS ===
+  
+  /// Insérer un nouveau dépôt client
+  Future<int> insertDepotClient(DepotClientModel depot) async {
+    final prefs = await database;
+    final depotId = await _generateSequentialId('depot_client_');
+    final depotWithId = DepotClientModel(
+      id: depotId,
+      shopId: depot.shopId,
+      simNumero: depot.simNumero,
+      montant: depot.montant,
+      telephoneClient: depot.telephoneClient,
+      dateDepot: depot.dateDepot,
+      userId: depot.userId,
+    );
+    
+    await prefs.setString('depot_client_$depotId', jsonEncode(depotWithId.toMap()));
+    debugPrint('💰 Dépôt client enregistré: ID=$depotId, Montant=\$${depot.montant}');
+    return depotId;
+  }
+  
+  /// Mettre à jour un dépôt client
+  Future<void> updateDepotClient(DepotClientModel depot) async {
+    if (depot.id == null) throw Exception('Depot ID is required for update');
+    final prefs = await database;
+    await prefs.setString('depot_client_${depot.id}', jsonEncode(depot.toMap()));
+    debugPrint('💰 Dépôt client mis à jour: ID=${depot.id}, Montant=\$${depot.montant}');
+  }
+  
+  /// Récupérer tous les dépôts clients
+  Future<List<DepotClientModel>> getAllDepotsClients({
+    int? shopId,
+    DateTime? dateDebut,
+    DateTime? dateFin,
+  }) async {
+    final prefs = await database;
+    final depots = <DepotClientModel>[];
+    
+    final keys = prefs.getKeys();
+    for (String key in keys) {
+      if (key.startsWith('depot_client_')) {
+        try {
+          final depotData = prefs.getString(key);
+          if (depotData != null) {
+            final depot = DepotClientModel.fromMap(jsonDecode(depotData));
+            
+            // Filtres
+            bool matches = true;
+            
+            if (shopId != null && depot.shopId != shopId) {
+              matches = false;
+            }
+            
+            if (dateDebut != null && depot.dateDepot.isBefore(dateDebut)) {
+              matches = false;
+            }
+            
+            if (dateFin != null && depot.dateDepot.isAfter(dateFin)) {
+              matches = false;
+            }
+            
+            if (matches) {
+              depots.add(depot);
+            }
+          }
+        } catch (e) {
+          debugPrint('Erreur chargement dépôt client $key: $e');
+        }
+      }
+    }
+    
+    // Trier par date (plus récents en premier)
+    depots.sort((a, b) => b.dateDepot.compareTo(a.dateDepot));
+    return depots;
+  }
+  
+  /// Récupérer un dépôt client par ID
+  Future<DepotClientModel?> getDepotClientById(int depotId) async {
+    final prefs = await database;
+    final depotData = prefs.getString('depot_client_$depotId');
+    
+    if (depotData == null) return null;
+    
+    try {
+      return DepotClientModel.fromMap(jsonDecode(depotData));
+    } catch (e) {
+      debugPrint('Erreur chargement dépôt client $depotId: $e');
+      return null;
+    }
+  }
+  
+  /// Supprimer un dépôt client
+  Future<void> deleteDepotClient(int depotId) async {
+    final prefs = await database;
+    await prefs.remove('depot_client_$depotId');
+    debugPrint('Dépôt client supprimé: ID=$depotId');
   }
 
 }

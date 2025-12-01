@@ -5,12 +5,14 @@ import '../../services/shop_service.dart';
 import 'report_filters_widget.dart';
 import 'mouvements_caisse_report.dart';
 import '../rapport_cloture_widget.dart';
+import '../rapportcloture.dart';
 import 'historique_clotures_report.dart';
 import 'credits_inter_shops_report.dart';
 import 'commissions_report.dart';
 import '../cloture_agent_widget.dart';
 
 import 'admin_flot_report.dart';
+import 'company_net_position_report.dart';
 import '../../utils/responsive_utils.dart';
 import '../../theme/ucash_typography.dart';
 import '../../theme/ucash_containers.dart';
@@ -30,6 +32,7 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
   int? _selectedShopId;
 
   final List<Tab> _tabs = [
+    const Tab(icon: Icon(Icons.business), text: 'Situation Nette Entreprise'),
     const Tab(icon: Icon(Icons.account_balance), text: 'Mouvements de Caisse'),
     const Tab(icon: Icon(Icons.receipt_long), text: 'Clôture Journalière'),
     const Tab(icon: Icon(Icons.list_alt), text: 'Historique Clôtures'),
@@ -39,6 +42,7 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
   ];
 
   final List<Tab> _mobileTabs = [
+    const Tab(icon: Icon(Icons.business), text: 'Entreprise'),
     const Tab(icon: Icon(Icons.account_balance), text: 'Caisse'),
     const Tab(icon: Icon(Icons.receipt_long), text: 'Clôture'),
     const Tab(icon: Icon(Icons.list_alt), text: 'Clôtures'),
@@ -250,6 +254,9 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
                 child: TabBarView(
                   controller: _tabController,
                   children: [
+                    // Situation Nette Entreprise
+                    const CompanyNetPositionReport(),
+                    
                     // Mouvements de caisse (EXACTEMENT comme l'agent)
                     MouvementsCaisseReport(
                       shopId: _selectedShopId,
@@ -260,7 +267,7 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
                     
                     // Clôture journalière (EXACTEMENT comme l'agent)
                     _selectedShopId != null
-                      ? ClotureAgentWidget(
+                      ? RapportCloture(
                           shopId: _selectedShopId!,
                           isAdminView: true, // Admin ne peut pas clôturer
                         )

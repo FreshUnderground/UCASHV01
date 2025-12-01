@@ -15,7 +15,7 @@ import '../widgets/offline_banner.dart';
 import '../widgets/flot_management_widget.dart';
 import '../widgets/comptes_speciaux_widget.dart';
 import '../widgets/sync_monitor_widget.dart';
-import '../widgets/virtual_transactions_widget.dart';
+import '../widgets/virtual_transactions_widget.dart' as virtual_widget;
 import '../widgets/language_selector.dart';
 import '../widgets/agent_deletion_validation_widget.dart';
 import '../services/deletion_service.dart';
@@ -541,7 +541,15 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
     ];
 
     return BottomNavigationBar(
-      currentIndex: bottomNavItems.indexWhere((item) => item['index'] == _selectedIndex),
+      currentIndex: (() {
+        final index = bottomNavItems.indexWhere((item) => item['index'] == _selectedIndex);
+        // Si _selectedIndex n'est pas dans bottomNavItems, retourner 0 (Opérations)
+        if (index == -1) {
+          debugPrint('⚠️ [BottomNav] _selectedIndex $_selectedIndex non trouvé dans bottomNavItems, defaulting to 0');
+          return 0;
+        }
+        return index;
+      })(),
       onTap: (bottomIndex) {
         setState(() {
           _selectedIndex = bottomNavItems[bottomIndex]['index'] as int;
@@ -657,7 +665,7 @@ Widget _buildMainContent() {
   }
 
   Widget _buildVirtuelContent() {
-    return const VirtualTransactionsWidget();
+    return const virtual_widget.VirtualTransactionsWidget();
   }
 
   Future<void> _handleLogout() async {

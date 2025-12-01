@@ -1,192 +1,112 @@
 <?php
-// Désactiver l'affichage des erreurs pour éviter de corrompre le JSON
-ini_set('display_errors', '0');
-error_reporting(E_ALL);
-
-// Capturer TOUTES les erreurs et les convertir en JSON
-set_error_handler(function($errno, $errstr, $errfile, $errline) {
-    throw new ErrorException($errstr, 0, $errno, $errfile, $errline);
-});
-
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, Accept');
+header('Access-Control-Max-Age: 86400');
 
+// Gestion des requêtes OPTIONS (preflight)
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
 }
 
-require_once __DIR__ . '/../../config/database.php';
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    echo json_encode(['success' => false, 'message' => 'Méthode non autorisée']);
+    exit();
+}
+
+// Activer l'affichage des erreurs PHP pour le debugging (à désactiver en production)
+// error_reporting(E_ALL);
+// ini_set('display_errors', 1);
+
+require_once '../../../config/database.php';
+require_once '../../../classes/SyncManager.php';
 
 try {
-    $db = new Database();
-    $conn = $db->getConnection();
+    // Récupération des données JSON
+    $input = file_get_contents('php://input');
     
-    // Lire les données JSON
-    $json = file_get_contents('php://input');
-    $data = json_decode($json, true);
+    // Log the raw input for debugging
+    error_log("Virtual transactions upload - Raw input: " . substr($input, 0, 1000));
     
-    if (!$data || !isset($data['entities']) || !is_array($data['entities'])) {
-        throw new Exception('Format de données invalide');
+    $data = json_decode($input, true);
+    
+    if (!$data || !isset($data['entities'])) {
+        throw new Exception('Données JSON invalides: ' . substr($input, 0, 200));
     }
     
     $entities = $data['entities'];
-    $successCount = 0;
-    $errorCount = 0;
+    $userId = $data['user_id'] ?? 'unknown';
+    $timestamp = $data['timestamp'] ?? date('c');
+    
+    $syncManager = new SyncManager($pdo);
+    $uploaded = 0;
     $errors = [];
     
-    error_log("💰 [Virtual Transactions Upload] Réception de " . count($entities) . " transactions");
-    
-    foreach ($entities as $index => $transaction) {
+    foreach ($entities as $index => $entity) {
         try {
-            // Validation des champs obligatoires
-            if (empty($transaction['reference'])) {
-                throw new Exception("Référence manquante pour l'entité $index");
-            }
-            if (!isset($transaction['montant_virtuel'])) {
-                throw new Exception("Montant virtuel manquant pour l'entité $index");
-            }
-            if (!isset($transaction['montant_cash'])) {
-                throw new Exception("Montant cash manquant pour l'entité $index");
-            }
-            if (empty($transaction['sim_numero'])) {
-                throw new Exception("Numéro SIM manquant pour l'entité $index");
-            }
-            if (empty($transaction['shop_id'])) {
-                throw new Exception("shop_id manquant pour l'entité $index");
-            }
-            if (empty($transaction['agent_id'])) {
-                throw new Exception("agent_id manquant pour l'entité $index");
+            // Log entity data for debugging
+            error_log("Processing virtual transaction entity $index: " . json_encode($entity));
+            
+            // Validation basique des champs requis
+            if (empty($entity['reference'])) {
+                throw new Exception('Référence manquante pour l\'entité ' . $index);
             }
             
-            $transactionId = $transaction['id'] ?? null;
-            
-            // Vérifier si la transaction existe déjà
-            $checkStmt = $conn->prepare("SELECT id FROM virtual_transactions WHERE reference = ? LIMIT 1");
-            $checkStmt->execute([$transaction['reference']]);
-            $existing = $checkStmt->fetch(PDO::FETCH_ASSOC);
-            
-            if ($existing && (!$transactionId || $existing['id'] != $transactionId)) {
-                // Transaction existe déjà avec un autre ID - UPDATE
-                $transactionId = $existing['id'];
+            if (!isset($entity['montant_virtuel']) || $entity['montant_virtuel'] <= 0) {
+                throw new Exception('Montant virtuel invalide pour l\'entité ' . $index);
             }
             
-            if ($transactionId && $existing) {
-                // UPDATE
-                $stmt = $conn->prepare("
-                    UPDATE virtual_transactions SET
-                        reference = ?,
-                        montant_virtuel = ?,
-                        frais = ?,
-                        montant_cash = ?,
-                        devise = ?,
-                        sim_numero = ?,
-                        shop_id = ?,
-                        shop_designation = ?,
-                        agent_id = ?,
-                        agent_username = ?,
-                        client_nom = ?,
-                        client_telephone = ?,
-                        statut = ?,
-                        date_enregistrement = ?,
-                        date_validation = ?,
-                        notes = ?,
-                        last_modified_at = ?,
-                        last_modified_by = ?,
-                        is_synced = 1,
-                        synced_at = NOW()
-                    WHERE id = ?
-                ");
-                
-                $stmt->execute([
-                    $transaction['reference'],
-                    $transaction['montant_virtuel'],
-                    $transaction['frais'] ?? 0,
-                    $transaction['montant_cash'],
-                    $transaction['devise'] ?? 'USD',
-                    $transaction['sim_numero'],
-                    $transaction['shop_id'],
-                    $transaction['shop_designation'] ?? null,
-                    $transaction['agent_id'],
-                    $transaction['agent_username'] ?? null,
-                    $transaction['client_nom'] ?? null,
-                    $transaction['client_telephone'] ?? null,
-                    $transaction['statut'] ?? 'enAttente',
-                    $transaction['date_enregistrement'] ?? date('Y-m-d H:i:s'),
-                    $transaction['date_validation'] ?? null,
-                    $transaction['notes'] ?? null,
-                    $transaction['last_modified_at'] ?? date('Y-m-d H:i:s'),
-                    $transaction['last_modified_by'] ?? null,
-                    $transactionId
-                ]);
-                
-                error_log("✏️ Transaction mise à jour: {$transaction['reference']} (ID: $transactionId)");
-            } else {
-                // INSERT
-                $stmt = $conn->prepare("
-                    INSERT INTO virtual_transactions (
-                        reference, montant_virtuel, frais, montant_cash, devise,
-                        sim_numero, shop_id, shop_designation,
-                        agent_id, agent_username,
-                        client_nom, client_telephone,
-                        statut, date_enregistrement, date_validation, notes,
-                        last_modified_at, last_modified_by,
-                        is_synced, synced_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW())
-                ");
-                
-                $stmt->execute([
-                    $transaction['reference'],
-                    $transaction['montant_virtuel'],
-                    $transaction['frais'] ?? 0,
-                    $transaction['montant_cash'],
-                    $transaction['devise'] ?? 'USD',
-                    $transaction['sim_numero'],
-                    $transaction['shop_id'],
-                    $transaction['shop_designation'] ?? null,
-                    $transaction['agent_id'],
-                    $transaction['agent_username'] ?? null,
-                    $transaction['client_nom'] ?? null,
-                    $transaction['client_telephone'] ?? null,
-                    $transaction['statut'] ?? 'enAttente',
-                    $transaction['date_enregistrement'] ?? date('Y-m-d H:i:s'),
-                    $transaction['date_validation'] ?? null,
-                    $transaction['notes'] ?? null,
-                    $transaction['last_modified_at'] ?? date('Y-m-d H:i:s'),
-                    $transaction['last_modified_by'] ?? null
-                ]);
-                
-                $transactionId = $conn->lastInsertId();
-                error_log("➕ Nouvelle transaction insérée: {$transaction['reference']} (ID: $transactionId)");
+            if (empty($entity['sim_numero'])) {
+                throw new Exception('Numéro SIM manquant pour l\'entité ' . $index);
             }
             
-            $successCount++;
+            if (empty($entity['shop_id']) || $entity['shop_id'] <= 0) {
+                throw new Exception('Shop ID invalide pour l\'entité ' . $index);
+            }
+            
+            if (empty($entity['agent_id']) || $entity['agent_id'] <= 0) {
+                throw new Exception('Agent ID invalide pour l\'entité ' . $index);
+            }
+            
+            // Ajouter les métadonnées de synchronisation (sans is_synced)
+            $entity['last_modified_at'] = $timestamp;
+            $entity['last_modified_by'] = $userId;
+            
+            // Sauvegarder l'entité (is_synced sera mis à jour après insertion réussie)
+            $syncManager->saveVirtualTransaction($entity);
+            $uploaded++;
             
         } catch (Exception $e) {
-            $errorCount++;
-            $errorMsg = "Erreur Transaction {$transaction['reference']}: " . $e->getMessage();
-            $errors[] = $errorMsg;
-            error_log("❌ $errorMsg");
+            $errors[] = [
+                'entity_id' => $entity['id'] ?? $entity['reference'] ?? 'unknown',
+                'error' => $e->getMessage(),
+                'entity_data' => array_slice($entity, 0, 5) // Log only first 5 fields for security
+            ];
+            error_log("Error processing virtual transaction: " . $e->getMessage());
         }
     }
     
-    error_log("✅ Upload Virtual Transactions terminé: $successCount succès, $errorCount erreurs");
-    
-    echo json_encode([
+    $response = [
         'success' => true,
-        'message' => "Upload terminé: $successCount transactions synchronisées",
-        'uploaded' => $successCount,
-        'errors' => $errorCount,
-        'error_details' => $errors
-    ]);
+        'message' => 'Upload terminé',
+        'uploaded' => $uploaded,
+        'total' => count($entities),
+        'errors' => $errors,
+        'timestamp' => date('c')
+    ];
+    
+    echo json_encode($response);
     
 } catch (Exception $e) {
-    error_log("❌ [Virtual Transactions Upload] Erreur: " . $e->getMessage());
+    error_log("Virtual transactions upload error: " . $e->getMessage());
     http_response_code(500);
     echo json_encode([
         'success' => false,
-        'message' => $e->getMessage()
+        'message' => 'Erreur serveur: ' . $e->getMessage(),
+        'timestamp' => date('c')
     ]);
 }
+?>

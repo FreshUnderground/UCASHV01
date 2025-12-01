@@ -21,21 +21,23 @@ try {
         ]
     );
 } catch (PDOException $e) {
-    // TEMPORAIRE: Afficher les détails de l'erreur pour diagnostic
-    // TODO: Retirer après résolution du problème
+    // Log the error for debugging
+    error_log("Database connection error: " . $e->getMessage());
+    
+    // Return a proper JSON error response
     if (isset($_SERVER['HTTP_HOST'])) {
         // Mode web
         http_response_code(500);
+        header('Content-Type: application/json; charset=utf-8');
         echo json_encode([
             'success' => false,
             'message' => 'Erreur de connexion à la base de données',
-            'error_details' => $e->getMessage(), // TEMPORAIRE - Détails de l'erreur
+            'error_details' => $e->getMessage(),
             'error_code' => $e->getCode(),
             'db_config' => [
                 'host' => DB_HOST,
                 'database' => DB_NAME,
                 'user' => DB_USER,
-                // Ne jamais afficher le mot de passe!
             ],
             'timestamp' => date('c')
         ]);

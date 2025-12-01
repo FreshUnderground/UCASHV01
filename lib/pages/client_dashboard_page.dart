@@ -413,8 +413,11 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
   }
 
   Widget _buildBottomNavigation() {
+    // S'assurer que currentIndex est valide
+    final validIndex = _selectedIndex.clamp(0, _menuItems.length - 1);
+    
     return BottomNavigationBar(
-      currentIndex: _selectedIndex,
+      currentIndex: validIndex,
       onTap: (index) {
         setState(() {
           _selectedIndex = index;

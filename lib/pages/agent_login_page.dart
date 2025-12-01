@@ -44,6 +44,7 @@ class _AgentLoginPageState extends State<AgentLoginPage> {
     setState(() => _isLoading = false);
 
     if (success && mounted) {
+      // Navigation directe vers le dashboard
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (context) => const AgentDashboardPage()),
       );

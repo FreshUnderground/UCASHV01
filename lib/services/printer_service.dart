@@ -765,7 +765,7 @@ class PrinterService {
       // Montant Net (ce que le destinataire reçoit)
       lines.add(LineText(
         type: LineText.TYPE_TEXT,
-        content: 'MONTANT NET: ${operation.montantNet.toStringAsFixed(2)} ${operation.devise}',
+        content: 'NET: ${operation.montantNet.toStringAsFixed(2)} ${operation.devise}',
         weight: 1,
         height: 1,
         linefeed: 1,
@@ -1027,7 +1027,7 @@ class PrinterService {
       
       // Montant Net (ce que le destinataire reçoit)
       bytes += generator.text(
-        'MONTANT NET: ${operation.montantNet.toStringAsFixed(2)} ${operation.devise}',
+        ': ${operation.montantNet.toStringAsFixed(2)} ${operation.devise}',
         styles: const PosStyles(
           height: PosTextSize.size1,
           width: PosTextSize.size1,

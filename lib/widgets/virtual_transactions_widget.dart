@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 import '../services/virtual_transaction_service.dart';
 import '../services/auth_service.dart';
 import '../services/sim_service.dart';
@@ -12,10 +14,13 @@ import '../models/virtual_transaction_model.dart';
 import '../models/sim_model.dart';
 import '../models/retrait_virtuel_model.dart';
 import '../models/cloture_virtuelle_model.dart';
+import '../models/depot_client_model.dart';
 import '../models/flot_model.dart' as flot_model;
+import '../models/operation_model.dart';
 import 'create_virtual_transaction_dialog.dart';
 import 'serve_client_dialog.dart';
 import 'create_retrait_virtuel_dialog.dart';
+import 'create_depot_client_dialog.dart';
 import 'cloture_virtuelle_moderne_widget.dart';
 import 'modern_transaction_card.dart';
 import 'pdf_viewer_dialog.dart';
@@ -35,6 +40,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
   int? _selectedShopFilter; // NOUVEAU: Pour les admins
   DateTime? _dateDebutFilter;
   DateTime? _dateFinFilter;
+  DateTime? _selectedDate; // NOUVEAU: Date unique pour Vue d'Ensemble
   Key _retraitsTabKey = UniqueKey(); // Pour forcer le rechargement
   bool _showFilters = false; // Masquer les filtres par défaut
   
@@ -170,10 +176,10 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
     );
   }
 
-  /// Onglet Transactions (avec sous-onglets: Tout, En Attente, Servies, Retrait)
+  /// Onglet Transactions (avec sous-onglets: Tout, En Attente, Servies, Retrait, Dépôt)
   Widget _buildTransactionsTab() {
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Column(
         children: [
           Container(
@@ -188,6 +194,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                 Tab(text: 'En Attente', icon: Icon(Icons.hourglass_empty, size: 18)),
                 Tab(text: 'Servies', icon: Icon(Icons.check_circle, size: 18)),
                 Tab(text: 'Retrait', icon: Icon(Icons.remove_circle, size: 18)),
+                Tab(text: 'Dépôt', icon: Icon(Icons.account_balance, size: 18)),
               ],
             ),
           ),
@@ -198,6 +205,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                 _buildEnAttenteTab(),  // En Attente
                 _buildServiesTab(),    // Servies
                 _buildRetraitsTab(),   // Retrait
+                _buildDepotTab(),      // Dépôt
               ],
             ),
           ),
@@ -628,6 +636,337 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
         ],
       ),
     );
+  }
+
+  /// Filtre de date unique pour Vue d'Ensemble
+  Widget _buildSingleDateFilter() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[300]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.calendar_today, size: 20, color: Color(0xFF48bb78)),
+              const SizedBox(width: 8),
+              const Text(
+                'Sélectionner une date',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+              const Spacer(),
+              if (_selectedDate != null)
+                TextButton.icon(
+                  icon: const Icon(Icons.clear, size: 16),
+                  label: const Text('Effacer', style: TextStyle(fontSize: 12)),
+                  onPressed: () {
+                    setState(() {
+                      _selectedDate = null;
+                    });
+                  },
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.event, size: 20),
+                  label: Text(
+                    _selectedDate != null
+                        ? DateFormat('dd/MM/yyyy').format(_selectedDate!)
+                        : 'Toutes les dates',
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    backgroundColor: _selectedDate != null ? const Color(0xFF48bb78).withOpacity(0.1) : Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                    side: BorderSide(
+                      color: _selectedDate != null ? const Color(0xFF48bb78) : Colors.grey.shade400,
+                      width: 2,
+                    ),
+                  ),
+                  onPressed: () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: _selectedDate ?? DateTime.now(),
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now(),
+                    );
+                    if (date != null) {
+                      setState(() {
+                        _selectedDate = DateTime(date.year, date.month, date.day);
+                      });
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Onglet Dépôt
+  Widget _buildDepotTab() {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final shopId = authService.currentUser?.shopId;
+    
+    return FutureBuilder<List<DepotClientModel>>(
+      future: LocalDB.instance.getAllDepotsClients(shopId: shopId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        
+        final depots = snapshot.data ?? [];
+        
+        return Column(
+          children: [
+            // En-tête avec bouton
+            Container(
+              padding: const EdgeInsets.all(16),
+              color: Colors.grey[100],
+              child: Row(
+                children: [
+                  Icon(Icons.account_balance, color: Colors.grey[700]),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Dépôts Clients',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[800],
+                          ),
+                        ),
+                        Text(
+                          'Cash reçu → Virtuel envoyé',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () => _creerDepot(),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Nouveau'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF48bb78),
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            // Liste des dépôts
+            Expanded(
+              child: depots.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.account_balance_outlined,
+                            size: 80,
+                            color: Colors.grey[400],
+                          ),
+                          const SizedBox(height: 20),
+                          Text(
+                            'Aucun dépôt client',
+                            style: TextStyle(
+                              fontSize: 18,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Cliquez sur "Nouveau" pour enregistrer un dépôt',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: () async {
+                        setState(() {}); // Recharger
+                      },
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(8),
+                        itemCount: depots.length,
+                        itemBuilder: (context, index) {
+                          final depot = depots[index];
+                          return Card(
+                            margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                            child: ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: const Color(0xFF48bb78).withOpacity(0.1),
+                                child: const Icon(
+                                  Icons.account_balance,
+                                  color: Color(0xFF48bb78),
+                                ),
+                              ),
+                              title: Row(
+                                children: [
+                                  Text(
+                                    '\$${depot.montant.toStringAsFixed(2)}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue[100],
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      depot.simNumero,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.blue[900],
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Icon(Icons.phone, size: 14, color: Colors.grey[600]),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        depot.telephoneClient,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.grey[700],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Row(
+                                    children: [
+                                      Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        DateFormat('dd/MM/yyyy HH:mm').format(depot.dateDepot),
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey[600],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit, color: Colors.blue),
+                                    onPressed: () {},
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete, color: Colors.red),
+                                    onPressed: () => _confirmerSuppressionDepot(depot),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+  
+  /// Créer un nouveau dépôt client
+  Future<void> _creerDepot() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => const CreateDepotClientDialog(),
+    );
+    
+    if (result == true) {
+      setState(() {}); // Recharger l'onglet
+    }
+  }
+  
+  /// Confirmer la suppression d'un dépôt
+  Future<void> _confirmerSuppressionDepot(DepotClientModel depot) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Supprimer le dépôt'),
+        content: Text(
+          'Voulez-vous vraiment supprimer ce dépôt de \$${depot.montant.toStringAsFixed(2)} ?\n\nAttention: Cette action ne peut pas être annulée.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirm == true && depot.id != null) {
+      try {
+        await LocalDB.instance.deleteDepotClient(depot.id!);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Dépôt supprimé avec succès'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          setState(() {}); // Recharger
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Erreur: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
   }
 
   /// Onglet Flot - Transferts et floats reçus avec solde par shop
@@ -1656,6 +1995,96 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
     }
   }
 
+  /// Récupérer le solde FRAIS antérieur de la clôture du jour précédent
+  /// Utilise la MÊME logique que rapport_cloture_service.dart
+  Future<double> _getSoldeFraisAnterieur(int? shopId) async {
+    if (shopId == null) return 0.0;
+    
+    try {
+      // Obtenir la date d'aujourd'hui
+      final aujourdhui = DateTime.now();
+      // Jour précédent
+      final jourPrecedent = aujourdhui.subtract(const Duration(days: 1));
+      
+      // Récupérer la clôture caisse du jour précédent
+      final cloturePrecedente = await LocalDB.instance.getClotureCaisseByDate(shopId, jourPrecedent);
+      
+      if (cloturePrecedente != null) {
+        // Retourner le solde FRAIS enregistré dans la clôture
+        debugPrint('📋 Solde FRAIS antérieur trouvé (clôture du ${jourPrecedent.toIso8601String().split('T')[0]}):');
+        debugPrint('   SOLDE FRAIS: ${cloturePrecedente.soldeFraisAnterieur} USD');
+        return cloturePrecedente.soldeFraisAnterieur;
+      }
+      
+      // Si aucune clôture précédente, retourner 0
+      debugPrint('ℹ️ Aucun solde FRAIS antérieur (pas de clôture caisse du jour précédent)');
+      return 0.0;
+    } catch (e) {
+      debugPrint('❌ Erreur récupération solde FRAIS antérieur: $e');
+      return 0.0;
+    }
+  }
+
+  /// Récupérer les sorties FRAIS (retraits du compte FRAIS) pour la date sélectionnée
+  Future<double> _getSortieFrais(int? shopId, DateTime? selectedDate) async {
+    if (shopId == null) return 0.0;
+    
+    try {
+      // Charger toutes les transactions de comptes spéciaux
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs.getKeys();
+      double sortieFrais = 0.0;
+      
+      for (String key in keys) {
+        if (key.startsWith('compte_special_')) {
+          final data = prefs.getString(key);
+          if (data != null) {
+            final json = jsonDecode(data) as Map<String, dynamic>;
+            final type = json['type'] as String?;
+            final typeTransaction = json['type_transaction'] as String?;
+            final transactionShopId = json['shop_id'] as int?;
+            
+            // Filtrer: type FRAIS, typeTransaction RETRAIT, même shop
+            if (type == 'FRAIS' && 
+                typeTransaction == 'RETRAIT' && 
+                transactionShopId == shopId) {
+              
+              // Filtrer par date si spécifiée
+              if (selectedDate != null) {
+                final dateTransaction = json['date_transaction'] as String?;
+                if (dateTransaction != null) {
+                  final transDate = DateTime.parse(dateTransaction);
+                  final startOfDay = DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
+                  final endOfDay = DateTime(selectedDate.year, selectedDate.month, selectedDate.day, 23, 59, 59);
+                  
+                  if (transDate.isAfter(startOfDay.subtract(const Duration(seconds: 1))) &&
+                      transDate.isBefore(endOfDay.add(const Duration(seconds: 1)))) {
+                    final montant = json['montant'] as num?;
+                    if (montant != null) {
+                      sortieFrais += montant.toDouble().abs(); // Prendre valeur absolue car montant est négatif
+                    }
+                  }
+                }
+              } else {
+                // Pas de filtre de date, compter tous les retraits
+                final montant = json['montant'] as num?;
+                if (montant != null) {
+                  sortieFrais += montant.toDouble().abs();
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      debugPrint('💸 Sortie FRAIS calculée: ${sortieFrais.toStringAsFixed(2)} USD');
+      return sortieFrais;
+    } catch (e) {
+      debugPrint('❌ Erreur récupération sortie FRAIS: $e');
+      return 0.0;
+    }
+  }
+
   /// Vue d'ensemble avec statistiques globales et graphiques
   Widget _buildRapportVueEnsembleTab() {
     return Consumer2<VirtualTransactionService, SimService>(
@@ -1683,16 +2112,16 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
             ? vtService.transactions.where((t) => t.shopId == shopIdFilter).toList()
             : vtService.transactions;
 
-        // Appliquer les filtres de dates
+        // Appliquer les filtres de dates (date unique pour Vue d'Ensemble)
         var filteredTransactions = transactions;
-        if (_dateDebutFilter != null) {
+        if (_selectedDate != null) {
+          // Filtrer pour la date exacte sélectionnée
+          final startOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day);
+          final endOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day, 23, 59, 59);
           filteredTransactions = filteredTransactions
-              .where((t) => t.dateEnregistrement.isAfter(_dateDebutFilter!))
-              .toList();
-        }
-        if (_dateFinFilter != null) {
-          filteredTransactions = filteredTransactions
-              .where((t) => t.dateEnregistrement.isBefore(_dateFinFilter!))
+              .where((t) => 
+                t.dateEnregistrement.isAfter(startOfDay.subtract(const Duration(seconds: 1))) &&
+                t.dateEnregistrement.isBefore(endOfDay.add(const Duration(seconds: 1))))
               .toList();
         }
         // Filtrer par SIM (si sélectionnée)
@@ -1748,12 +2177,13 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
             // Statistiques des retraits
             var retraits = retraitsSnapshot.data ?? [];
             
-            // Filtrer par dates
-            if (_dateDebutFilter != null) {
-              retraits = retraits.where((r) => r.dateRetrait.isAfter(_dateDebutFilter!)).toList();
-            }
-            if (_dateFinFilter != null) {
-              retraits = retraits.where((r) => r.dateRetrait.isBefore(_dateFinFilter!)).toList();
+            // Filtrer par date unique
+            if (_selectedDate != null) {
+              final startOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day);
+              final endOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day, 23, 59, 59);
+              retraits = retraits.where((r) => 
+                r.dateRetrait.isAfter(startOfDay.subtract(const Duration(seconds: 1))) &&
+                r.dateRetrait.isBefore(endOfDay.add(const Duration(seconds: 1)))).toList();
             }
             // Filtrer par SIM
             if (_selectedSimFilter != null) {
@@ -1770,56 +2200,63 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
             // NOUVEAU: Calculer le Cash Disponible selon la formule de clôture
             // Cash Disponible = Solde Antérieur (Dernière clôture CAISSE) + FLOTs reçus - Cash Servi (après capture)
             // MÊME LOGIQUE QUE cloture_agent_widget.dart et rapport_cloture_service.dart
-            return FutureBuilder<List<flot_model.FlotModel>>(
-              future: LocalDB.instance.getAllFlots(),
-              builder: (BuildContext context, flotsSnapshot) {
-                // Calculer les FLOTs reçus ET envoyés
-                var allFlots = flotsSnapshot.data ?? [];
+            return FutureBuilder<List<OperationModel>>(
+              future: LocalDB.instance.getAllOperations(),
+              builder: (BuildContext context, operationsSnapshot) {
+                // Extraire les FLOTs depuis les opérations
+                var allOperations = operationsSnapshot.data ?? [];
                 
-                // Filtrer les FLOTs REÇUS (où on est destination et statut = servi)
-                var flotsRecus = allFlots.where((f) => 
-                  f.shopDestinationId == shopIdFilter &&
-                  f.statut == flot_model.StatutFlot.servi
+                // Filtrer uniquement les opérations de type FLOT
+                var flotOperations = allOperations.where((op) => 
+                  op.type == OperationType.flotShopToShop
                 ).toList();
                 
-                // Filtrer les FLOTs ENVOYÉS (où on est source et statut = servi)
-                var flotsEnvoyes = allFlots.where((f) => 
-                  f.shopSourceId == shopIdFilter &&
-                  f.statut == flot_model.StatutFlot.servi
-                ).toList();
+                // Filtrer les FLOTs REÇUS (où on est destination et statut = validee OU enAttente)
+                var flotsRecus = shopIdFilter != null
+                  ? flotOperations.where((f) => 
+                      f.shopDestinationId == shopIdFilter &&
+                      (f.statut == OperationStatus.validee || f.statut == OperationStatus.enAttente)
+                    ).toList()
+                  : flotOperations.where((f) => f.statut == OperationStatus.validee || f.statut == OperationStatus.enAttente).toList();
+                
+                // Filtrer les FLOTs ENVOYÉS (où on est source et statut = validee OU enAttente)
+                var flotsEnvoyes = shopIdFilter != null
+                  ? flotOperations.where((f) => 
+                      f.shopSourceId == shopIdFilter &&
+                      (f.statut == OperationStatus.validee || f.statut == OperationStatus.enAttente)
+                    ).toList()
+                  : flotOperations.where((f) => f.statut == OperationStatus.validee || f.statut == OperationStatus.enAttente).toList();
                 
                 // Appliquer les filtres de date sur FLOTs REÇUS
-                if (_dateDebutFilter != null) {
+                if (_selectedDate != null) {
+                  final startOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day);
+                  final endOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day, 23, 59, 59);
                   flotsRecus = flotsRecus.where((f) {
-                    final dateToCheck = f.dateReception ?? f.dateEnvoi;
-                    return dateToCheck.isAfter(_dateDebutFilter!) || 
-                           dateToCheck.isAtSameMomentAs(_dateDebutFilter!);
-                  }).toList();
-                }
-                if (_dateFinFilter != null) {
-                  flotsRecus = flotsRecus.where((f) {
-                    final dateToCheck = f.dateReception ?? f.dateEnvoi;
-                    return dateToCheck.isBefore(_dateFinFilter!.add(const Duration(days: 1)));
+                    // Utiliser UNIQUEMENT created_at pour le filtrage
+                    if (f.createdAt == null) return false; // Exclure si pas de created_at
+                    final dateToCheck = f.createdAt!;
+                    return dateToCheck.isAfter(startOfDay.subtract(const Duration(seconds: 1))) &&
+                           dateToCheck.isBefore(endOfDay.add(const Duration(seconds: 1)));
                   }).toList();
                 }
                 
                 // Appliquer les filtres de date sur FLOTs ENVOYÉS
-                if (_dateDebutFilter != null) {
+                if (_selectedDate != null) {
+                  final startOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day);
+                  final endOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day, 23, 59, 59);
                   flotsEnvoyes = flotsEnvoyes.where((f) {
-                    final dateToCheck = f.dateEnvoi;
-                    return dateToCheck.isAfter(_dateDebutFilter!) || 
-                           dateToCheck.isAtSameMomentAs(_dateDebutFilter!);
-                  }).toList();
-                }
-                if (_dateFinFilter != null) {
-                  flotsEnvoyes = flotsEnvoyes.where((f) {
-                    final dateToCheck = f.dateEnvoi;
-                    return dateToCheck.isBefore(_dateFinFilter!.add(const Duration(days: 1)));
+                    // Utiliser UNIQUEMENT created_at pour le filtrage
+                    if (f.createdAt == null) return false; // Exclure si pas de created_at
+                    final dateToCheck = f.createdAt!;
+                    return dateToCheck.isAfter(startOfDay.subtract(const Duration(seconds: 1))) &&
+                           dateToCheck.isBefore(endOfDay.add(const Duration(seconds: 1)));
                   }).toList();
                 }
                 
-                final flotsRecusPhysiques = flotsRecus.fold<double>(0.0, (sum, f) => sum + f.montant);
-                final flotsEnvoyesPhysiques = flotsEnvoyes.fold<double>(0.0, (sum, f) => sum + f.montant);
+                final flotsRecusPhysiques = flotsRecus.fold<double>(0.0, (sum, f) => sum + f.montantNet);
+                final flotsEnvoyesPhysiques = flotsEnvoyes.fold<double>(0.0, (sum, f) => sum + f.montantNet);
+                final flotsRecusListe = flotsRecus; // Garder la liste pour les détails
+                final flotsEnvoyesListe = flotsEnvoyes; // Garder la liste pour les détails
                 
                 return FutureBuilder<double>(
                   future: _getSoldeAnterieurCash(shopIdFilter),
@@ -1840,8 +2277,8 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Filtres de dates
-                          _buildDateFilters(),
+                          // Filtre de date unique
+                          _buildSingleDateFilter(),
                           const SizedBox(height: 16),
 
                           // En-tête
@@ -1857,9 +2294,9 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                               'Vue d\'Ensemble',
                               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                             ),
-                            if (_dateDebutFilter != null || _dateFinFilter != null)
+                            if (_selectedDate != null)
                               Text(
-                                'Période filtrée',
+                                'Date: ${DateFormat('dd/MM/yyyy').format(_selectedDate!)}',
                                 style: TextStyle(fontSize: 12, color: Colors.grey[600], fontStyle: FontStyle.italic),
                               ),
                             if (isAdmin && shopIdFilter == null)
@@ -1879,15 +2316,21 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                           ],
                         ),
                       ),
-                      Text(
-                        DateFormat('dd/MM/yyyy').format(DateTime.now()),
-                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                      ),
+                      if (_selectedDate != null)
+                        Text(
+                          DateFormat('dd/MM/yyyy').format(_selectedDate!),
+                          style: const TextStyle(color: Color(0xFF48bb78), fontSize: 14, fontWeight: FontWeight.bold),
+                        )
+                      else
+                        Text(
+                          DateFormat('dd/MM/yyyy').format(DateTime.now()),
+                          style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                        ),
                             ],
                           ),
 const SizedBox(height: 16),
 
-                          // Statistiques financières
+                          // SECTION CASH DISPONIBLE
                           Container(
                             margin: const EdgeInsets.symmetric(vertical: 8),
                             decoration: BoxDecoration(
@@ -1907,7 +2350,7 @@ const SizedBox(height: 16),
                                 children: [
                                   // HEADER - CASH DISPONIBLE
                                   Container(
-                                    padding: const EdgeInsets.all(20),
+                                    padding: const EdgeInsets.all(4),
                                     decoration: BoxDecoration(
                                       gradient: LinearGradient(
                                         begin: Alignment.topLeft,
@@ -1921,11 +2364,11 @@ const SizedBox(height: 16),
                                     child: Row(
                                       children: [
                                         Container(
-                                          width: 48,
-                                          height: 48,
-                                          decoration: BoxDecoration(
+                                          width: 30,
+                                          height: 30,
+                                          decoration: const BoxDecoration(
                                             shape: BoxShape.circle,
-                                            gradient: const LinearGradient(
+                                            gradient: LinearGradient(
                                               colors: [Colors.blue, Color(0xFF1976D2)],
                                             ),
                                           ),
@@ -1934,7 +2377,7 @@ const SizedBox(height: 16),
                                         const SizedBox(width: 12),
                                         const Expanded(
                                           child: Text(
-                                            'Cash Disponible (Physique)',
+                                            'CASH DISPONIBLE',
                                             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                                           ),
                                         ),
@@ -1946,188 +2389,71 @@ const SizedBox(height: 16),
                                     padding: const EdgeInsets.all(20),
                                     child: Column(
                                       children: [
-                                  _buildFinanceRow('Solde Antérieur', capitalInitialCash, const Color(0xFF48bb78)),
-                                  const SizedBox(height: 8),
-                                  _buildFinanceRow('+ FLOTs reçus', flotsRecus, Colors.green),
-                                  const SizedBox(height: 8),
-                                  _buildFinanceRow('- FLOTs envoyés', flotsEnvoyes, Colors.orange),
-                                  const SizedBox(height: 8),
-                                  _buildFinanceRow('- Cash servis (Toutes SIMs)', cashServiValue, Colors.red),
-                                  const SizedBox(height: 4),
-                                  // Détails Cash Servi par SIM
-                                  FutureBuilder<Map<String, double>>(
-                                    future: _getCashServiParSim(shopIdFilter, validees),
-                                    builder: (context, snapshot) {
-                                      final cashParSim = snapshot.data ?? {};
-                                      if (cashParSim.isEmpty) return const SizedBox.shrink();
-                                      
-                                      return Padding(
-                                        padding: const EdgeInsets.only(left: 16, top: 4),
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: cashParSim.entries.map((e) => 
-                                            Text(
-                                              '• ${e.key}: \$${e.value.toStringAsFixed(2)}',
-                                              style: TextStyle(fontSize: 11, color: Colors.blue[700]),
-                                            )
-                                          ).toList(),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                  const SizedBox(height: 8),
-                                  const Divider(height: 16),
-                                  _buildFinanceRow(
-                                    'Cash Disponible',
-                                    cashDisponible,
-                                    cashDisponible >= 0 ? Colors.blue : Colors.orange,
-                                  ),
-                                  const SizedBox(height: 16),
-                                  const SizedBox(height: 8),
-
-                                  // VIRTUEL DISPONIBLE - FORMULE
-                                  // Virtuel Disponible = Solde Antérieur (Solde d'hier) + Captures du Jour (SANS Frais) - Retraits du Jour (Toutes SIMs)
-                                  FutureBuilder<double>(
-                                    future: _getSoldeAnterieurVirtuel(shopIdFilter),
-                                    builder: (context, virtuelSnapshot) {
-                                      final soldeAnterieurVirtuel = virtuelSnapshot.data ?? 0.0;
-                                      final capturesDuJour = montantTotalCaptures; // Captures SANS Frais
-                                      final retraitsDuJour = montantTotalRetraits; // Retraits (Toutes SIMs)
-                                      final virtuelDisponible = soldeAnterieurVirtuel + capturesDuJour - retraitsDuJour;
-                                      
-                                      return Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          // 1. SOLDE ANTÉRIEUR (Solde d'hier)
-                                          _buildFinanceRow('Solde Antérieur (Virtuel)', soldeAnterieurVirtuel, Colors.grey),
-                                          const SizedBox(height: 8),
-                                          
-                                          // 2. CAPTURES DU JOUR (Toutes SIMs) - Frais inclus sur le solde virtuel
-                                          _buildFinanceRow('+ Captures du jour', capturesDuJour, Colors.green),
-                                          const SizedBox(height: 8),
-                                          
-                                          // 3. RETRAITS DU JOUR (Toutes SIMs)
-                                          _buildFinanceRow('- Retraits du jour', retraitsDuJour, Colors.red),
-                                          const Divider(height: 16),
-                                          
-                                          // 4. RÉSULTAT = VIRTUEL DISPONIBLE
-                                          _buildFinanceRow('= Virtuel Disponible', virtuelDisponible, Colors.purple, isBold: true, fontSize: 16),
-                                          const SizedBox(height: 16),
-                                          
-                                          // 5. LISTE DES NON SERVIS PAR SIM
-                                          if (enAttente.isNotEmpty) ...[
-                                            const Divider(height: 16),
-                                            const SizedBox(height: 8),
-                                            Text(
-                                              'Captures non servies par SIM:',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.orange[800],
-                                              ),
-                                            ),
-                                            const SizedBox(height: 8),
-                                            ...(() {
-                                              // Grouper les non servis par SIM
-                                              final Map<String, List<VirtualTransactionModel>> nonServisParSim = {};
-                                              for (var transaction in enAttente) {
-                                                final simKey = transaction.simNumero;
-                                                if (!nonServisParSim.containsKey(simKey)) {
-                                                  nonServisParSim[simKey] = [];
-                                                }
-                                                nonServisParSim[simKey]!.add(transaction);
-                                              }
-                                              
-                                              // Créer les widgets pour chaque SIM
-                                              return nonServisParSim.entries.map((entry) {
-                                                final simNumero = entry.key;
-                                                final transactions = entry.value;
-                                                final totalMontant = transactions.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
-                                                
-                                                return Padding(
-                                                  padding: const EdgeInsets.only(bottom: 8),
-                                                  child: Container(
-                                                    padding: const EdgeInsets.all(8),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.orange.shade50,
-                                                      borderRadius: BorderRadius.circular(8),
-                                                      border: Border.all(color: Colors.orange.shade200),
-                                                    ),
-                                                    child: Row(
-                                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                      children: [
-                                                        Text(
-                                                          '📱 SIM: $simNumero',
-                                                          style: TextStyle(
-                                                            fontSize: 11,
-                                                            fontWeight: FontWeight.bold,
-                                                            color: Colors.orange[900],
-                                                          ),
-                                                        ),
-                                                        Text(
-                                                          '${transactions.length} = \$${totalMontant.toStringAsFixed(2)}',
-                                                          style: TextStyle(
-                                                            fontSize: 10,
-                                                            fontWeight: FontWeight.bold,
-                                                            color: Colors.orange[700],
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
+                                        _buildFinanceRow('Solde Antérieur', capitalInitialCash, Colors.grey),
+                                        const SizedBox(height: 8),
+                                        _buildFinanceRow('+ FLOTs reçus', flotsRecus, Colors.green),
+                                        // Détails FLOTs reçus
+                                        if (flotsRecusListe.isNotEmpty)
+                                          Padding(
+                                            padding: const EdgeInsets.only(left: 16, top: 4),
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: flotsRecusListe.map((flot) => 
+                                                Text(
+                                                  '• ${flot.shopSourceDesignation ?? "Shop #${flot.shopSourceId}"}: \$${flot.montantNet.toStringAsFixed(2)}',
+                                                  style: TextStyle(
+                                                    fontSize: 11, 
+                                                    color: flot.statut == OperationStatus.validee ? Colors.green[700] : Colors.orange[700],
                                                   ),
-                                                );
-                                              }).toList();
-                                            })(),
-                                          ],
-                                        ],
-                                      );
-                                    },
-                                  ),
-                                  const SizedBox(height: 8),
-                                  _buildFinanceRow('Frais perçus (Virtuel)', fraisPercus, Colors.green),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Frais dans le solde virtuel',
-                                    style: TextStyle(fontSize: 10, color: Colors.grey[600], fontStyle: FontStyle.italic),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  // Détails Captures par SIM (aujourd'hui)
-                                  FutureBuilder<Map<String, Map<String, dynamic>>>(
-                                    future: _getCapturesParSim(shopIdFilter, captures),
-                                    builder: (context, snapshot) {
-                                      final capturesParSim = snapshot.data ?? {};
-                                      if (capturesParSim.isEmpty) return const SizedBox.shrink();
-                                      
-                                      return Padding(
-                                        padding: const EdgeInsets.only(left: 16, top: 4),
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              'Captures d\'aujourd\'hui:',
-                                              style: TextStyle(fontSize: 10, color: Colors.grey[700], fontWeight: FontWeight.w600),
+                                                )
+                                              ).toList(),
                                             ),
-                                            ...capturesParSim.entries.map((e) => 
-                                              Padding(
-                                                padding: const EdgeInsets.only(bottom: 2, left: 8),
-                                                child: Text(
-                                                  '• ${e.key}: ${e.value['count']} capture(s) = \$${e.value['montant'].toStringAsFixed(2)}',
-                                                  style: TextStyle(fontSize: 11, color: Colors.purple[700]),
-                                                ),
-                                              )
-                                            ).toList(),
-                                          ],
+                                          ),
+                                        const SizedBox(height: 8),
+                                        _buildFinanceRow('- FLOTs envoyés', flotsEnvoyes, Colors.red),
+                                        // Détails FLOTs envoyés
+                                        if (flotsEnvoyesListe.isNotEmpty)
+                                          Padding(
+                                            padding: const EdgeInsets.only(left: 16, top: 4),
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: flotsEnvoyesListe.map((flot) => 
+                                                Text(
+                                                  '• Vers ${flot.shopDestinationDesignation ?? "Shop #${flot.shopDestinationId}"}: \$${flot.montantNet.toStringAsFixed(2)} (${flot.statut == OperationStatus.validee ? "Validé" : "En attente"})',
+                                                  style: TextStyle(
+                                                    fontSize: 11, 
+                                                    color: flot.statut == OperationStatus.validee ? Colors.orange[700] : Colors.orange[900],
+                                                  ),
+                                                )
+                                              ).toList(),
+                                            ),
+                                          ),
+                                        const SizedBox(height: 8),
+                                        _buildFinanceRow('- Cash servi', cashServiValue, Colors.red),
+                                        // Détails Cash Servi par SIM
+                                        FutureBuilder<Map<String, double>>(
+                                          future: _getCashServiParSim(shopIdFilter, validees),
+                                          builder: (context, snapshot) {
+                                            final cashParSim = snapshot.data ?? {};
+                                            if (cashParSim.isEmpty) return const SizedBox.shrink();
+                                            
+                                            return Padding(
+                                              padding: const EdgeInsets.only(left: 16, top: 4),
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: cashParSim.entries.map((e) => 
+                                                  Text(
+                                                    '• ${e.key}: \$${e.value.toStringAsFixed(2)}',
+                                                    style: TextStyle(fontSize: 11, color: Colors.blue[700]),
+                                                  )
+                                                ).toList(),
+                                              ),
+                                            );
+                                          },
                                         ),
-                                      );
-                                    },
-                                  ),
-                                  
-                                  const SizedBox(height: 16),
-                                  const Divider(height: 8),
-                                  const SizedBox(height: 8),
-                                  
-                                  // VIRTUEL DISPONIBLE - DUPLICATE (REMOVED)
-                                  // Déjà affiché au-dessus, cette section est supprimée pour éviter la duplication
+                                        const SizedBox(height: 8),
+                                        const Divider(),
+                                        _buildFinanceRow('= Cash Disponible', cashDisponible, Colors.blue, isBold: true),
                                       ],
                                     ),
                                   ),
@@ -2137,27 +2463,338 @@ const SizedBox(height: 16),
                           ),
                           const SizedBox(height: 16),
                           
-                          // CARD CAPITAL NET
-                          // Calculer le Virtuel Disponible pour le Capital Net (SANS Frais)
+                          // SECTION VIRTUEL DISPONIBLE
                           FutureBuilder<double>(
                             future: _getSoldeAnterieurVirtuel(shopIdFilter),
-                            builder: (context, virtuelSoldeSnapshot) {
-                              final soldeAnterieurVirtuel = virtuelSoldeSnapshot.data ?? 0.0;
-                              final capturesDuJour = montantTotalCaptures;  // SANS frais
-                              final retraitsDuJour = montantTotalRetraits;
+                            builder: (context, virtuelSnapshot) {
+                              final soldeAnterieurVirtuel = virtuelSnapshot.data ?? 0.0;
+                              final capturesDuJour = montantTotalCaptures; // Captures SANS Frais
+                              final retraitsDuJour = montantTotalRetraits; // Retraits (Toutes SIMs)
                               final virtuelDisponible = soldeAnterieurVirtuel + capturesDuJour - retraitsDuJour;
-                              final nonServi = montantEnAttente; // Captures non servies
                               
-                              return FutureBuilder<Map<String, double>>(
-                                future: _getCapitalNetData(shopIdFilter ?? currentShopId, cashDisponible, virtuelDisponible, enAttente),
-                                builder: (context, capitalSnapshot) {
-                                  final capitalData = capitalSnapshot.data ?? {};
-                                  final shopsNousDoivent = capitalData['shopsNousDoivent'] ?? 0.0;
-                                  final shopsNousDevons = capitalData['shopsNousDevons'] ?? 0.0;
+                              return Container(
+                                margin: const EdgeInsets.symmetric(vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(24),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.08),
+                                      blurRadius: 20,
+                                      offset: const Offset(0, 8),
+                                    ),
+                                  ],
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(24),
+                                  child: Column(
+                                    children: [
+                                      // HEADER - VIRTUEL DISPONIBLE
+                                      Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            begin: Alignment.topLeft,
+                                            end: Alignment.bottomRight,
+                                            colors: [
+                                              Colors.purple.withOpacity(0.1),
+                                              Colors.purple.withOpacity(0.05),
+                                            ],
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Container(
+                                              width: 30,
+                                              height: 30,
+                                              decoration: const BoxDecoration(
+                                                shape: BoxShape.circle,
+                                                gradient: LinearGradient(
+                                                  colors: [Colors.purple, Color(0xFF7B1FA2)],
+                                                ),
+                                              ),
+                                              child: const Icon(Icons.cloud_upload, color: Colors.white, size: 24),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            const Expanded(
+                                              child: Text(
+                                                'VIRTUEL DISPONIBLE',
+                                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      // BODY - DETAILS VIRTUEL
+                                      Padding(
+                                        padding: const EdgeInsets.all(20),
+                                        child: Column(
+                                          children: [
+                                            _buildFinanceRow('Solde Antérieur', soldeAnterieurVirtuel, Colors.grey),
+                                            const SizedBox(height: 8),
+                                            _buildFinanceRow('+ Captures du jour', capturesDuJour, Colors.green),
+                                            // Détails Captures par SIM
+                                            FutureBuilder<Map<String, Map<String, dynamic>>>(
+                                              future: _getCapturesParSim(shopIdFilter, captures),
+                                              builder: (context, snapshot) {
+                                                final capturesParSim = snapshot.data ?? {};
+                                                if (capturesParSim.isEmpty) return const SizedBox.shrink();
+                                                
+                                                return Padding(
+                                                  padding: const EdgeInsets.only(left: 16, top: 4),
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      ...capturesParSim.entries.map((e) => 
+                                                        Padding(
+                                                          padding: const EdgeInsets.only(bottom: 2, left: 8),
+                                                          child: Text(
+                                                            '• ${e.key}: ${e.value['count']} capture(s) = \$${e.value['montant'].toStringAsFixed(2)}',
+                                                            style: TextStyle(fontSize: 11, color: Colors.purple[700]),
+                                                          ),
+                                                        )
+                                                      ).toList(),
+                                                    ],
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                            const SizedBox(height: 8),
+                                            _buildFinanceRow('- Flot Virtuel', retraitsDuJour, Colors.red),
+                                            // Détails Flots Virtuels (Retraits)
+                                            if (retraits.isNotEmpty)
+                                              Padding(
+                                                padding: const EdgeInsets.only(left: 16, top: 4),
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    ...retraits.map((retrait) => 
+                                                      Padding(
+                                                        padding: const EdgeInsets.only(bottom: 2, left: 8),
+                                                        child: Text(
+                                                          '• ${retrait.simNumero}: \$${retrait.montant.toStringAsFixed(2)}',
+                                                          style: TextStyle(
+                                                            fontSize: 11, 
+                                                            color: retrait.statut == RetraitVirtuelStatus.enAttente 
+                                                              ? Colors.orange[700] 
+                                                              : retrait.statut == RetraitVirtuelStatus.rembourse 
+                                                                ? Colors.red[700] 
+                                                                : Colors.purple[700],
+                                                          ),
+                                                        ),
+                                                      )
+                                                    ).toList(),
+                                                  ],
+                                                ),
+                                              ),
+                                            const SizedBox(height: 8),
+                                            const Divider(),
+                                            _buildFinanceRow('= Virtuel Disponible', virtuelDisponible, Colors.purple, isBold: true),
+                                            const SizedBox(height: 16),
+                                            // LISTE DES NON SERVIS PAR SIM
+                                            if (enAttente.isNotEmpty) ...[
+                                              const Divider(height: 16),
+                                              const SizedBox(height: 8),
+                                              Text(
+                                                'Captures non servies par SIM:',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.orange[800],
+                                                ),
+                                              ),
+                                              const SizedBox(height: 8),
+                                              ...(() {
+                                                // Grouper les non servis par SIM
+                                                final Map<String, List<VirtualTransactionModel>> nonServisParSim = {};
+                                                for (var transaction in enAttente) {
+                                                  final simKey = transaction.simNumero;
+                                                  if (!nonServisParSim.containsKey(simKey)) {
+                                                    nonServisParSim[simKey] = [];
+                                                  }
+                                                  nonServisParSim[simKey]!.add(transaction);
+                                                }
+                                                
+                                                // Créer les widgets pour chaque SIM
+                                                return nonServisParSim.entries.map((entry) {
+                                                  final simNumero = entry.key;
+                                                  final transactions = entry.value;
+                                                  final totalMontant = transactions.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
+                                                  
+                                                  return Padding(
+                                                    padding: const EdgeInsets.only(bottom: 8),
+                                                    child: Container(
+                                                      padding: const EdgeInsets.all(8),
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.orange.shade50,
+                                                        borderRadius: BorderRadius.circular(8),
+                                                        border: Border.all(color: Colors.orange.shade200),
+                                                      ),
+                                                      child: Row(
+                                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                        children: [
+                                                          Text(
+                                                            '📱 SIM: $simNumero',
+                                                            style: TextStyle(
+                                                              fontSize: 11,
+                                                              fontWeight: FontWeight.bold,
+                                                              color: Colors.orange[900],
+                                                            ),
+                                                          ),
+                                                          Text(
+                                                            '${transactions.length} = \$${totalMontant.toStringAsFixed(2)}',
+                                                            style: TextStyle(
+                                                              fontSize: 10,
+                                                              fontWeight: FontWeight.bold,
+                                                              color: Colors.orange[700],
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  );
+                                                }).toList();
+                                              })(),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          
+                          // SECTION FRAIS (comme rapportcloture.dart)
+                          Container(
+                            margin: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(24),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.08),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(24),
+                              child: Column(
+                                children: [
+                                  // HEADER - COMPTE FRAIS
+                                  Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [
+                                          Colors.green.withOpacity(0.1),
+                                          Colors.green.withOpacity(0.05),
+                                        ],
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          width: 30,
+                                          height: 30,
+                                          decoration: const BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            gradient: LinearGradient(
+                                              colors: [Colors.green, Color(0xFF48bb78)],
+                                            ),
+                                          ),
+                                          child: const Icon(Icons.attach_money, color: Colors.white, size: 24),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        const Expanded(
+                                          child: Text(
+                                            'Compte FRAIS',
+                                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  // BODY - DETAILS FRAIS
+                                  FutureBuilder<double>(
+                                    future: _getSoldeFraisAnterieur(shopIdFilter),
+                                    builder: (context, fraisAntSnapshot) {
+                                      final fraisAnterieur = fraisAntSnapshot.data ?? 0.0;
+                                      
+                                      return FutureBuilder<double>(
+                                        future: _getSortieFrais(shopIdFilter, _selectedDate),
+                                        builder: (context, sortieFraisSnapshot) {
+                                          final sortieFrais = sortieFraisSnapshot.data ?? 0.0;
+                                          final soldeFraisTotal = fraisAnterieur + fraisPercus - sortieFrais;
+                                          
+                                          return Column(
+                                            children: [
+                                              // FRAIS Details Display
+                                              Padding(
+                                                padding: const EdgeInsets.all(20),
+                                                child: Column(
+                                                  children: [
+                                                    _buildFinanceRow('Frais Antérieur', fraisAnterieur, Colors.grey),
+                                                    const SizedBox(height: 8),
+                                                    _buildFinanceRow('+ Frais du jour', fraisPercus, Colors.green),
+                                                    const SizedBox(height: 4),
+                                                    _buildFinanceRow('- Sortie Frais', sortieFrais, Colors.red),
+                                                    const SizedBox(height: 4),
+                                                    const Divider(),
+                                                    _buildFinanceRow('= Solde FRAIS total', soldeFraisTotal, Colors.green, isBold: true),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          );
+                                        },
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          
+                          // CARD CAPITAL NET
+                          // Calculer les FRAIS puis le Virtuel Disponible et le Capital Net
+                          FutureBuilder<double>(
+                            future: _getSoldeFraisAnterieur(shopIdFilter),
+                            builder: (context, fraisAntSnapshot) {
+                              final fraisAnterieur = fraisAntSnapshot.data ?? 0.0;
+                              
+                              return FutureBuilder<double>(
+                                future: _getSortieFrais(shopIdFilter, _selectedDate),
+                                builder: (context, sortieFraisSnapshot) {
+                                  final sortieFrais = sortieFraisSnapshot.data ?? 0.0;
+                                  final soldeFraisTotal = fraisAnterieur + fraisPercus - sortieFrais;
                                   
-                                  // CAPITAL NET = Cash Disponible + Virtuel Disponible + Shops nous doivent - Shops nous devons - Non Servi
-                                  final capitalNet = cashDisponible + virtuelDisponible + shopsNousDoivent - shopsNousDevons - nonServi;
-                              final isPositif = capitalNet >= 0;
+                                  return FutureBuilder<double>(
+                                    future: _getSoldeAnterieurVirtuel(shopIdFilter),
+                                    builder: (context, virtuelSoldeSnapshot) {
+                                      final soldeAnterieurVirtuel = virtuelSoldeSnapshot.data ?? 0.0;
+                                      final capturesDuJour = montantTotalCaptures;  // SANS frais
+                                      final retraitsDuJour = montantTotalRetraits;
+                                      final virtuelDisponible = soldeAnterieurVirtuel + capturesDuJour - retraitsDuJour;
+                                      final nonServi = montantEnAttente; // Captures non servies
+                                      
+                                      return FutureBuilder<Map<String, double>>(
+                                        future: _getCapitalNetData(shopIdFilter ?? currentShopId, cashDisponible, virtuelDisponible, enAttente),
+                                        builder: (context, capitalSnapshot) {
+                                          final capitalData = capitalSnapshot.data ?? {};
+                                          final shopsNousDoivent = capitalData['shopsNousDoivent'] ?? 0.0;
+                                          final shopsNousDevons = capitalData['shopsNousDevons'] ?? 0.0;
+                                          
+                                          // CAPITAL NET = Cash Disponible + Virtuel Disponible + Shops nous doivent - Shops nous devons - Solde FRAIS
+                                          final capitalNet = cashDisponible + virtuelDisponible + shopsNousDoivent - shopsNousDevons - soldeFraisTotal;
+                                      final isPositif = capitalNet >= 0;
                               
                               return Container(
                                 margin: const EdgeInsets.symmetric(vertical: 8),
@@ -2230,7 +2867,7 @@ const SizedBox(height: 16),
                                                   Text(
                                                     '\$${capitalNet.toStringAsFixed(2)}',
                                                     style: TextStyle(
-                                                      fontSize: 32,
+                                                      fontSize: 20,
                                                       fontWeight: FontWeight.bold,
                                                       color: isPositif ? const Color(0xFF48bb78) : Colors.orange,
                                                     ),
@@ -2246,26 +2883,16 @@ const SizedBox(height: 16),
                                         padding: const EdgeInsets.all(20),
                                         child: Column(
                                           children: [
-                                            _buildFinanceRow('Shops qui nous doivent', shopsNousDoivent, Colors.green),
-                                            const SizedBox(height: 8),
-                                            _buildFinanceRow('Shops que nous devons', shopsNousDevons, Colors.red),
-                                            const SizedBox(height: 8),
-                                            _buildFinanceRow('Non Servi (Virtuel)', nonServi, Colors.orange),
-                                            const SizedBox(height: 12),
-                                            Container(
-                                              padding: const EdgeInsets.all(12),
-                                              decoration: BoxDecoration(
-                                                color: Colors.green.shade50,
-                                                borderRadius: BorderRadius.circular(12),
-                                                border: Border.all(color: Colors.green.shade200),
-                                              ),
-                                              child: Text(
-                                                'CAPITAL NET = Cash Disponible + Virtuel Disponible + Shops nous doivent - Shops nous devons - Non Servi',
-                                                style: TextStyle(fontSize: 10, color: Colors.green.shade800, fontStyle: FontStyle.italic),
-                                                textAlign: TextAlign.center,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 16),
+                                                _buildFinanceRow('Cash Disponible', cashDisponible, Colors.blue),
+                                                const SizedBox(height: 8),
+                                                _buildFinanceRow('+ Virtuel Disponible', virtuelDisponible, Colors.blue),
+                                                const SizedBox(height: 8),
+                                                _buildFinanceRow('+ DIFF. DETTES', shopsNousDoivent, Colors.green),
+                                                const SizedBox(height: 8),
+                                                _buildFinanceRow('- Shops que nous devons', shopsNousDevons, Colors.red),
+                                                const SizedBox(height: 8),
+                                                _buildFinanceRow('- Solde FRAIS', soldeFraisTotal, Colors.red),
+                                                                   const SizedBox(height: 16),
                                             // BOUTON PRÉVISUALISATION PDF
                                             ElevatedButton.icon(
                                               onPressed: () => _previewRapportPdf(
@@ -2305,8 +2932,12 @@ const SizedBox(height: 16),
                                   ),
                                 ),
                               );
-                            },
-                          );
+                                        },
+                                      );
+                                    },
+                                  );
+                                },
+                              );
                             },
                           ),
                           const SizedBox(height: 16),
@@ -2317,118 +2948,237 @@ const SizedBox(height: 16),
                             child: Padding(
                               padding: const EdgeInsets.all(16),
                               child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Row(
-                                    children: [
-                                      Icon(Icons.business, color: Colors.indigo),
-                                      SizedBox(width: 8),
-                                      Text(
-                                        'Par Opérateur',
-                                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                      ),
-                                    ],
-                                  ),
-                                  const Divider(height: 24),
-                                  ...statsParOperateur.entries.map((entry) {
-                                    final operateur = entry.key;
-                                    final stats = entry.value;
-                                    return Container(
-                                      margin: const EdgeInsets.only(bottom: 12),
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: Colors.indigo.shade50,
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: Colors.indigo.shade200),
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              Expanded(
-                                                child: Text(
-                                                  operateur,
-                                                  style: const TextStyle(
-                                                    fontSize: 15,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: Colors.indigo,
-                                                  ),
-                                                ),
-                                              ),
-                                              Text(
-                                                '${stats['nombre_sims']} SIM(s)',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: Colors.grey[700],
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    'Solde total',
-                                                    style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                                                  ),
-                                                  Text(
-                                                    '\$${stats['solde_total'].toStringAsFixed(2)}',
-                                                    style: const TextStyle(
-                                                      fontSize: 14,
-                                                      fontWeight: FontWeight.bold,
-                                                      color: Color(0xFF48bb78),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                              Column(
-                                                crossAxisAlignment: CrossAxisAlignment.end,
-                                                children: [
-                                                  Text(
-                                                    'Transactions',
-                                                    style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                                                  ),
-                                                  Text(
-                                                    '${stats['transactions']}',
-                                                    style: const TextStyle(
-                                                      fontSize: 14,
-                                                      fontWeight: FontWeight.bold,
-                                                      color: Colors.blue,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                              Column(
-                                                crossAxisAlignment: CrossAxisAlignment.end,
-                                                children: [
-                                                  Text(
-                                                    'Frais',
-                                                    style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                                                  ),
-                                                  Text(
-                                                    '\$${stats['frais'].toStringAsFixed(2)}',
-                                                    style: const TextStyle(
-                                                      fontSize: 14,
-                                                      fontWeight: FontWeight.bold,
-                                                      color: Colors.purple,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  }),
-                                ],
+// ... existing code ...
                               ),
                             ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // NOUVELLE SECTION: Shops qui nous doivent
+                          FutureBuilder<Map<String, List<Map<String, dynamic>>>>(
+                            future: _getShopBalancesDetails(shopIdFilter),
+                            builder: (context, shopBalancesSnapshot) {
+                              if (!shopBalancesSnapshot.hasData) {
+                                return const SizedBox.shrink();
+                              }
+                              
+                              final shopBalances = shopBalancesSnapshot.data!;
+                              final shopsNousDoivent = shopBalances['shopsNousDoivent'] ?? [];
+                              final shopsNousDevons = shopBalances['shopsNousDevons'] ?? [];
+                              
+                              return Column(
+                                children: [
+                                  // Shops qui nous doivent (Créances)
+                                  if (shopsNousDoivent.isNotEmpty) ...[
+                                    Card(
+                                      elevation: 3,
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(16),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Icon(Icons.store, color: Colors.orange.shade700),
+                                                const SizedBox(width: 8),
+                                                Text(
+                                                  'Shops Qui Nous Doivent',
+                                                  style: TextStyle(
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.orange.shade700,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              '${shopsNousDoivent.length} shop(s)',
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey,
+                                              ),
+                                            ),
+                                            const Divider(height: 24),
+                                            ...shopsNousDoivent.map((shop) => 
+                                              Container(
+                                                margin: const EdgeInsets.only(bottom: 8),
+                                                padding: const EdgeInsets.all(12),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.orange.shade50,
+                                                  borderRadius: BorderRadius.circular(8),
+                                                  border: Border.all(color: Colors.orange.shade200),
+                                                ),
+                                                child: Row(
+                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                  children: [
+                                                    Expanded(
+                                                      child: Column(
+                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        children: [
+                                                          Text(
+                                                            shop['designation'],
+                                                            style: const TextStyle(
+                                                              fontSize: 14,
+                                                              fontWeight: FontWeight.bold,
+                                                            ),
+                                                          ),
+                                                          Text(
+                                                            shop['localisation'],
+                                                            style: TextStyle(
+                                                              fontSize: 11,
+                                                              color: Colors.grey[600],
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      '\$${shop['montant'].toStringAsFixed(2)}',
+                                                      style: TextStyle(
+                                                        fontSize: 16,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: Colors.orange.shade700,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ).toList(),
+                                            const Divider(),
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                const Text(
+                                                  'TOTAL',
+                                                  style: TextStyle(
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  '\$${shopsNousDoivent.fold<double>(0.0, (sum, shop) => sum + shop['montant']).toStringAsFixed(2)}',
+                                                  style: TextStyle(
+                                                    fontSize: 18,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.orange.shade700,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+                                  ],
+                                  
+                                  // Shops que nous devons (Dettes)
+                                  if (shopsNousDevons.isNotEmpty) ...[
+                                    Card(
+                                      elevation: 3,
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(16),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Icon(Icons.store, color: Colors.purple.shade700),
+                                                const SizedBox(width: 8),
+                                                Text(
+                                                  'Shops Que Nous Devons',
+                                                  style: TextStyle(
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.purple.shade700,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              '${shopsNousDevons.length} shop(s)',
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey,
+                                              ),
+                                            ),
+                                            const Divider(height: 24),
+                                            ...shopsNousDevons.map((shop) => 
+                                              Container(
+                                                margin: const EdgeInsets.only(bottom: 8),
+                                                padding: const EdgeInsets.all(12),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.purple.shade50,
+                                                  borderRadius: BorderRadius.circular(8),
+                                                  border: Border.all(color: Colors.purple.shade200),
+                                                ),
+                                                child: Row(
+                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                  children: [
+                                                    Expanded(
+                                                      child: Column(
+                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        children: [
+                                                          Text(
+                                                            shop['designation'],
+                                                            style: const TextStyle(
+                                                              fontSize: 14,
+                                                              fontWeight: FontWeight.bold,
+                                                            ),
+                                                          ),
+                                                          Text(
+                                                            shop['localisation'],
+                                                            style: TextStyle(
+                                                              fontSize: 11,
+                                                              color: Colors.grey[600],
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      '\$${shop['montant'].toStringAsFixed(2)}',
+                                                      style: TextStyle(
+                                                        fontSize: 16,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: Colors.purple.shade700,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ).toList(),
+                                            const Divider(),
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                const Text(
+                                                  'TOTAL',
+                                                  style: TextStyle(
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  '\$${shopsNousDevons.fold<double>(0.0, (sum, shop) => sum + shop['montant']).toStringAsFixed(2)}',
+                                                  style: TextStyle(
+                                                    fontSize: 18,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.purple.shade700,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              );
+                            },
                           ),
                         ],
                       ),
@@ -3110,16 +3860,21 @@ const SizedBox(height: 16),
     }
     
     try {
-      // Récupérer tous les retraits et FLOTs pour calculer les soldes
+      // Récupérer tous les retraits et opérations (pour les FLOTs)
       final retraits = await LocalDB.instance.getAllRetraitsVirtuels();
-      final allFlots = await LocalDB.instance.getAllFlots();
+      final allOperations = await LocalDB.instance.getAllOperations();
+      
+      // Filtrer les opérations de type FLOT (nouvelle méthode)
+      final flotOperations = allOperations.where((op) => 
+        op.type == OperationType.flotShopToShop
+      ).toList();
       
       // Filtrer pour notre shop
       final retraitsFiltres = retraits.where((r) => 
         r.shopSourceId == shopId || r.shopDebiteurId == shopId
       ).toList();
       
-      final flots = allFlots.where((f) => 
+      final flots = flotOperations.where((f) => 
         f.shopSourceId == shopId || f.shopDestinationId == shopId
       ).toList();
       
@@ -3129,35 +3884,40 @@ const SizedBox(height: 16),
       // Calculer par shop
       final Map<int, double> soldesParShop = {};
       
-      // Retraits
+      // Retraits virtuels
       for (final retrait in retraitsFiltres) {
         if (retrait.shopSourceId == shopId) {
-          // On est créancier
+          // On est créancier (on a fait un retrait virtuel pour un autre shop)
           final autreShopId = retrait.shopDebiteurId;
           soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + retrait.montant;
         } else {
-          // On est débiteur
+          // On est débiteur (un autre shop a fait un retrait pour nous)
           final autreShopId = retrait.shopSourceId;
           soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - retrait.montant;
         }
       }
       
-      // FLOTs
+      // FLOTs (nouvelle méthode avec OperationModel)
       for (final flot in flots) {
-        if (flot.statut == flot_model.StatutFlot.servi) {
+        // Vérifier si le FLOT est validé ou en attente
+        if (flot.statut == OperationStatus.validee || flot.statut == OperationStatus.enAttente) {
           if (flot.shopSourceId == shopId) {
-            // On a envoyé
+            // On a envoyé un FLOT → L'autre shop nous doit
             final autreShopId = flot.shopDestinationId;
-            soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + flot.montant;
+            if (autreShopId != null && autreShopId != shopId) {
+              soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + flot.montantNet;
+            }
           } else if (flot.shopDestinationId == shopId) {
-            // On a reçu
+            // On a reçu un FLOT → On doit à l'autre shop
             final autreShopId = flot.shopSourceId;
-            soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - flot.montant;
+            if (autreShopId != null && autreShopId != shopId) {
+              soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - flot.montantNet;
+            }
           }
         }
       }
       
-      // Séparer positifs et négatifs
+      // Séparer positifs (créances) et négatifs (dettes)
       for (final solde in soldesParShop.values) {
         if (solde > 0) {
           shopsNousDoivent += solde;
@@ -3183,6 +3943,112 @@ const SizedBox(height: 16),
         'shopsNousDoivent': 0.0,
         'shopsNousDevons': 0.0,
         'capturesEnAttente': 0.0,
+      };
+    }
+  }
+
+  /// Obtenir les détails des shops (qui nous doivent et que nous devons)
+  Future<Map<String, List<Map<String, dynamic>>>> _getShopBalancesDetails(int? shopId) async {
+    if (shopId == null) {
+      return {
+        'shopsNousDoivent': [],
+        'shopsNousDevons': [],
+      };
+    }
+    
+    try {
+      // Récupérer tous les retraits et opérations (pour les FLOTs)
+      final retraits = await LocalDB.instance.getAllRetraitsVirtuels();
+      final allOperations = await LocalDB.instance.getAllOperations();
+      final allShops = await LocalDB.instance.getAllShops();
+      
+      // Créer un map des shops pour accès rapide
+      final shopsMap = {for (var shop in allShops) shop.id: shop};
+      
+      // Filtrer les opérations de type FLOT
+      final flotOperations = allOperations.where((op) => 
+        op.type == OperationType.flotShopToShop
+      ).toList();
+      
+      // Filtrer pour notre shop
+      final retraitsFiltres = retraits.where((r) => 
+        r.shopSourceId == shopId || r.shopDebiteurId == shopId
+      ).toList();
+      
+      final flots = flotOperations.where((f) => 
+        f.shopSourceId == shopId || f.shopDestinationId == shopId
+      ).toList();
+      
+      // Calculer par shop
+      final Map<int, double> soldesParShop = {};
+      
+      // Retraits virtuels
+      for (final retrait in retraitsFiltres) {
+        if (retrait.shopSourceId == shopId) {
+          final autreShopId = retrait.shopDebiteurId;
+          soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + retrait.montant;
+        } else {
+          final autreShopId = retrait.shopSourceId;
+          soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - retrait.montant;
+        }
+      }
+      
+      // FLOTs
+      for (final flot in flots) {
+        if (flot.statut == OperationStatus.validee || flot.statut == OperationStatus.enAttente) {
+          if (flot.shopSourceId == shopId) {
+            final autreShopId = flot.shopDestinationId;
+            if (autreShopId != null && autreShopId != shopId) {
+              soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + flot.montantNet;
+            }
+          } else if (flot.shopDestinationId == shopId) {
+            final autreShopId = flot.shopSourceId;
+            if (autreShopId != null && autreShopId != shopId) {
+              soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - flot.montantNet;
+            }
+          }
+        }
+      }
+      
+      // Séparer en deux listes
+      final List<Map<String, dynamic>> shopsNousDoivent = [];
+      final List<Map<String, dynamic>> shopsNousDevons = [];
+      
+      for (final entry in soldesParShop.entries) {
+        final autreShopId = entry.key;
+        final solde = entry.value;
+        final shop = shopsMap[autreShopId];
+        
+        if (shop == null) continue;
+        
+        if (solde > 0) {
+          // Créance
+          shopsNousDoivent.add({
+            'shopId': autreShopId,
+            'designation': shop.designation,
+            'localisation': shop.localisation,
+            'montant': solde,
+          });
+        } else if (solde < 0) {
+          // Dette
+          shopsNousDevons.add({
+            'shopId': autreShopId,
+            'designation': shop.designation,
+            'localisation': shop.localisation,
+            'montant': solde.abs(),
+          });
+        }
+      }
+      
+      return {
+        'shopsNousDoivent': shopsNousDoivent,
+        'shopsNousDevons': shopsNousDevons,
+      };
+    } catch (e) {
+      debugPrint('Erreur calcul détails shops: $e');
+      return {
+        'shopsNousDoivent': [],
+        'shopsNousDevons': [],
       };
     }
   }
@@ -3566,9 +4432,9 @@ const SizedBox(height: 16),
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            const Text(
               'Confirmer que vous avez REMBOURSÉ ce retrait ?',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
             ),
             const SizedBox(height: 12),
             Container(
@@ -3778,14 +4644,14 @@ const SizedBox(height: 16),
                       pw.SizedBox(height: 8),
                       pw.Text(
                         '$shopName - $agentName',
-                        style: pw.TextStyle(
+                        style: const pw.TextStyle(
                           fontSize: 14,
                           color: PdfColors.white,
                         ),
                       ),
                       pw.Text(
                         DateFormat('dd/MM/yyyy HH:mm').format(dateNow),
-                        style: pw.TextStyle(
+                        style: const pw.TextStyle(
                           fontSize: 12,
                           color: PdfColors.white,
                         ),

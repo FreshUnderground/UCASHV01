@@ -1,87 +1,93 @@
 <?php
-// Désactiver l'affichage des erreurs pour éviter de corrompre le JSON
-ini_set('display_errors', '0');
-error_reporting(E_ALL);
 
-// Capturer TOUTES les erreurs et les convertir en JSON
-set_error_handler(function($errno, $errstr, $errfile, $errline) {
-    throw new ErrorException($errstr, 0, $errno, $errfile, $errline);
-});
-
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, Accept');
+header('Access-Control-Max-Age: 86400');
 
+// Gestion des requêtes OPTIONS (preflight)
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
 }
 
-require_once __DIR__ . '/../../config/database.php';
+if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+    http_response_code(405);
+    echo json_encode(['success' => false, 'message' => 'Méthode non autorisée']);
+    exit();
+}
+
+// Enable error reporting for debugging
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
 
 try {
-    $db = new Database();
-    $conn = $db->getConnection();
+    require_once '../../../config/database.php';
     
-    // Récupérer le paramètre 'since' (timestamp de dernière sync)
-    $since = $_GET['since'] ?? '2020-01-01T00:00:00.000';
+    $since = $_GET['since'] ?? null;
+    $userId = $_GET['user_id'] ?? 'unknown';
     
-    error_log("📱 [SIMs Changes] Requête depuis: $since");
+    // Debug: Log input parameters
+    error_log("SIMs changes request - since: " . ($since ?? 'null') . ", userId: " . $userId);
     
-    // Récupérer toutes les SIMs modifiées depuis le timestamp
-    $stmt = $conn->prepare("
-        SELECT 
-            id,
-            numero,
-            operateur,
-            shop_id,
-            shop_designation,
-            solde_initial,
-            solde_actuel,
-            statut,
-            motif_suspension,
-            date_creation,
-            date_suspension,
-            cree_par,
-            last_modified_at,
-            last_modified_by,
-            is_synced,
-            synced_at
-        FROM sims
-        WHERE last_modified_at >= ?
-        ORDER BY last_modified_at ASC
-    ");
+    // Construire la requête SQL
+    $sql = "SELECT * FROM sims WHERE 1=1";
+    $params = [];
+
+    // Debug: Log SQL query
+    error_log("SIMs SQL query: " . $sql . " with params: " . print_r($params, true));
     
-    $stmt->execute([$since]);
-    $sims = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $simsData = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    error_log("📱 [SIMs Changes] " . count($sims) . " SIMs trouvées");
+    // Debug: Log number found
+    error_log("SIMs found: " . count($simsData));
     
-    echo json_encode([
+    // Convertir les données pour Flutter
+    $entities = [];
+    foreach ($simsData as $sim) {
+        $entities[] = [
+            'id' => (int)$sim['id'],
+            'numero' => $sim['numero'],
+            'operateur' => $sim['operateur'],
+            'shop_id' => (int)$sim['shop_id'],
+            'shop_designation' => $sim['shop_designation'] ?? null,
+            'solde_initial' => (float)($sim['solde_initial'] ?? 0),
+            'solde_actuel' => (float)($sim['solde_actuel'] ?? 0),
+            'statut' => $sim['statut'] ?? 'active',
+            'motif_suspension' => $sim['motif_suspension'] ?? null,
+            'date_creation' => $sim['date_creation'],
+            'date_suspension' => $sim['date_suspension'] ?? null,
+            'cree_par' => $sim['cree_par'] ?? null,
+            'last_modified_at' => $sim['last_modified_at'],
+            'last_modified_by' => $sim['last_modified_by'] ?? null,
+            'is_synced' => (bool)($sim['is_synced'] ?? false),
+            'synced_at' => $sim['synced_at'] ?? null
+        ];
+    }
+    
+    $response = [
         'success' => true,
-        'entities' => $sims,
-        'count' => count($sims),
+        'entities' => $entities,
+        'count' => count($entities),
         'since' => $since,
         'timestamp' => date('c')
-    ]);
+    ];
     
-} catch (PDOException $e) {
-    error_log("❌ [SIMs Changes] Erreur de base de données: " . $e->getMessage());
-    http_response_code(500);
-    echo json_encode([
-        'success' => false,
-        'message' => 'Erreur de base de données: ' . $e->getMessage(),
-        'entities' => [],
-        'timestamp' => date('c')
-    ]);
+    // Debug: Log response
+    error_log("SIMs response count: " . count($entities));
+    
+    echo json_encode($response);
+    
 } catch (Exception $e) {
-    error_log("❌ [SIMs Changes] Erreur: " . $e->getMessage());
+    error_log("SIMs error: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
     http_response_code(500);
     echo json_encode([
         'success' => false,
-        'message' => $e->getMessage(),
-        'entities' => [],
+        'message' => 'Erreur serveur: ' . $e->getMessage(),
         'timestamp' => date('c')
     ]);
 }
+?>

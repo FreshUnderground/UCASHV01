@@ -1,59 +1,74 @@
 <?php
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, Accept');
+header('Access-Control-Max-Age: 86400');
 
+// Gestion des requêtes OPTIONS (preflight)
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
 }
 
-require_once __DIR__ . '/../../config/database.php';
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    echo json_encode(['success' => false, 'message' => 'Méthode non autorisée']);
+    exit();
+}
+
+require_once '../../../config/database.php';
 
 try {
-    $db = new Database();
-    $conn = $db->getConnection();
+    // Récupération des données JSON
+    $input = file_get_contents('php://input');
+    $data = json_decode($input, true);
     
-    // Lire les données JSON
-    $json = file_get_contents('php://input');
-    $data = json_decode($json, true);
-    
-    if (!$data || !isset($data['entities']) || !is_array($data['entities'])) {
-        throw new Exception('Format de données invalide');
+    if (!$data || !isset($data['entities'])) {
+        throw new Exception('Données JSON invalides');
     }
     
     $entities = $data['entities'];
-    $successCount = 0;
-    $errorCount = 0;
+    $userId = $data['user_id'] ?? 'unknown';
+    $timestamp = $data['timestamp'] ?? date('c');
+    
+    $uploaded = 0;
+    $updated = 0;
     $errors = [];
     
-    error_log("📝 [SIM Movements Upload] Réception de " . count($entities) . " mouvements");
+    error_log("SIM Movements upload - received: " . count($entities) . " entities");
     
-    foreach ($entities as $index => $movement) {
+    foreach ($entities as $entity) {
         try {
+            // Ajouter les métadonnées de synchronisation
+            $entity['last_modified_at'] = $timestamp;
+            $entity['last_modified_by'] = $userId;
+            
             // Validation des champs obligatoires
-            if (empty($movement['sim_id'])) {
-                throw new Exception("sim_id manquant pour l'entité $index");
+            if (empty($entity['sim_id'])) {
+                throw new Exception("sim_id manquant");
             }
-            if (empty($movement['sim_numero'])) {
-                throw new Exception("sim_numero manquant pour l'entité $index");
+            if (empty($entity['sim_numero'])) {
+                throw new Exception("sim_numero manquant");
             }
-            if (empty($movement['nouveau_shop_id'])) {
-                throw new Exception("nouveau_shop_id manquant pour l'entité $index");
+            if (empty($entity['nouveau_shop_id'])) {
+                throw new Exception("nouveau_shop_id manquant pour SIM {$entity['sim_numero']}");
+            }
+            if (empty($entity['admin_responsable'])) {
+                throw new Exception("admin_responsable manquant pour SIM {$entity['sim_numero']}");
             }
             
-            $movementId = $movement['id'] ?? null;
+            $movementId = $entity['id'] ?? null;
             
             if ($movementId) {
                 // Vérifier si le mouvement existe
-                $checkStmt = $conn->prepare("SELECT id FROM sim_movements WHERE id = ? LIMIT 1");
+                $checkStmt = $pdo->prepare("SELECT id FROM sim_movements WHERE id = ? LIMIT 1");
                 $checkStmt->execute([$movementId]);
                 $existing = $checkStmt->fetch(PDO::FETCH_ASSOC);
                 
                 if ($existing) {
                     // UPDATE
-                    $stmt = $conn->prepare("
+                    $stmt = $pdo->prepare("
                         UPDATE sim_movements SET
                             sim_id = ?,
                             sim_numero = ?,
@@ -72,21 +87,22 @@ try {
                     ");
                     
                     $stmt->execute([
-                        $movement['sim_id'],
-                        $movement['sim_numero'],
-                        $movement['ancien_shop_id'] ?? null,
-                        $movement['ancien_shop_designation'] ?? null,
-                        $movement['nouveau_shop_id'],
-                        $movement['nouveau_shop_designation'],
-                        $movement['admin_responsable'],
-                        $movement['motif'] ?? null,
-                        $movement['date_movement'] ?? date('Y-m-d H:i:s'),
-                        $movement['last_modified_at'] ?? date('Y-m-d H:i:s'),
-                        $movement['last_modified_by'] ?? null,
+                        $entity['sim_id'],
+                        $entity['sim_numero'],
+                        $entity['ancien_shop_id'] ?? null,
+                        $entity['ancien_shop_designation'] ?? null,
+                        $entity['nouveau_shop_id'],
+                        $entity['nouveau_shop_designation'] ?? null,
+                        $entity['admin_responsable'],
+                        $entity['motif'] ?? null,
+                        $entity['date_movement'] ?? date('Y-m-d H:i:s'),
+                        $entity['last_modified_at'],
+                        $entity['last_modified_by'],
                         $movementId
                     ]);
                     
-                    error_log("✏️ Mouvement mis à jour: SIM {$movement['sim_numero']} (ID: $movementId)");
+                    $updated++;
+                    error_log("SIM Movement updated: {$entity['sim_numero']}");
                 } else {
                     $movementId = null; // Force INSERT si ID n'existe pas
                 }
@@ -94,7 +110,7 @@ try {
             
             if (!$movementId) {
                 // INSERT
-                $stmt = $conn->prepare("
+                $stmt = $pdo->prepare("
                     INSERT INTO sim_movements (
                         sim_id, sim_numero, ancien_shop_id, ancien_shop_designation,
                         nouveau_shop_id, nouveau_shop_designation, admin_responsable,
@@ -104,48 +120,53 @@ try {
                 ");
                 
                 $stmt->execute([
-                    $movement['sim_id'],
-                    $movement['sim_numero'],
-                    $movement['ancien_shop_id'] ?? null,
-                    $movement['ancien_shop_designation'] ?? null,
-                    $movement['nouveau_shop_id'],
-                    $movement['nouveau_shop_designation'],
-                    $movement['admin_responsable'],
-                    $movement['motif'] ?? null,
-                    $movement['date_movement'] ?? date('Y-m-d H:i:s'),
-                    $movement['last_modified_at'] ?? date('Y-m-d H:i:s'),
-                    $movement['last_modified_by'] ?? null
+                    $entity['sim_id'],
+                    $entity['sim_numero'],
+                    $entity['ancien_shop_id'] ?? null,
+                    $entity['ancien_shop_designation'] ?? null,
+                    $entity['nouveau_shop_id'],
+                    $entity['nouveau_shop_designation'] ?? null,
+                    $entity['admin_responsable'],
+                    $entity['motif'] ?? null,
+                    $entity['date_movement'] ?? date('Y-m-d H:i:s'),
+                    $entity['last_modified_at'],
+                    $entity['last_modified_by']
                 ]);
                 
-                $movementId = $conn->lastInsertId();
-                error_log("➕ Nouveau mouvement inséré: SIM {$movement['sim_numero']} (ID: $movementId)");
+                $uploaded++;
+                error_log("SIM Movement inserted: {$entity['sim_numero']}");
             }
             
-            $successCount++;
-            
         } catch (Exception $e) {
-            $errorCount++;
-            $errorMsg = "Erreur mouvement {$movement['sim_numero']}: " . $e->getMessage();
-            $errors[] = $errorMsg;
-            error_log("❌ $errorMsg");
+            $errors[] = [
+                'entity_id' => $entity['id'] ?? 'unknown',
+                'error' => $e->getMessage()
+            ];
+            error_log("SIM Movement error: " . $e->getMessage());
         }
     }
     
-    error_log("✅ Upload mouvements terminé: $successCount succès, $errorCount erreurs");
-    
-    echo json_encode([
+    $response = [
         'success' => true,
-        'message' => "Upload terminé: $successCount mouvements synchronisés",
-        'uploaded' => $successCount,
-        'errors' => $errorCount,
-        'error_details' => $errors
-    ]);
+        'message' => 'Upload terminé',
+        'uploaded' => $uploaded,
+        'updated' => $updated,
+        'total' => count($entities),
+        'errors' => $errors,
+        'timestamp' => date('c')
+    ];
+    
+    error_log("SIM Movements upload complete: $uploaded inserted, $updated updated");
+    
+    echo json_encode($response);
     
 } catch (Exception $e) {
-    error_log("❌ [SIM Movements Upload] Erreur: " . $e->getMessage());
+    error_log("SIM Movements upload error: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
     http_response_code(500);
     echo json_encode([
         'success' => false,
-        'message' => $e->getMessage()
+        'message' => 'Erreur serveur: ' . $e->getMessage(),
+        'timestamp' => date('c')
     ]);
 }
+?>

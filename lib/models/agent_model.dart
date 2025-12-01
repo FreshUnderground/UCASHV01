@@ -6,6 +6,7 @@ class AgentModel {
   final String? shopDesignation;  // Nom du shop pour affichage
   final String? nom;
   final String? telephone;
+  final String role;  // 'AGENT' ou 'ADMIN'
   final bool isActive;
   final DateTime? createdAt;
   final DateTime? lastModifiedAt;
@@ -19,6 +20,7 @@ class AgentModel {
     this.shopDesignation,
     this.nom,
     this.telephone,
+    this.role = 'AGENT',  // Par défaut AGENT
     this.isActive = true,
     this.createdAt,
     this.lastModifiedAt,
@@ -34,6 +36,7 @@ class AgentModel {
       shopDesignation: json['shop_designation'] ?? json['shopDesignation'],
       nom: json['nom'],
       telephone: json['telephone'],
+      role: json['role'] ?? 'AGENT',  // Support du rôle depuis la BDD
       isActive: json['is_active'] == 1 || json['isActive'] == true,
       createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
       lastModifiedAt: json['last_modified_at'] != null ? DateTime.parse(json['last_modified_at']) : null,
@@ -50,6 +53,7 @@ class AgentModel {
       'shop_designation': shopDesignation,
       'nom': nom,
       'telephone': telephone,
+      'role': role,  // Inclure le rôle dans l'export JSON
       'is_active': isActive ? 1 : 0,
       'created_at': createdAt?.toString().split('.')[0].replaceFirst('T', ' '), // Format: YYYY-MM-DD HH:MM:SS
       'last_modified_at': lastModifiedAt?.toString().split('.')[0].replaceFirst('T', ' '), // Format: YYYY-MM-DD HH:MM:SS
@@ -65,6 +69,7 @@ class AgentModel {
     String? shopDesignation,
     String? nom,
     String? telephone,
+    String? role,
     bool? isActive,
     DateTime? createdAt,
     DateTime? lastModifiedAt,
@@ -78,6 +83,7 @@ class AgentModel {
       shopDesignation: shopDesignation ?? this.shopDesignation,
       nom: nom ?? this.nom,
       telephone: telephone ?? this.telephone,
+      role: role ?? this.role,
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
       lastModifiedAt: lastModifiedAt ?? this.lastModifiedAt,

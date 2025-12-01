@@ -42,7 +42,7 @@ echo  INSTRUCTIONS DE DEPLOIEMENT
 echo ========================================
 echo.
 echo 1. Connectez-vous a votre serveur via FTP/SFTP ou cPanel
-echo    Serveur: shops.investee-group.com
+echo    Serveur: mahanaim.investee-group.com
 echo.
 echo 2. Uploadez les fichiers suivants:
 echo.

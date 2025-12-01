@@ -32,6 +32,8 @@ class AgentDashboardPage extends StatefulWidget {
 
 class _AgentDashboardPageState extends State<AgentDashboardPage> {
   int _selectedIndex = 0;
+  bool _isLoadingData = false;
+  bool _isDisposed = false; // Track disposal state
   
   final List<String> _menuItems = [
     'Dashboard',
@@ -66,35 +68,79 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
   @override
   void initState() {
     super.initState();
-    _loadData();
-    _setupFlotNotifications();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_isDisposed && mounted) {
+        _loadData();
+        _setupFlotNotifications();
+      }
+    });
+  }
+  
+  @override
+  void dispose() {
+    _isDisposed = true;
+    super.dispose();
   }
 
-  void _loadData() {
-    final authService = Provider.of<AgentAuthService>(context, listen: false);
-    final operationService = Provider.of<OperationService>(context, listen: false);
-    final shopService = Provider.of<ShopService>(context, listen: false);
-    final agentService = Provider.of<AgentService>(context, listen: false);
-    final flotService = Provider.of<FlotService>(context, listen: false);
+  Future<void> _loadData() async {
+    if (_isDisposed || !mounted) return;
     
-    if (authService.currentAgent != null) {
-      // IMPORTANT: Recharger TOUS les services après sync
-      shopService.loadShops();
-      agentService.loadAgents();
-      operationService.loadOperations(agentId: authService.currentAgent!.id);
-      flotService.loadFlots(shopId: authService.currentAgent!.shopId, isAdmin: false);
+    try {
+      if (!_isDisposed && mounted) {
+        setState(() => _isLoadingData = true);
+      }
       
-      debugPrint('🔄 _loadData: Rechargement des données après sync');
-      debugPrint('   Agents disponibles: ${agentService.agents.length}');
-      debugPrint('   Shops disponibles: ${shopService.shops.length}');
-      debugPrint('   Opérations pour agent ${authService.currentAgent!.id}: ${operationService.operations.length}');
-      debugPrint('   FLOTs pour shop ${authService.currentAgent!.shopId}: ${flotService.flots.length}');
+      final authService = Provider.of<AgentAuthService>(context, listen: false);
+      final operationService = Provider.of<OperationService>(context, listen: false);
+      final shopService = Provider.of<ShopService>(context, listen: false);
+      final agentService = Provider.of<AgentService>(context, listen: false);
+      final flotService = Provider.of<FlotService>(context, listen: false);
+      
+      if (authService.currentAgent != null) {
+        // IMPORTANT: Recharger TOUS les services après sync
+        await Future.wait([
+          shopService.loadShops(),
+          agentService.loadAgents(),
+          operationService.loadOperations(agentId: authService.currentAgent!.id),
+          flotService.loadFlots(shopId: authService.currentAgent!.shopId, isAdmin: false),
+        ]);
+        
+        debugPrint('🔄 _loadData: Rechargement des données après sync');
+        debugPrint('   Agents disponibles: ${agentService.agents.length}');
+        debugPrint('   Shops disponibles: ${shopService.shops.length}');
+        debugPrint('   Opérations pour agent ${authService.currentAgent!.id}: ${operationService.operations.length}');
+        debugPrint('   FLOTs pour shop ${authService.currentAgent!.shopId}: ${flotService.flots.length}');
+      }
+    } catch (e) {
+      debugPrint('❌ [AgentDashboard] Erreur chargement données: $e');
+      
+      if (!_isDisposed && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Erreur chargement: $e'),
+            backgroundColor: Colors.red,
+            action: SnackBarAction(
+              label: 'Réessayer',
+              textColor: Colors.white,
+              onPressed: _loadData,
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (!_isDisposed && mounted) {
+        setState(() => _isLoadingData = false);
+      }
     }
   }
 
   /// Configure les notifications pour les flots entrants
   void _setupFlotNotifications() {
+    if (_isDisposed || !mounted) return;
+    
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_isDisposed || !mounted) return;
+      
       final authService = Provider.of<AgentAuthService>(context, listen: false);
       final flotService = Provider.of<FlotService>(context, listen: false);
       final flotNotificationService = FlotNotificationService();
@@ -106,7 +152,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
       
       // Définir le callback pour les nouvelles notifications de flots
       flotNotificationService.onNewFlotDetected = (title, message, flotId) {
-        if (mounted) {
+        if (!_isDisposed && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Row(
@@ -138,10 +184,12 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
                 label: 'VOIR',
                 textColor: Colors.white,
                 onPressed: () {
-                  // Naviguer vers l'onglet FLOT
-                  setState(() {
-                    _selectedIndex = 7; // Index 7 = FLOT
-                  });
+                  if (!_isDisposed && mounted) {
+                    // Naviguer vers l'onglet FLOT
+                    setState(() {
+                      _selectedIndex = 7; // Index 7 = FLOT
+                    });
+                  }
                 },
               ),
             ),
@@ -689,7 +737,10 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
         case 9: return 3; // Frais
         case 11: return 4; // VIRTUEL (Retrait Mobile Money)
         case 10: return 5; // Config
-        default: return 0;
+        default: 
+          // Pour les items non mappés (1,2,3,4,5,8), retourner Dashboard
+          debugPrint('⚠️ [BottomNav] Index desktop $desktopIndex non mappé -> Dashboard');
+          return 0;
       }
     }
 
@@ -705,8 +756,17 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
       }
     }
 
+    // S'assurer que currentIndex est valide AVANT de construire le widget
+    final mobileIndex = _getMobileNavIndex(_selectedIndex);
+    // Double sécurité: clamp entre 0 et 5 (6 items)
+    final validMobileIndex = mobileIndex.clamp(0, 5);
+    
+    if (mobileIndex != validMobileIndex) {
+      debugPrint('⚠️ [BottomNav] Index invalidé: $mobileIndex -> $validMobileIndex');
+    }
+
     return BottomNavigationBar(
-      currentIndex: _getMobileNavIndex(_selectedIndex),
+      currentIndex: validMobileIndex,
       onTap: (mobileIndex) {
         final desktopIndex = _getDesktopIndexFromMobile(mobileIndex);
         setState(() => _selectedIndex = desktopIndex);

@@ -129,6 +129,23 @@ class OperationService extends ChangeNotifier {
 
   Future<OperationModel?> createOperation(OperationModel operation, {AuthService? authService}) async {
     try {
+      // ✅ VÉRIFIER SI LA JOURNÉE EST CLÔTURÉE
+      // Un agent ne peut plus effectuer une opération si sa journée est clôturée
+      if (operation.shopSourceId != null) {
+        final today = DateTime.now();
+        final isClosedToday = await LocalDB.instance.clotureExistsPourDate(
+          operation.shopSourceId!,
+          today,
+        );
+        
+        if (isClosedToday) {
+          final dateStr = '${today.day.toString().padLeft(2, '0')}/${today.month.toString().padLeft(2, '0')}/${today.year}';
+          _errorMessage = 'La journée du $dateStr est déjà clôturée. Aucune opération ne peut être effectuée.';
+          debugPrint('❌ $_errorMessage');
+          throw Exception(_errorMessage);
+        }
+      }
+      
       // RÉSOUDRE et ENRICHIR l'opération avec l'USERNAME de l'agent AVANT sauvegarde
       OperationModel enrichedOperation = operation;
       

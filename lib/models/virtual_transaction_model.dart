@@ -38,7 +38,7 @@ class VirtualTransactionModel {
 
   VirtualTransactionModel({
     this.id,
-    required this.reference,
+    required String reference, // Normalized reference
     required this.montantVirtuel,
     this.frais = 0.0,
     required this.montantCash,
@@ -58,7 +58,7 @@ class VirtualTransactionModel {
     this.lastModifiedBy,
     this.isSynced = false,
     this.syncedAt,
-  });
+  }) : reference = reference.trim().toLowerCase();
 
   VirtualTransactionModel copyWith({
     int? id,
@@ -86,7 +86,7 @@ class VirtualTransactionModel {
   }) {
     return VirtualTransactionModel(
       id: id ?? this.id,
-      reference: reference ?? this.reference,
+      reference: reference != null ? reference.trim().toLowerCase() : this.reference,
       montantVirtuel: montantVirtuel ?? this.montantVirtuel,
       frais: frais ?? this.frais,
       montantCash: montantCash ?? this.montantCash,
@@ -136,9 +136,19 @@ class VirtualTransactionModel {
   }
 
   factory VirtualTransactionModel.fromJson(Map<String, dynamic> json) {
+    // Gérer is_synced qui peut être bool (serveur) ou int (local)
+    bool isSynced = false;
+    if (json['is_synced'] != null) {
+      if (json['is_synced'] is bool) {
+        isSynced = json['is_synced'] as bool;
+      } else if (json['is_synced'] is int) {
+        isSynced = (json['is_synced'] as int) == 1;
+      }
+    }
+    
     return VirtualTransactionModel(
       id: json['id'] as int?,
-      reference: (json['reference'] as String?) ?? '',
+      reference: ((json['reference'] as String?) ?? '').trim().toLowerCase(),
       montantVirtuel: (json['montant_virtuel'] as num?)?.toDouble() ?? 0.0,
       frais: (json['frais'] as num?)?.toDouble() ?? 0.0,
       montantCash: (json['montant_cash'] as num?)?.toDouble() ?? 0.0,
@@ -165,7 +175,7 @@ class VirtualTransactionModel {
           ? DateTime.parse(json['last_modified_at'] as String)
           : null,
       lastModifiedBy: json['last_modified_by'] as String?,
-      isSynced: (json['is_synced'] as int?) == 1,
+      isSynced: isSynced,
       syncedAt: json['synced_at'] != null
           ? DateTime.parse(json['synced_at'] as String)
           : null,

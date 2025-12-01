@@ -22,15 +22,21 @@ class _CreateVirtualTransactionDialogState extends State<CreateVirtualTransactio
   SimModel? _selectedSim;
   bool _isLoading = false;
   bool _isLoadingSims = true;
+  bool _isDisposed = false; // Track disposal state
 
   @override
   void initState() {
     super.initState();
-    _loadSims();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_isDisposed && mounted) {
+        _loadSims();
+      }
+    });
   }
 
   @override
   void dispose() {
+    _isDisposed = true;
     _referenceController.dispose();
     _montantController.dispose();
     _notesController.dispose();
@@ -38,41 +44,74 @@ class _CreateVirtualTransactionDialogState extends State<CreateVirtualTransactio
   }
 
   Future<void> _loadSims() async {
-    final authService = Provider.of<AuthService>(context, listen: false);
-    final currentUser = authService.currentUser;
+    if (_isDisposed || !mounted) return;
     
-    debugPrint('🔄 [CreateVirtualTransactionDialog] Chargement SIMs...');
-    debugPrint('   User shopId: ${currentUser?.shopId}');
-    
-    if (currentUser?.shopId != null) {
-      await SimService.instance.loadSims(shopId: currentUser!.shopId);
-      debugPrint('✅ [CreateVirtualTransactionDialog] SIMs chargées: ${SimService.instance.sims.length}');
-      if (SimService.instance.sims.isNotEmpty) {
-        for (var sim in SimService.instance.sims.take(3)) {
-          debugPrint('   - ${sim.numero} (${sim.operateur}) - Shop: ${sim.shopId}, Statut: ${sim.statut.name}');
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final currentUser = authService.currentUser;
+      
+      debugPrint('🔄 [CreateVirtualTransactionDialog] Chargement SIMs...');
+      debugPrint('   User shopId: ${currentUser?.shopId}');
+      
+      if (currentUser?.shopId != null) {
+        await SimService.instance.loadSims(shopId: currentUser!.shopId);
+        debugPrint('✅ [CreateVirtualTransactionDialog] SIMs chargées: ${SimService.instance.sims.length}');
+        if (SimService.instance.sims.isNotEmpty) {
+          for (var sim in SimService.instance.sims.take(3)) {
+            debugPrint('   - ${sim.numero} (${sim.operateur}) - Shop: ${sim.shopId}, Statut: ${sim.statut.name}');
+          }
         }
       }
+      
+      if (!_isDisposed && mounted) {
+        setState(() => _isLoadingSims = false);
+      }
+    } catch (e) {
+      debugPrint('❌ [CreateVirtualTransactionDialog] Erreur chargement SIMs: $e');
+      
+      if (!_isDisposed && mounted) {
+        setState(() => _isLoadingSims = false);
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Erreur chargement SIMs: $e'),
+            backgroundColor: Colors.red,
+            action: SnackBarAction(
+              label: 'Réessayer',
+              textColor: Colors.white,
+              onPressed: () {
+                setState(() => _isLoadingSims = true);
+                _loadSims();
+              },
+            ),
+          ),
+        );
+      }
     }
-    
-    setState(() => _isLoadingSims = false);
   }
 
 
 
   Future<void> _submit() async {
+    if (_isDisposed || !mounted) return;
+    
     if (!_formKey.currentState!.validate()) return;
     if (_selectedSim == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('❌ Veuillez sélectionner une SIM'),
-          backgroundColor: Colors.red,
-          duration: Duration(seconds: 3),
-        ),
-      );
+      if (!_isDisposed && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Veuillez sélectionner une SIM'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
       return;
     }
 
-    setState(() => _isLoading = true);
+    if (!_isDisposed && mounted) {
+      setState(() => _isLoading = true);
+    }
 
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
@@ -110,7 +149,7 @@ class _CreateVirtualTransactionDialogState extends State<CreateVirtualTransactio
         debugPrint('   Erreur: ${VirtualTransactionService.instance.errorMessage}');
       }
 
-      if (mounted) {
+      if (!_isDisposed && mounted) {
         if (transaction != null) {
           debugPrint('🔄 [CreateVirtualTransaction] Rechargement des transactions...');
           // Recharger pour mettre à jour l'affichage
@@ -138,7 +177,7 @@ class _CreateVirtualTransactionDialogState extends State<CreateVirtualTransactio
       }
     } catch (e) {
       debugPrint('❌ [CreateVirtualTransaction] Exception: $e');
-      if (mounted) {
+      if (!_isDisposed && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('❌ Erreur: $e'),
@@ -148,7 +187,7 @@ class _CreateVirtualTransactionDialogState extends State<CreateVirtualTransactio
         );
       }
     } finally {
-      if (mounted) {
+      if (!_isDisposed && mounted) {
         setState(() => _isLoading = false);
       }
     }
@@ -327,35 +366,44 @@ class _CreateVirtualTransactionDialogState extends State<CreateVirtualTransactio
                   const SizedBox(height: 24),
                   
                   // Boutons
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Annuler'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: _isLoading ? null : _submit,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF48bb78),
-                            foregroundColor: Colors.white,
+                  Consumer<SimService>(
+                    builder: (context, simService, child) {
+                      final authService = Provider.of<AuthService>(context, listen: false);
+                      final currentShopId = authService.currentUser?.shopId;
+                      final hasActiveSims = simService.sims
+                          .any((s) => s.shopId == currentShopId && s.statut == SimStatus.active);
+                      
+                      return Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('Annuler'),
+                            ),
                           ),
-                          child: _isLoading
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Text('Enregistrer'),
-                        ),
-                      ),
-                    ],
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: (_isLoading || !hasActiveSims) ? null : _submit,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF48bb78),
+                                foregroundColor: Colors.white,
+                              ),
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Text('Save'),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),

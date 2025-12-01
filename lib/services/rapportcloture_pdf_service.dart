@@ -172,7 +172,20 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                     
                     // NOUVEAU: Compte FRAIS
                     _buildSection('4. Compte FRAIS', [
-                      _buildRow('Commissions du jour', rapport.commissionsFraisDuJour, color: PdfColors.green700),
+                      _buildRow('Frais encaissés', rapport.commissionsFraisDuJour, color: PdfColors.green700),
+                      // Détail des frais par shop
+                      if (rapport.fraisGroupesParShop.isNotEmpty) ...[
+                        pw.SizedBox(height: 4),
+                        pw.Text('Détail par Shop:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                        pw.Divider(),
+                        ...rapport.fraisGroupesParShop.entries.map((entry) => _buildDetailRow(
+                          entry.key, // Nom du shop source
+                          'Frais',
+                          entry.value, // Montant des frais
+                          PdfColors.green700,
+                        )),
+                      ],
+                      pw.SizedBox(height: 4),
                       _buildRow('Retraits du jour', rapport.retraitsFraisDuJour, color: PdfColors.red700, prefix: '-'),
                       pw.Divider(),
                       _buildRow('Solde FRAIS total', rapport.soldeFraisTotal, color: PdfColors.green700, bold: true),

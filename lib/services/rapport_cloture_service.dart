@@ -35,6 +35,7 @@ class RapportClotureService {
 
       // 1. Récupérer le solde antérieur (clôture du jour précédent)
       final soldeAnterieur = await _getSoldeAnterieur(shopId, dateRapport);
+      final soldeFraisAnterieur = soldeAnterieur['soldeFraisAnterieur'] ?? 0.0;
 
       // 2. Calculer les flots
       final flots = await _calculerFlots(shopId, dateRapport);
@@ -52,7 +53,7 @@ class RapportClotureService {
       final comptesShops = await _getComptesShops(shopId);
       
       // 6.5. Calculer les comptes spéciaux (FRAIS et DÉPENSE)
-      final comptesSpeciaux = await _calculerComptesSpeciaux(shopId, dateRapport);
+      final comptesSpeciaux = await _calculerComptesSpeciaux(shopId, dateRapport, operations);
 
       // 7. Calculer les transferts groupés par route
       final transfertsGroupes = await _calculerTransfertsGroupes(shopId, dateRapport, operations);
@@ -130,8 +131,10 @@ class RapportClotureService {
         shopsNousDevons: comptesShops['nousDevons']!,
         
         // NOUVEAU: Comptes spéciaux (FRAIS uniquement)
+        soldeFraisAnterieur: soldeFraisAnterieur,
         retraitsFraisDuJour: comptesSpeciaux['retraits_frais'] as double,
         commissionsFraisDuJour: comptesSpeciaux['commissions_frais'] as double,
+        fraisGroupesParShop: comptesSpeciaux['frais_groupes_par_shop'] as Map<String, double>,
         soldeFraisTotal: comptesSpeciaux['solde_frais_total'] as double,
         sortiesDepenseDuJour: 0.0,  // Non utilisé
         depotsDepenseDuJour: 0.0,   // Non utilisé
@@ -186,6 +189,7 @@ class RapportClotureService {
       debugPrint('   Orange Money SAISI: ${cloturePrecedente.soldeSaisiOrangeMoney} USD (Calculé: ${cloturePrecedente.soldeCalculeOrangeMoney})');
       debugPrint('   TOTAL SAISI: ${cloturePrecedente.soldeSaisiTotal} USD (Calculé: ${cloturePrecedente.soldeCalculeTotal})');
       debugPrint('   ÉCART TOTAL: ${cloturePrecedente.ecartTotal} USD');
+      debugPrint('   FRAIS ANTÉRIEUR: ${cloturePrecedente.soldeFraisAnterieur} USD');
       
       // Utiliser les montants SAISIS comme solde antérieur (ce que l'agent a compté)
       return {
@@ -193,6 +197,7 @@ class RapportClotureService {
         'airtelMoney': cloturePrecedente.soldeSaisiAirtelMoney,
         'mPesa': cloturePrecedente.soldeSaisiMPesa,
         'orangeMoney': cloturePrecedente.soldeSaisiOrangeMoney,
+        'soldeFraisAnterieur': cloturePrecedente.soldeFraisAnterieur ?? 0.0,
       };
     }
     
@@ -203,6 +208,7 @@ class RapportClotureService {
       'airtelMoney': 0.0,
       'mPesa': 0.0,
       'orangeMoney': 0.0,
+      'soldeFraisAnterieur': 0.0,
     };
   }
 
@@ -660,7 +666,8 @@ class RapportClotureService {
   }
 
   /// Calculer les comptes spéciaux (FRAIS et DÉPENSE)
-  Future<Map<String, dynamic>> _calculerComptesSpeciaux(int shopId, DateTime dateRapport) async {
+  /// IMPORTANT: Les frais affichés sont UNIQUEMENT les frais encaissés sur les transferts que nous avons servis
+  Future<Map<String, dynamic>> _calculerComptesSpeciaux(int shopId, DateTime dateRapport, List<OperationModel>? providedOperations) async {
     final service = CompteSpecialService.instance;
     await service.loadTransactions(shopId: shopId);
     
@@ -682,14 +689,58 @@ class RapportClotureService {
     );
     
     // Calculer les RETRAITS FRAIS du jour (montants négatifs)
-    final retraitsFrais = fraisDuJour
+    final retraitsFraisList = fraisDuJour
         .where((t) => t.typeTransaction == TypeTransactionCompte.RETRAIT)
-        .fold(0.0, (sum, t) => sum + t.montant.abs());
+        .toList();
+    final retraitsFrais = retraitsFraisList.fold(0.0, (sum, t) => sum + t.montant.abs());
     
-    // Calculer les COMMISSIONS FRAIS du jour (montants positifs)
-    final commissionsFrais = fraisDuJour
-        .where((t) => t.typeTransaction == TypeTransactionCompte.COMMISSION_AUTO)
-        .fold(0.0, (sum, t) => sum + t.montant);
+    // NOUVELLE LOGIQUE: Calculer les FRAIS ENCAISSÉS sur les transferts que NOUS avons servis
+    // Les frais appartiennent au shop DESTINATION qui sert le transfert
+    final operations = providedOperations ?? await LocalDB.instance.getAllOperations();
+    
+    // Récupérer tous les shops pour afficher leurs noms dans les logs
+    final shops = await LocalDB.instance.getAllShops();
+    final shopsMap = {for (var shop in shops) shop.id: shop.designation};
+    
+    final transfertsServis = operations.where((op) =>
+        op.shopDestinationId == shopId && // Nous sommes le shop destination
+        (op.type == OperationType.transfertNational ||
+         op.type == OperationType.transfertInternationalEntrant ||
+         op.type == OperationType.transfertInternationalSortant) &&
+        op.statut == OperationStatus.validee &&
+        _isSameDay(op.dateValidation ?? op.createdAt ?? op.dateOp, dateRapport)
+    ).toList();
+    
+    // Total des frais encaissés = somme des commissions sur les transferts servis
+    final fraisEncaisses = transfertsServis.fold(0.0, (sum, op) => sum + op.commission);
+    
+    // Grouper les frais par shop source (qui a envoyé le transfert)
+    final Map<String, double> fraisGroupesParShop = {};
+    for (final op in transfertsServis) {
+      final shopSource = shopsMap[op.shopSourceId] ?? 'Shop ${op.shopSourceId}';
+      fraisGroupesParShop[shopSource] = (fraisGroupesParShop[shopSource] ?? 0.0) + op.commission;
+    }
+    
+    debugPrint('📊 FRAIS ENCAISSÉS SUR TRANSFERTS SERVIS:');
+    debugPrint('   Nombre de transferts servis: ${transfertsServis.length}');
+    debugPrint('   Total frais encaissés: ${fraisEncaisses.toStringAsFixed(2)} USD');
+    debugPrint('   Frais groupés par shop:');
+    fraisGroupesParShop.forEach((shop, montant) {
+      debugPrint('     - $shop : ${montant.toStringAsFixed(2)} USD');
+    });
+    transfertsServis.forEach((op) {
+      final shopSource = shopsMap[op.shopSourceId] ?? 'Shop ${op.shopSourceId}';
+      final shopDest = shopsMap[op.shopDestinationId] ?? 'Shop ${op.shopDestinationId}';
+      final destinataire = op.destinataire ?? 'N/A';
+      debugPrint('     - $shopSource → $shopDest, $destinataire : ${op.montantNet.toStringAsFixed(2)} USD (Frais: ${op.commission.toStringAsFixed(2)} USD)');
+    });
+    
+    debugPrint('📊 RETRAITS SUR FRAIS DU JOUR:');
+    debugPrint('   Nombre de retraits: ${retraitsFraisList.length}');
+    debugPrint('   Total retraits: ${retraitsFrais.toStringAsFixed(2)} USD');
+    retraitsFraisList.forEach((r) {
+      debugPrint('     - ${r.description} : ${r.montant.abs().toStringAsFixed(2)} USD');
+    });
     
     // Calculer les SORTIES DÉPENSE du jour (montants négatifs)
     final sortiesDepense = depensesDuJour
@@ -706,7 +757,7 @@ class RapportClotureService {
     final soldeDepenseTotal = service.getSoldeDepense(shopId: shopId);
     
     debugPrint('📊 COMPTES SPÉCIAUX - ${dateRapport.toIso8601String().split('T')[0]}:');
-    debugPrint('   FRAIS: Commissions du jour = ${commissionsFrais.toStringAsFixed(2)} USD');
+    debugPrint('   FRAIS: Frais encaissés (transferts servis) = ${fraisEncaisses.toStringAsFixed(2)} USD');
     debugPrint('   FRAIS: Retraits du jour = ${retraitsFrais.toStringAsFixed(2)} USD');
     debugPrint('   FRAIS: Solde total = ${soldeFraisTotal.toStringAsFixed(2)} USD');
     debugPrint('   DÉPENSE: Dépôts du jour = ${depotsDepense.toStringAsFixed(2)} USD');
@@ -715,7 +766,8 @@ class RapportClotureService {
     
     return {
       'retraits_frais': retraitsFrais,
-      'commissions_frais': commissionsFrais,
+      'commissions_frais': fraisEncaisses, // MODIFIÉ: Utiliser les frais encaissés calculés
+      'frais_groupes_par_shop': fraisGroupesParShop, // NOUVEAU: Frais groupés par shop
       'solde_frais_total': soldeFraisTotal,
       'sorties_depense': sortiesDepense,
       'depots_depense': depotsDepense,
@@ -960,9 +1012,23 @@ class RapportClotureService {
       final ecartOrangeMoney = soldeSaisiOrangeMoney - soldeCalculeOrangeMoney;
       final ecartTotal = soldeSaisiTotal - soldeCalculeTotal;
       
+      // NOUVEAU: Calculer le Solde FRAIS du jour selon la formule:
+      // Solde Frais = Frais Antérieur + Frais encaissés du jour - Sortie Frais du jour
+      final soldeFraisAnterieur = rapport.soldeFraisAnterieur;
+      final fraisEncaisses = rapport.commissionsFraisDuJour;
+      final sortieFrais = rapport.retraitsFraisDuJour;
+      final soldeFraisDuJour = soldeFraisAnterieur + fraisEncaisses - sortieFrais;
+      
+      debugPrint('💰 Calcul Solde FRAIS du jour:');
+      debugPrint('   Frais Antérieur: ${soldeFraisAnterieur.toStringAsFixed(2)} USD');
+      debugPrint('   + Frais encaissés: ${fraisEncaisses.toStringAsFixed(2)} USD');
+      debugPrint('   - Sortie Frais: ${sortieFrais.toStringAsFixed(2)} USD');
+      debugPrint('   = Solde Frais du jour: ${soldeFraisDuJour.toStringAsFixed(2)} USD');
+      
       final cloture = ClotureCaisseModel(
         shopId: shopId,
         dateCloture: DateTime(dateCloture.year, dateCloture.month, dateCloture.day), // Normaliser à minuit
+        soldeFraisAnterieur: soldeFraisDuJour, // ENREGISTRER le Solde Frais calculé du jour
         
         // Montants saisis
         soldeSaisiCash: soldeSaisiCash,
@@ -997,6 +1063,7 @@ class RapportClotureService {
       debugPrint('   Solde Saisi: ${soldeSaisiTotal.toStringAsFixed(2)} USD');
       debugPrint('   Solde Calculé: ${soldeCalculeTotal.toStringAsFixed(2)} USD');
       debugPrint('   Écart: ${ecartTotal.toStringAsFixed(2)} USD');
+      debugPrint('   Solde FRAIS enregistré: ${soldeFraisDuJour.toStringAsFixed(2)} USD');
     } catch (e) {
       debugPrint('❌ Erreur lors de la clôture de journée: $e');
       rethrow;
@@ -1005,6 +1072,62 @@ class RapportClotureService {
 
   /// Vérifier si la journée a déjà été clôturée
   Future<bool> journeeEstCloturee(int shopId, DateTime date) async {
-    return await LocalDB.instance.clotureExistsPourDate(shopId, date);
+    try {
+      final cloture = await LocalDB.instance.getClotureCaisseByDate(shopId, date);
+      final estCloturee = cloture != null;
+      debugPrint('🔎 Journée ${date.toIso8601String().split('T')[0]} pour shop $shopId: ${estCloturee ? "CLÔTURÉE ✅" : "NON CLÔTURÉE ⚠️"}');
+      return estCloturee;
+    } catch (e) {
+      debugPrint('❌ Erreur vérification clôture journée: $e');
+      return false; // En cas d'erreur, considérer comme non clôturée pour forcer la vérification
+    }
+  }
+
+  /// Trouver le dernier jour ouvrable (excluant les dimanches)
+  /// Si la date est un dimanche, retourne le samedi précédent
+  DateTime getDernierJourOuvrable(DateTime date) {
+    DateTime jourOuvrable = date;
+    
+    // Si c'est un dimanche (weekday = 7), reculer d'un jour
+    while (jourOuvrable.weekday == DateTime.sunday) {
+      jourOuvrable = jourOuvrable.subtract(const Duration(days: 1));
+      debugPrint('⏪ Dimanche détecté, recul au ${jourOuvrable.toIso8601String().split('T')[0]}');
+    }
+    
+    return jourOuvrable;
+  }
+
+  /// Vérifier si la journée précédente nécessite une clôture
+  /// Retourne la date qui doit être clôturée, ou null si tout est à jour
+  Future<DateTime?> verifierCloturePrecedente(int shopId, DateTime dateActuelle) async {
+    try {
+      // Obtenir la date d'hier (ou le dernier jour ouvrable si on est lundi)
+      DateTime dateHier = dateActuelle.subtract(const Duration(days: 1));
+      DateTime dernierJourOuvrable = getDernierJourOuvrable(dateHier);
+      
+      debugPrint('🔍 Vérification clôture pour Shop $shopId');
+      debugPrint('   Date actuelle: ${dateActuelle.toIso8601String().split('T')[0]}');
+      debugPrint('   Dernier jour ouvrable: ${dernierJourOuvrable.toIso8601String().split('T')[0]}');
+      
+      // Vérifier si le dernier jour ouvrable est clôturé
+      final estCloturee = await journeeEstCloturee(shopId, dernierJourOuvrable);
+      
+      if (!estCloturee) {
+        debugPrint('⚠️ Journée non clôturée détectée: ${dernierJourOuvrable.toIso8601String().split('T')[0]}');
+        debugPrint('🔒 CLÔTURE OBLIGATOIRE REQUISE');
+        return dernierJourOuvrable;
+      }
+      
+      debugPrint('✅ Toutes les journées précédentes sont clôturées');
+      return null;
+    } catch (e, stackTrace) {
+      debugPrint('❌ Erreur vérification clôture précédente: $e');
+      debugPrint('📚 Stack trace: $stackTrace');
+      // En cas d'erreur, retourner la date précédente pour forcer une vérification manuelle
+      DateTime dateHier = dateActuelle.subtract(const Duration(days: 1));
+      DateTime dernierJourOuvrable = getDernierJourOuvrable(dateHier);
+      debugPrint('⚠️ En cas d\'erreur, demande de clôture pour: ${dernierJourOuvrable.toIso8601String().split('T')[0]}');
+      return dernierJourOuvrable;
+    }
   }
 }

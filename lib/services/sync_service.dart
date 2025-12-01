@@ -15,6 +15,8 @@ import 'transfer_sync_service.dart';
 import 'compte_special_service.dart';
 import 'auth_service.dart'; // Add this import
 import 'flot_service.dart'; // Add FlotService import
+import 'sim_service.dart'; // Add SimService import
+import 'virtual_transaction_service.dart'; // Add VirtualTransactionService import
 import 'local_db.dart';
 import '../models/shop_model.dart';
 import '../models/agent_model.dart';
@@ -245,7 +247,7 @@ class SyncService {
       debugPrint('🔄 Synchronisation des flots en file d\'attente...');
       await syncPendingFlots();
       
-      final dependentTables = ['agents', 'clients', 'operations', 'taux', 'commissions', 'comptes_speciaux', 'document_headers', 'cloture_caisse', 'flots', 'sims', 'virtual_transactions'];
+      final dependentTables = ['agents', 'clients', 'operations', 'taux', 'commissions', 'comptes_speciaux', 'document_headers', 'cloture_caisse', 'flots', 'sims', 'sim_movements', 'virtual_transactions'];
       for (String table in dependentTables) {
         try {
           await _uploadTableDataWithRetry(table, userIdToUse, userRole); // Pass user role
@@ -361,7 +363,7 @@ class SyncService {
   /// Upload des changements locaux vers le serveur
   Future<void> _uploadLocalChanges(String userId) async {
     // NOTE: 'operations' est maintenant inclus dans la sync normale
-    final tables = ['shops', 'agents', 'clients', 'operations', 'taux', 'commissions', 'document_headers', 'cloture_caisse', 'sims', 'virtual_transactions'];
+    final tables = ['shops', 'agents', 'clients', 'operations', 'taux', 'commissions', 'document_headers', 'cloture_caisse', 'sims', 'sim_movements', 'virtual_transactions'];
     int successCount = 0;
     int errorCount = 0;
     
@@ -520,6 +522,15 @@ class SyncService {
           debugPrint('❌ Validation: operateur manquant pour sim ${data['id']}');
           return false;
         }
+        if (data['shop_id'] == null || data['shop_id'] <= 0) {
+          debugPrint('❌ Validation: shop_id manquant ou invalide pour sim ${data['id']} (valeur: ${data['shop_id']})');
+          return false;
+        }
+        // Additional validation for shop_id type
+        if (data['shop_id'] is! int) {
+          debugPrint('❌ Validation: shop_id doit être un entier pour sim ${data['id']} (valeur: ${data['shop_id']}, type: ${data['shop_id'].runtimeType})');
+          return false;
+        }
         return true;
         
       case 'virtual_transactions':
@@ -530,6 +541,46 @@ class SyncService {
         }
         if (data['montant_virtuel'] == null || data['montant_virtuel'] <= 0) {
           debugPrint('❌ Validation: montant_virtuel invalide pour virtual_transaction ${data['id']}');
+          return false;
+        }
+        if (data['montant_cash'] == null || data['montant_cash'] < 0) {
+          debugPrint('❌ Validation: montant_cash invalide pour virtual_transaction ${data['id']}');
+          return false;
+        }
+        if (data['sim_numero'] == null || data['sim_numero'].toString().isEmpty) {
+          debugPrint('❌ Validation: sim_numero manquant pour virtual_transaction ${data['id']}');
+          return false;
+        }
+        if (data['shop_id'] == null || data['shop_id'] <= 0) {
+          debugPrint('❌ Validation: shop_id manquant ou invalide pour virtual_transaction ${data['id']}');
+          return false;
+        }
+        if (data['agent_id'] == null || data['agent_id'] <= 0) {
+          debugPrint('❌ Validation: agent_id manquant ou invalide pour virtual_transaction ${data['id']}');
+          return false;
+        }
+        return true;
+        
+      case 'sim_movements':
+        // Validation des champs obligatoires pour les mouvements de SIM
+        if (data['sim_id'] == null || data['sim_id'] <= 0) {
+          debugPrint('❌ Validation: sim_id manquant ou invalide pour sim_movement ${data['id']}');
+          return false;
+        }
+        if (data['sim_numero'] == null || data['sim_numero'].toString().isEmpty) {
+          debugPrint('❌ Validation: sim_numero manquant pour sim_movement ${data['id']}');
+          return false;
+        }
+        if (data['nouveau_shop_id'] == null || data['nouveau_shop_id'] <= 0) {
+          debugPrint('❌ Validation: nouveau_shop_id manquant ou invalide pour sim_movement ${data['id']}');
+          return false;
+        }
+        if (data['nouveau_shop_designation'] == null || data['nouveau_shop_designation'].toString().isEmpty) {
+          debugPrint('❌ Validation: nouveau_shop_designation manquant pour sim_movement ${data['id']}');
+          return false;
+        }
+        if (data['admin_responsable'] == null || data['admin_responsable'].toString().isEmpty) {
+          debugPrint('❌ Validation: admin_responsable manquant pour sim_movement ${data['id']}');
           return false;
         }
         return true;
@@ -576,6 +627,18 @@ class SyncService {
       }
           
       final baseUrl = await _baseUrl;
+      
+      // Log the data being sent for debugging
+      if (validatedData.isNotEmpty) {
+        debugPrint('📤 $tableName: Sending ${validatedData.length} entities');
+        for (int i = 0; i < validatedData.length && i < 3; i++) {
+          debugPrint('   Entity $i: ${validatedData[i]}');
+        }
+        if (validatedData.length > 3) {
+          debugPrint('   ... and ${validatedData.length - 3} more entities');
+        }
+      }
+      
       final response = await http.post(
         Uri.parse('$baseUrl/$tableName/upload.php'),
         headers: {
@@ -591,7 +654,23 @@ class SyncService {
       ).timeout(_syncTimeout);
 
       if (response.statusCode == 200) {
-        final result = jsonDecode(response.body);
+        // Vérifier que la réponse est bien du JSON avant de parser
+        final responseBody = response.body.trim();
+        
+        // Log pour déboguer les erreurs de parsing
+        if (responseBody.isEmpty) {
+          debugPrint('❌ $tableName: Réponse vide du serveur');
+          throw Exception('Réponse vide du serveur pour $tableName');
+        }
+        
+        // Vérifier que la réponse commence par { ou [ (JSON valide)
+        if (!responseBody.startsWith('{') && !responseBody.startsWith('[')) {
+          debugPrint('❌ $tableName: Réponse non-JSON reçue lors de l\'upload');
+          debugPrint('📄 Contenu brut (premiers 1000 caractères): ${responseBody.substring(0, responseBody.length > 1000 ? 1000 : responseBody.length)}');
+          throw FormatException('La réponse du serveur n\'est pas du JSON valide pour $tableName: ${responseBody.substring(0, responseBody.length > 100 ? 100 : responseBody.length)}');
+        }
+        
+        final result = jsonDecode(responseBody);
         if (result['success'] == true) {
           final uploaded = result['uploaded'] ?? 0;
           final updated = result['updated'] ?? 0;
@@ -629,11 +708,13 @@ class SyncService {
           throw Exception('Erreur serveur: ${result['message']}');
         }
       } else {
-        debugPrint('⚠️ Erreur HTTP $tableName: ${response.statusCode} - ${response.body}');
+        debugPrint('⚠️ Erreur HTTP $tableName: ${response.statusCode}');
+        debugPrint('📄 Réponse du serveur: ${response.body}');
         throw Exception('Erreur HTTP ${response.statusCode}: ${response.body}');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('❌ Erreur upload $tableName: $e');
+      debugPrint('📚 Stack trace: $stackTrace');
       throw Exception('Erreur upload $tableName: $e');
     }
   }
@@ -650,8 +731,9 @@ class SyncService {
   
   /// Download des changements du serveur vers l'app
   Future<void> _downloadRemoteChanges(String userId, String userRole) async {
-    // NOTE: 'operations' géré par TransferSyncService
-    final tables = ['shops', 'agents', 'clients', 'taux', 'commissions', 'document_headers', 'cloture_caisse', 'flots'];
+    // NOTE: 'operations' est maintenant inclus pour permettre à l'admin de télécharger toutes les opérations
+    // TransferSyncService gère la synchronisation en temps réel pour les agents
+    final tables = ['operations', 'shops', 'agents', 'clients', 'taux', 'commissions', 'document_headers', 'cloture_caisse', 'flots', 'sims', 'sim_movements', 'virtual_transactions'];
     int successCount = 0;
     int errorCount = 0;
     
@@ -677,21 +759,49 @@ class SyncService {
     try {
       final lastSync = await _getLastSyncTimestamp(tableName);
       
-      // OPTIMIZATION: Add 60-second overlap window to prevent missing data
-      // This ensures we catch any concurrent modifications that happened
-      // during the previous sync window
-      DateTime? adjustedSince;
-      if (lastSync != null) {
-        adjustedSince = lastSync.subtract(const Duration(seconds: 60));
-        debugPrint('🔄 $tableName: Overlap window applied (60s before $lastSync)');
+      // STRATÉGIE SPÉCIALE POUR virtual_transactions
+      // Utilise date_enregistrement de la dernière transaction locale au lieu de last_sync
+      String sinceParam;
+      
+      if (tableName == 'virtual_transactions') {
+        // Récupérer la dernière transaction locale
+        final allLocalVt = await LocalDB.instance.getAllVirtualTransactions();
+        
+        if (allLocalVt.isEmpty) {
+          // PREMIÈRE UTILISATION: Télécharger TOUT
+          sinceParam = '2020-01-01T00:00:00.000';
+          debugPrint('🆕 VIRTUAL_TRANSACTIONS: Première utilisation - Téléchargement COMPLET');
+        } else {
+          // Trouver la transaction avec la date_enregistrement la plus récente
+          final latestTransaction = allLocalVt.reduce((a, b) => 
+            a.dateEnregistrement.isAfter(b.dateEnregistrement) ? a : b
+          );
+          
+          // Télécharger depuis cette date (avec 60s overlap pour sécurité)
+          final sinceDate = latestTransaction.dateEnregistrement.subtract(const Duration(seconds: 60));
+          sinceParam = sinceDate.toIso8601String();
+          
+          debugPrint('💰 VIRTUAL_TRANSACTIONS: Dernière transaction locale: ${latestTransaction.reference}');
+          debugPrint('   Date enregistrement: ${latestTransaction.dateEnregistrement}');
+          debugPrint('   Téléchargement depuis: $sinceParam (avec 60s overlap)');
+        }
+      } else {
+        // OPTIMIZATION: Add 60-second overlap window to prevent missing data
+        // This ensures we catch any concurrent modifications that happened
+        // during the previous sync window
+        DateTime? adjustedSince;
+        if (lastSync != null) {
+          adjustedSince = lastSync.subtract(const Duration(seconds: 60));
+          debugPrint('🔄 $tableName: Overlap window applied (60s before $lastSync)');
+        }
+        
+        // Pour les tables standards, utiliser le timestamp de dernière sync avec overlap
+        sinceParam = adjustedSince != null 
+            ? adjustedSince.toIso8601String() 
+            : '2020-01-01T00:00:00.000';  // Date par défaut très ancienne
       }
       
-      // Pour les tables standards, utiliser le timestamp de dernière sync avec overlap
-      String sinceParam = adjustedSince != null 
-          ? adjustedSince.toIso8601String() 
-          : '2020-01-01T00:00:00.000';  // Date par défaut très ancienne
-      
-      debugPrint('📥 $tableName: Downloading since $sinceParam ${adjustedSince != null ? '(with 60s overlap)' : '(initial sync)'}');
+      debugPrint('📥 $tableName: Downloading since $sinceParam ${lastSync != null ? '(with 60s overlap)' : '(initial sync)'}');
       
       final baseUrl = await _baseUrl;
       
@@ -764,11 +874,41 @@ class SyncService {
       ).timeout(_syncTimeout);
 
       if (response.statusCode == 200) {
-        final result = jsonDecode(response.body);
+        // Vérifier que la réponse est bien du JSON avant de parser
+        final responseBody = response.body.trim();
+        
+        // Log pour déboguer les erreurs de parsing
+        if (responseBody.isEmpty) {
+          debugPrint('❌ $tableName: Réponse vide du serveur');
+          throw Exception('Réponse vide du serveur pour $tableName');
+        }
+        
+        // Vérifier que la réponse commence par { ou [ (JSON valide)
+        if (!responseBody.startsWith('{') && !responseBody.startsWith('[')) {
+          debugPrint('❌ $tableName: Réponse non-JSON reçue');
+          debugPrint('📄 Contenu brut (premiers 500 caractères): ${responseBody.substring(0, responseBody.length > 500 ? 500 : responseBody.length)}');
+          throw FormatException('La réponse du serveur n\'est pas du JSON valide pour $tableName');
+        }
+        
+        final result = jsonDecode(responseBody);
         if (result['success'] == true) {
           // Gérer le cas où entities est null ou n'est pas une liste
           final remoteData = (result['entities'] as List?) ?? [];
           debugPrint('📥 $tableName: ${remoteData.length} éléments reçus du serveur');
+          
+          // DIAGNOSTIC POUR SIMS
+          if (tableName == 'sims') {
+            if (remoteData.isEmpty) {
+              debugPrint('⚠️ AUCUNE SIM REÇUE DU SERVEUR !');
+              debugPrint('   Vérifiez si des SIMs existent dans la base de données serveur');
+              debugPrint('   URL requête: $uri');
+            } else {
+              debugPrint('📱 SIMs reçues du serveur:');
+              for (var simData in remoteData) {
+                debugPrint('   - ID: ${simData['id']}, Numéro: ${simData['numero']}, Opérateur: ${simData['operateur']}, Shop: ${simData['shop_id']}');
+              }
+            }
+          }
           
           if (remoteData.isNotEmpty) {
             await _processRemoteChanges(tableName, remoteData, userId);
@@ -801,6 +941,39 @@ class SyncService {
                   shopId: currentShopId,
                   isAdmin: userRole == 'admin',
                 );
+                break;
+              case 'operations':
+                // Recharger les opérations dans le service
+                debugPrint('📋 Rechargement des OPÉRATIONS en mémoire...');
+                // IMPORTANT: Utiliser l'instance existante via le contexte si disponible
+                // Sinon créer une instance temporaire pour le rechargement
+                final operationService = OperationService();
+                if (userRole == 'admin') {
+                  // Admin: charger TOUTES les opérations
+                  await operationService.loadOperations();
+                  debugPrint('👑 Admin: ${operationService.operations.length} opérations chargées (TOUTES)');
+                } else if (currentShopId != null) {
+                  // Agent: charger seulement les opérations du shop
+                  await operationService.loadOperations(shopId: currentShopId);
+                  debugPrint('👤 Agent: ${operationService.operations.length} opérations chargées (shop $currentShopId)');
+                } else {
+                  debugPrint('⚠️ Impossible de recharger les opérations: pas de contexte utilisateur');
+                }
+                break;
+              case 'sims':
+                // Recharger les SIMs dans le service
+                debugPrint('📱 Rechargement des SIMs en mémoire...');
+                await SimService.instance.loadSims();
+                break;
+              case 'sim_movements':
+                // Recharger les mouvements de SIM dans le service
+                debugPrint('📝 Rechargement des mouvements de SIM en mémoire...');
+                await SimService.instance.loadMovements();
+                break;
+              case 'virtual_transactions':
+                // Recharger les transactions virtuelles dans le service
+                debugPrint('💰 Rechargement des transactions virtuelles en mémoire...');
+                await VirtualTransactionService.instance.loadTransactions();
                 break;
               case 'document_headers':
               case 'cloture_caisse':
@@ -835,6 +1008,47 @@ class SyncService {
     
     debugPrint('🔄 Traitement de ${remoteData.length} éléments pour $tableName');
     
+    // STRATÉGIE SPÉCIALE POUR LES SIMs: Écraser complètement
+    if (tableName == 'sims') {
+      debugPrint('📱 STRATÉGIE SIMs: Téléchargement complet et écrasement');
+      
+      // ÉTAPE 1: Supprimer TOUTES les SIMs locales
+      final allLocalSims = await LocalDB.instance.getAllSims();
+      debugPrint('🗑️ Suppression de ${allLocalSims.length} SIMs locales existantes');
+      
+      final prefs = await LocalDB.instance.database;
+      final keys = prefs.getKeys();
+      for (String key in keys) {
+        if (key.startsWith('sim_')) {
+          await prefs.remove(key);
+        }
+      }
+      debugPrint('✅ Toutes les SIMs locales supprimées');
+      
+      // ÉTAPE 2: Insérer toutes les SIMs du serveur
+      debugPrint('📥 Insertion de ${remoteData.length} SIMs depuis le serveur');
+      
+      for (var simData in remoteData) {
+        try {
+          final sim = SimModel.fromJson(simData);
+          await LocalDB.instance.saveSim(sim);
+          inserted++;
+          debugPrint('  ✅ SIM ${sim.numero} insérée (Opérateur: ${sim.operateur}, Solde: ${sim.soldeActuel})');
+        } catch (e) {
+          errors++;
+          debugPrint('  ❌ Erreur insertion SIM: $e');
+        }
+      }
+      
+      debugPrint('✅ $tableName: $inserted insérés, $errors erreurs');
+      
+      // ÉTAPE 3: Recharger les SIMs en mémoire
+      debugPrint('🔄 Rechargement des SIMs en mémoire...');
+      await SimService.instance.loadSims();
+      debugPrint('✅ SIMs rechargées: ${SimService.instance.sims.length} SIMs disponibles');
+      
+      return; // Sortir de la fonction - traitement terminé pour les SIMs
+    }
    
     // Afficher un aperçu des données pour débogage
     if (tableName == 'clients' && remoteData.isNotEmpty) {
@@ -921,6 +1135,27 @@ class SyncService {
           shopId: currentShopId,
           isAdmin: currentUserRole == 'admin',
         );
+        break;
+      case 'operations':
+        // Recharger les opérations automatiquement après traitement
+        debugPrint('📋 Rechargement des OPÉRATIONS après traitement...');
+        final prefsOps = await SharedPreferences.getInstance();
+        final shopIdOps = prefsOps.getInt('current_shop_id');
+        final userRoleOps = prefsOps.getString('current_user_role') ?? 'agent';
+        final operationServiceProcess = OperationService();
+        if (userRoleOps == 'admin') {
+          // Admin: charger TOUTES les opérations
+          await operationServiceProcess.loadOperations();
+          debugPrint('👑 Admin: ${operationServiceProcess.operations.length} opérations rechargées (TOUTES)');
+        } else if (shopIdOps != null) {
+          // Agent: charger seulement les opérations du shop
+          await operationServiceProcess.loadOperations(shopId: shopIdOps);
+          debugPrint('👤 Agent: ${operationServiceProcess.operations.length} opérations rechargées (shop $shopIdOps)');
+        }
+        break;
+      case 'sims':
+        // Déjà rechargé dans la stratégie spéciale ci-dessus
+        debugPrint('ℹ️ SIMs déjà rechargées dans la stratégie d\'effacement');
         break;
       case 'document_headers':
       case 'cloture_caisse':
@@ -1281,17 +1516,37 @@ class SyncService {
           final allSims = await LocalDB.instance.getAllSims();
           debugPrint('📱 SIMS: Total SIMs en mémoire: ${allSims.length}');
           
+          // DIAGNOSTIC DÉTAILLÉ
+          if (allSims.isEmpty) {
+            debugPrint('⚠️ AUCUNE SIM TROUVÉE EN LOCAL !');
+            debugPrint('   Vérifiez si des SIMs ont été créées dans l\'application');
+          } else {
+            debugPrint('📋 Liste des SIMs trouvées:');
+            for (var sim in allSims) {
+              debugPrint('   - SIM ID: ${sim.id}, Numéro: ${sim.numero}, Opérateur: ${sim.operateur}, isSynced: ${sim.isSynced}, Shop: ${sim.shopId}');
+            }
+          }
+          
           // Filtrer uniquement les SIMs non synchronisées
-          unsyncedData = allSims
-              .where((sim) => sim.isSynced != true)
+          final simsToSync = allSims.where((sim) => sim.isSynced != true).toList();
+          
+          debugPrint('📤 SIMS: ${simsToSync.length}/${allSims.length} non synchronisées');
+          
+          if (simsToSync.isEmpty && allSims.isNotEmpty) {
+            debugPrint('ℹ️ Toutes les SIMs sont déjà synchronisées');
+          } else if (simsToSync.isNotEmpty) {
+            debugPrint('🔍 SIMs à synchroniser:');
+            for (var sim in simsToSync) {
+              debugPrint('   → ${sim.numero} (${sim.operateur}) - Solde: ${sim.soldeActuel}');
+            }
+          }
+          
+          unsyncedData = simsToSync
               .map((sim) {
                 final json = _addSyncMetadata(sim.toJson(), 'sim');
-                debugPrint('📤 SIM ${sim.numero} à synchroniser: ${sim.operateur} - Solde: ${sim.soldeActuel}');
                 return json;
               })
               .toList();
-          
-          debugPrint('📤 SIMS: ${unsyncedData.length}/${allSims.length} non synchronisées');
           break;
         
         case 'virtual_transactions':
@@ -1646,19 +1901,23 @@ class SyncService {
           break;
           
         case 'cloture_caisse':
-          final cloture = ClotureCaisseModel.fromJson(data);
-          final prefs = await LocalDB.instance.database;
-          // Clé unique: shop_id + date_cloture
-          final clotureKey = 'cloture_caisse_${cloture.shopId}_${cloture.dateCloture.toIso8601String().split('T')[0]}';
+          // Vérifier si la clôture existe déjà par shop_id + date_cloture
+          final shopId = data['shop_id'];
+          final dateCloture = data['date_cloture'];
           
-          // Vérifier si clôture existe déjà pour ce shop et cette date
-          if (prefs.containsKey(clotureKey)) {
-            debugPrint('⚠️ Doublon ignoré: clôture pour shop ${cloture.shopId} du ${cloture.dateCloture.toIso8601String().split('T')[0]} existe déjà');
-            return;
+          if (shopId != null && dateCloture != null) {
+            final dateClotureObj = DateTime.parse(dateCloture);
+            final existingCloture = await LocalDB.instance.getClotureCaisseByDate(shopId, dateClotureObj);
+            
+            if (existingCloture != null) {
+              debugPrint('⚠️ Doublon ignoré: clôture pour shop $shopId du ${dateClotureObj.toIso8601String().split('T')[0]} existe déjà (ID: ${existingCloture.id})');
+              return;
+            }
           }
           
-          await prefs.setString(clotureKey, jsonEncode(cloture.toJson()));
-          debugPrint('✅ Clôture caisse shop ${cloture.shopId} du ${cloture.dateCloture.toIso8601String().split('T')[0]} sauvegardée');
+          final cloture = ClotureCaisseModel.fromJson(data);
+          await LocalDB.instance.saveClotureCaisse(cloture);
+          debugPrint('✅ Clôture caisse shop ${cloture.shopId} du ${cloture.dateCloture.toIso8601String().split('T')[0]} sauvegardée (ID: ${cloture.id})');
           break;
         
         case 'flots':
@@ -1719,19 +1978,26 @@ class SyncService {
           // await LocalDB.instance.saveFlot(flot); // <-- COMMENTÉ pour éviter les doublons
           // debugPrint('✅ Flot ID ${flot.id} sauvegardé: ${flot.shopSourceDesignation} → ${flot.shopDestinationDesignation} - ${flot.montant} ${flot.devise}');
           break;
-          
-        case 'sims':
-          // Vérifier si la SIM existe déjà
-          final simId = data['id'];
-          if (simId != null) {
-            final existingSim = await LocalDB.instance.getSimById(simId);
-            if (existingSim != null) {
-              debugPrint('⚠️ Doublon ignoré: SIM ID $simId existe déjà');
+        
+        case 'operations':
+          // Vérifier si l'opération existe déjà
+          final opId = data['id'];
+          if (opId != null) {
+            final existingOp = await LocalDB.instance.getOperationById(opId);
+            if (existingOp != null) {
+              debugPrint('⚠️ Doublon ignoré: operation ID $opId existe déjà');
               return;
             }
           }
           
-          // Créer et sauvegarder la SIM
+          // Créer et sauvegarder l'opération
+          final operation = OperationModel.fromJson(data);
+          await LocalDB.instance.saveOperation(operation);
+          debugPrint('✅ Opération ID ${operation.id} sauvegardée: ${operation.type.name} - ${operation.montantNet} ${operation.devise}');
+          break;
+          
+        case 'sims':
+          // Créer et sauvegarder la SIM (appelé depuis _processRemoteChanges)
           final sim = SimModel.fromJson(data);
           await LocalDB.instance.saveSim(sim);
           debugPrint('✅ SIM ID ${sim.id} sauvegardée: ${sim.numero} - ${sim.operateur} - Solde: ${sim.soldeActuel}');
@@ -2069,16 +2335,18 @@ class SyncService {
             
           case 'cloture_caisse':
             final prefs = await LocalDB.instance.database;
-            // Pour les clôtures, l'ID est composé de shop_id + date
-            final clotureKeys = prefs.getKeys().where((key) => key.contains('cloture_caisse_') && key.contains('_$entityId'));
-            for (var key in clotureKeys) {
-              final clotureData = prefs.getString(key);
-              if (clotureData != null) {
-                final clotureJson = jsonDecode(clotureData);
-                clotureJson['is_synced'] = true;
-                clotureJson['synced_at'] = now.toIso8601String();
-                await prefs.setString(key, jsonEncode(clotureJson));
-              }
+            // Utiliser directement la clé avec l'ID de la clôture
+            final clotureKey = 'cloture_caisse_$entityId';
+            final clotureData = prefs.getString(clotureKey);
+            
+            if (clotureData != null) {
+              final clotureJson = jsonDecode(clotureData);
+              clotureJson['is_synced'] = true;
+              clotureJson['synced_at'] = now.toIso8601String();
+              await prefs.setString(clotureKey, jsonEncode(clotureJson));
+              debugPrint('✅ Clôture ID $entityId marquée comme synchronisée');
+            } else {
+              debugPrint('⚠️ Clôture ID $entityId non trouvée pour marquage sync (clé: $clotureKey)');
             }
             break;
           

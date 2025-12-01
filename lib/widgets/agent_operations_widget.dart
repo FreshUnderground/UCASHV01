@@ -92,10 +92,15 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
   }
 
   void _loadOperations() async {
+    // Check if widget is still mounted before starting
+    if (!mounted) return;
+    
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentUser = authService.currentUser;
     if (currentUser?.id != null) {
       // 1️⃣ D'ABORD: Synchroniser depuis l'API pour obtenir toutes les opérations fraîches
+      if (!mounted) return; // Check before accessing context
+      
       final transferSync = Provider.of<TransferSyncService>(context, listen: false);
       debugPrint('🔄 [MES OPS] Synchronisation des opérations depuis l\'API...');
       await transferSync.forceRefreshFromAPI();
@@ -103,6 +108,8 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
       
       // 2️⃣ ENSUITE: Charger les opérations filtrées par shop depuis LocalDB
       // ✅ Ceci inclut maintenant les FLOTs (type = flotShopToShop) depuis la table operations
+      if (!mounted) return; // Check after async operation
+      
       Provider.of<OperationService>(context, listen: false).loadOperations(shopId: currentUser!.shopId!);
       debugPrint('📋 [MES OPS] Chargement des opérations (incluant FLOTs) pour shop ${currentUser.shopId}');
     }

@@ -27,41 +27,33 @@ class ClotureVirtuelleService {
       
       debugPrint('Génération rapport clôture virtuelle pour shop $shopId - ${dateRapport.toIso8601String().split('T')[0]}');
 
-      // === 1. TRANSACTIONS VIRTUELLES ===
+      // === 1. TRANSACTIONS VIRTUELLES (optimisé pour mobiles) ===
       final allTransactions = await LocalDB.instance.getAllVirtualTransactions(
         shopId: shopId,
         dateDebut: dateDebut,
         dateFin: dateFin,
       );
       
-      // Statistiques globales
-      final captures = allTransactions;
-      final nombreCaptures = captures.length;
-      final montantTotalCaptures = captures.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
+      // Statistiques globales (calculs en une seule passe)
+      double montantTotalCaptures = 0.0;
+      double cashSortiCaptures = 0.0;
+      double montantVirtuelServies = 0.0;
+      double fraisPercus = 0.0;
+      double cashServi = 0.0;
+      int nombreServies = 0;
+      double montantVirtuelEnAttente = 0.0;
+      int nombreEnAttente = 0;
+      double montantVirtuelAnnulees = 0.0;
+      int nombreAnnulees = 0;
       
-      // CASH LORS DES CAPTURES:
-      // Client donne VIRTUEL → Nous donnons CASH
-      // Cash SORT (diminue) = montantVirtuel des captures
-      final cashSortiCaptures = captures.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
-      
-      final servies = allTransactions.where((t) => t.statut == VirtualTransactionStatus.validee).toList();
-      final nombreServies = servies.length;
-      final montantVirtuelServies = servies.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
-      final fraisPercus = servies.fold<double>(0, (sum, t) => sum + t.frais);
-      final cashServi = servies.fold<double>(0, (sum, t) => sum + t.montantCash);
-      
-      final enAttente = allTransactions.where((t) => t.statut == VirtualTransactionStatus.enAttente).toList();
-      final nombreEnAttente = enAttente.length;
-      final montantVirtuelEnAttente = enAttente.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
-      
-      final annulees = allTransactions.where((t) => t.statut == VirtualTransactionStatus.annulee).toList();
-      final nombreAnnulees = annulees.length;
-      final montantVirtuelAnnulees = annulees.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
-      
-      // NOUVEAU: Statistiques PAR SIM pour les transactions
+      // NOUVEAU: Statistiques PAR SIM (optimisé)
       final Map<String, Map<String, dynamic>> transactionsParSim = {};
       
+      // Traiter toutes les transactions en une seule boucle (optimisation mémoire)
       for (var trans in allTransactions) {
+        montantTotalCaptures += trans.montantVirtuel;
+        cashSortiCaptures += trans.montantVirtuel;
+        
         final simKey = trans.simNumero;
         if (!transactionsParSim.containsKey(simKey)) {
           transactionsParSim[simKey] = {
@@ -83,45 +75,83 @@ class ClotureVirtuelleService {
         transactionsParSim[simKey]!['montantCaptures'] += trans.montantVirtuel;
         
         if (trans.statut == VirtualTransactionStatus.validee) {
+          nombreServies++;
+          montantVirtuelServies += trans.montantVirtuel;
+          fraisPercus += trans.frais;
+          cashServi += trans.montantCash;
+          
           transactionsParSim[simKey]!['nombreServies'] += 1;
           transactionsParSim[simKey]!['montantServies'] += trans.montantVirtuel;
           transactionsParSim[simKey]!['fraisServies'] += trans.frais;
           transactionsParSim[simKey]!['cashServi'] += trans.montantCash;
         } else if (trans.statut == VirtualTransactionStatus.enAttente) {
+          nombreEnAttente++;
+          montantVirtuelEnAttente += trans.montantVirtuel;
+          
           transactionsParSim[simKey]!['nombreEnAttente'] += 1;
           transactionsParSim[simKey]!['montantEnAttente'] += trans.montantVirtuel;
         } else if (trans.statut == VirtualTransactionStatus.annulee) {
+          nombreAnnulees++;
+          montantVirtuelAnnulees += trans.montantVirtuel;
+          
           transactionsParSim[simKey]!['nombreAnnulees'] += 1;
           transactionsParSim[simKey]!['montantAnnulees'] += trans.montantVirtuel;
         }
       }
       
-      // === 2. RETRAITS VIRTUELS ===
+      final nombreCaptures = allTransactions.length;
+      
+      // === 2. FLOTS (optimisé) ===
       final allRetraits = await LocalDB.instance.getAllRetraitsVirtuels(
         shopSourceId: shopId,
         dateDebut: dateDebut,
         dateFin: dateFin,
       );
       
-      final nombreRetraits = allRetraits.length;
-      final montantTotalRetraits = allRetraits.fold<double>(0, (sum, r) => sum + r.montant);
+      // Séparer les retraits et les transferts (Dépots)
+      final retraitsSeuls = allRetraits.where((r) => 
+        !((r.notes?.contains('Dépot') ?? false) || (r.notes?.contains('Transfert') ?? false))
+      ).toList();
+      final transfertsVirtuels = allRetraits.where((r) => 
+        (r.notes?.contains('Dépot') ?? false) || (r.notes?.contains('Transfert') ?? false)
+      ).toList();
       
-      final retraitsRembourses = allRetraits.where((r) => r.statut == RetraitVirtuelStatus.rembourse).toList();
-      final nombreRetraitsRembourses = retraitsRembourses.length;
-      final montantRetraitsRembourses = retraitsRembourses.fold<double>(0, (sum, r) => sum + r.montant);
+      // Calculer en une seule passe (optimisation mémoire)
+      double montantTotalRetraits = 0.0;
+      double montantRetraitsRembourses = 0.0;
+      int nombreRetraitsRembourses = 0;
+      double montantRetraitsEnAttente = 0.0;
+      int nombreRetraitsEnAttente = 0;
       
-      // CASH ENTRANT lors des remboursements de retraits virtuels
-      // Quand un retrait est remboursé (via FLOT), on reçoit du CASH
-      final cashEntrantRetraitsRembourses = montantRetraitsRembourses;
+      // NOUVEAU: Transferts (Dépots Virtuel → Cash)
+      final nombreTransferts = transfertsVirtuels.length;
+      final montantTotalTransferts = transfertsVirtuels.fold<double>(0.0, (sum, r) => sum + r.montant);
       
-      final retraitsEnAttente = allRetraits.where((r) => r.statut == RetraitVirtuelStatus.enAttente).toList();
-      final nombreRetraitsEnAttente = retraitsEnAttente.length;
-      final montantRetraitsEnAttente = retraitsEnAttente.fold<double>(0, (sum, r) => sum + r.montant);
+      // NOUVEAU: Dépots PAR SIM (optimisé)
+      final Map<String, Map<String, dynamic>> depotsParSim = {};
       
-      // NOUVEAU: Retraits PAR SIM
+      for (var depot in transfertsVirtuels) {
+        final simKey = depot.simNumero;
+        if (!depotsParSim.containsKey(simKey)) {
+          depotsParSim[simKey] = {
+            'simNumero': simKey,
+            'nombreDepots': 0,
+            'montantDepots': 0.0,
+          };
+        }
+        
+        depotsParSim[simKey]!['nombreDepots'] += 1;
+        depotsParSim[simKey]!['montantDepots'] += depot.montant;
+      }
+      
+      debugPrint('💵 Dépôts par SIM: ${depotsParSim.length} SIM(s) - Total: \$${montantTotalTransferts.toStringAsFixed(2)}');
+      
+      // NOUVEAU: Retraits PAR SIM (optimisé)
       final Map<String, Map<String, dynamic>> retraitsParSim = {};
       
-      for (var retrait in allRetraits) {
+      for (var retrait in retraitsSeuls) {
+        montantTotalRetraits += retrait.montant;
+        
         final simKey = retrait.simNumero;
         if (!retraitsParSim.containsKey(simKey)) {
           retraitsParSim[simKey] = {
@@ -139,13 +169,50 @@ class ClotureVirtuelleService {
         retraitsParSim[simKey]!['montantRetraits'] += retrait.montant;
         
         if (retrait.statut == RetraitVirtuelStatus.rembourse) {
+          nombreRetraitsRembourses++;
+          montantRetraitsRembourses += retrait.montant;
+          
           retraitsParSim[simKey]!['nombreRembourses'] += 1;
           retraitsParSim[simKey]!['montantRembourses'] += retrait.montant;
         } else if (retrait.statut == RetraitVirtuelStatus.enAttente) {
+          nombreRetraitsEnAttente++;
+          montantRetraitsEnAttente += retrait.montant;
+          
           retraitsParSim[simKey]!['nombreEnAttente'] += 1;
           retraitsParSim[simKey]!['montantEnAttente'] += retrait.montant;
         }
       }
+      
+      final nombreRetraits = allRetraits.length;
+      
+      // CASH ENTRANT lors des remboursements de retraits virtuels
+      final cashEntrantRetraitsRembourses = montantRetraitsRembourses;
+      
+      // === NOUVEAU: FLOTs PHYSIQUES (entre shops) ===
+      final allFlots = await LocalDB.instance.getAllFlots();
+      
+      // FLOTs REÇUS (shop destination = nous)
+      final flotsRecus = allFlots.where((f) =>
+        f.shopDestinationId == shopId &&
+        f.dateReception != null &&
+        f.dateReception!.isAfter(dateDebut) &&
+        f.dateReception!.isBefore(dateFin)
+      ).toList();
+      
+      final nombreFlotsRecus = flotsRecus.length;
+      final montantFlotsRecus = flotsRecus.fold<double>(0.0, (sum, f) => sum + f.montant);
+      
+      // FLOTs ENVOYÉS (shop source = nous)
+      final flotsEnvoyes = allFlots.where((f) =>
+        f.shopSourceId == shopId &&
+        f.dateEnvoi.isAfter(dateDebut) &&
+        f.dateEnvoi.isBefore(dateFin)
+      ).toList();
+      
+      final nombreFlotsEnvoyes = flotsEnvoyes.length;
+      final montantFlotsEnvoyes = flotsEnvoyes.fold<double>(0.0, (sum, f) => sum + f.montant);
+      
+      debugPrint('📦 FLOTs - Reçus: $nombreFlotsRecus (\$${montantFlotsRecus.toStringAsFixed(2)}) | Envoyés: $nombreFlotsEnvoyes (\$${montantFlotsEnvoyes.toStringAsFixed(2)})');
       
       // === 3. SOLDES DES SIMS ===
       final allSims = await LocalDB.instance.getAllSims();
@@ -181,11 +248,16 @@ class ClotureVirtuelleService {
       final fraisTotalJournee = fraisPercus;
       
       // CALCUL DU CASH TOTAL
-      // Cash SORT lors des captures (on donne cash contre virtuel)
-      final cashSortiTotal = cashSortiCaptures;
+      // Cash SORTANT:
+      // - Captures: on donne cash contre virtuel
+      // - FLOTs envoyés: on envoie du cash à d'autres shops
+      final cashSortiTotal = cashSortiCaptures + montantFlotsEnvoyes;
       
-      // Cash ENTRANT lors des remboursements de retraits
-      final cashEntrantTotal = cashEntrantRetraitsRembourses;
+      // Cash ENTRANT:
+      // - Retraits remboursés: on reçoit du cash via FLOT
+      // - Dépôts (Virtuel → Cash): conversion interne, augmente le cash
+      // - FLOTs reçus: on reçoit du cash d'autres shops
+      final cashEntrantTotal = cashEntrantRetraitsRembourses + montantTotalTransferts + montantFlotsRecus;
       
       // MOUVEMENT NET DE CASH = Entrant - Sortant
       final mouvementNetCash = cashEntrantTotal - cashSortiTotal;
@@ -207,6 +279,14 @@ class ClotureVirtuelleService {
         'montantRetraitsRembourses': montantRetraitsRembourses,
         'nombreRetraitsEnAttente': nombreRetraitsEnAttente,
         'montantRetraitsEnAttente': montantRetraitsEnAttente,
+        // NOUVEAU: Transferts (Dépots)
+        'nombreTransferts': nombreTransferts,
+        'montantTotalTransferts': montantTotalTransferts,
+        // NOUVEAU: FLOTs physiques
+        'nombreFlotsRecus': nombreFlotsRecus,
+        'montantFlotsRecus': montantFlotsRecus,
+        'nombreFlotsEnvoyes': nombreFlotsEnvoyes,
+        'montantFlotsEnvoyes': montantFlotsEnvoyes,
         'soldesParOperateur': soldesParOperateur,
         'nombreSimsParOperateur': nombreSimsParOperateur,
         'soldeTotalSims': soldeTotalSims,
@@ -217,10 +297,12 @@ class ClotureVirtuelleService {
         // CASH
         'cashSortiCaptures': cashSortiCaptures,
         'cashEntrantRetraitsRembourses': cashEntrantRetraitsRembourses,
+        'cashEntrantTransferts': montantTotalTransferts, // NOUVEAU: Cash entrant des dépots
         'mouvementNetCash': mouvementNetCash,
         // NOUVEAU: Détails par SIM
         'transactionsParSim': transactionsParSim,
         'retraitsParSim': retraitsParSim,
+        'depotsParSim': depotsParSim,
         'detailsParSim': detailsParSim,
       };
     } catch (e) {

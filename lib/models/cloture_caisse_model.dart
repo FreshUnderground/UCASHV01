@@ -6,6 +6,9 @@ class ClotureCaisseModel {
   final int shopId;
   final DateTime dateCloture; // Date de la clôture (fin de journée)
   
+  // NOUVEAU: Solde FRAIS antérieur (enregistré lors de la clôture)
+  final double soldeFraisAnterieur;
+  
   // Montants SAISIS par l'agent (comptage physique)
   final double soldeSaisiCash;
   final double soldeSaisiAirtelMoney;
@@ -35,6 +38,7 @@ class ClotureCaisseModel {
     this.id,
     required this.shopId,
     required this.dateCloture,
+    this.soldeFraisAnterieur = 0.0,
     required this.soldeSaisiCash,
     required this.soldeSaisiAirtelMoney,
     required this.soldeSaisiMPesa,
@@ -60,6 +64,7 @@ class ClotureCaisseModel {
       id: json['id'] as int?,
       shopId: json['shop_id'] as int,
       dateCloture: DateTime.parse(json['date_cloture'] as String),
+      soldeFraisAnterieur: ((json['solde_frais_anterieur'] ?? 0) as num).toDouble(),
       soldeSaisiCash: ((json['solde_saisi_cash'] ?? 0) as num).toDouble(),
       soldeSaisiAirtelMoney: ((json['solde_saisi_airtel_money'] ?? 0) as num).toDouble(),
       soldeSaisiMPesa: ((json['solde_saisi_mpesa'] ?? 0) as num).toDouble(),
@@ -86,6 +91,7 @@ class ClotureCaisseModel {
       if (id != null) 'id': id,
       'shop_id': shopId,
       'date_cloture': dateCloture.toIso8601String(),
+      'solde_frais_anterieur': soldeFraisAnterieur,
       'solde_saisi_cash': soldeSaisiCash,
       'solde_saisi_airtel_money': soldeSaisiAirtelMoney,
       'solde_saisi_mpesa': soldeSaisiMPesa,
@@ -111,6 +117,7 @@ class ClotureCaisseModel {
     int? id,
     int? shopId,
     DateTime? dateCloture,
+    double? soldeFraisAnterieur,
     double? soldeSaisiCash,
     double? soldeSaisiAirtelMoney,
     double? soldeSaisiMPesa,
@@ -134,6 +141,7 @@ class ClotureCaisseModel {
       id: id ?? this.id,
       shopId: shopId ?? this.shopId,
       dateCloture: dateCloture ?? this.dateCloture,
+      soldeFraisAnterieur: soldeFraisAnterieur ?? this.soldeFraisAnterieur,
       soldeSaisiCash: soldeSaisiCash ?? this.soldeSaisiCash,
       soldeSaisiAirtelMoney: soldeSaisiAirtelMoney ?? this.soldeSaisiAirtelMoney,
       soldeSaisiMPesa: soldeSaisiMPesa ?? this.soldeSaisiMPesa,

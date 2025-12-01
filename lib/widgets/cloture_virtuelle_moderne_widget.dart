@@ -47,7 +47,15 @@ class _ClotureVirtuelleModerneWidgetState extends State<ClotureVirtuelleModerneW
       final authService = Provider.of<AuthService>(context, listen: false);
       final shopId = widget.shopId ?? authService.currentUser?.shopId ?? 1;
       
-      final clotures = await LocalDB.instance.getAllCloturesVirtuelles(shopId: shopId);
+      // Filtrer par la date sélectionnée
+      final dateDebut = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+      final dateFin = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, 23, 59, 59);
+      
+      final clotures = await LocalDB.instance.getAllCloturesVirtuelles(
+        shopId: shopId,
+        dateDebut: dateDebut,
+        dateFin: dateFin,
+      );
       
       if (!mounted) return;
       

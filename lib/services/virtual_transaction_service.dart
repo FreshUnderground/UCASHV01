@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../models/virtual_transaction_model.dart';
 import 'local_db.dart';
 import 'sync_service.dart';
+import 'sim_service.dart';
 
 /// Service de gestion des transactions virtuelles (Mobile Money)
 class VirtualTransactionService extends ChangeNotifier {
@@ -29,7 +30,7 @@ class VirtualTransactionService extends ChangeNotifier {
     _setLoading(true);
     try {
       debugPrint('🔍 [VirtualTransactionService] Chargement transactions...');
-      debugPrint('   Filtre shopId: $shopId');
+      debugPrint('   Filtre shopId: $shopId (${shopId?.runtimeType})');
       debugPrint('   Filtre SIM: $simNumero');
       debugPrint('   Filtre dateDebut: $dateDebut');
       debugPrint('   Filtre dateFin: $dateFin');
@@ -45,12 +46,25 @@ class VirtualTransactionService extends ChangeNotifier {
       
       debugPrint('✅ [VirtualTransactionService] ${_transactions.length} transactions chargées');
       
+      // Log transaction details for debugging
+      if (_transactions.isNotEmpty) {
+        debugPrint('📋 [VirtualTransactionService] Transaction details:');
+        for (var i = 0; i < _transactions.length && i < 5; i++) {
+          final t = _transactions[i];
+          debugPrint('   #$i: ${t.reference} - Shop: ${t.shopId} (${t.shopId.runtimeType}) - Status: ${t.statut.name} - SIM: ${t.simNumero}');
+        }
+        if (_transactions.length > 5) {
+          debugPrint('   ... and ${_transactions.length - 5} more transactions');
+        }
+      }
+      
       _errorMessage = null;
       _setLoading(false);
       notifyListeners();
-    } catch (e) {
+    } catch (e, stackTrace) {
       _errorMessage = 'Erreur chargement transactions: $e';
       debugPrint('❌ [VirtualTransactionService] $_errorMessage');
+      debugPrint('📚 Stack trace: $stackTrace');
       _setLoading(false);
       notifyListeners();
     }
@@ -107,6 +121,13 @@ class VirtualTransactionService extends ChangeNotifier {
       debugPrint('📦 [VirtualTransactionService] Sauvegarde transaction...');
       final savedTransaction = await LocalDB.instance.saveVirtualTransaction(newTransaction);
       debugPrint('✅ [VirtualTransactionService] Transaction sauvegardée avec ID #${savedTransaction.id}');
+      
+      // IMPORTANT: Recalculer le solde de la SIM dès l'enregistrement de la capture
+      final sim = await LocalDB.instance.getSimByNumero(simNumero);
+      if (sim != null) {
+        await SimService.instance.updateSoldeAutomatiquement(sim);
+        debugPrint('💰 Solde SIM $simNumero recalculé après enregistrement capture');
+      }
       
       // Recharger les transactions
       await loadTransactions(shopId: shopId);
@@ -174,6 +195,7 @@ class VirtualTransactionService extends ChangeNotifier {
         dateValidation: DateTime.now(), // Définie UNE SEULE FOIS
         lastModifiedAt: DateTime.now(),
         lastModifiedBy: modifiedBy,
+        isSynced: false, // IMPORTANT: Marquer comme non synchronisé pour upload vers cloud
       );
 
       await LocalDB.instance.updateVirtualTransaction(updatedTransaction);
@@ -228,10 +250,18 @@ class VirtualTransactionService extends ChangeNotifier {
         notes: motif != null ? '${transaction.notes ?? ""}\nAnnulation: $motif' : transaction.notes,
         lastModifiedAt: DateTime.now(),
         lastModifiedBy: modifiedBy,
+        isSynced: false, // IMPORTANT: Marquer comme non synchronisé pour upload vers cloud
       );
 
       await LocalDB.instance.updateVirtualTransaction(updatedTransaction);
       debugPrint('✅ [VirtualTransactionService] Transaction annulée');
+      
+      // IMPORTANT: Recalculer le solde de la SIM car une capture annulée ne compte plus
+      final sim = await LocalDB.instance.getSimByNumero(transaction.simNumero);
+      if (sim != null) {
+        await SimService.instance.updateSoldeAutomatiquement(sim);
+        debugPrint('💰 Solde SIM ${transaction.simNumero} recalculé après annulation');
+      }
       
       // Recharger les transactions
       await loadTransactions(shopId: transaction.shopId);
@@ -301,27 +331,30 @@ class VirtualTransactionService extends ChangeNotifier {
     }
   }
 
-  /// Vérifier si une référence existe déjà
+  /// Vérifier si une référence existe déjà (insensible à la casse et aux espaces)
   Future<bool> _referenceExists(String reference) async {
-    final existing = await LocalDB.instance.getVirtualTransactionByReference(reference);
+    // Normaliser la référence : trim + lowercase
+    final normalizedReference = reference.trim().toLowerCase();
+    final existing = await LocalDB.instance.getVirtualTransactionByReference(normalizedReference);
     return existing != null;
   }
 
-  /// Mettre à jour le solde de la SIM lors de la validation
+  /// Recalculer automatiquement le solde de la SIM après une opération
   Future<void> _updateSimBalance(VirtualTransactionModel transaction) async {
     try {
       final sim = await LocalDB.instance.getSimByNumero(transaction.simNumero);
       if (sim != null) {
-        final updatedSim = sim.copyWith(
-          soldeActuel: sim.soldeActuel + transaction.montantVirtuel,
-          lastModifiedAt: DateTime.now(),
-          lastModifiedBy: 'virtual_transaction_${transaction.id}',
-        );
-        await LocalDB.instance.updateSim(updatedSim);
-        debugPrint('💰 Solde SIM ${sim.numero} mis à jour: +${transaction.montantVirtuel}');
+        // IMPORTANT: Ne PAS mettre à jour manuellement le solde!
+        // Au lieu de cela, recalculer automatiquement basé sur les captures et retraits
+        final wasUpdated = await SimService.instance.updateSoldeAutomatiquement(sim);
+        if (wasUpdated) {
+          debugPrint('☺️ Solde SIM ${sim.numero} recalculé automatiquement');
+        } else {
+          debugPrint('ℹ️ Solde SIM ${sim.numero} déjà à jour');
+        }
       }
     } catch (e) {
-      debugPrint('❌ Erreur mise à jour solde SIM: $e');
+      debugPrint('❌ Erreur recalcul solde SIM: $e');
     }
   }
 
