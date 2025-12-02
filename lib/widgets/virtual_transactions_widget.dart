@@ -45,6 +45,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
   DateTime? _selectedDate; // Date unique pour Vue d'Ensemble
   Key _retraitsTabKey = UniqueKey(); // Pour forcer le rechargement
   bool _showFilters = false; // Masquer les filtres par défaut
+  bool _showVueEnsembleFilter = false; // Masquer le filtre Vue d'ensemble par défaut
   
   // 🔍 NOUVEAU: Filtres de recherche
   VirtualTransactionStatus? _statusFilter = VirtualTransactionStatus.enAttente; // Par défaut: En Attente
@@ -3326,14 +3327,47 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Filtre de date unique
-                          _buildSingleDateFilter(),
-                          const SizedBox(height: 16),
+                          // Bouton pour afficher/masquer le filtre
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  _showVueEnsembleFilter = !_showVueEnsembleFilter;
+                                });
+                              },
+                              icon: Icon(
+                                _showVueEnsembleFilter ? Icons.filter_alt_off : Icons.filter_alt,
+                                size: 20,
+                              ),
+                              label: Text(
+                                _showVueEnsembleFilter ? 'Masquer Filtre' : 'Afficher Filtre',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFF48bb78),
+                                side: const BorderSide(color: Color(0xFF48bb78), width: 1.5),
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                          ),
+                          
+                          // Filtre de date unique (masqué par défaut)
+                          if (_showVueEnsembleFilter)
+                            _buildSingleDateFilter(),
+                          if (_showVueEnsembleFilter)
+                            const SizedBox(height: 16),
 
                           // En-tête
                           Row(
                             children: [
-                      const Icon(Icons.dashboard, color: Color(0xFF48bb78), size: 28),
+                      const Icon(Icons.dashboard, color: Color(0xFF48bb78), size: 20),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
@@ -3341,13 +3375,8 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                           children: [
                             const Text(
                               'Vue d\'Ensemble',
-                              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                             ),
-                            if (_selectedDate != null)
-                              Text(
-                                'Date: ${DateFormat('dd/MM/yyyy').format(_selectedDate!)}',
-                                style: TextStyle(fontSize: 12, color: Colors.grey[600], fontStyle: FontStyle.italic),
-                              ),
                             if (isAdmin && shopIdFilter == null)
 
                               Container(
