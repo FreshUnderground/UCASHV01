@@ -3605,7 +3605,8 @@ const SizedBox(height: 16),
                               final soldeAnterieurVirtuel = virtuelSnapshot.data ?? 0.0;
                               final capturesDuJour = montantTotalCaptures; // Captures SANS Frais
                               final retraitsDuJour = montantTotalRetraits; // Retraits (Toutes SIMs)
-                              final virtuelDisponible = soldeAnterieurVirtuel + capturesDuJour - retraitsDuJour;
+                              // FORMULE: Virtuel Dispo = Solde Antérieur + Captures - Retraits - Dépôts Clients
+                              final virtuelDisponible = soldeAnterieurVirtuel + capturesDuJour - retraitsDuJour - depotsClients;
                               
                               return Container(
                                 margin: const EdgeInsets.symmetric(vertical: 8),
@@ -3720,6 +3721,41 @@ const SizedBox(height: 16),
                                                       )
                                                     ).toList(),
                                                   ],
+                                                ),
+                                              ),
+                                            const SizedBox(height: 8),
+                                            _buildFinanceRow('- Dépôts Clients', depotsClients, Colors.red),
+                                            // Détails Dépôts Clients (groupés par SIM)
+                                            if (depotsListe.isNotEmpty)
+                                              Padding(
+                                                padding: const EdgeInsets.only(left: 16, top: 4),
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: () {
+                                                    // Grouper les dépôts par SIM
+                                                    final Map<String, List<DepotClientModel>> depotsParSim = {};
+                                                    for (var depot in depotsListe) {
+                                                      if (!depotsParSim.containsKey(depot.simNumero)) {
+                                                        depotsParSim[depot.simNumero] = [];
+                                                      }
+                                                      depotsParSim[depot.simNumero]!.add(depot);
+                                                    }
+                                                    
+                                                    // Afficher chaque SIM avec son total
+                                                    return depotsParSim.entries.map((entry) {
+                                                      final simNumero = entry.key;
+                                                      final depotsSim = entry.value;
+                                                      final totalSim = depotsSim.fold<double>(0, (sum, d) => sum + d.montant);
+                                                      
+                                                      return Text(
+                                                        '• $simNumero: ${depotsSim.length} dépôt(s) = \$${totalSim.toStringAsFixed(2)}',
+                                                        style: TextStyle(
+                                                          fontSize: 11, 
+                                                          color: Colors.red[700],
+                                                        ),
+                                                      );
+                                                    }).toList();
+                                                  }(),
                                                 ),
                                               ),
                                             const SizedBox(height: 8),
@@ -3917,7 +3953,8 @@ const SizedBox(height: 16),
                                       final soldeAnterieurVirtuel = virtuelSoldeSnapshot.data ?? 0.0;
                                       final capturesDuJour = montantTotalCaptures;  // SANS frais
                                       final retraitsDuJour = montantTotalRetraits;
-                                      final virtuelDisponible = soldeAnterieurVirtuel + capturesDuJour - retraitsDuJour;
+                                      // FORMULE: Virtuel Dispo = Solde Antérieur + Captures - Retraits - Dépôts Clients
+                                      final virtuelDisponible = soldeAnterieurVirtuel + capturesDuJour - retraitsDuJour - depotsClients;
                                       final nonServi = montantEnAttente; // Captures non servies
                                       
                                       return FutureBuilder<Map<String, double>>(
