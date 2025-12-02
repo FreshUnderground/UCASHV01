@@ -6,6 +6,8 @@ class DepotClientModel {
   final String telephoneClient;
   final DateTime dateDepot;
   final int userId;
+  final bool isSynced;
+  final DateTime? syncedAt;
 
   DepotClientModel({
     this.id,
@@ -15,6 +17,8 @@ class DepotClientModel {
     required this.telephoneClient,
     required this.dateDepot,
     required this.userId,
+    this.isSynced = false,
+    this.syncedAt,
   });
 
   Map<String, dynamic> toMap() {
@@ -26,6 +30,8 @@ class DepotClientModel {
       'telephone_client': telephoneClient,
       'date_depot': dateDepot.toIso8601String(),
       'user_id': userId,
+      'is_synced': isSynced ? 1 : 0,
+      'synced_at': syncedAt?.toIso8601String(),
     };
   }
 
@@ -38,6 +44,8 @@ class DepotClientModel {
       telephoneClient: map['telephone_client'] as String,
       dateDepot: DateTime.parse(map['date_depot'] as String),
       userId: map['user_id'] as int,
+      isSynced: (map['is_synced'] as int?) == 1,
+      syncedAt: map['synced_at'] != null ? DateTime.parse(map['synced_at'] as String) : null,
     );
   }
   
@@ -49,6 +57,8 @@ class DepotClientModel {
     String? telephoneClient,
     DateTime? dateDepot,
     int? userId,
+    bool? isSynced,
+    DateTime? syncedAt,
   }) {
     return DepotClientModel(
       id: id ?? this.id,
@@ -58,6 +68,8 @@ class DepotClientModel {
       telephoneClient: telephoneClient ?? this.telephoneClient,
       dateDepot: dateDepot ?? this.dateDepot,
       userId: userId ?? this.userId,
+      isSynced: isSynced ?? this.isSynced,
+      syncedAt: syncedAt ?? this.syncedAt,
     );
   }
 }

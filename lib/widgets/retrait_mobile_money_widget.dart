@@ -33,10 +33,16 @@ class _RetraitMobileMoneyWidgetState extends State<RetraitMobileMoneyWidget> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _loadData();
+      }
+    });
   }
   
   Future<void> _loadData() async {
+    if (!mounted) return;
+    
     final authService = Provider.of<AgentAuthService>(context, listen: false);
     final shopId = authService.currentAgent?.shopId;
     
@@ -48,37 +54,84 @@ class _RetraitMobileMoneyWidgetState extends State<RetraitMobileMoneyWidget> {
   
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Retrait Mobile Money (Cash-Out)'),
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width <= 768;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
               colors: [Color(0xFFDC2626), Color(0xFFB91C1C)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.mobile_friendly, color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Retrait Mobile Money (Cash-Out)',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
-      ),
-      body: Row(
-        children: [
-          // LEFT: Formulaire d'enregistrement
-          Expanded(
-            flex: 2,
-            child: _buildFormulaire(),
-          ),
-          
-          // DIVIDER
-          const VerticalDivider(width: 1),
-          
-          // RIGHT: Liste des retraits en attente
-          Expanded(
-            flex: 3,
-            child: _buildListeRetraitsEnAttente(),
-          ),
-        ],
-      ),
+        const SizedBox(height: 16),
+        
+        // Content
+        Expanded(
+          child: isMobile
+              ? SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      _buildFormulaire(),
+                      const Divider(height: 32),
+                      SizedBox(
+                        height: 400,
+                        child: _buildListeRetraitsEnAttente(),
+                      ),
+                    ],
+                  ),
+                )
+              : Row(
+                  children: [
+                    // LEFT: Formulaire d'enregistrement
+                    Expanded(
+                      flex: 2,
+                      child: _buildFormulaire(),
+                    ),
+                    
+                    // DIVIDER
+                    const VerticalDivider(width: 1),
+                    
+                    // RIGHT: Liste des retraits en attente
+                    Expanded(
+                      flex: 3,
+                      child: _buildListeRetraitsEnAttente(),
+                    ),
+                  ],
+                ),
+        ),
+      ],
     );
   }
   

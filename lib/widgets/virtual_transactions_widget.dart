@@ -1303,7 +1303,9 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
     final authService = Provider.of<AuthService>(context, listen: false);
     final shopId = authService.currentUser?.shopId;
     
+    // Utiliser une clé unique basée sur un timestamp pour forcer le rechargement
     return FutureBuilder<List<DepotClientModel>>(
+      key: ValueKey('depot_tab_${DateTime.now().millisecondsSinceEpoch}'),
       future: LocalDB.instance.getAllDepotsClients(shopId: shopId),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -1464,7 +1466,8 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                     )
                   : RefreshIndicator(
                       onRefresh: () async {
-                        setState(() {}); // Recharger
+                        // Forcer le rechargement en reconstruisant le widget avec une nouvelle clé
+                        setState(() {}); 
                       },
                       child: ListView.builder(
                         padding: const EdgeInsets.all(4),

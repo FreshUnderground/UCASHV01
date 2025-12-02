@@ -247,7 +247,7 @@ class SyncService {
       debugPrint('🔄 Synchronisation des flots en file d\'attente...');
       await syncPendingFlots();
       
-      final dependentTables = ['agents', 'clients', 'operations', 'taux', 'commissions', 'comptes_speciaux', 'document_headers', 'cloture_caisse', 'flots', 'sims', 'sim_movements', 'virtual_transactions'];
+      final dependentTables = ['agents', 'clients', 'operations', 'taux', 'commissions', 'comptes_speciaux', 'document_headers', 'cloture_caisse', 'flots', 'sims', 'sim_movements', 'virtual_transactions', 'depot_clients'];
       for (String table in dependentTables) {
         try {
           await _uploadTableDataWithRetry(table, userIdToUse, userRole); // Pass user role
@@ -363,7 +363,7 @@ class SyncService {
   /// Upload des changements locaux vers le serveur
   Future<void> _uploadLocalChanges(String userId) async {
     // NOTE: 'operations' est maintenant inclus dans la sync normale
-    final tables = ['shops', 'agents', 'clients', 'operations', 'taux', 'commissions', 'document_headers', 'cloture_caisse', 'sims', 'sim_movements', 'virtual_transactions'];
+    final tables = ['shops', 'agents', 'clients', 'operations', 'taux', 'commissions', 'document_headers', 'cloture_caisse', 'sims', 'sim_movements', 'virtual_transactions', 'depot_clients'];
     int successCount = 0;
     int errorCount = 0;
     
@@ -733,7 +733,7 @@ class SyncService {
   Future<void> _downloadRemoteChanges(String userId, String userRole) async {
     // NOTE: 'operations' est maintenant inclus pour permettre à l'admin de télécharger toutes les opérations
     // TransferSyncService gère la synchronisation en temps réel pour les agents
-    final tables = ['operations', 'shops', 'agents', 'clients', 'taux', 'commissions', 'document_headers', 'cloture_caisse', 'flots', 'sims', 'sim_movements', 'virtual_transactions'];
+    final tables = ['operations', 'shops', 'agents', 'clients', 'taux', 'commissions', 'document_headers', 'cloture_caisse', 'flots', 'sims', 'sim_movements', 'virtual_transactions', 'depot_clients'];
     int successCount = 0;
     int errorCount = 0;
     
@@ -1565,6 +1565,24 @@ class SyncService {
               .toList();
           
           debugPrint('📤 VIRTUAL_TRANSACTIONS: ${unsyncedData.length}/${allVirtualTransactions.length} non synchronisées');
+          break;
+        
+        case 'depot_clients':
+          // Récupérer tous les dépôts clients depuis LocalDB
+          final allDepots = await LocalDB.instance.getAllDepotsClients();
+          debugPrint('📦 DEPOT_CLIENTS: Total en mémoire: ${allDepots.length}');
+          
+          // Filtrer uniquement les dépôts non synchronisés
+          unsyncedData = allDepots
+              .where((depot) => depot.isSynced != true)
+              .map((depot) {
+                final json = _addSyncMetadata(depot.toMap(), 'depot_client');
+                debugPrint('📤 Dépôt Client ID ${depot.id} à synchroniser: SIM ${depot.simNumero} - ${depot.montant} pour ${depot.telephoneClient}');
+                return json;
+              })
+              .toList();
+          
+          debugPrint('📤 DEPOT_CLIENTS: ${unsyncedData.length}/${allDepots.length} non synchronisés');
           break;
           
         case 'audit_log':
