@@ -1173,7 +1173,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                   label: Text(
                     _dateDebutFilter != null
                         ? DateFormat('dd/MM/yyyy').format(_dateDebutFilter!)
-                        : 'Date début',
+                        : 'début',
                     style: const TextStyle(fontSize: 13),
                   ),
                   style: OutlinedButton.styleFrom(
@@ -1199,7 +1199,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                   label: Text(
                     _dateFinFilter != null
                         ? DateFormat('dd/MM/yyyy').format(_dateFinFilter!)
-                        : 'Date fin',
+                        : 'fin',
                     style: const TextStyle(fontSize: 13),
                   ),
                   style: OutlinedButton.styleFrom(
@@ -4624,11 +4624,11 @@ const SizedBox(height: 16),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Row(
+                                  const Row(
                                     children: [
-                                      const Icon(Icons.all_inclusive, color: Color(0xFF48bb78), size: 20),
-                                      const SizedBox(width: 8),
-                                      const Expanded(
+                                      Icon(Icons.all_inclusive, color: Color(0xFF48bb78), size: 20),
+                                      SizedBox(width: 8),
+                                      Expanded(
                                         child: Text(
                                           'Global SIM (Toutes Périodes)',
                                           style: TextStyle(
@@ -4678,21 +4678,25 @@ const SizedBox(height: 16),
           return const Center(child: Text('Shop ID non disponible'));
         }
 
+        // FRAIS GLOBAUX (toutes périodes)
+        final toutesTransactionsValidees = service.transactions
+            .where((t) => t.shopId == currentShopId && t.statut == VirtualTransactionStatus.validee)
+            .toList();
+        final totalFraisGlobal = toutesTransactionsValidees.fold<double>(0, (sum, t) => sum + t.frais);
+        final totalVirtuelGlobal = toutesTransactionsValidees.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
+
+        // FRAIS PÉRIODE (avec filtre de dates, par défaut: aujourd'hui)
+        final dateDebut = _dateDebutFilter ?? DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+        final dateFin = _dateFinFilter ?? DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day, 23, 59, 59);
+        
         var transactions = service.transactions
             .where((t) => t.shopId == currentShopId && t.statut == VirtualTransactionStatus.validee)
             .toList();
 
-        // Appliquer les filtres de dates
-        if (_dateDebutFilter != null) {
-          transactions = transactions
-              .where((t) => t.dateValidation != null && t.dateValidation!.isAfter(_dateDebutFilter!))
-              .toList();
-        }
-        if (_dateFinFilter != null) {
-          transactions = transactions
-              .where((t) => t.dateValidation != null && t.dateValidation!.isBefore(_dateFinFilter!))
-              .toList();
-        }
+        // Appliquer les filtres de dates (toujours)
+        transactions = transactions
+            .where((t) => t.dateValidation != null && t.dateValidation!.isAfter(dateDebut) && t.dateValidation!.isBefore(dateFin))
+            .toList();
 
         if (transactions.isEmpty) {
           return Center(
@@ -4717,11 +4721,11 @@ const SizedBox(height: 16),
           );
         }
 
-        // Statistiques globales
-        final totalFrais = transactions.fold<double>(0, (sum, t) => sum + t.frais);
-        final totalVirtuel = transactions.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
-        final moyenneFrais = totalFrais / transactions.length;
-        final tauxMoyenFrais = (totalFrais / totalVirtuel) * 100;
+        // Statistiques de la période
+        final totalFraisPeriode = transactions.fold<double>(0, (sum, t) => sum + t.frais);
+        final totalVirtuelPeriode = transactions.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
+        final moyenneFrais = transactions.isNotEmpty ? totalFraisPeriode / transactions.length : 0.0;
+        final tauxMoyenFrais = totalVirtuelPeriode > 0 ? (totalFraisPeriode / totalVirtuelPeriode) * 100 : 0.0;
 
         // Regrouper par SIM
         final fraisParSim = <String, Map<String, dynamic>>{};
@@ -4783,7 +4787,97 @@ const SizedBox(height: 16),
               ),
               const SizedBox(height: 16),
               
-              // Résumé global
+              // Récapitulatif: Frais Globaux vs Période
+              Row(
+                children: [
+                  // FRAIS GLOBAUX
+                  Expanded(
+                    child: Card(
+                      elevation: 3,
+                      color: const Color(0xFF48bb78).withOpacity(0.05),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.all_inclusive, color: Color(0xFF48bb78), size: 20),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Frais Globaux',
+                                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              '\$${totalFraisGlobal.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF48bb78),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${toutesTransactionsValidees.length} transactions',
+                              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // FRAIS PÉRIODE
+                  Expanded(
+                    child: Card(
+                      elevation: 3,
+                      color: Colors.purple.withOpacity(0.05),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.date_range, color: Colors.purple, size: 20),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    _dateDebutFilter != null || _dateFinFilter != null
+                                        ? 'Frais Période'
+                                        : 'Frais Aujourd\'hui',
+                                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              '\$${totalFraisPeriode.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.purple,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${transactions.length} transactions',
+                              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              
+              // Résumé statistiques période
               Card(
                 elevation: 3,
                 color: Colors.purple.withOpacity(0.05),
@@ -4793,12 +4887,12 @@ const SizedBox(height: 16),
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Résumé Global',
+                        'Détails Période',
                         style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 16),
                       _buildSimStatRow('Total Transactions', '${transactions.length}', Icons.receipt, Colors.blue),
-                      _buildSimStatRow('Total Frais', '\$${totalFrais.toStringAsFixed(2)}', Icons.attach_money, Colors.purple, isBold: true),
+                      _buildSimStatRow('Total Frais', '\$${totalFraisPeriode.toStringAsFixed(2)}', Icons.attach_money, Colors.purple, isBold: true),
                       _buildSimStatRow('Moyenne Frais/Trans', '\$${moyenneFrais.toStringAsFixed(2)}', Icons.trending_up, Colors.orange),
                       _buildSimStatRow('Taux Moyen Frais', '${tauxMoyenFrais.toStringAsFixed(2)}%', Icons.percent, Colors.green),
                     ],
@@ -5392,7 +5486,7 @@ const SizedBox(height: 16),
                   icon: const Icon(Icons.calendar_today),
                   label: Text(_dateDebutFilter != null
                       ? DateFormat('dd/MM/yyyy').format(_dateDebutFilter!)
-                      : 'Date début'),
+                      : 'début'),
                   onPressed: () async {
                     final date = await showDatePicker(
                       context: context,
@@ -5412,7 +5506,7 @@ const SizedBox(height: 16),
                   icon: const Icon(Icons.calendar_today),
                   label: Text(_dateFinFilter != null
                       ? DateFormat('dd/MM/yyyy').format(_dateFinFilter!)
-                      : 'Date fin'),
+                      : 'fin'),
                   onPressed: () async {
                     final date = await showDatePicker(
                       context: context,
