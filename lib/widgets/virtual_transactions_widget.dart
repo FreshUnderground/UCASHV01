@@ -3313,14 +3313,36 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                   builder: (BuildContext context, soldeSnapshot) {
                     final soldeAnterieur = soldeSnapshot.data ?? 0.0;
                     
-                    final capitalInitialCash = soldeAnterieur; // Solde antérieur de la dernière clôture
-                    final flotsRecus = flotsRecusPhysiques; // FLOTs PHYSIQUES reçus
-                    final flotsEnvoyes = flotsEnvoyesPhysiques; // FLOTs PHYSIQUES envoyés
-                    final cashServiValue = cashServi; // Cash physique servi (toutes les SIMs)
-                    // FORMULE: Cash Dispo = Solde Antérieur + FLOT Reçu - FLOT Envoyé - Cash Servi
-                    final cashDisponible = capitalInitialCash + flotsRecus - flotsEnvoyes - cashServiValue;
+                    // NOUVEAU: Charger les dépôts clients
+                    return FutureBuilder<List<DepotClientModel>>(
+                      future: LocalDB.instance.getAllDepotsClients(shopId: shopIdFilter),
+                      builder: (BuildContext context, depotsSnapshot) {
+                        var depots = depotsSnapshot.data ?? [];
+                        
+                        // Filtrer par date unique
+                        if (_selectedDate != null) {
+                          final startOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day);
+                          final endOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day, 23, 59, 59);
+                          depots = depots.where((d) => 
+                            d.dateDepot.isAfter(startOfDay.subtract(const Duration(seconds: 1))) &&
+                            d.dateDepot.isBefore(endOfDay.add(const Duration(seconds: 1)))).toList();
+                        }
+                        // Filtrer par SIM
+                        if (_selectedSimFilter != null) {
+                          depots = depots.where((d) => d.simNumero == _selectedSimFilter).toList();
+                        }
+                        
+                        final depotsClients = depots.fold<double>(0, (sum, d) => sum + d.montant);
+                        final depotsListe = depots; // Garder la liste pour les détails
+                        
+                        final capitalInitialCash = soldeAnterieur; // Solde antérieur de la dernière clôture
+                        final flotsRecus = flotsRecusPhysiques; // FLOTs PHYSIQUES reçus
+                        final flotsEnvoyes = flotsEnvoyesPhysiques; // FLOTs PHYSIQUES envoyés
+                        final cashServiValue = cashServi; // Cash physique servi (toutes les SIMs)
+                        // FORMULE: Cash Dispo = Solde Antérieur + FLOT Reçu - FLOT Envoyé + Dépôts Clients - Cash Servi
+                        final cashDisponible = capitalInitialCash + flotsRecus - flotsEnvoyes + depotsClients - cashServiValue;
                 
-                return Consumer<ShopService>(
+                        return Consumer<ShopService>(
                   builder: (BuildContext context, shopService, child) {
                     return SingleChildScrollView(
                       padding: const EdgeInsets.all(16),
@@ -3504,6 +3526,41 @@ const SizedBox(height: 16),
                                                   ),
                                                 )
                                               ).toList(),
+                                            ),
+                                          ),
+                                        const SizedBox(height: 8),
+                                        _buildFinanceRow('+ Dépôts Clients', depotsClients, Colors.green),
+                                        // Détails Dépôts Clients (groupés par SIM)
+                                        if (depotsListe.isNotEmpty)
+                                          Padding(
+                                            padding: const EdgeInsets.only(left: 16, top: 4),
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: () {
+                                                // Grouper les dépôts par SIM
+                                                final Map<String, List<DepotClientModel>> depotsParSim = {};
+                                                for (var depot in depotsListe) {
+                                                  if (!depotsParSim.containsKey(depot.simNumero)) {
+                                                    depotsParSim[depot.simNumero] = [];
+                                                  }
+                                                  depotsParSim[depot.simNumero]!.add(depot);
+                                                }
+                                                
+                                                // Afficher chaque SIM avec son total
+                                                return depotsParSim.entries.map((entry) {
+                                                  final simNumero = entry.key;
+                                                  final depotsSim = entry.value;
+                                                  final totalSim = depotsSim.fold<double>(0, (sum, d) => sum + d.montant);
+                                                  
+                                                  return Text(
+                                                    '• $simNumero: ${depotsSim.length} dépôt(s) = \$${totalSim.toStringAsFixed(2)}',
+                                                    style: const TextStyle(
+                                                      fontSize: 11, 
+                                                      color: Colors.green,
+                                                    ),
+                                                  );
+                                                }).toList();
+                                              }(),
                                             ),
                                           ),
                                         const SizedBox(height: 8),
@@ -4263,8 +4320,10 @@ const SizedBox(height: 16),
                     );
                   },
                 );
-              },
-            );
+              }, // Fermeture builder FutureBuilder dépôts clients
+            ); // Fermeture FutureBuilder dépôts clients  
+              }, // Fermeture builder FutureBuilder soldeAnterieur
+            ); // Fermeture FutureBuilder soldeAnterieur
               },
             );
           },
