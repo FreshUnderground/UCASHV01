@@ -2204,236 +2204,395 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
   }
 
   Future<void> _generatePdfFrais(BuildContext context) async {
-    final service = CompteSpecialService.instance;
-    final frais = await service.getFraisAsync(
-      shopId: _selectedShopId,
-      startDate: _startDate,
-      endDate: _endDate,
-    );
-
-    // Trier par date croissante
-    frais.sort((a, b) => a.dateTransaction.compareTo(b.dateTransaction));
-
-    final pdf = pw.Document();
-    
-    // Calculer le solde cumulatif
-    double solde = 0;
-    final transactionsWithSolde = frais.map((t) {
-      solde += t.montant;
-      return {
-        'date': DateFormat('dd/MM/yyyy HH:mm').format(t.dateTransaction),
-        'type': t.typeTransaction.label,
-        'description': t.description,
-        'montant': t.montant,
-        'solde': solde,
-      };
-    }).toList();
-    
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(10),
-        build: (context) => [
-          // En-tête moderne
-          pw.Container(
-            padding: const pw.EdgeInsets.all(10),
-            decoration: pw.BoxDecoration(
-              gradient: const pw.LinearGradient(
-                colors: [PdfColor.fromInt(0xFF10B981), PdfColor.fromInt(0xFF059669)],
-              ),
-              borderRadius: pw.BorderRadius.circular(10),
+    try {
+      final service = CompteSpecialService.instance;
+      
+      // Vérifier et définir le shopId
+      final authService = Provider.of<AuthService>(context, listen: false);
+      debugPrint('🔍 DEBUG PDF FRAIS - Auth Info:');
+      debugPrint('   currentUser: ${authService.currentUser}');
+      debugPrint('   currentUser.shopId: ${authService.currentUser?.shopId}');
+      debugPrint('   _selectedShopId: $_selectedShopId');
+      
+      final effectiveShopId = _selectedShopId ?? authService.currentUser?.shopId;
+      
+      debugPrint('   effectiveShopId: $effectiveShopId (type: ${effectiveShopId.runtimeType})');
+      
+      if (effectiveShopId == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('⚠️ Veuillez sélectionner un shop'),
+              backgroundColor: Colors.orange,
             ),
-            child: pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      'RAPPORT FRAIS',
-                      style: pw.TextStyle(
-                        fontSize: 24,
-                        fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.white,
-                      ),
-                    ),
-                    pw.SizedBox(height: 8),
-                    pw.Text(
-                      'Mouvements du compte FRAIS',
-                      style: const pw.TextStyle(
-                        fontSize: 12,
-                        color: PdfColors.white,
-                      ),
-                    ),
-                  ],
-                ),
-                pw.Container(
-                  padding: const pw.EdgeInsets.all(4),
-                  decoration: pw.BoxDecoration(
-                    color: PdfColors.white,
-                    borderRadius: pw.BorderRadius.circular(8),
-                  ),
-                  child: pw.Text(
-                    '💰',
-                    style: const pw.TextStyle(fontSize: 32),
-                  ),
-                ),
-              ],
+          );
+        }
+        return;
+      }
+      
+      // Si les dates sont null, utiliser la date du jour par défaut
+      final now = DateTime.now();
+      final defaultStartDate = DateTime(now.year, now.month, now.day);
+      final defaultEndDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
+      
+      final effectiveStartDate = _startDate ?? defaultStartDate;
+      final effectiveEndDate = _endDate ?? defaultEndDate;
+      
+      debugPrint('🔄 Début génération PDF FRAIS');
+      debugPrint('   NOW: $now');
+      debugPrint('   Shop ID: $effectiveShopId (original: $_selectedShopId)');
+      debugPrint('   Date début effective: $effectiveStartDate');
+      debugPrint('   Date fin effective: $effectiveEndDate');
+      debugPrint('   Date actuelle: ${DateTime.now()}');
+      
+      // CRITIQUE: Recharger les transactions pour s'assurer que les données sont à jour
+      await service.loadTransactions(shopId: effectiveShopId);
+      debugPrint('   ✅ Transactions rechargées');
+      
+      // Vérifier d'abord les statistiques pour le jour
+      final stats = await service.getStatistics(
+        shopId: effectiveShopId,
+        startDate: effectiveStartDate,
+        endDate: effectiveEndDate,
+      );
+      debugPrint('   📊 Stats pour la période:');
+      debugPrint('      - Total Frais: ${stats['totalFrais']}');
+      debugPrint('      - Retraits Frais: ${stats['retraitsFrais']}');
+      debugPrint('      - Solde Frais: ${stats['soldeFrais']}');
+      
+      // getFraisAsync combine _transactions (retraits) + operations (commissions)
+      final frais = await service.getFraisAsync(
+        shopId: effectiveShopId,
+        startDate: effectiveStartDate,
+        endDate: effectiveEndDate,
+      );
+      
+      debugPrint('   📊 Nombre de frais récupérés: ${frais.length}');
+      
+      if (frais.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('⚠️ Aucune transaction FRAIS trouvée pour cette période'),
+              backgroundColor: Colors.orange,
             ),
-          ),
-          pw.SizedBox(height: 20),
-          
-          // Informations de période
-          if (_startDate != null || _endDate != null)
+          );
+        }
+        return;
+      }
+
+      // Trier par date croissante
+      frais.sort((a, b) => a.dateTransaction.compareTo(b.dateTransaction));
+      debugPrint('   ✅ Tri effectué');
+
+      final pdf = pw.Document();
+      
+      // Calculer le solde cumulatif
+      double solde = 0;
+      final transactionsWithSolde = frais.map((t) {
+        solde += t.montant;
+        return {
+          'date': DateFormat('dd/MM/yyyy HH:mm').format(t.dateTransaction),
+          'type': t.typeTransaction.label,
+          'description': t.description,
+          'montant': t.montant,
+          'solde': solde,
+        };
+      }).toList();
+      
+      debugPrint('   ✅ Soldes cumulatifs calculés');
+      
+      // Calculer les statistiques
+      final totalEntrees = frais.where((t) => t.montant > 0).fold<double>(0, (sum, t) => sum + t.montant);
+      final totalSorties = frais.where((t) => t.montant < 0).fold<double>(0, (sum, t) => sum + t.montant.abs());
+      final soldeFinal = totalEntrees - totalSorties;
+      
+      debugPrint('   📊 Stats - Entrées: $totalEntrees, Sorties: $totalSorties, Solde: $soldeFinal');
+      
+      // Générer le PDF
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(16),
+          build: (context) => [
+            // EN-TÊTE MODERNE
             pw.Container(
-              padding: const pw.EdgeInsets.all(4),
+              padding: const pw.EdgeInsets.all(16),
               decoration: pw.BoxDecoration(
-                color: const PdfColor.fromInt(0xFFF3F4F6),
+                gradient: const pw.LinearGradient(
+                  colors: [PdfColor.fromInt(0xFF10B981), PdfColor.fromInt(0xFF059669)],
+                ),
+                borderRadius: pw.BorderRadius.circular(12),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(
+                            'RAPPORT COMPTE FRAIS',
+                            style: pw.TextStyle(
+                              fontSize: 20,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.white,
+                            ),
+                          ),
+                          pw.SizedBox(height: 4),
+                          pw.Text(
+                            'Frais encaissés sur transferts servis',
+                            style: pw.TextStyle(
+                              fontSize: 11,
+                              color: PdfColors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                      pw.Container(
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: pw.BoxDecoration(
+                          color: PdfColors.white,
+                          borderRadius: pw.BorderRadius.circular(8),
+                        ),
+                        child: pw.Text(
+                          '${frais.length}',
+                          style: pw.TextStyle(
+                            fontSize: 24,
+                            fontWeight: pw.FontWeight.bold,
+                            color: const PdfColor.fromInt(0xFF10B981),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            
+            pw.SizedBox(height: 16),
+            
+            // INFORMATIONS PÉRIODE
+            pw.Container(
+              padding: const pw.EdgeInsets.all(12),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.grey100,
                 borderRadius: pw.BorderRadius.circular(8),
               ),
               child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Icon(const pw.IconData(0xe878), size: 16),
-                  pw.SizedBox(width: 8),
+                  pw.Row(
+                    children: [
+                      pw.Icon(
+                        const pw.IconData(0xe8df),
+                        size: 16,
+                        color: PdfColors.grey700,
+                      ),
+                      pw.SizedBox(width: 6),
+                      pw.Text(
+                        'Période: ${DateFormat('dd/MM/yyyy').format(effectiveStartDate)} - ${DateFormat('dd/MM/yyyy').format(effectiveEndDate)}',
+                        style: pw.TextStyle(
+                          fontSize: 10,
+                          color: PdfColors.grey700,
+                        ),
+                      ),
+                    ],
+                  ),
                   pw.Text(
-                    'Période: ${_startDate != null ? DateFormat('dd/MM/yyyy').format(_startDate!) : 'Début'} - ${_endDate != null ? DateFormat('dd/MM/yyyy').format(_endDate!) : 'Fin'}',
+                    'Généré le ${DateFormat('dd/MM/yyyy à HH:mm').format(DateTime.now())}',
                     style: pw.TextStyle(
-                      fontSize: 11,
-                      fontWeight: pw.FontWeight.bold,
+                      fontSize: 9,
+                      color: PdfColors.grey600,
                     ),
                   ),
                 ],
               ),
             ),
-          pw.SizedBox(height: 20),
-          
-          // Tableau moderne des transactions
-          pw.Table(
-            border: pw.TableBorder.all(
-              color: const PdfColor.fromInt(0xFFE5E7EB),
-              width: 1,
-            ),
-            columnWidths: {
-              0: const pw.FlexColumnWidth(2),
-              1: const pw.FlexColumnWidth(2),
-              2: const pw.FlexColumnWidth(3),
-              3: const pw.FlexColumnWidth(1.5),
-              4: const pw.FlexColumnWidth(1.5),
-            },
-            children: [
-              // En-tête du tableau
-              pw.TableRow(
-                decoration: const pw.BoxDecoration(
-                  color: PdfColor.fromInt(0xFF10B981),
-                ),
-                children: [
-                  _buildTableHeader('Date'),
-                  _buildTableHeader('Type'),
-                  _buildTableHeader('Description'),
-                  _buildTableHeader('Montant', align: pw.TextAlign.right),
-                  _buildTableHeader('Solde', align: pw.TextAlign.right),
-                ],
-              ),
-              // Lignes de données
-              ...transactionsWithSolde.asMap().entries.map((entry) {
-                final index = entry.key;
-                final t = entry.value;
-                final isEven = index % 2 == 0;
-                
-                return pw.TableRow(
-                  decoration: pw.BoxDecoration(
-                    color: isEven ? PdfColors.white : const PdfColor.fromInt(0xFFF9FAFB),
-                  ),
-                  children: [
-                    _buildTableCell(t['date'] as String),
-                    _buildTableCell(t['type'] as String),
-                    _buildTableCell(t['description'] as String),
-                    _buildTableCell(
-                      '\$${_numberFormat.format(t['montant'])}',
-                      align: pw.TextAlign.right,
-                      color: (t['montant'] as double) >= 0 ? const PdfColor.fromInt(0xFF10B981) : const PdfColor.fromInt(0xFFEF4444),
-                    ),
-                    _buildTableCell(
-                      '\$${_numberFormat.format(t['solde'])}',
-                      align: pw.TextAlign.right,
-                      bold: true,
-                    ),
-                  ],
-                );
-              }),
-            ],
-          ),
-          
-          pw.SizedBox(height: 20),
-          
-          // Résumé final
-          pw.Container(
-            padding: const pw.EdgeInsets.all(4),
-            decoration: pw.BoxDecoration(
-              gradient: const pw.LinearGradient(
-                colors: [PdfColor.fromInt(0xFF10B981), PdfColor.fromInt(0xFF059669)],
-              ),
-              borderRadius: pw.BorderRadius.circular(8),
-            ),
-            child: pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            
+            pw.SizedBox(height: 16),
+            
+            // RÉSUMÉ FINANCIER
+            pw.Row(
               children: [
-                pw.Text(
-                  'SOLDE FINAL',
-                  style: pw.TextStyle(
-                    fontSize: 16,
-                    fontWeight: pw.FontWeight.bold,
-                    color: PdfColors.white,
+                pw.Expanded(
+                  child: _buildStatCard(
+                    'ENTRÉES',
+                    '\$${_numberFormat.format(totalEntrees)}',
+                    const PdfColor.fromInt(0xFF10B981),
                   ),
                 ),
-                pw.Text(
-                  '\$${_numberFormat.format(solde)}',
-                  style: pw.TextStyle(
-                    fontSize: 20,
-                    fontWeight: pw.FontWeight.bold,
-                    color: PdfColors.white,
+                pw.SizedBox(width: 12),
+                pw.Expanded(
+                  child: _buildStatCard(
+                    'SORTIES',
+                    '\$${_numberFormat.format(totalSorties)}',
+                    const PdfColor.fromInt(0xFFEF4444),
+                  ),
+                ),
+                pw.SizedBox(width: 12),
+                pw.Expanded(
+                  child: _buildStatCard(
+                    'SOLDE',
+                    '\$${_numberFormat.format(soldeFinal)}',
+                    const PdfColor.fromInt(0xFF3B82F6),
                   ),
                 ),
               ],
             ),
-          ),
-          
-          pw.SizedBox(height: 20),
-          
-          // Pied de page
-          pw.Container(
-            alignment: pw.Alignment.center,
-            child: pw.Text(
-              'Généré le ${DateFormat('dd/MM/yyyy à HH:mm').format(DateTime.now())}',
+            
+            pw.SizedBox(height: 20),
+            
+            // TABLEAU DES TRANSACTIONS
+            pw.Text(
+              'DÉTAIL DES TRANSACTIONS',
               style: pw.TextStyle(
-                fontSize: 9,
-                color: const PdfColor.fromInt(0xFF6B7280),
-                fontStyle: pw.FontStyle.italic,
+                fontSize: 14,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.grey800,
+              ),
+            ),
+            
+            pw.SizedBox(height: 8),
+            
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(2),
+                1: const pw.FlexColumnWidth(2),
+                2: const pw.FlexColumnWidth(4),
+                3: const pw.FlexColumnWidth(1.5),
+                4: const pw.FlexColumnWidth(1.5),
+              },
+              children: [
+                // En-tête
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(
+                    color: PdfColor.fromInt(0xFF10B981),
+                  ),
+                  children: [
+                    _buildTableHeader('Date'),
+                    _buildTableHeader('Type'),
+                    _buildTableHeader('Description'),
+                    _buildTableHeader('Montant', align: pw.TextAlign.right),
+                    _buildTableHeader('Solde', align: pw.TextAlign.right),
+                  ],
+                ),
+                // Lignes de données
+                ...transactionsWithSolde.map((t) {
+                  final montant = t['montant'] as double;
+                  final isSortie = montant < 0;
+                  return pw.TableRow(
+                    decoration: pw.BoxDecoration(
+                      color: transactionsWithSolde.indexOf(t).isEven 
+                          ? PdfColors.white 
+                          : PdfColors.grey50,
+                    ),
+                    children: [
+                      _buildTableCell(t['date'] as String),
+                      _buildTableCell(t['type'] as String),
+                      _buildTableCell(
+                        t['description'] as String,
+                        fontSize: 8,
+                      ),
+                      _buildTableCell(
+                        isSortie 
+                            ? '-\$${_numberFormat.format(montant.abs())}'
+                            : '\$${_numberFormat.format(montant)}',
+                        align: pw.TextAlign.right,
+                        color: isSortie 
+                            ? const PdfColor.fromInt(0xFFEF4444) 
+                            : const PdfColor.fromInt(0xFF10B981),
+                        bold: true,
+                      ),
+                      _buildTableCell(
+                        '\$${_numberFormat.format(t['solde'])}',
+                        align: pw.TextAlign.right,
+                        bold: true,
+                      ),
+                    ],
+                  );
+                }),
+              ],
+            ),
+            
+            pw.SizedBox(height: 20),
+            
+            // PIED DE PAGE
+            pw.Container(
+              padding: const pw.EdgeInsets.all(12),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.grey100,
+                borderRadius: pw.BorderRadius.circular(8),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    '${frais.length} transaction(s)',
+                    style: pw.TextStyle(
+                      fontSize: 9,
+                      color: PdfColors.grey700,
+                    ),
+                  ),
+                  pw.Text(
+                    'UCASH - Rapport Frais',
+                    style: pw.TextStyle(
+                      fontSize: 9,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.grey700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+      
+      debugPrint('   ✅ PDF généré avec succès');
+      
+      // Afficher le PDF dans un dialog avec PdfPreview
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => Dialog(
+            child: SizedBox(
+              width: MediaQuery.of(context).size.width * 0.9,
+              height: MediaQuery.of(context).size.height * 0.9,
+              child: PdfPreview(
+                build: (format) => pdf.save(),
+                canChangePageFormat: false,
+                canChangeOrientation: false,
+                canDebug: false,
+                pdfFileName: 'Rapport_Frais_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
               ),
             ),
           ),
-        ],
-      ),
-    );
-
-    // Afficher la prévisualisation dans un dialog avec PdfPreview
-    if (mounted) {
-      showDialog(
-        context: context,
-        builder: (context) => Dialog(
-          child: SizedBox(
-            width: MediaQuery.of(context).size.width * 0.9,
-            height: MediaQuery.of(context).size.height * 0.9,
-            child: PdfPreview(
-              build: (format) => pdf.save(),
-              canChangePageFormat: false,
-              canChangeOrientation: false,
-              canDebug: false,
-              pdfFileName: 'Rapport_Frais_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
-            ),
+        );
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ PDF généré avec succès: ${frais.length} transactions'),
+            backgroundColor: Colors.green,
           ),
-        ),
-      );
+        );
+      }
+    } catch (e, stackTrace) {
+      debugPrint('❌ Erreur génération PDF FRAIS: $e');
+      debugPrint('   Stack trace: $stackTrace');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Erreur: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     }
   }
 
@@ -2458,13 +2617,14 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
     pw.TextAlign align = pw.TextAlign.left,
     PdfColor? color,
     bool bold = false,
+    double fontSize = 9,
   }) {
     return pw.Container(
       padding: const pw.EdgeInsets.all(8),
       child: pw.Text(
         text,
         style: pw.TextStyle(
-          fontSize: 9,
+          fontSize: fontSize,
           fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
           color: color,
         ),
@@ -2472,13 +2632,74 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
       ),
     );
   }
+  
+  pw.Widget _buildStatCard(String label, String value, PdfColor color) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(12),
+      decoration: pw.BoxDecoration(
+        color: color.shade(0.9),
+        borderRadius: pw.BorderRadius.circular(8),
+        border: pw.Border.all(color: color, width: 1),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            label,
+            style: pw.TextStyle(
+              fontSize: 9,
+              color: color.shade(-0.3),
+              fontWeight: pw.FontWeight.bold,
+            ),
+          ),
+          pw.SizedBox(height: 4),
+          pw.Text(
+            value,
+            style: pw.TextStyle(
+              fontSize: 16,
+              fontWeight: pw.FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<void> _generatePdfDepenses(BuildContext context) async {
     final service = CompteSpecialService.instance;
+    
+    // Vérifier et définir le shopId
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final effectiveShopId = _selectedShopId ?? authService.currentUser?.shopId;
+    
+    if (effectiveShopId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('⚠️ Veuillez sélectionner un shop'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+    
+    // Si les dates sont null, utiliser la date du jour par défaut
+    final now = DateTime.now();
+    final defaultStartDate = DateTime(now.year, now.month, now.day);
+    final defaultEndDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
+    
+    final effectiveStartDate = _startDate ?? defaultStartDate;
+    final effectiveEndDate = _endDate ?? defaultEndDate;
+    
+    // CRITIQUE: Recharger les transactions pour s'assurer que les données sont à jour
+    await service.loadTransactions(shopId: effectiveShopId);
+    
     final depenses = service.getDepenses(
-      shopId: _selectedShopId,
-      startDate: _startDate,
-      endDate: _endDate,
+      shopId: effectiveShopId,
+      startDate: effectiveStartDate,
+      endDate: effectiveEndDate,
     );
 
     // Trier par date croissante
@@ -2554,27 +2775,26 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
           pw.SizedBox(height: 20),
           
           // Informations de période
-          if (_startDate != null || _endDate != null)
-            pw.Container(
-              padding: const pw.EdgeInsets.all(4),
-              decoration: pw.BoxDecoration(
-                color: const PdfColor.fromInt(0xFFF3F4F6),
-                borderRadius: pw.BorderRadius.circular(8),
-              ),
-              child: pw.Row(
-                children: [
-                  pw.Icon(const pw.IconData(0xe878), size: 16),
-                  pw.SizedBox(width: 8),
-                  pw.Text(
-                    'Période: ${_startDate != null ? DateFormat('dd/MM/yyyy').format(_startDate!) : 'Début'} - ${_endDate != null ? DateFormat('dd/MM/yyyy').format(_endDate!) : 'Fin'}',
-                    style: pw.TextStyle(
-                      fontSize: 11,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
+          pw.Container(
+            padding: const pw.EdgeInsets.all(4),
+            decoration: pw.BoxDecoration(
+              color: const PdfColor.fromInt(0xFFF3F4F6),
+              borderRadius: pw.BorderRadius.circular(8),
             ),
+            child: pw.Row(
+              children: [
+                pw.Icon(const pw.IconData(0xe878), size: 16),
+                pw.SizedBox(width: 8),
+                pw.Text(
+                  'Période: ${DateFormat('dd/MM/yyyy').format(effectiveStartDate)} - ${DateFormat('dd/MM/yyyy').format(effectiveEndDate)}',
+                  style: pw.TextStyle(
+                    fontSize: 11,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
           pw.SizedBox(height: 20),
           
           // Tableau moderne des transactions

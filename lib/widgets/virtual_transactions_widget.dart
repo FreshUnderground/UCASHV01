@@ -10,6 +10,7 @@ import '../services/auth_service.dart';
 import '../services/sim_service.dart';
 import '../services/shop_service.dart';
 import '../services/local_db.dart';
+import '../services/depot_retrait_sync_service.dart';
 import '../models/virtual_transaction_model.dart';
 import '../models/sim_model.dart';
 import '../models/retrait_virtuel_model.dart';
@@ -67,7 +68,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 4, vsync: this); // 4 tabs: Captures, Flots, Dépôt, Rapport
     // Initialiser la date à aujourd'hui pour le filtre Vue d'ensemble
     _selectedDate = DateTime.now();
     _loadData();
@@ -140,10 +141,6 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                   text: 'Dépôt',
                 ),
                 Tab(
-                  icon: Icon(Icons.receipt_long, size: isMobile ? 18 : 22),
-                  text: 'Clôture',
-                ),
-                Tab(
                   icon: Icon(Icons.analytics, size: isMobile ? 18 : 22),
                   text: 'Rapport',
                 ),
@@ -158,7 +155,6 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
           _buildTransactionsTab(),
           _buildFlotTab(),
           _buildDepotTab(),
-          _buildClotureTab(),
           _buildRapportTab(),
         ],
       ),
@@ -1307,11 +1303,14 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
     final authService = Provider.of<AuthService>(context, listen: false);
     final shopId = authService.currentUser?.shopId;
     
-    // Utiliser une clé unique basée sur un timestamp pour forcer le rechargement
-    return FutureBuilder<List<DepotClientModel>>(
-      key: ValueKey('depot_tab_${DateTime.now().millisecondsSinceEpoch}'),
-      future: LocalDB.instance.getAllDepotsClients(shopId: shopId),
-      builder: (context, snapshot) {
+    // Écouter les changements du service de sync pour rafraîchir automatiquement
+    return Consumer<DepotRetraitSyncService>(
+      builder: (context, depotSyncService, child) {
+        // Utiliser une clé unique basée sur un timestamp pour forcer le rechargement
+        return FutureBuilder<List<DepotClientModel>>(
+          key: ValueKey('depot_tab_${DateTime.now().millisecondsSinceEpoch}'),
+          future: LocalDB.instance.getAllDepotsClients(shopId: shopId),
+          builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -1565,6 +1564,8 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
             ),
           ],
         );
+      },
+    );
       },
     );
   }

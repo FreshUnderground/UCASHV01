@@ -36,17 +36,52 @@ register_shutdown_function(function() {
     }
 });
 
+// Vérifier que le fichier de config existe
+if (!file_exists(__DIR__ . '/../../../config/database.php')) {
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'message' => 'Fichier de configuration database.php introuvable',
+        'path_checked' => __DIR__ . '/../../../config/database.php'
+    ]);
+    exit;
+}
+
+// Vérifier que la classe Database existe
+if (!file_exists(__DIR__ . '/../../../classes/Database.php')) {
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'message' => 'Fichier Database.php introuvable',
+        'path_checked' => __DIR__ . '/../../../classes/Database.php'
+    ]);
+    exit;
+}
+
 require_once __DIR__ . '/../../../config/database.php';
 require_once __DIR__ . '/../../../classes/Database.php';
 
 try {
-    error_log("Upload comptes spéciaux - request received");
+    error_log("[COMPTES_SPECIAUX] Upload request received");
+    error_log("[COMPTES_SPECIAUX] Request method: " . $_SERVER['REQUEST_METHOD']);
+    error_log("[COMPTES_SPECIAUX] Content-Type: " . ($_SERVER['CONTENT_TYPE'] ?? 'not set'));
     
     // Lire les données POST
     $input = file_get_contents('php://input');
+    error_log("[COMPTES_SPECIAUX] Input length: " . strlen($input));
+    
+    if (empty($input)) {
+        throw new Exception('Aucune donnée reçue dans la requête');
+    }
+    
     $data = json_decode($input, true);
     
-    error_log("Input data: " . print_r($data, true));
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        throw new Exception('Erreur de décodage JSON: ' . json_last_error_msg());
+    }
+    
+    error_log("[COMPTES_SPECIAUX] JSON décodé avec succès");
+    error_log("[COMPTES_SPECIAUX] Données reçues: " . print_r($data, true));
     
     if (!isset($data['entities']) || !is_array($data['entities'])) {
         throw new Exception('Données invalides: entities requis');

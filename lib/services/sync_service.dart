@@ -363,7 +363,7 @@ class SyncService {
   /// Upload des changements locaux vers le serveur
   Future<void> _uploadLocalChanges(String userId) async {
     // NOTE: 'operations' est maintenant inclus dans la sync normale
-    final tables = ['shops', 'agents', 'clients', 'operations', 'taux', 'commissions', 'document_headers', 'cloture_caisse', 'sims', 'sim_movements', 'virtual_transactions', 'depot_clients'];
+    final tables = ['shops', 'agents', 'clients', 'operations', 'taux', 'commissions', 'comptes_speciaux', 'document_headers', 'cloture_caisse', 'sims', 'sim_movements', 'virtual_transactions', 'depot_clients'];
     int successCount = 0;
     int errorCount = 0;
     
@@ -585,6 +585,34 @@ class SyncService {
         }
         return true;
         
+      case 'comptes_speciaux':
+        // Validation des champs obligatoires pour les comptes spéciaux
+        if (data['type'] == null || data['type'].toString().isEmpty) {
+          debugPrint('❌ Validation: type manquant pour compte_special ${data['id']}');
+          return false;
+        }
+        if (data['type_transaction'] == null || data['type_transaction'].toString().isEmpty) {
+          debugPrint('❌ Validation: type_transaction manquant pour compte_special ${data['id']}');
+          return false;
+        }
+        if (data['montant'] == null || data['montant'] <= 0) {
+          debugPrint('❌ Validation: montant invalide pour compte_special ${data['id']}');
+          return false;
+        }
+        // Vérifier les valeurs valides pour type et type_transaction
+        final validTypes = ['FRAIS', 'DEPENSE'];  // CORRIGÉ: DEPENSE (sans S)
+        final validTransactionTypes = ['DEPOT', 'DEPOT_FRAIS', 'RETRAIT', 'SORTIE', 'COMMISSION_AUTO'];  // CORRIGÉ: valeurs de l'enum
+        
+        if (!validTypes.contains(data['type'])) {
+          debugPrint('❌ Validation: type invalide "${data['type']}" pour compte_special ${data['id']} (valeurs acceptées: ${validTypes.join(", ")})');
+          return false;
+        }
+        if (!validTransactionTypes.contains(data['type_transaction'])) {
+          debugPrint('❌ Validation: type_transaction invalide "${data['type_transaction']}" pour compte_special ${data['id']} (valeurs acceptées: ${validTransactionTypes.join(", ")})');
+          return false;
+        }
+        return true;
+        
       default:
         debugPrint('⚠️ Validation non implémentée pour $tableName');
         return true; // Par défaut, accepter les données non validées
@@ -733,11 +761,13 @@ class SyncService {
   Future<void> _downloadRemoteChanges(String userId, String userRole) async {
     // NOTE: 'operations' est maintenant inclus pour permettre à l'admin de télécharger toutes les opérations
     // TransferSyncService gère la synchronisation en temps réel pour les agents
-    final tables = ['operations', 'shops', 'agents', 'clients', 'taux', 'commissions', 'document_headers', 'cloture_caisse', 'flots', 'sims', 'sim_movements', 'virtual_transactions', 'depot_clients'];
+    // DepotRetraitSyncService gère la synchronisation des depot_clients
+    final tables = ['operations', 'shops', 'agents', 'clients', 'taux', 'commissions', 'comptes_speciaux', 'document_headers', 'cloture_caisse', 'flots', 'sims', 'sim_movements', 'virtual_transactions'];
     int successCount = 0;
     int errorCount = 0;
     
     debugPrint('📥 Début du download des données distantes (${tables.length} tables)');
+    debugPrint('⚠️ depot_clients synchronisé par DepotRetraitSyncService (ignoré ici)');
     
     for (String table in tables) {
       try {
@@ -861,6 +891,20 @@ class SyncService {
         
         uri = Uri.parse('$baseUrl/$tableName/$endpoint').replace(queryParameters: queryParams);
         debugPrint('📥 Requête download operations: $uri');
+      } else if (tableName == 'comptes_speciaux') {
+        // Pour comptes_speciaux, l'admin télécharge TOUT, les agents filtrent par shop
+        final queryParams = {
+          'since': sinceParam,
+        };
+        
+        if (userRole != 'admin' && currentShopId != null) {
+          queryParams['shop_id'] = currentShopId.toString();
+          debugPrint('💰 Mode AGENT: filtrage COMPTES SPÉCIAUX par shop_id=$currentShopId');
+        } else {
+          debugPrint('👑 Mode ADMIN: téléchargement de TOUS les comptes spéciaux');
+        }
+        
+        uri = Uri.parse('$baseUrl/$tableName/$endpoint').replace(queryParameters: queryParams);
       }
       
       debugPrint('📥 Requête download: $uri');

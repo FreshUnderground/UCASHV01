@@ -125,20 +125,29 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
         final totalWhoOweUs = partnersWhoOweUs.fold(0.0, (sum, item) => sum + (item['balance'] as double));
         final netPosition = totalWhoOweUs - totalWeOwe;
 
-        return Column(
-          children: [
+        return CustomScrollView(
+          slivers: [
             // En-tête et filtres
-            _buildHeader(isMobile, shopService),
+            SliverToBoxAdapter(
+              child: _buildHeader(isMobile, shopService),
+            ),
             
-            const SizedBox(height: 16),
+            SliverToBoxAdapter(
+              child: const SizedBox(height: 16),
+            ),
             
             // Résumé de la position nette
-            _buildNetPositionSummary(totalWeOwe, totalWhoOweUs, netPosition, isMobile),
+            SliverToBoxAdapter(
+              child: _buildNetPositionSummary(totalWeOwe, totalWhoOweUs, netPosition, isMobile),
+            ),
             
-            const SizedBox(height: 16),
+            SliverToBoxAdapter(
+              child: const SizedBox(height: 16),
+            ),
             
             // Listes des partenaires
-            Expanded(
+            SliverFillRemaining(
+              hasScrollBody: true,
               child: isMobile 
                 ? _buildMobileView(partnersWeOwe, partnersWhoOweUs, totalWeOwe, totalWhoOweUs)
                 : _buildDesktopView(partnersWeOwe, partnersWhoOweUs, totalWeOwe, totalWhoOweUs),
@@ -354,23 +363,30 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
       length: 2,
       child: Column(
         children: [
-          TabBar(
-            labelColor: const Color(0xFFDC2626),
-            unselectedLabelColor: Colors.grey,
-            indicatorColor: const Color(0xFFDC2626),
-            tabs: const [
-              Tab(
-                icon: Icon(Icons.arrow_downward),
-                text: 'Ils nous doivent',
-              ),
-              Tab(
-                icon: Icon(Icons.arrow_upward),
-                text: 'Nous leur devons',
-              ),
-            ],
+          Material(
+            color: Colors.white,
+            elevation: 2,
+            child: TabBar(
+              labelColor: const Color(0xFFDC2626),
+              unselectedLabelColor: Colors.grey,
+              indicatorColor: const Color(0xFFDC2626),
+              labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              unselectedLabelStyle: const TextStyle(fontSize: 13),
+              tabs: const [
+                Tab(
+                  icon: Icon(Icons.arrow_downward, size: 20),
+                  text: 'Ils nous doivent',
+                ),
+                Tab(
+                  icon: Icon(Icons.arrow_upward, size: 20),
+                  text: 'Nous leur devons',
+                ),
+              ],
+            ),
           ),
           Expanded(
             child: TabBarView(
+              physics: const NeverScrollableScrollPhysics(),
               children: [
                 _buildPartnerList(
                   'Ceux qui nous doivent',
@@ -404,19 +420,45 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 768;
 
-    return Card(
-      elevation: 2,
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Column(
         children: [
+          // Header
           Container(
             padding: EdgeInsets.all(isMobile ? 12 : 16),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+              gradient: LinearGradient(
+                colors: [
+                  color.withOpacity(0.1),
+                  color.withOpacity(0.05),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
             ),
             child: Row(
               children: [
-                Icon(icon, color: color, size: isMobile ? 20 : 24),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, color: color, size: isMobile ? 20 : 24),
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -430,6 +472,7 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
                           color: color,
                         ),
                       ),
+                      const SizedBox(height: 2),
                       Text(
                         '${partners.length} partenaire(s)',
                         style: TextStyle(
@@ -448,6 +491,7 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
                       style: TextStyle(
                         fontSize: isMobile ? 10 : 11,
                         color: Colors.grey[600],
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                     Text(
@@ -463,32 +507,45 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
               ],
             ),
           ),
-          const Divider(height: 1),
+          Divider(height: 1, color: Colors.grey[200]),
+          // List
           Expanded(
             child: partners.isEmpty
                 ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.check_circle, size: 48, color: Colors.grey[300]),
-                        const SizedBox(height: 8),
+                        Icon(Icons.check_circle_outline, size: 64, color: Colors.grey[300]),
+                        const SizedBox(height: 16),
                         Text(
-                          'Aucun partenaire dans cette catégorie',
-                          style: TextStyle(color: Colors.grey[600]),
+                          'Aucun partenaire',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'dans cette catégorie',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[500],
+                          ),
                         ),
                       ],
                     ),
                   )
-                : ListView.separated(
+                : ListView.builder(
+                    physics: const BouncingScrollPhysics(),
                     padding: EdgeInsets.all(isMobile ? 8 : 12),
                     itemCount: partners.length,
-                    separatorBuilder: (context, index) => const Divider(),
                     itemBuilder: (context, index) {
                       final item = partners[index];
                       final client = item['client'] as ClientModel;
                       final balance = item['balance'] as double;
                       
-                      return _buildPartnerItem(client, balance, color, isMobile);
+                      return _buildPartnerItem(client, balance, color, isMobile, index);
                     },
                   ),
           ),
@@ -497,101 +554,164 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
     );
   }
 
-  Widget _buildPartnerItem(ClientModel client, double balance, Color color, bool isMobile) {
-    return Card(
-      elevation: 1,
-      margin: EdgeInsets.symmetric(vertical: isMobile ? 4 : 6),
-      child: Padding(
-        padding: EdgeInsets.all(isMobile ? 12 : 16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Avatar
-            CircleAvatar(
-              backgroundColor: color.withOpacity(0.2),
-              radius: isMobile ? 20 : 24,
-              child: Text(
-                client.nom[0].toUpperCase(),
-                style: TextStyle(
-                  color: color,
-                  fontWeight: FontWeight.bold,
-                  fontSize: isMobile ? 16 : 20,
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            // Informations
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Nom
-                  Text(
-                    client.nom,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: isMobile ? 15 : 16,
+  Widget _buildPartnerItem(ClientModel client, double balance, Color color, bool isMobile, int index) {
+    return Container(
+      margin: EdgeInsets.only(bottom: isMobile ? 8 : 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: color.withOpacity(0.2),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            // Optionally add navigation or details
+          },
+          child: Padding(
+            padding: EdgeInsets.all(isMobile ? 12 : 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Avatar
+                Container(
+                  width: isMobile ? 48 : 56,
+                  height: isMobile ? 48 : 56,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        color.withOpacity(0.3),
+                        color.withOpacity(0.15),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      client.nom[0].toUpperCase(),
+                      style: TextStyle(
+                        color: color,
+                        fontWeight: FontWeight.bold,
+                        fontSize: isMobile ? 20 : 24,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  // Téléphone
-                  Row(
+                ),
+                const SizedBox(width: 12),
+                // Informations
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.phone, size: isMobile ? 14 : 16, color: Colors.grey[600]),
-                      const SizedBox(width: 6),
+                      // Nom
                       Text(
-                        client.telephone,
+                        client.nom,
                         style: TextStyle(
-                          fontSize: isMobile ? 12 : 13,
-                          color: Colors.grey[700],
+                          fontWeight: FontWeight.bold,
+                          fontSize: isMobile ? 15 : 16,
+                          color: Colors.grey[900],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 6),
+                      // Téléphone
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.phone_rounded,
+                            size: isMobile ? 14 : 16,
+                            color: Colors.grey[500],
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            client.telephone,
+                            style: TextStyle(
+                              fontSize: isMobile ? 12 : 13,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                      // Numéro de compte
+                      if (client.numeroCompte != null) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.credit_card,
+                              size: isMobile ? 14 : 16,
+                              color: Colors.grey[500],
+                            ),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                client.numeroCompte!,
+                                style: TextStyle(
+                                  fontSize: isMobile ? 12 : 13,
+                                  color: Colors.grey[600],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // Solde
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isMobile ? 10 : 12,
+                    vertical: isMobile ? 6 : 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '${_numberFormat.format(balance)}',
+                        style: TextStyle(
+                          fontSize: isMobile ? 16 : 18,
+                          fontWeight: FontWeight.bold,
+                          color: color,
+                        ),
+                      ),
+                      Text(
+                        'USD',
+                        style: TextStyle(
+                          fontSize: isMobile ? 10 : 11,
+                          color: color.withOpacity(0.7),
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
                   ),
-                  // Numéro de compte
-                  if (client.numeroCompte != null) ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(Icons.account_balance, size: isMobile ? 14 : 16, color: Colors.grey[600]),
-                        const SizedBox(width: 6),
-                        Text(
-                          client.numeroCompte!,
-                          style: TextStyle(
-                            fontSize: isMobile ? 12 : 13,
-                            color: Colors.grey[700],
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            // Solde
-            Column(
-              mainAxisAlignment: MainAxisAlignment.start,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '${_numberFormat.format(balance)}',
-                  style: TextStyle(
-                    fontSize: isMobile ? 16 : 18,
-                    fontWeight: FontWeight.bold,
-                    color: color,
-                  ),
-                ),
-                Text(
-                  'USD',
-                  style: TextStyle(
-                    fontSize: isMobile ? 11 : 12,
-                    color: Colors.grey[600],
-                  ),
                 ),
               ],
             ),
-          ],
+          ),
         ),
       ),
     );

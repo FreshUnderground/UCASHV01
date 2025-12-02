@@ -8,6 +8,8 @@ class DepotClientModel {
   final int userId;
   final bool isSynced;
   final DateTime? syncedAt;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
 
   DepotClientModel({
     this.id,
@@ -19,6 +21,8 @@ class DepotClientModel {
     required this.userId,
     this.isSynced = false,
     this.syncedAt,
+    this.createdAt,
+    this.updatedAt,
   });
 
   Map<String, dynamic> toMap() {
@@ -32,6 +36,8 @@ class DepotClientModel {
       'user_id': userId,
       'is_synced': isSynced ? 1 : 0,
       'synced_at': syncedAt?.toIso8601String(),
+      'created_at': createdAt?.toIso8601String(),
+      'updated_at': updatedAt?.toIso8601String(),
     };
   }
 
@@ -46,6 +52,8 @@ class DepotClientModel {
       userId: map['user_id'] as int,
       isSynced: (map['is_synced'] as int?) == 1,
       syncedAt: map['synced_at'] != null ? DateTime.parse(map['synced_at'] as String) : null,
+      createdAt: map['created_at'] != null ? DateTime.parse(map['created_at'] as String) : null,
+      updatedAt: map['updated_at'] != null ? DateTime.parse(map['updated_at'] as String) : null,
     );
   }
   
@@ -59,6 +67,8 @@ class DepotClientModel {
     int? userId,
     bool? isSynced,
     DateTime? syncedAt,
+    DateTime? createdAt,
+    DateTime? updatedAt,
   }) {
     return DepotClientModel(
       id: id ?? this.id,
@@ -70,6 +80,8 @@ class DepotClientModel {
       userId: userId ?? this.userId,
       isSynced: isSynced ?? this.isSynced,
       syncedAt: syncedAt ?? this.syncedAt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 }

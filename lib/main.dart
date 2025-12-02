@@ -19,6 +19,7 @@ import 'services/flot_notification_service.dart';
 import 'services/flot_service.dart';
 import 'services/document_header_service.dart';
 import 'services/transfer_sync_service.dart';
+import 'services/depot_retrait_sync_service.dart';
 import 'services/compte_special_service.dart';
 import 'services/robust_sync_service.dart';
 import 'services/connectivity_service.dart';
@@ -194,6 +195,7 @@ class _UCashAppState extends State<UCashApp> {
         ChangeNotifierProvider(create: (_) => FlotNotificationService()),
         ChangeNotifierProvider(create: (_) => DocumentHeaderService()),
         ChangeNotifierProvider(create: (_) => TransferSyncService()),
+        ChangeNotifierProvider(create: (_) => DepotRetraitSyncService()),
         ChangeNotifierProvider(create: (_) => CompteSpecialService.instance),
         ChangeNotifierProvider(create: (_) => ConnectivityService.instance),
         ChangeNotifierProvider(create: (_) => SimService.instance),

@@ -82,7 +82,7 @@ try {
             'telephone_client' => $depot['telephone_client'],
             'date_depot' => $depot['date_depot'],
             'user_id' => (int)$depot['user_id'],
-            'is_synced' => (bool)$depot['is_synced'],
+            'is_synced' => (int)$depot['is_synced'],
             'synced_at' => $depot['synced_at'],
             'created_at' => $depot['created_at'],
             'updated_at' => $depot['updated_at'],
