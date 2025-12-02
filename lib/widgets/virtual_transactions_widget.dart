@@ -22,6 +22,7 @@ import 'serve_client_dialog.dart';
 import 'create_retrait_virtuel_dialog.dart';
 import 'create_depot_client_dialog.dart';
 import 'cloture_virtuelle_moderne_widget.dart';
+import 'cloture_virtuelle_par_sim_widget.dart';
 import 'modern_transaction_card.dart';
 import 'pdf_viewer_dialog.dart';
 import 'flot_management_widget.dart';
@@ -41,7 +42,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
   int? _selectedShopFilter; // NOUVEAU: Pour les admins
   DateTime? _dateDebutFilter;
   DateTime? _dateFinFilter;
-  DateTime? _selectedDate; // NOUVEAU: Date unique pour Vue d'Ensemble
+  DateTime? _selectedDate; // Date unique pour Vue d'Ensemble
   Key _retraitsTabKey = UniqueKey(); // Pour forcer le rechargement
   bool _showFilters = false; // Masquer les filtres par défaut
   
@@ -66,6 +67,8 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
   void initState() {
     super.initState();
     _tabController = TabController(length: 5, vsync: this);
+    // Initialiser la date à aujourd'hui pour le filtre Vue d'ensemble
+    _selectedDate = DateTime.now();
     _loadData();
   }
 
@@ -2934,7 +2937,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
   /// Onglet rapport avec sous-onglets (par SIM et Frais)
   Widget _buildRapportTab() {
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Column(
         children: [
           Container(
@@ -2948,6 +2951,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                 Tab(text: 'Vue d\'ensemble', icon: Icon(Icons.dashboard, size: 20)),
                 Tab(text: 'Par SIM', icon: Icon(Icons.sim_card, size: 20)),
                 Tab(text: 'Frais', icon: Icon(Icons.attach_money, size: 20)),
+                Tab(text: 'Clôture par SIM', icon: Icon(Icons.phonelink_lock, size: 20)),
               ],
             ),
           ),
@@ -2957,6 +2961,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                 _buildRapportVueEnsembleTab(),
                 _buildRapportParSimTab(),
                 _buildRapportFraisTab(),
+                _buildClotureParSimTab(),
               ],
             ),
           ),
@@ -4266,17 +4271,14 @@ const SizedBox(height: 16),
             ? vtService.transactions.where((t) => t.shopId == shopIdFilter).toList()
             : vtService.transactions;
 
-        // Appliquer les filtres de dates
-        if (_dateDebutFilter != null) {
-          transactions = transactions
-              .where((t) => t.dateEnregistrement.isAfter(_dateDebutFilter!))
-              .toList();
-        }
-        if (_dateFinFilter != null) {
-          transactions = transactions
-              .where((t) => t.dateEnregistrement.isBefore(_dateFinFilter!))
-              .toList();
-        }
+        // Appliquer les filtres de dates (par défaut: aujourd'hui)
+        final dateDebut = _dateDebutFilter ?? DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+        final dateFin = _dateFinFilter ?? DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day, 23, 59, 59);
+        
+        transactions = transactions
+            .where((t) => t.dateEnregistrement.isAfter(dateDebut) && t.dateEnregistrement.isBefore(dateFin))
+            .toList();
+        
         // Filtrer par SIM (si sélectionnée)
         if (_selectedSimFilter != null) {
           transactions = transactions
@@ -4285,23 +4287,33 @@ const SizedBox(height: 16),
           sims = sims.where((s) => s.numero == _selectedSimFilter).toList();
         }
 
-        // NOUVEAU: Charger les retraits virtuels
+        // NOUVEAU: Charger les retraits virtuels ET dépôts clients
         return FutureBuilder<List<RetraitVirtuelModel>>(
           future: LocalDB.instance.getAllRetraitsVirtuels(shopSourceId: shopIdFilter),
           builder: (BuildContext context, retraitsSnapshot) {
             var retraits = retraitsSnapshot.data ?? [];
             
-            // Appliquer les filtres de dates sur les retraits
-            if (_dateDebutFilter != null) {
-              retraits = retraits.where((r) => r.dateRetrait.isAfter(_dateDebutFilter!)).toList();
-            }
-            if (_dateFinFilter != null) {
-              retraits = retraits.where((r) => r.dateRetrait.isBefore(_dateFinFilter!)).toList();
-            }
+            // Appliquer les filtres de dates sur les retraits (par défaut: aujourd'hui)
+            retraits = retraits.where((r) => r.dateRetrait.isAfter(dateDebut) && r.dateRetrait.isBefore(dateFin)).toList();
+            
             // Filtrer par SIM
             if (_selectedSimFilter != null) {
               retraits = retraits.where((r) => r.simNumero == _selectedSimFilter).toList();
             }
+            
+            // Charger les dépôts clients
+            return FutureBuilder<List<DepotClientModel>>(
+              future: LocalDB.instance.getAllDepotsClients(shopId: shopIdFilter),
+              builder: (BuildContext context, depotsSnapshot) {
+                var depots = depotsSnapshot.data ?? [];
+                
+                // Appliquer les filtres de dates sur les dépôts (par défaut: aujourd'hui)
+                depots = depots.where((d) => d.dateDepot.isAfter(dateDebut) && d.dateDepot.isBefore(dateFin)).toList();
+                
+                // Filtrer par SIM
+                if (_selectedSimFilter != null) {
+                  depots = depots.where((d) => d.simNumero == _selectedSimFilter).toList();
+                }
 
         if (sims.isEmpty) {
           return Center(
@@ -4339,20 +4351,68 @@ const SizedBox(height: 16),
           final totalCash = validees.fold<double>(0, (sum, t) => sum + t.montantCash);
           final montantEnAttente = enAttente.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
           
+          // Calculer le solde pour la période filtrée (avec filtres appliqués)
+          final simDepots = depots.where((d) => d.simNumero == sim.numero).toList();
+          final nbDepotsFiltre = simDepots.length;
+          final montantDepotsFiltre = simDepots.fold<double>(0, (sum, d) => sum + d.montant);
+          final montantCaptures = simTransactions.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
+          final soldePeriode = montantCaptures - montantTotalRetraits - montantDepotsFiltre;
+          
+          // NOUVEAU: Calculer le solde GLOBAL (SANS FILTRE - toutes les transactions)
+          // Récupérer TOUTES les transactions de cette SIM (sans filtre de date, mais avec filtre shop)
+          var toutesTransactionsSim = vtService.transactions.where((t) => t.simNumero == sim.numero).toList();
+          if (shopIdFilter != null) {
+            toutesTransactionsSim = toutesTransactionsSim.where((t) => t.shopId == shopIdFilter).toList();
+          }
+          
+          // Récupérer TOUS les retraits (sans filtre de date, mais avec filtre shop)
+          final allRetraits = retraitsSnapshot.data ?? [];
+          var tousRetraitsSim = allRetraits.where((r) => r.simNumero == sim.numero).toList();
+          if (shopIdFilter != null) {
+            tousRetraitsSim = tousRetraitsSim.where((r) => r.shopSourceId == shopIdFilter).toList();
+          }
+          
+          // Récupérer TOUS les dépôts clients (sans filtre de date, mais avec filtre shop)
+          final allDepots = depotsSnapshot.data ?? [];
+          var tousDepotsSim = allDepots.where((d) => d.simNumero == sim.numero).toList();
+          if (shopIdFilter != null) {
+            tousDepotsSim = tousDepotsSim.where((d) => d.shopId == shopIdFilter).toList();
+          }
+          
+          // Formule GLOBALE: Somme Captures - Somme Retraits - Somme Dépôts (TOUTES PÉRIODES)
+          final toutesCaptures = toutesTransactionsSim.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
+          final tousRetraits = tousRetraitsSim.fold<double>(0, (sum, r) => sum + r.montant);
+          final tousDepots = tousDepotsSim.fold<double>(0, (sum, d) => sum + d.montant);
+          final soldeGlobalCalcule = toutesCaptures - tousRetraits - tousDepots;
+          
           simStats[sim.numero] = {
             'sim': sim,
             'nb_total': simTransactions.length,
             'nb_validees': validees.length,
             'nb_en_attente': enAttente.length,
             'nb_retraits': nbRetraits,
+            'nb_depots_filtre': nbDepotsFiltre,
             'montant_retraits': montantTotalRetraits,
+            'montant_depots_filtre': montantDepotsFiltre,
+            'montant_captures': montantCaptures,
             'total_virtuel': totalVirtuel,
             'total_frais': totalFrais,
             'total_cash': totalCash,
             'montant_en_attente': montantEnAttente,
-            'solde_actuel': sim.soldeActuel,
+            'solde_actuel': sim.soldeActuel, // Solde de la BDD (peut être incorrect)
+            'solde_global': soldeGlobalCalcule, // Solde calculé (TOUTES périodes)
+            'solde_periode': soldePeriode, // Solde calculé pour la période filtrée
+            'total_captures_global': toutesCaptures, // Pour le récapitulatif
+            'total_retraits_global': tousRetraits, // Pour le récapitulatif
+            'total_depots_global': tousDepots, // Pour le récapitulatif
           };
         }
+        
+        // Calculer les totaux globaux pour toutes les SIMs
+        final grandTotalCaptures = simStats.values.fold<double>(0, (sum, stats) => sum + (stats['total_captures_global'] as double));
+        final grandTotalRetraits = simStats.values.fold<double>(0, (sum, stats) => sum + (stats['total_retraits_global'] as double));
+        final grandTotalDepots = simStats.values.fold<double>(0, (sum, stats) => sum + (stats['total_depots_global'] as double));
+        final grandSolde = grandTotalCaptures - grandTotalRetraits - grandTotalDepots;
 
         return SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -4391,6 +4451,76 @@ const SizedBox(height: 16),
               ),
               const SizedBox(height: 16),
               
+              // Récapitulatif global
+              Card(
+                elevation: 4,
+                color: const Color(0xFF48bb78).withOpacity(0.05),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.summarize, color: Color(0xFF48bb78), size: 24),
+                          SizedBox(width: 8),
+                          Text(
+                            'Récapitulatif Global',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildTotalCard(
+                              'Total Captures',
+                              grandTotalCaptures,
+                              Icons.add_circle,
+                              Colors.green,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildTotalCard(
+                              'Total Retraits',
+                              grandTotalRetraits,
+                              Icons.remove_circle,
+                              Colors.orange,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildTotalCard(
+                              'Total Dépôts',
+                              grandTotalDepots,
+                              Icons.account_balance,
+                              Colors.purple,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildTotalCard(
+                              'Solde Global',
+                              grandSolde,
+                              Icons.account_balance_wallet,
+                              const Color(0xFF48bb78),
+                              isBold: true,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              
               // Liste des SIMs avec leurs stats
               ...simStats.entries.map((entry) {
                 final simNumero = entry.key;
@@ -4423,7 +4553,7 @@ const SizedBox(height: 16),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            'Solde: \$${stats['solde_actuel'].toStringAsFixed(2)}',
+                            '\$${stats['solde_global'].toStringAsFixed(2)}',
                             style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
@@ -4435,21 +4565,55 @@ const SizedBox(height: 16),
                     ),
                     children: [
                       Padding(
-                        padding: const EdgeInsets.all(7),
+                        padding: const EdgeInsets.all(16),
                         child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _buildSimStatRow('Transactions Total', '${stats['nb_total']}', Icons.receipt_long, Colors.blue),
-                            _buildSimStatRow('Servies', '${stats['nb_validees']}', Icons.check_circle, Colors.green),
-                            _buildSimStatRow('En Attente', '${stats['nb_en_attente']}', Icons.hourglass_empty, Colors.orange),
-                            _buildSimStatRow('Retraits', '${stats['nb_retraits']}', Icons.remove_circle, Colors.purple),
-                            const Divider(height: 24),
-                            _buildSimStatRow('Virtuel Encaissé', '\$${stats['total_virtuel'].toStringAsFixed(2)}', Icons.mobile_friendly, const Color(0xFF48bb78)),
-                            _buildSimStatRow('Frais Générés', '\$${stats['total_frais'].toStringAsFixed(2)}', Icons.attach_money, Colors.purple),
-                            _buildSimStatRow('Cash Servi', '\$${stats['total_cash'].toStringAsFixed(2)}', Icons.money, Colors.red),
-                            _buildSimStatRow('Montant Retraits', '\$${stats['montant_retraits'].toStringAsFixed(2)}', Icons.payments, Colors.purple),
-                            if (stats['montant_en_attente'] > 0)
-                              _buildSimStatRow('En Attente (Montant)', '\$${stats['montant_en_attente'].toStringAsFixed(2)}', Icons.pending, Colors.orange),
-                            const Divider(height: 24),
+                            // SECTION 1: PÉRIODE FILTRÉE
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.blue, width: 2),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.date_range, color: Colors.blue, size: 20),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          _dateDebutFilter != null || _dateFinFilter != null
+                                              ? 'Période: ${_dateDebutFilter != null ? DateFormat('dd/MM/yyyy').format(_dateDebutFilter!) : "..."} - ${_dateFinFilter != null ? DateFormat('dd/MM/yyyy').format(_dateFinFilter!) : "..."}'
+                                              : 'Période: ${DateFormat('dd/MM/yyyy').format(DateTime.now())} (Aujourd\'hui)',
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.blue,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  _buildSimStatRow('Transactions Total', '${stats['nb_total']}', Icons.receipt_long, Colors.blue),
+                                  _buildSimStatRow('Servies', '${stats['nb_validees']}', Icons.check_circle, Colors.green),
+                                  _buildSimStatRow('En Attente', '${stats['nb_en_attente']}', Icons.hourglass_empty, Colors.orange),
+                                  const Divider(height: 16),
+                                  _buildSimStatRow('Captures', '\$${stats['montant_captures'].toStringAsFixed(2)}', Icons.add_circle, const Color(0xFF48bb78)),
+                                  _buildSimStatRow('Total Retraits', '\$${stats['montant_retraits'].toStringAsFixed(2)}', Icons.remove_circle, Colors.red),
+                                  _buildSimStatRow('Total Dépôts', '\$${stats['montant_depots_filtre'].toStringAsFixed(2)}', Icons.account_balance, Colors.purple),
+                                  const Divider(height: 16),
+                                  _buildSimStatRow('Solde Période', '\$${stats['solde_periode'].toStringAsFixed(2)}', Icons.trending_up, Colors.blue, isBold: true),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            
+                            // SECTION 2: GLOBAL (TOUTES PÉRIODES)
                             Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
@@ -4458,23 +4622,30 @@ const SizedBox(height: 16),
                                 border: Border.all(color: const Color(0xFF48bb78), width: 2),
                               ),
                               child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Row(
                                     children: [
-                                      const Icon(Icons.info_outline, color: Color(0xFF48bb78), size: 16),
+                                      const Icon(Icons.all_inclusive, color: Color(0xFF48bb78), size: 20),
                                       const SizedBox(width: 8),
-                                      Text(
-                                        'Solde Actuel (Toutes périodes)',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey[700],
-                                          fontStyle: FontStyle.italic,
+                                      const Expanded(
+                                        child: Text(
+                                          'Global SIM (Toutes Périodes)',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF48bb78),
+                                          ),
                                         ),
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 8),
-                                  _buildSimStatRow('Solde SIM Actuel', '\$${stats['solde_actuel'].toStringAsFixed(2)}', Icons.account_balance_wallet, const Color(0xFF48bb78), isBold: true),
+                                  const SizedBox(height: 12),
+                                  _buildSimStatRow('Total Captures', '\$${stats['total_captures_global'].toStringAsFixed(2)}', Icons.add_circle, Colors.green),
+                                  _buildSimStatRow('Total Retraits', '\$${stats['total_retraits_global'].toStringAsFixed(2)}', Icons.remove_circle, Colors.orange),
+                                  _buildSimStatRow('Total Dépôts', '\$${stats['total_depots_global'].toStringAsFixed(2)}', Icons.account_balance, Colors.purple),
+                                  const Divider(height: 16),
+                                  _buildSimStatRow('Solde Global', '\$${stats['solde_global'].toStringAsFixed(2)}', Icons.account_balance_wallet, const Color(0xFF48bb78), isBold: true),
                                 ],
                               ),
                             ),
@@ -4488,6 +4659,8 @@ const SizedBox(height: 16),
             ],
           ),
         );
+              },
+            );
           },
         );
       },
@@ -4704,6 +4877,11 @@ const SizedBox(height: 16),
     );
   }
 
+  /// Onglet Clôture par SIM
+  Widget _buildClotureParSimTab() {
+    return const ClotureVirtuelleParSimWidget();
+  }
+
   /// Ligne de statistique pour SIM
   Widget _buildSimStatRow(String label, String value, IconData icon, Color color, {bool isBold = false}) {
     return Padding(
@@ -4726,6 +4904,48 @@ const SizedBox(height: 16),
             value,
             style: TextStyle(
               fontSize: isBold ? 18 : 16,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Carte pour afficher un total dans le récapitulatif
+  Widget _buildTotalCard(String label, double value, IconData icon, Color color, {bool isBold = false}) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.3), width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[700],
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '\$${value.toStringAsFixed(2)}',
+            style: TextStyle(
+              fontSize: isBold ? 20 : 18,
               fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
               color: color,
             ),

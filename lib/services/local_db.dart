@@ -19,6 +19,7 @@ import '../models/virtual_transaction_model.dart';
 import '../models/retrait_virtuel_model.dart';
 import '../models/cloture_virtuelle_model.dart';
 import '../models/depot_client_model.dart';
+import '../models/cloture_virtuelle_par_sim_model.dart';
 
 class LocalDB {
   static final LocalDB _instance = LocalDB._internal();
@@ -2263,6 +2264,130 @@ class LocalDB {
     final prefs = await database;
     await prefs.remove('depot_client_$depotId');
     debugPrint('Dépôt client supprimé: ID=$depotId');
+  }
+
+  // ===================================================================
+  // CLÔTURES VIRTUELLES PAR SIM
+  // ===================================================================
+
+  /// Sauvegarder une clôture virtuelle par SIM
+  Future<void> saveClotureVirtuelleParSim(dynamic cloture) async {
+    final prefs = await database;
+    
+    // Générer un ID si nécessaire
+    final clotureId = cloture.id ?? await _generateSequentialId('cloture_sim_');
+    final clotureWithId = cloture.copyWith(id: clotureId);
+    
+    // Sauvegarder avec une clé unique: cloture_sim_{simNumero}_{date}
+    final dateKey = clotureWithId.dateCloture.toIso8601String().split('T')[0];
+    final key = 'cloture_sim_${clotureWithId.simNumero}_$dateKey';
+    
+    await prefs.setString(key, jsonEncode(clotureWithId.toMap()));
+    debugPrint('✅ Clôture SIM sauvegardée: ${clotureWithId.simNumero} - $dateKey');
+  }
+
+  /// Récupérer toutes les clôtures par SIM pour une date donnée
+  Future<List<dynamic>> getCloturesVirtuellesParDate({
+    required int shopId,
+    required DateTime date,
+  }) async {
+    final prefs = await database;
+    final dateKey = date.toIso8601String().split('T')[0];
+    final List<dynamic> clotures = [];
+    
+    final allKeys = prefs.getKeys();
+    for (var key in allKeys) {
+      if (key.startsWith('cloture_sim_') && key.endsWith(dateKey)) {
+        final clotureData = prefs.getString(key);
+        if (clotureData != null) {
+          final clotureMap = jsonDecode(clotureData);
+          if (clotureMap['shop_id'] == shopId) {
+            // Note: Le service appelant doit convertir vers le bon modèle
+            clotures.add(clotureMap);
+          }
+        }
+      }
+    }
+    
+    debugPrint('📊 ${clotures.length} clôture(s) trouvée(s) pour le $dateKey');
+    return clotures;
+  }
+
+  /// Récupérer la dernière clôture d'une SIM avant une date donnée
+  Future<dynamic> getDerniereClotureParSim({
+    required String simNumero,
+    required DateTime avant,
+  }) async {
+    final prefs = await database;
+    final allKeys = prefs.getKeys();
+    
+    dynamic derniereCloture;
+    DateTime? derniereDateCloture;
+    
+    for (var key in allKeys) {
+      if (key.startsWith('cloture_sim_$simNumero')) {
+        final clotureData = prefs.getString(key);
+        if (clotureData != null) {
+          final clotureMap = jsonDecode(clotureData);
+          final dateCloture = DateTime.parse(clotureMap['date_cloture']);
+          
+          // Vérifier si cette clôture est avant la date demandée
+          if (dateCloture.isBefore(avant)) {
+            // Garder la plus récente
+            if (derniereDateCloture == null || dateCloture.isAfter(derniereDateCloture)) {
+              derniereDateCloture = dateCloture;
+              derniereCloture = clotureMap;
+            }
+          }
+        }
+      }
+    }
+    
+    return derniereCloture;
+  }
+
+  /// Récupérer l'historique des clôtures pour une SIM
+  Future<List<dynamic>> getHistoriqueCloturesParSim({
+    required String simNumero,
+    DateTime? depuis,
+    DateTime? jusqua,
+  }) async {
+    final prefs = await database;
+    final allKeys = prefs.getKeys();
+    final List<dynamic> clotures = [];
+    
+    for (var key in allKeys) {
+      if (key.startsWith('cloture_sim_$simNumero')) {
+        final clotureData = prefs.getString(key);
+        if (clotureData != null) {
+          final clotureMap = jsonDecode(clotureData);
+          final dateCloture = DateTime.parse(clotureMap['date_cloture']);
+          
+          // Filtrer par période si spécifiée
+          bool inclure = true;
+          if (depuis != null && dateCloture.isBefore(depuis)) {
+            inclure = false;
+          }
+          if (jusqua != null && dateCloture.isAfter(jusqua)) {
+            inclure = false;
+          }
+          
+          if (inclure) {
+            clotures.add(clotureMap);
+          }
+        }
+      }
+    }
+    
+    // Trier par date décroissante (plus récente en premier)
+    clotures.sort((a, b) {
+      final dateA = DateTime.parse(a['date_cloture']);
+      final dateB = DateTime.parse(b['date_cloture']);
+      return dateB.compareTo(dateA);
+    });
+    
+    debugPrint('📊 ${clotures.length} clôture(s) trouvée(s) pour SIM $simNumero');
+    return clotures;
   }
 
 }
