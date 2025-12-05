@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../models/operation_model.dart';
 import '../models/journal_caisse_model.dart';
@@ -35,6 +36,13 @@ class OperationService extends ChangeNotifier {
   Timer? _pendingOpsTimer;
   bool _isPendingOpsCheckEnabled = false;
   int _pendingOpsCount = 0;
+  
+  // Timer pour synchroniser les opérations non synchronisées
+  Timer? _unsyncedOpsTimer;
+  int _unsyncedOpsCount = 0;
+  
+  // Queue des suppressions en attente de synchronisation
+  final List<String> _pendingDeletions = [];
 
   List<OperationModel> get operations => _operations;
   List<JournalCaisseModel> get journalEntries => _journalEntries;
@@ -42,6 +50,8 @@ class OperationService extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   int get pendingOpsCount => _pendingOpsCount;
   bool get isPendingOpsCheckEnabled => _isPendingOpsCheckEnabled;
+  int get unsyncedOpsCount => _unsyncedOpsCount;
+  int get pendingDeletionsCount => _pendingDeletions.length;
 
   void _setLoading(bool loading) {
     _isLoading = loading;
@@ -767,7 +777,7 @@ class OperationService extends ChangeNotifier {
       case ModePaiement.airtelMoney:
         return 'Airtel Money';
       case ModePaiement.mPesa:
-        return 'M-Pesa';
+        return 'MPESA/VODACASH';
       case ModePaiement.orangeMoney:
         return 'Orange Money';
     }
@@ -1093,6 +1103,241 @@ class OperationService extends ChangeNotifier {
       return _operations.firstWhere((op) => op.codeOps == codeOps);
     } catch (e) {
       return null;
+    }
+  }
+  
+  /// Get operation from database by CodeOps (used when operation may not be in memory)
+  Future<OperationModel?> getOperationByCodeOpsFromDB(String codeOps) async {
+    try {
+      return await LocalDB.instance.getOperationByCodeOps(codeOps);
+    } catch (e) {
+      debugPrint('Error getting operation by CodeOps: $e');
+      return null;
+    }
+  }
+  
+  /// Delete operation by CodeOps (unique identifier - more reliable than ID)
+  Future<bool> deleteOperationByCodeOps(String codeOps) async {
+    try {
+      debugPrint('🗑️ Suppression de l\'opération par CodeOps: $codeOps...');
+      
+      // 1. Get the operation from database
+      final operation = await LocalDB.instance.getOperationByCodeOps(codeOps);
+      if (operation == null) {
+        _errorMessage = 'Opération non trouvée (CodeOps: $codeOps)';
+        debugPrint(_errorMessage);
+        return false;
+      }
+      
+      // 2. Delete from local database FIRST (immediate)
+      if (operation.id != null) {
+        await LocalDB.instance.deleteOperation(operation.id!);
+        debugPrint('✅ Opération $codeOps supprimée en LOCAL');
+      }
+      
+      // 3. Remove from memory to update UI immediately
+      _operations.removeWhere((op) => op.codeOps == codeOps);
+      notifyListeners();
+      
+      // 4. Delete on server in BACKGROUND (non-blocking)
+      _syncOperationDeleteInBackground(codeOps);
+      
+      debugPrint('✅ Opération $codeOps supprimée avec succès (sync en arrière-plan)');
+      return true;
+    } catch (e) {
+      _errorMessage = 'Erreur lors de la suppression: $e';
+      debugPrint(_errorMessage);
+      notifyListeners();
+      return false;
+    }
+  }
+  
+  /// Remove operation from memory only (used by DeletionService)
+  /// Does NOT delete from database or server - only removes from in-memory list
+  void removeOperationFromMemory(String codeOps) {
+    final countBefore = _operations.length;
+    _operations.removeWhere((op) => op.codeOps == codeOps);
+    final countAfter = _operations.length;
+    
+    if (countBefore > countAfter) {
+      debugPrint('📋 Opération $codeOps retirée de la mémoire OperationService ($countBefore -> $countAfter)');
+      notifyListeners();
+    } else {
+      debugPrint('⚠️ Opération $codeOps non trouvée en mémoire (déjà supprimée?)');
+    }
+  }
+  
+  /// Sync operation deletion to server in background
+  void _syncOperationDeleteInBackground(String codeOps) async {
+    try {
+      final url = '${AppConfig.apiBaseUrl}/sync/operations/delete.php';
+      debugPrint('🌐 [BACKGROUND] Synchronisation suppression serveur: $codeOps...');
+      
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'codeOps': codeOps}),
+      ).timeout(const Duration(seconds: 10));
+      
+      if (response.statusCode == 200) {
+        final result = jsonDecode(response.body);
+        if (result['success'] == true) {
+          debugPrint('✅ [BACKGROUND] Opération $codeOps supprimée sur le serveur');
+          // Remove from pending deletions queue if it was there
+          _pendingDeletions.remove(codeOps);
+        } else {
+          debugPrint('⚠️ [BACKGROUND] Erreur serveur: ${result["message"]} - Ajout à la queue de retry');
+          _addToPendingDeletions(codeOps);
+        }
+      } else {
+        debugPrint('⚠️ [BACKGROUND] Erreur HTTP ${response.statusCode} - Ajout à la queue de retry');
+        _addToPendingDeletions(codeOps);
+      }
+    } on TimeoutException catch (e) {
+      debugPrint('⚠️ [BACKGROUND] TIMEOUT suppression: $e - Ajout à la queue de retry');
+      _addToPendingDeletions(codeOps);
+    } on http.ClientException catch (e) {
+      debugPrint('⚠️ [BACKGROUND] Pas d\'internet (ClientException): $e - Ajout à la queue de retry');
+      _addToPendingDeletions(codeOps);
+    } catch (e) {
+      debugPrint('⚠️ [BACKGROUND] Erreur suppression: $e - Ajout à la queue de retry');
+      _addToPendingDeletions(codeOps);
+    }
+  }
+  
+  /// Add CodeOps to pending deletions queue
+  void _addToPendingDeletions(String codeOps) {
+    if (!_pendingDeletions.contains(codeOps)) {
+      _pendingDeletions.add(codeOps);
+      debugPrint('📋 Suppression ajoutée à la queue de retry: $codeOps (Total: ${_pendingDeletions.length})');
+    }
+  }
+  
+  /// Retry all pending deletions
+  Future<void> _retryPendingDeletions() async {
+    if (_pendingDeletions.isEmpty) {
+      return;
+    }
+    
+    debugPrint('🔄 [RETRY] Tentative de synchronisation de ${_pendingDeletions.length} suppressions en attente...');
+    
+    // Create a copy to iterate over (to avoid concurrent modification)
+    final deletionsToRetry = List<String>.from(_pendingDeletions);
+    
+    for (final codeOps in deletionsToRetry) {
+      try {
+        final url = '${AppConfig.apiBaseUrl}/sync/operations/delete.php';
+        debugPrint('🔄 [RETRY] Suppression: $codeOps...');
+        
+        final response = await http.post(
+          Uri.parse(url),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'codeOps': codeOps}),
+        ).timeout(const Duration(seconds: 10));
+        
+        if (response.statusCode == 200) {
+          final result = jsonDecode(response.body);
+          if (result['success'] == true) {
+            debugPrint('✅ [RETRY] Suppression $codeOps réussie sur le serveur');
+            _pendingDeletions.remove(codeOps);
+          } else {
+            debugPrint('⚠️ [RETRY] Erreur serveur: ${result["message"]} - Restera en queue');
+          }
+        } else {
+          debugPrint('⚠️ [RETRY] HTTP ${response.statusCode} - Restera en queue');
+        }
+      } catch (e) {
+        debugPrint('⚠️ [RETRY] Erreur pour $codeOps: $e - Restera en queue');
+        // Stop retrying if we have connection issues
+        break;
+      }
+    }
+    
+    if (_pendingDeletions.isEmpty) {
+      debugPrint('✅ [RETRY] Toutes les suppressions en attente ont été synchronisées!');
+    } else {
+      debugPrint('📋 [RETRY] ${_pendingDeletions.length} suppressions restent en attente');
+    }
+  }
+  
+  /// Update operation by CodeOps (unique identifier - more reliable than ID)
+  Future<bool> updateOperationByCodeOps(OperationModel operation) async {
+    try {
+      debugPrint('🔄 Mise à jour de l\'opération par CodeOps: ${operation.codeOps}...');
+      
+      // 1. Update in local database FIRST (immediate)
+      await LocalDB.instance.updateOperationByCodeOps(operation);
+      debugPrint('✅ Opération ${operation.codeOps} mise à jour en LOCAL');
+      
+      // 2. Update in memory to reflect changes immediately in UI
+      final index = _operations.indexWhere((op) => op.codeOps == operation.codeOps);
+      if (index != -1) {
+        _operations[index] = operation.copyWith(isSynced: false); // Mark as not synced
+        notifyListeners();
+      }
+      
+      // 3. Sync to server in BACKGROUND (non-blocking)
+      _syncOperationUpdateInBackground(operation);
+      
+      debugPrint('✅ Opération ${operation.codeOps} mise à jour avec succès (sync en arrière-plan)');
+      return true;
+    } catch (e) {
+      _errorMessage = 'Erreur lors de la mise à jour: $e';
+      debugPrint(_errorMessage);
+      notifyListeners();
+      return false;
+    }
+  }
+  
+  /// Sync operation update to server in background
+  void _syncOperationUpdateInBackground(OperationModel operation) async {
+    try {
+      final url = '${AppConfig.apiBaseUrl}/sync/operations/update.php';
+      debugPrint('🌐 [BACKGROUND] Synchronisation serveur: ${operation.codeOps}...');
+      debugPrint('🌐 [BACKGROUND] URL: $url');
+      
+      final jsonBody = jsonEncode(operation.toJson());
+      debugPrint('📦 [BACKGROUND] Taille du body: ${jsonBody.length} caractères');
+      
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonBody,
+      ).timeout(const Duration(seconds: 10));
+      
+      debugPrint('📡 [BACKGROUND] Réponse HTTP ${response.statusCode}');
+      debugPrint('📡 [BACKGROUND] Body: ${response.body}');
+      
+      if (response.statusCode == 200) {
+        final result = jsonDecode(response.body);
+        if (result['success'] == true) {
+          debugPrint('✅ [BACKGROUND] Opération ${operation.codeOps} synchronisée sur le serveur');
+          
+          // Mark as synced in local DB
+          final syncedOp = operation.copyWith(isSynced: true, syncedAt: DateTime.now());
+          await LocalDB.instance.updateOperationByCodeOps(syncedOp);
+          
+          // Update in memory
+          final index = _operations.indexWhere((op) => op.codeOps == operation.codeOps);
+          if (index != -1) {
+            _operations[index] = syncedOp;
+            notifyListeners();
+          }
+        } else {
+          debugPrint('⚠️ [BACKGROUND] Erreur serveur: ${result["message"]} - Restera en attente de sync');
+        }
+      } else {
+        debugPrint('⚠️ [BACKGROUND] Erreur HTTP ${response.statusCode} - Restera en attente de sync');
+      }
+    } on TimeoutException catch (e) {
+      debugPrint('⚠️ [BACKGROUND] TIMEOUT (10s): $e');
+    } on http.ClientException catch (e) {
+      debugPrint('⚠️ [BACKGROUND] ClientException: $e');
+    } on FormatException catch (e) {
+      debugPrint('⚠️ [BACKGROUND] FormatException (JSON invalide): $e');
+    } catch (e, stackTrace) {
+      debugPrint('⚠️ [BACKGROUND] ERREUR COMPLETE: Type=${e.runtimeType}, Message=$e');
+      debugPrint('⚠️ [BACKGROUND] STACK TRACE: $stackTrace');
     }
   }
   
@@ -1609,6 +1854,132 @@ class OperationService extends ChangeNotifier {
     } catch (e) {
       debugPrint('❌ Erreur ajout à la file de synchronisation: $e');
     }
+  }
+  
+  /// Démarrer la synchronisation automatique des opérations non synchronisées
+  /// Vérifie toutes les 2 minutes et tente de synchroniser
+  void startUnsyncedOperationsSync() {
+    debugPrint('🔄 Démarrage de la synchronisation automatique des opérations non synchronisées...');
+    
+    // Annuler le timer existant s'il y en a un
+    _unsyncedOpsTimer?.cancel();
+    
+    // Créer un nouveau timer qui vérifie toutes les 2 minutes (120 secondes)
+    _unsyncedOpsTimer = Timer.periodic(const Duration(minutes: 2), (_) {
+      _syncUnsyncedOperations();
+    });
+    
+    // Première synchronisation immédiate
+    _syncUnsyncedOperations();
+  }
+  
+  /// Arrêter la synchronisation automatique
+  void stopUnsyncedOperationsSync() {
+    debugPrint('🛝️ Arrêt de la synchronisation automatique des opérations');
+    _unsyncedOpsTimer?.cancel();
+    _unsyncedOpsTimer = null;
+  }
+  
+  /// Synchroniser toutes les opérations non synchronisées
+  Future<void> _syncUnsyncedOperations() async {
+    try {
+      // Récupérer toutes les opérations de la base de données
+      final allOps = await LocalDB.instance.getAllOperations();
+      
+      // Filtrer les opérations non synchronisées
+      final unsyncedOps = allOps.where((op) => op.isSynced == false).toList();
+      
+      _unsyncedOpsCount = unsyncedOps.length;
+      
+      if (unsyncedOps.isEmpty && _pendingDeletions.isEmpty) {
+        debugPrint('✅ [AUTO-SYNC] Aucune opération à synchroniser');
+        return;
+      }
+      
+      if (unsyncedOps.isNotEmpty) {
+        debugPrint('🔄 [AUTO-SYNC] ${unsyncedOps.length} opérations non synchronisées détectées');
+      }
+      
+      if (_pendingDeletions.isNotEmpty) {
+        debugPrint('🔄 [AUTO-SYNC] ${_pendingDeletions.length} suppressions en attente détectées');
+      }
+      
+      int successCount = 0;
+      int failCount = 0;
+      
+      // Tenter de synchroniser chaque opération
+      for (var operation in unsyncedOps) {
+        try {
+          debugPrint('🔄 [AUTO-SYNC] Tentative sync: ${operation.codeOps}');
+          
+          // Utiliser la méthode de synchronisation en arrière-plan
+          await _syncOperationUpdateToServer(operation);
+          
+          successCount++;
+        } catch (e) {
+          debugPrint('⚠️ [AUTO-SYNC] Échec sync ${operation.codeOps}: $e');
+          failCount++;
+        }
+      }
+      
+      // Also retry pending deletions
+      await _retryPendingDeletions();
+      
+      debugPrint('✅ [AUTO-SYNC] Synchronisation terminée: $successCount réussies, $failCount échecs');
+      
+      // Mettre à jour le compteur
+      _unsyncedOpsCount = failCount;
+      notifyListeners();
+      
+    } catch (e) {
+      debugPrint('❌ [AUTO-SYNC] Erreur lors de la synchronisation: $e');
+    }
+  }
+  
+  /// Synchroniser une opération vers le serveur (version await au lieu de void)
+  Future<void> _syncOperationUpdateToServer(OperationModel operation) async {
+    try {
+      final url = '${AppConfig.apiBaseUrl}/sync/operations/update.php';
+      
+      final jsonBody = jsonEncode(operation.toJson());
+      
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonBody,
+      ).timeout(const Duration(seconds: 10));
+      
+      if (response.statusCode == 200) {
+        final result = jsonDecode(response.body);
+        if (result['success'] == true) {
+          debugPrint('✅ [AUTO-SYNC] Opération ${operation.codeOps} synchronisée');
+          
+          // Marquer comme synchronisée dans la base de données locale
+          final syncedOp = operation.copyWith(isSynced: true, syncedAt: DateTime.now());
+          await LocalDB.instance.updateOperationByCodeOps(syncedOp);
+          
+          // Mettre à jour en mémoire si l'opération est chargée
+          final index = _operations.indexWhere((op) => op.codeOps == operation.codeOps);
+          if (index != -1) {
+            _operations[index] = syncedOp;
+          }
+        } else {
+          throw Exception(result['message'] ?? 'Erreur serveur inconnue');
+        }
+      } else {
+        throw Exception('HTTP ${response.statusCode}');
+      }
+    } catch (e) {
+      // Re-throw pour que l'appelant puisse compter les échecs
+      throw Exception('Sync failed: $e');
+    }
+  }
+  
+  @override
+  void dispose() {
+    _pendingOpsTimer?.cancel();
+    _unsyncedOpsTimer?.cancel();
+    super.dispose();
   }
 
 }

@@ -165,7 +165,7 @@ class _CreateShopDialogState extends State<CreateShopDialog> {
                     keyboardType: TextInputType.number,
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
-                        return 'Le capital M-Pesa est requis';
+                        return 'Le capital MPESA/VODACASH est requis';
                       }
                       final capital = double.tryParse(value);
                       if (capital == null || capital < 0) {

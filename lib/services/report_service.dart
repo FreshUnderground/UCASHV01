@@ -186,22 +186,25 @@ class ReportService extends ChangeNotifier {
       });
     }
 
-    // Ajouter les FLOTs au rapport avec les dates appropriées
-    for (final flot in flots) {
+    // Ajouter les FLOTs au rapport (NOUVEAU: depuis operations avec type=flotShopToShop)
+    // Les FLOTs sont maintenant dans la table operations
+    final flotsOperations = operations.where((op) => op.type == OperationType.flotShopToShop).toList();
+    
+    for (final flot in flotsOperations) {
       final isEntree = flot.shopDestinationId == shopId;
       final isSortie = flot.shopSourceId == shopId;
       
       if ((isEntree || isSortie) && flot.devise == 'USD') {
-        // Utiliser date_reception pour les flots reçus et created_at pour les flots envoyés
+        // Utiliser dateValidation pour les flots reçus et dateOp pour les flots envoyés
         final dateAction = isEntree 
-            ? (flot.dateReception ?? flot.dateEnvoi)  // Pour les flots reçus, préférer date_reception
-            : (flot.createdAt ?? flot.dateEnvoi);     // Pour les flots envoyés, préférer created_at
+            ? (flot.dateValidation ?? flot.dateOp)  // Pour les flots reçus, préférer dateValidation
+            : (flot.createdAt ?? flot.dateOp);      // Pour les flots envoyés, préférer createdAt
             
         // Vérifier si la date est dans la période demandée
         if ((startDate == null || dateAction.isAfter(startDate.subtract(const Duration(days: 1)))) &&
             (endDate == null || dateAction.isBefore(endDate.add(const Duration(days: 1))))) {
           
-          final montant = flot.montant;
+          final montant = flot.montantNet;
           final mode = flot.modePaiement.name;
           
           // Mettre à jour les totaux
@@ -214,17 +217,23 @@ class ReportService extends ChangeNotifier {
           // Mettre à jour les totaux par mode de paiement
           totauxParMode[mode] = (totauxParMode[mode] ?? 0) + montant;
           
-          // Récupérer les noms des agents
-          final agentEnvoyeur = flot.agentEnvoyeurId != null 
-              ? agentService.getAgentById(flot.agentEnvoyeurId!) 
+          // Récupérer le nom de l'agent
+          final agent = flot.agentId != null 
+              ? agentService.getAgentById(flot.agentId!) 
               : null;
-          final agentRecepteur = flot.agentRecepteurId != null 
-              ? agentService.getAgentById(flot.agentRecepteurId!) 
-              : null;
+          final agentName = agent?.nom ?? agent?.username ?? flot.lastModifiedBy ?? 'Agent inconnu';
           
-          final agentName = isEntree 
-              ? (agentRecepteur?.nom ?? agentRecepteur?.username ?? 'Agent inconnu')
-              : (agentEnvoyeur?.nom ?? agentEnvoyeur?.username ?? 'Agent inconnu');
+          // Trouver les noms des shops
+          final shopSource = _shops.firstWhere(
+            (s) => s.id == flot.shopSourceId,
+            orElse: () => ShopModel(designation: 'Shop ${flot.shopSourceId}', localisation: ''),
+          );
+          final shopDestination = flot.shopDestinationId != null
+              ? _shops.firstWhere(
+                  (s) => s.id == flot.shopDestinationId,
+                  orElse: () => ShopModel(designation: 'Shop ${flot.shopDestinationId}', localisation: ''),
+                )
+              : null;
           
           mouvements.add({
             'date': dateAction,
@@ -241,8 +250,8 @@ class ReportService extends ChangeNotifier {
             'soldeApres': 0.0,
             'statut': flot.statut.name,
             'destinataire': isEntree 
-                ? 'Reçu de ${flot.getShopSourceDesignation(_shops)}'
-                : 'Envoyé vers ${flot.getShopDestinationDesignation(_shops)}',
+                ? 'Reçu de ${shopSource.designation}'
+                : 'Envoyé vers ${shopDestination?.designation ?? "Inconnu"}',
           });
         }
       }
@@ -265,9 +274,9 @@ class ReportService extends ChangeNotifier {
         'parMode': totauxParMode,
       },
       'statistiques': {
-        'nombreOperations': shopOperations.length + flots.length,
-        'moyenneParOperation': (shopOperations.length + flots.length) > 0 
-            ? (totalEntrees + totalSorties) / (shopOperations.length + flots.length) 
+        'nombreOperations': shopOperations.length + flotsOperations.length,
+        'moyenneParOperation': (shopOperations.length + flotsOperations.length) > 0 
+            ? (totalEntrees + totalSorties) / (shopOperations.length + flotsOperations.length) 
             : 0,
       },
     };
@@ -816,13 +825,15 @@ class ReportService extends ChangeNotifier {
       },
       'transactions': clientOperations.map((op) => {
         'id': op.id,
+        'code_ops': op.codeOps, // IMPORTANT: Unique identifier
         'date': op.dateOp,
         'type': op.type.name,
         'montant': op.montantNet,
         'commission': op.commission,
         'statut': op.statut.name,
         'notes': op.notes,
-        'observation': op.observation, // Add this line
+        'observation': op.observation,
+        'destinataire': op.destinataire,
       }).toList(),
     };
   }
@@ -928,6 +939,294 @@ class ReportService extends ChangeNotifier {
     }
     
     debugPrint('🔍 DIAGNOSTIC TERMINÉ');
+  }
+
+  // Générer le rapport des mouvements de dettes intershop journalier
+  Future<Map<String, dynamic>> generateDettesIntershopReport({
+    int? shopId,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    await loadReportData(shopId: shopId, startDate: startDate, endDate: endDate);
+
+    // Filtrer les opérations pertinentes (transferts et flots)
+    final transferts = _operations.where((op) => 
+      op.type == OperationType.transfertNational ||
+      op.type == OperationType.transfertInternationalSortant ||
+      op.type == OperationType.transfertInternationalEntrant
+    ).toList();
+
+    final flots = _operations.where((op) => 
+      op.type == OperationType.flotShopToShop
+    ).toList();
+
+    // Préparer les structures de données
+    final List<Map<String, dynamic>> mouvements = [];
+    final Map<String, Map<String, dynamic>> mouvementsParJour = {};
+    final Map<int, Map<String, dynamic>> soldesParShop = {}; // Soldes par shop
+    
+    double totalCreances = 0.0;
+    double totalDettes = 0.0;
+
+    // Traiter les transferts
+    for (final transfert in transferts) {
+      if (transfert.shopDestinationId == null) continue;
+
+      final shopSource = _shops.firstWhere((s) => s.id == transfert.shopSourceId);
+      final shopDestination = _shops.firstWhere((s) => s.id == transfert.shopDestinationId);
+      
+      // Si un shop spécifique est sélectionné, filtrer les mouvements
+      if (shopId != null && 
+          transfert.shopSourceId != shopId && 
+          transfert.shopDestinationId != shopId) {
+        continue;
+      }
+
+      String typeMouvement;
+      String description;
+      bool isCreance = false;
+
+      // Déterminer le type de mouvement selon la perspective du shop
+      if (shopId == null) {
+        // Vue globale: shop source doit au shop destination
+        typeMouvement = 'transfert_initie';
+        description = 'Transfert ${transfert.type.name} - ${shopSource.designation} doit ${transfert.montantBrut.toStringAsFixed(2)} USD à ${shopDestination.designation}';
+      } else if (transfert.shopDestinationId == shopId) {
+        // Ce shop a servi le transfert → créance
+        typeMouvement = 'transfert_servi';
+        description = 'Transfert servi - ${shopSource.designation} nous doit ${transfert.montantBrut.toStringAsFixed(2)} USD';
+        isCreance = true;
+        totalCreances += transfert.montantBrut;
+      } else {
+        // Ce shop a initié le transfert → dette
+        typeMouvement = 'transfert_initie';
+        description = 'Transfert initié - Nous devons ${transfert.montantBrut.toStringAsFixed(2)} USD à ${shopDestination.designation}';
+        totalDettes += transfert.montantBrut;
+      }
+
+      final mouvement = {
+        'date': transfert.dateOp,
+        'shopSource': shopSource.designation,
+        'shopDestination': shopDestination.designation,
+        'montant': transfert.montantBrut,
+        'typeMouvement': typeMouvement,
+        'description': description,
+        'isCreance': isCreance,
+      };
+
+      mouvements.add(mouvement);
+
+      // Calculer les soldes par shop
+      if (shopId != null) {
+        if (isCreance) {
+          // Créance: l'autre shop nous doit
+          final autreShopId = transfert.shopSourceId!;
+          if (!soldesParShop.containsKey(autreShopId)) {
+            soldesParShop[autreShopId] = {
+              'shopId': autreShopId,
+              'shopName': shopSource.designation,
+              'creances': 0.0,
+              'dettes': 0.0,
+              'solde': 0.0,
+            };
+          }
+          soldesParShop[autreShopId]!['creances'] += transfert.montantBrut;
+        } else {
+          // Dette: on doit à l'autre shop
+          final autreShopId = transfert.shopDestinationId!;
+          if (!soldesParShop.containsKey(autreShopId)) {
+            soldesParShop[autreShopId] = {
+              'shopId': autreShopId,
+              'shopName': shopDestination.designation,
+              'creances': 0.0,
+              'dettes': 0.0,
+              'solde': 0.0,
+            };
+          }
+          soldesParShop[autreShopId]!['dettes'] += transfert.montantBrut;
+        }
+      }
+
+      // Agréger par jour
+      final dateKey = transfert.dateOp.toIso8601String().split('T')[0];
+      if (!mouvementsParJour.containsKey(dateKey)) {
+        mouvementsParJour[dateKey] = {
+          'date': dateKey,
+          'creances': 0.0,
+          'dettes': 0.0,
+          'solde': 0.0,
+          'nombreOperations': 0,
+        };
+      }
+
+      if (isCreance || shopId == null) {
+        mouvementsParJour[dateKey]!['creances'] += transfert.montantBrut;
+      }
+      if (!isCreance || shopId == null) {
+        mouvementsParJour[dateKey]!['dettes'] += transfert.montantBrut;
+      }
+      mouvementsParJour[dateKey]!['nombreOperations']++;
+    }
+
+    // Traiter les flots
+    for (final flot in flots) {
+      if (flot.shopDestinationId == null) continue;
+
+      final shopSource = _shops.firstWhere((s) => s.id == flot.shopSourceId);
+      final shopDestination = _shops.firstWhere((s) => s.id == flot.shopDestinationId);
+      
+      // Si un shop spécifique est sélectionné, filtrer les mouvements
+      if (shopId != null && 
+          flot.shopSourceId != shopId && 
+          flot.shopDestinationId != shopId) {
+        continue;
+      }
+
+      String typeMouvement;
+      String description;
+      bool isCreance = false;
+
+      // Déterminer le type de mouvement selon la perspective du shop
+      if (shopId == null) {
+        // Vue globale
+        typeMouvement = flot.statut == OperationStatus.validee ? 'flot_recu' : 'flot_envoye';
+        description = 'Flot ${flot.statut.name} - ${shopSource.designation} → ${shopDestination.designation}';
+      } else if (flot.shopSourceId == shopId) {
+        // Ce shop a envoyé le flot → créance (ils nous doivent)
+        typeMouvement = 'flot_envoye';
+        description = 'Flot envoyé - ${shopDestination.designation} nous doit ${flot.montantNet.toStringAsFixed(2)} USD';
+        isCreance = true;
+        totalCreances += flot.montantNet;
+      } else {
+        // Ce shop a reçu le flot → dette (on leur doit)
+        typeMouvement = 'flot_recu';
+        description = 'Flot reçu - Nous devons ${flot.montantNet.toStringAsFixed(2)} USD à ${shopSource.designation}';
+        totalDettes += flot.montantNet;
+      }
+
+      final mouvement = {
+        'date': flot.dateOp,
+        'shopSource': shopSource.designation,
+        'shopDestination': shopDestination.designation,
+        'montant': flot.montantNet,
+        'typeMouvement': typeMouvement,
+        'description': description,
+        'isCreance': isCreance,
+      };
+
+      mouvements.add(mouvement);
+
+      // Calculer les soldes par shop
+      if (shopId != null) {
+        if (isCreance) {
+          // Créance: l'autre shop nous doit
+          final autreShopId = flot.shopDestinationId!;
+          if (!soldesParShop.containsKey(autreShopId)) {
+            soldesParShop[autreShopId] = {
+              'shopId': autreShopId,
+              'shopName': shopDestination.designation,
+              'creances': 0.0,
+              'dettes': 0.0,
+              'solde': 0.0,
+            };
+          }
+          soldesParShop[autreShopId]!['creances'] += flot.montantNet;
+        } else {
+          // Dette: on doit à l'autre shop
+          final autreShopId = flot.shopSourceId!;
+          if (!soldesParShop.containsKey(autreShopId)) {
+            soldesParShop[autreShopId] = {
+              'shopId': autreShopId,
+              'shopName': shopSource.designation,
+              'creances': 0.0,
+              'dettes': 0.0,
+              'solde': 0.0,
+            };
+          }
+          soldesParShop[autreShopId]!['dettes'] += flot.montantNet;
+        }
+      }
+
+      // Agréger par jour
+      final dateKey = flot.dateOp.toIso8601String().split('T')[0];
+      if (!mouvementsParJour.containsKey(dateKey)) {
+        mouvementsParJour[dateKey] = {
+          'date': dateKey,
+          'creances': 0.0,
+          'dettes': 0.0,
+          'solde': 0.0,
+          'nombreOperations': 0,
+        };
+      }
+
+      if (isCreance || shopId == null) {
+        mouvementsParJour[dateKey]!['creances'] += flot.montantNet;
+      }
+      if (!isCreance || shopId == null) {
+        mouvementsParJour[dateKey]!['dettes'] += flot.montantNet;
+      }
+      mouvementsParJour[dateKey]!['nombreOperations']++;
+    }
+
+    // Calculer le solde pour chaque jour
+    for (final jour in mouvementsParJour.values) {
+      jour['solde'] = (jour['creances'] as double) - (jour['dettes'] as double);
+    }
+
+    // Calculer l'évolution quotidienne avec solde cumulé
+    final joursListe = mouvementsParJour.values.toList();
+    joursListe.sort((a, b) => (a['date'] as String).compareTo(b['date'] as String)); // Tri croissant pour calcul
+
+    double soldeAnterieur = 0.0;
+    for (final jour in joursListe) {
+      jour['detteAnterieure'] = soldeAnterieur;
+      final soldeJour = (jour['creances'] as double) - (jour['dettes'] as double);
+      final soldeCumule = soldeAnterieur + soldeJour;
+      jour['soldeCumule'] = soldeCumule;
+      soldeAnterieur = soldeCumule; // Le solde devient la dette antérieure du jour suivant
+    }
+
+    // Trier les jours par date décroissante pour l'affichage
+    joursListe.sort((a, b) => (b['date'] as String).compareTo(a['date'] as String));
+
+    // Calculer le solde net pour chaque shop
+    for (final shop in soldesParShop.values) {
+      shop['solde'] = (shop['creances'] as double) - (shop['dettes'] as double);
+    }
+
+    // Séparer les shops en créanciers et débiteurs
+    final shopsNousDoivent = soldesParShop.values
+        .where((s) => (s['solde'] as double) > 0)
+        .toList()
+      ..sort((a, b) => (b['solde'] as double).compareTo(a['solde'] as double));
+    
+    final shopsNousDevons = soldesParShop.values
+        .where((s) => (s['solde'] as double) < 0)
+        .toList()
+      ..sort((a, b) => (a['solde'] as double).compareTo(b['solde'] as double));
+
+    // Trier les mouvements par date décroissante
+    mouvements.sort((a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
+
+    return {
+      'periode': {
+        'debut': startDate?.toIso8601String(),
+        'fin': endDate?.toIso8601String(),
+      },
+      'shopName': shopId != null 
+          ? _shops.firstWhere((s) => s.id == shopId, orElse: () => _shops.first).designation 
+          : 'Tous les shops',
+      'summary': {
+        'totalCreances': totalCreances,
+        'totalDettes': totalDettes,
+        'soldeNet': totalCreances - totalDettes,
+        'nombreMouvements': mouvements.length,
+      },
+      'shopsNousDoivent': shopsNousDoivent,
+      'shopsNousDevons': shopsNousDevons,
+      'mouvements': mouvements,
+      'mouvementsParJour': joursListe,
+    };
   }
 
   // Créer des opérations de test pour vérifier la logique

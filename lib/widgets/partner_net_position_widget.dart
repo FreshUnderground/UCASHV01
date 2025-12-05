@@ -97,21 +97,24 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
         }).toList();
 
         // Calculer les soldes et séparer en deux catégories
-        List<Map<String, dynamic>> partnersWeOwe = []; // Solde positif
-        List<Map<String, dynamic>> partnersWhoOweUs = []; // Solde négatif
+        // IMPORTANT: Solde négatif (-) = Ils nous doivent, Solde positif (+) = Nous leur devons
+        List<Map<String, dynamic>> partnersWeOwe = []; // Solde positif (+) = Nous leur devons
+        List<Map<String, dynamic>> partnersWhoOweUs = []; // Solde négatif (-) = Ils nous doivent
 
         for (final client in clients) {
           final balance = _calculateClientBalance(client.id!, operationService.operations);
           
           if (balance > 0) {
+            // Solde POSITIF = Nous leur devons (le client a plus déposé que retiré)
             partnersWeOwe.add({
               'client': client,
               'balance': balance,
             });
           } else if (balance < 0) {
+            // Solde NÉGATIF = Ils nous doivent (le client a plus retiré que déposé)
             partnersWhoOweUs.add({
               'client': client,
-              'balance': balance.abs(),
+              'balance': balance.abs(), // Afficher en valeur absolue
             });
           }
         }

@@ -22,6 +22,7 @@ import '../widgets/comptes_speciaux_widget.dart';
 import '../widgets/audit_history_widget.dart';
 import '../widgets/reconciliation_report_widget.dart';
 import '../widgets/retrait_mobile_money_widget.dart';
+import '../widgets/reports/dettes_intershop_report.dart';
 
 class AgentDashboardPage extends StatefulWidget {
   const AgentDashboardPage({super.key});
@@ -34,6 +35,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
   int _selectedIndex = 0;
   bool _isLoadingData = false;
   bool _isDisposed = false; // Track disposal state
+  FlotNotificationService? _flotNotificationService;
   
   final List<String> _menuItems = [
     'Dashboard',
@@ -46,6 +48,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
     'FLOT',
     'Clôture Journalière',
     'Frais',
+    'Dettes Intershop',
     'Configuration',
     'Retrait Mobile Money',
   ];
@@ -61,6 +64,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
     Icons.local_shipping,
     Icons.receipt_long,
     Icons.account_balance,
+    Icons.swap_horiz,
     Icons.settings,
     Icons.mobile_friendly,
   ];
@@ -79,6 +83,8 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
   @override
   void dispose() {
     _isDisposed = true;
+    _flotNotificationService?.stopMonitoring();
+    _flotNotificationService?.onNewFlotDetected = null; // Clear callback
     super.dispose();
   }
 
@@ -143,58 +149,62 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
       
       final authService = Provider.of<AgentAuthService>(context, listen: false);
       final flotService = Provider.of<FlotService>(context, listen: false);
-      final flotNotificationService = FlotNotificationService();
+      _flotNotificationService = FlotNotificationService();
       
-      flotNotificationService.startMonitoring(
-        authService: authService,
+      _flotNotificationService!.startMonitoring(
+        shopId: authService.currentAgent?.shopId ?? 0,
         getFlots: () => flotService.flots, // Returns List<OperationModel> filtered by flotShopToShop
       );
       
       // Définir le callback pour les nouvelles notifications de flots
-      flotNotificationService.onNewFlotDetected = (title, message, flotId) {
-        if (!_isDisposed && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.local_shipping, color: Colors.white),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          title,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(message),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              backgroundColor: const Color(0xFF2563EB), // Bleu pour différencier des transferts
-              duration: const Duration(seconds: 8),
-              action: SnackBarAction(
-                label: 'VOIR',
-                textColor: Colors.white,
-                onPressed: () {
-                  if (!_isDisposed && mounted) {
-                    // Naviguer vers l'onglet FLOT
-                    setState(() {
-                      _selectedIndex = 7; // Index 7 = FLOT
-                    });
-                  }
-                },
-              ),
-            ),
-          );
+      _flotNotificationService!.onNewFlotDetected = (title, message, flotId) {
+        // CRITICAL: Check if widget is still mounted before accessing context
+        if (_isDisposed || !mounted) {
+          debugPrint('⚠️ [FLOT-NOTIF] Widget disposed, ignoring notification');
+          return;
         }
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.local_shipping, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(message),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF2563EB), // Bleu pour différencier des transferts
+            duration: const Duration(seconds: 8),
+            action: SnackBarAction(
+              label: 'VOIR',
+              textColor: Colors.white,
+              onPressed: () {
+                if (!_isDisposed && mounted) {
+                  // Naviguer vers l'onglet FLOT
+                  setState(() {
+                    _selectedIndex = 7; // Index 7 = FLOT
+                  });
+                }
+              },
+            ),
+          ),
+        );
       };
     });
   }
@@ -560,8 +570,10 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
       case 9:
         return _buildFraisContent();
       case 10:
-        return _buildConfigurationContent();
+        return _buildDettesIntershopContent();
       case 11:
+        return _buildConfigurationContent();
+      case 12:
         return _buildRetraitMobileMoneyContent();
       default:
         return _buildDashboardContent();
@@ -670,6 +682,17 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
     );
   }
 
+  Widget _buildDettesIntershopContent() {
+    final authService = Provider.of<AgentAuthService>(context, listen: false);
+    final shopId = authService.currentAgent?.shopId;
+    
+    return DettesIntershopReport(
+      shopId: shopId,
+      startDate: DateTime.now().subtract(const Duration(days: 30)),
+      endDate: DateTime.now(),
+    );
+  }
+
   Widget _buildConfigurationContent() {
     return DefaultTabController(
       length: 2,
@@ -727,7 +750,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
   }
 
   Widget _buildBottomNavigation() {
-    // Map pour convertir entre l'index desktop (12 items) et l'index mobile (6 items)
+    // Map pour convertir entre l'index desktop (13 items) et l'index mobile (6 items)
     int _getMobileNavIndex(int desktopIndex) {
       // Dashboard=0, Rapports=1, FLOT=2, Frais=3, VIRTUEL=4, Config=5
       switch (desktopIndex) {
@@ -735,10 +758,10 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
         case 6: return 1; // Rapports
         case 7: return 2; // FLOT
         case 9: return 3; // Frais
-        case 11: return 4; // VIRTUEL (Retrait Mobile Money)
-        case 10: return 5; // Config
+        case 12: return 4; // VIRTUEL (Retrait Mobile Money)
+        case 11: return 5; // Config
         default: 
-          // Pour les items non mappés (1,2,3,4,5,8), retourner Dashboard
+          // Pour les items non mappés (1,2,3,4,5,8,10), retourner Dashboard
           debugPrint('⚠️ [BottomNav] Index desktop $desktopIndex non mappé -> Dashboard');
           return 0;
       }
@@ -750,8 +773,8 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
         case 1: return 6; // Rapports
         case 2: return 7; // FLOT
         case 3: return 9; // Frais
-        case 4: return 11; // VIRTUEL
-        case 5: return 10; // Config
+        case 4: return 12; // VIRTUEL
+        case 5: return 11; // Config
         default: return 0;
       }
     }
@@ -796,11 +819,11 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
           label: 'Frais',
         ),
         BottomNavigationBarItem(
-          icon: Icon(_menuIcons[11]),
+          icon: Icon(_menuIcons[12]),
           label: 'VIRTUEL',
         ),
         BottomNavigationBarItem(
-          icon: Icon(_menuIcons[10]),
+          icon: Icon(_menuIcons[11]),
           label: 'Config',
         ),
       ],

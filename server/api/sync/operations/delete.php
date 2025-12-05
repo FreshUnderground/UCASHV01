@@ -1,111 +1,112 @@
 <?php
+/**
+ * API: Delete Operation by CodeOps
+ * Method: POST
+ * Body: {"codeOps": "251202160848312"}
+ */
+
+// Disable error display (errors should only go to error_log)
+error_reporting(E_ALL);
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+
+// Capture fatal errors
+register_shutdown_function(function() {
+    $error = error_get_last();
+    if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Erreur PHP fatale: ' . $error['message'],
+            'file' => $error['file'],
+            'line' => $error['line']
+        ]);
+    }
+});
+
+header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
-header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
 }
 
+// Include Database class and config
+require_once __DIR__ . '/../../../classes/Database.php';
 require_once __DIR__ . '/../../../config/database.php';
 
 try {
-    // Lire les données JSON
-    $data = json_decode(file_get_contents('php://input'), true);
+    $database = Database::getInstance();
+    $db = $database->getConnection();
     
-    // Accepter soit 'codeOps' (recommandé) soit 'id' (fallback)
-    if (!isset($data['codeOps']) && !isset($data['id'])) {
+    $json = file_get_contents('php://input');
+    $data = json_decode($json, true);
+    
+    // Log de la requête reçue
+    error_log("[DELETE] Requête reçue: " . json_encode($data));
+    
+    if (!isset($data['codeOps']) || empty($data['codeOps'])) {
         http_response_code(400);
         echo json_encode([
             'success' => false,
-            'error' => 'codeOps ou ID d\'opération manquant'
+            'message' => 'CodeOps requis'
         ]);
         exit;
     }
     
-    // Connexion à la base de données
-    $db = new Database();
-    $pdo = $db->getConnection();
+    $codeOps = $data['codeOps'];
     
-    // Prioriser codeOps pour la suppression (identifiant unique cross-platform)
-    if (isset($data['codeOps'])) {
-        $codeOps = $data['codeOps'];
-        
-        // Vérifier si l'opération existe
-        $stmt = $pdo->prepare("SELECT id, codeOps FROM operations WHERE codeOps = ?");
-        $stmt->execute([$codeOps]);
-        $operation = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if (!$operation) {
-            http_response_code(404);
-            echo json_encode([
-                'success' => false,
-                'error' => 'Opération non trouvée avec codeOps: ' . $codeOps
-            ]);
-            exit;
-        }
-        
-        // Supprimer l'opération par codeOps
-        $stmt = $pdo->prepare("DELETE FROM operations WHERE codeOps = ?");
-        $result = $stmt->execute([$codeOps]);
-        
-        if ($result) {
-            echo json_encode([
-                'success' => true,
-                'message' => 'Opération supprimée avec succès',
-                'codeOps' => $codeOps,
-                'id' => $operation['id']
-            ]);
-        } else {
-            http_response_code(500);
-            echo json_encode([
-                'success' => false,
-                'error' => 'Erreur lors de la suppression'
-            ]);
-        }
-    } else {
-        // Fallback: utiliser id (moins fiable car auto-increment)
-        $operationId = intval($data['id']);
-        
-        // Vérifier si l'opération existe
-        $stmt = $pdo->prepare("SELECT id FROM operations WHERE id = ?");
-        $stmt->execute([$operationId]);
-        $operation = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if (!$operation) {
-            http_response_code(404);
-            echo json_encode([
-                'success' => false,
-                'error' => 'Opération non trouvée'
-            ]);
-            exit;
-        }
-        
-        // Supprimer l'opération
-        $stmt = $pdo->prepare("DELETE FROM operations WHERE id = ?");
-        $result = $stmt->execute([$operationId]);
-        
-        if ($result) {
-            echo json_encode([
-                'success' => true,
-                'message' => 'Opération supprimée avec succès',
-                'id' => $operationId
-            ]);
-        } else {
-            http_response_code(500);
-            echo json_encode([
-                'success' => false,
-                'error' => 'Erreur lors de la suppression'
-            ]);
-        }
+    // Log du CodeOps
+    error_log("[DELETE] Recherche opération avec code_ops: $codeOps");
+    
+    // Check if operation exists
+    $stmt = $db->prepare("SELECT id FROM operations WHERE code_ops = ?");
+    $stmt->execute([$codeOps]);
+    $operation = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$operation) {
+        error_log("[DELETE] Opération non trouvée (peut-être déjà supprimée) - code_ops: $codeOps");
+        // Return success anyway since the operation doesn't exist on server
+        echo json_encode([
+            'success' => true,
+            'message' => 'Opération déjà supprimée ou n\'existe pas',
+            'code_ops' => $codeOps
+        ]);
+        exit;
     }
     
+    // Delete operation
+    error_log("[DELETE] Suppression opération ID: {$operation['id']}, code_ops: $codeOps");
+    $deleteStmt = $db->prepare("DELETE FROM operations WHERE code_ops = ?");
+    $result = $deleteStmt->execute([$codeOps]);
+    
+    if ($result) {
+        error_log("[DELETE] ✅ Opération supprimée avec succès - code_ops: $codeOps");
+        
+        echo json_encode([
+            'success' => true,
+            'message' => 'Opération supprimée avec succès',
+            'code_ops' => $codeOps
+        ]);
+    } else {
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Erreur lors de la suppression'
+        ]);
+    }
 } catch (Exception $e) {
+    error_log("[DELETE] ERREUR EXCEPTION: " . $e->getMessage());
+    error_log("[DELETE] TRACE: " . $e->getTraceAsString());
     http_response_code(500);
     echo json_encode([
         'success' => false,
-        'error' => 'Erreur serveur: ' . $e->getMessage()
+        'message' => 'Erreur serveur: ' . $e->getMessage(),
+        'error_type' => get_class($e),
+        'file' => $e->getFile(),
+        'line' => $e->getLine()
     ]);
 }

@@ -11,24 +11,24 @@ COLLATE utf8mb4_unicode_ci;
 USE ucash_db;
 
 -- ========================================
--- TABLE: users (Utilisateurs/Administrateurs)
+-- TABLE: users (Administrateurs uniquement - max 2)
 -- ========================================
 CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(50) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
-    role ENUM('ADMIN', 'AGENT', 'CLIENT') NOT NULL DEFAULT 'AGENT',
-    shop_id INT NULL,
+    role ENUM('ADMIN') NOT NULL DEFAULT 'ADMIN',
     nom VARCHAR(100) NULL,
-    adresse VARCHAR(255) NULL,
+    prenom VARCHAR(100) NULL,
+    email VARCHAR(100) NULL,
     telephone VARCHAR(20) NULL,
-    solde DECIMAL(15, 2) NULL DEFAULT 0.00,
-    devise VARCHAR(10) NULL DEFAULT 'USD',
-    created_by INT NULL,
+    is_active TINYINT(1) DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
     INDEX idx_username (username),
     INDEX idx_role (role),
-    INDEX idx_shop_id (shop_id)
+    INDEX idx_active (is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ========================================

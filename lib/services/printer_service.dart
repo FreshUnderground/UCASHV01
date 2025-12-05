@@ -1132,7 +1132,7 @@ class PrinterService {
       case ModePaiement.airtelMoney:
         return '📱 Airtel Money';
       case ModePaiement.mPesa:
-        return '📱 M-Pesa';
+        return '📱 MPESA/VODACASH';
       case ModePaiement.orangeMoney:
         return '📱 Orange Money';
     }

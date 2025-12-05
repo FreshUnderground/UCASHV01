@@ -367,6 +367,9 @@ class PdfService {
     DateTime? startDate,
     DateTime? endDate,
   }) async {
+    // Charger l'en-tête personnalisé depuis le cache local
+    final headerModel = await _loadHeaderFromCache();
+    
     final pdf = pw.Document();
     
     // Calculs
@@ -392,7 +395,9 @@ class PdfService {
                 pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text('UCASH', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                    pw.Text(headerModel.companyName, style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                    if (headerModel.companySlogan?.isNotEmpty ?? false)
+                      pw.Text(headerModel.companySlogan!, style: pw.TextStyle(fontSize: 10, color: PdfColors.white)),
                     pw.Text(shop.designation, style: const pw.TextStyle(fontSize: 12, color: PdfColors.white)),
                   ],
                 ),
@@ -483,6 +488,9 @@ class PdfService {
     DateTime? startDate,
     DateTime? endDate,
   }) async {
+    // Charger l'en-tête personnalisé depuis le cache local
+    final headerModel = await _loadHeaderFromCache();
+    
     final pdf = pw.Document();
     
     // Calculer les totaux
@@ -535,7 +543,9 @@ class PdfService {
                 pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text('UCASH', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                    pw.Text(headerModel.companyName, style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                    if (headerModel.companySlogan?.isNotEmpty ?? false)
+                      pw.Text(headerModel.companySlogan!, style: pw.TextStyle(fontSize: 10, color: PdfColors.white)),
                     pw.Text(shop.designation, style: const pw.TextStyle(fontSize: 12, color: PdfColors.white)),
                   ],
                 ),

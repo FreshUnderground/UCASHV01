@@ -353,15 +353,15 @@ class _RapportClotureState extends State<RapportCloture> {
               ),
               const SizedBox(height: 12),
               
-              // M-Pesa (Vodacash)
+              // MPESA/VODACASH
               TextField(
                 controller: mpesaController,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: InputDecoration(
-                  labelText: 'M-Pesa (Vodacash)',
+                  labelText: 'MPESA/VODACASH',
                   prefixIcon: const Icon(Icons.phone_android),
                   border: const OutlineInputBorder(),
-                  hintText: 'Montant M-Pesa',
+                  hintText: 'Montant MPESA/VODACASH',
                   helperText: _rapport != null ? 'Calculé: ${_rapport!.cashDisponibleMPesa.toStringAsFixed(2)}' : null,
                 ),
               ),
@@ -686,7 +686,7 @@ class _RapportClotureState extends State<RapportCloture> {
             const SizedBox(height: 8),
             _buildCashBreakdown('Cash', rapport.cashDisponibleCash),
             _buildCashBreakdown('Airtel Money', rapport.cashDisponibleAirtelMoney),
-            _buildCashBreakdown('M-Pesa', rapport.cashDisponibleMPesa),
+            _buildCashBreakdown('MPESA/VODACASH', rapport.cashDisponibleMPesa),
             _buildCashBreakdown('Orange Money', rapport.cashDisponibleOrangeMoney),
           ],
         ),
@@ -722,7 +722,7 @@ class _RapportClotureState extends State<RapportCloture> {
           [
             _buildCashRow('Cash', rapport.soldeAnterieurCash),
             _buildCashRow('Airtel Money', rapport.soldeAnterieurAirtelMoney),
-            _buildCashRow('M-Pesa', rapport.soldeAnterieurMPesa),
+            _buildCashRow('MPESA/VODACASH', rapport.soldeAnterieurMPesa),
             _buildCashRow('Orange Money', rapport.soldeAnterieurOrangeMoney),
             const Divider(),
             _buildTotalRow(

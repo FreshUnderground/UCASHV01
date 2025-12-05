@@ -5,10 +5,11 @@ import '../models/deletion_request_model.dart';
 import '../services/deletion_service.dart';
 import '../services/operation_service.dart';
 import '../services/auth_service.dart';
+import 'edit_operation_dialog.dart';
 
 /// Page Admin: Gestion des suppressions d'opérations
 class AdminDeletionPage extends StatefulWidget {
-  const AdminDeletionPage({Key? key}) : super(key: key);
+  const AdminDeletionPage({super.key});
 
   @override
   State<AdminDeletionPage> createState() => _AdminDeletionPageState();
@@ -71,8 +72,10 @@ class _AdminDeletionPageState extends State<AdminDeletionPage> {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () async {
-              await Provider.of<OperationService>(context, listen: false).loadOperations();
-              await Provider.of<DeletionService>(context, listen: false).loadDeletionRequests();
+              if (mounted) {
+                await Provider.of<OperationService>(context, listen: false).loadOperations();
+                await Provider.of<DeletionService>(context, listen: false).loadDeletionRequests();
+              }
             },
           ),
         ],
@@ -250,12 +253,74 @@ class _AdminDeletionPageState extends State<AdminDeletionPage> {
               ),
           ],
         ),
-        trailing: existingRequest != null
-            ? const Icon(Icons.check_circle, color: Colors.green)
-            : IconButton(
-                icon: const Icon(Icons.delete, color: Colors.red),
-                onPressed: () => _showDeletionDialog(operation),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (existingRequest != null)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: const Icon(Icons.check_circle, color: Colors.green, size: 20),
               ),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, color: Colors.grey),
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'details',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info, size: 18, color: Colors.blue),
+                      const SizedBox(width: 8),
+                      const Text('Détails'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'edit',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.edit, size: 18, color: Colors.blue),
+                      const SizedBox(width: 8),
+                      const Text('Modifier'),
+                    ],
+                  ),
+                ),
+                if (existingRequest == null)
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.delete, size: 18, color: Colors.red),
+                        const SizedBox(width: 8),
+                        const Text('Supprimer'),
+                      ],
+                    ),
+                  ),
+                if (existingRequest != null)
+                  const PopupMenuItem(
+                    value: 'request_details',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.pending_actions, size: 18, color: Colors.orange),
+                        const SizedBox(width: 8),
+                        const Text('Détails demande'),
+                      ],
+                    ),
+                  ),
+              ],
+              onSelected: (value) {
+                if (value == 'details') {
+                  _showOperationDetails(operation);
+                } else if (value == 'edit') {
+                  _showEditDialog(operation);
+                } else if (value == 'delete') {
+                  _showDeletionDialog(operation);
+                } else if (value == 'request_details') {
+                  _showRequestDetails(existingRequest!);
+                }
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -302,25 +367,188 @@ class _AdminDeletionPageState extends State<AdminDeletionPage> {
                 return;
               }
               
-              final deletionService = Provider.of<DeletionService>(context, listen: false);
-              final success = await deletionService.createDeletionRequest(
-                operation: operation,
-                adminId: admin.id ?? 0,
-                adminName: admin.username,
-                reason: reasonController.text.isEmpty ? null : reasonController.text,
-              );
-              
-              Navigator.pop(context);
-              
-              if (success) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Demande de suppression créée')),
+              if (mounted) {
+                final deletionService = Provider.of<DeletionService>(context, listen: false);
+                final success = await deletionService.createDeletionRequest(
+                  operation: operation,
+                  adminId: admin.id ?? 0,
+                  adminName: admin.username,
+                  reason: reasonController.text.isEmpty ? null : reasonController.text,
                 );
-                setState(() {});
+                
+                Navigator.pop(context);
+                
+                if (success && mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Demande de suppression créée')),
+                  );
+                  setState(() {});
+                }
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Créer demande'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditDialog(OperationModel operation) async {
+    await showDialog(
+      context: context,
+      builder: (context) => EditOperationDialog(
+        transaction: {
+          'code_ops': operation.codeOps,
+          'montant': operation.montantNet,
+          'observation': operation.observation,
+          'type': operation.type.name,
+          'date_op': operation.dateOp,
+        },
+      ),
+    );
+    
+    // Recharger les opérations après la fermeture du dialogue
+    if (mounted) {
+      await Provider.of<OperationService>(context, listen: false).loadOperations();
+      setState(() {});
+    }
+  }
+
+  void _showRequestDetails(DeletionRequestModel request) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Détails de la demande'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Code: ${request.codeOps}'),
+            Text('Type: ${request.operationType}'),
+            Text('Montant: ${request.montant} ${request.devise}'),
+            const SizedBox(height: 8),
+            Text('Statut: ${request.statutLabel}', 
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: _getStatusTextColor(request.statut),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text('Demandé par: ${request.requestedByAdminName}'),
+            Text('Date: ${_formatDate(request.requestDate)}'),
+            if (request.reason != null && request.reason!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Text('Raison:', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(request.reason!),
+            ],
+            if (request.validatedByAgentName != null) ...[
+              const SizedBox(height: 8),
+              Text('Validé par: ${request.validatedByAgentName}'),
+              if (request.validationDate != null)
+                Text('Date validation: ${_formatDate(request.validationDate!)}'),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Fermer'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showOperationDetails(OperationModel operation) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Détails - ${operation.codeOps}'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildDetailRow('Code Ops', operation.codeOps),
+              const Divider(),
+              _buildDetailRow('Type', operation.typeLabel),
+              const Divider(),
+              _buildDetailRow('Montant Brut', '${operation.montantBrut.toStringAsFixed(2)} ${operation.devise}'),
+              if (operation.commission > 0) ...[
+                _buildDetailRow('Commission', '${operation.commission.toStringAsFixed(2)} ${operation.devise}'),
+              ],
+              _buildDetailRow('Montant Net', '${operation.montantNet.toStringAsFixed(2)} ${operation.devise}'),
+              const Divider(),
+              if (operation.shopSourceId != null)
+                _buildDetailRow('Shop Source', 'ID: ${operation.shopSourceId}${operation.shopSourceDesignation != null ? ' - ${operation.shopSourceDesignation}' : ''}'),
+              if (operation.shopDestinationId != null)
+                _buildDetailRow('Shop Destination', 'ID: ${operation.shopDestinationId}${operation.shopDestinationDesignation != null ? ' - ${operation.shopDestinationDesignation}' : ''}'),
+              const Divider(),
+              _buildDetailRow('Agent', operation.agentUsername ?? 'ID: ${operation.agentId}'),
+              const Divider(),
+              if (operation.clientNom != null)
+                _buildDetailRow('Client', operation.clientNom!),
+              if (operation.destinataire != null)
+                _buildDetailRow('Destinataire', operation.destinataire!),
+              if (operation.telephoneDestinataire != null)
+                _buildDetailRow('Téléphone', operation.telephoneDestinataire!),
+              const Divider(),
+              _buildDetailRow('Mode Paiement', operation.modePaiementLabel),
+              _buildDetailRow('Statut', operation.statutLabel),
+              const Divider(),
+              _buildDetailRow('Date Opération', _formatDate(operation.dateOp)),
+              if (operation.dateValidation != null)
+                _buildDetailRow('Date Validation', _formatDate(operation.dateValidation!)),
+              if (operation.createdAt != null)
+                _buildDetailRow('Créé le', _formatDate(operation.createdAt!)),
+              if (operation.lastModifiedAt != null)
+                _buildDetailRow('Modifié le', _formatDate(operation.lastModifiedAt!)),
+              if (operation.lastModifiedBy != null)
+                _buildDetailRow('Modifié par', operation.lastModifiedBy!),
+              if (operation.notes != null && operation.notes!.isNotEmpty) ...[
+                const Divider(),
+                const Text('Notes:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Text(operation.notes!),
+              ],
+              if (operation.observation != null && operation.observation!.isNotEmpty) ...[
+                const Divider(),
+                const Text('Observation:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Text(operation.observation!),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Fermer'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 140,
+            child: Text(
+              '$label:',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(color: Colors.black87),
+            ),
           ),
         ],
       ),
@@ -417,12 +645,27 @@ class _AdminDeletionPageState extends State<AdminDeletionPage> {
     switch (statut) {
       case DeletionRequestStatus.enAttente:
         return Colors.orange.shade200;
-      case DeletionRequestStatus.validee:
+      case DeletionRequestStatus.adminValidee:
+      case DeletionRequestStatus.agentValidee:
         return Colors.green.shade200;
       case DeletionRequestStatus.refusee:
         return Colors.red.shade200;
       case DeletionRequestStatus.annulee:
         return Colors.grey.shade200;
+    }
+  }
+
+  Color _getStatusTextColor(DeletionRequestStatus statut) {
+    switch (statut) {
+      case DeletionRequestStatus.enAttente:
+        return Colors.orange;
+      case DeletionRequestStatus.adminValidee:
+      case DeletionRequestStatus.agentValidee:
+        return Colors.green;
+      case DeletionRequestStatus.refusee:
+        return Colors.red;
+      case DeletionRequestStatus.annulee:
+        return Colors.grey;
     }
   }
 

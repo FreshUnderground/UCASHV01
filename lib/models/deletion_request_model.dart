@@ -1,6 +1,7 @@
 enum DeletionRequestStatus {
-  enAttente,
-  validee,
+  enAttente,          // En attente de validation inter-admin
+  adminValidee,       // Validée par un autre admin
+  agentValidee,       // Validée par l'agent
   refusee,
   annulee,
 }
@@ -29,6 +30,11 @@ class DeletionRequestModel {
   final int? validatedByAgentId;
   final String? validatedByAgentName;
   final DateTime? validationDate;
+  
+  // Validation par un admin (inter-admin)
+  final int? validatedByAdminId;
+  final String? validatedByAdminName;
+  final DateTime? validationAdminDate;
   
   // Statut
   final DeletionRequestStatus statut;
@@ -59,6 +65,9 @@ class DeletionRequestModel {
     this.validatedByAgentId,
     this.validatedByAgentName,
     this.validationDate,
+    this.validatedByAdminId,
+    this.validatedByAdminName,
+    this.validationAdminDate,
     this.statut = DeletionRequestStatus.enAttente,
     this.createdAt,
     this.lastModifiedAt,
@@ -73,7 +82,7 @@ class DeletionRequestModel {
       codeOps: json['code_ops'],
       operationId: json['operation_id'],
       operationType: json['operation_type'] ?? '',
-      montant: (json['montant'] ?? 0).toDouble(),
+      montant: _parseDouble(json['montant']),
       devise: json['devise'] ?? 'USD',
       destinataire: json['destinataire'],
       expediteur: json['expediteur'],
@@ -88,6 +97,11 @@ class DeletionRequestModel {
       validatedByAgentName: json['validated_by_agent_name'],
       validationDate: json['validation_date'] != null 
           ? DateTime.parse(json['validation_date']) 
+          : null,
+      validatedByAdminId: json['validated_by_admin_id'],
+      validatedByAdminName: json['validated_by_admin_name'],
+      validationAdminDate: json['validation_admin_date'] != null 
+          ? DateTime.parse(json['validation_admin_date']) 
           : null,
       statut: _parseStatus(json['statut']),
       createdAt: json['created_at'] != null 
@@ -122,6 +136,9 @@ class DeletionRequestModel {
       'validated_by_agent_id': validatedByAgentId,
       'validated_by_agent_name': validatedByAgentName,
       'validation_date': validationDate?.toIso8601String(),
+      'validated_by_admin_id': validatedByAdminId,
+      'validated_by_admin_name': validatedByAdminName,
+      'validation_admin_date': validationAdminDate?.toIso8601String(),
       'statut': statut.index,
       'created_at': (createdAt ?? DateTime.now()).toIso8601String(),
       'last_modified_at': (lastModifiedAt ?? DateTime.now()).toIso8601String(),
@@ -147,7 +164,7 @@ class DeletionRequestModel {
         case 'en_attente':
           return DeletionRequestStatus.enAttente;
         case 'validee':
-          return DeletionRequestStatus.validee;
+          return DeletionRequestStatus.adminValidee;
         case 'refusee':
           return DeletionRequestStatus.refusee;
         case 'annulee':
@@ -159,13 +176,25 @@ class DeletionRequestModel {
     
     return DeletionRequestStatus.enAttente;
   }
+  
+  static double _parseDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) {
+      return double.tryParse(value) ?? 0.0;
+    }
+    return 0.0;
+  }
 
   String get statutLabel {
     switch (statut) {
       case DeletionRequestStatus.enAttente:
-        return 'En Attente';
-      case DeletionRequestStatus.validee:
-        return 'Validée';
+        return 'En Attente (Admin)';
+      case DeletionRequestStatus.adminValidee:
+        return 'Validée (Admin)';
+      case DeletionRequestStatus.agentValidee:
+        return 'Validée (Agent)';
       case DeletionRequestStatus.refusee:
         return 'Refusée';
       case DeletionRequestStatus.annulee:
@@ -190,6 +219,9 @@ class DeletionRequestModel {
     int? validatedByAgentId,
     String? validatedByAgentName,
     DateTime? validationDate,
+    int? validatedByAdminId,
+    String? validatedByAdminName,
+    DateTime? validationAdminDate,
     DeletionRequestStatus? statut,
     DateTime? createdAt,
     DateTime? lastModifiedAt,
@@ -214,6 +246,9 @@ class DeletionRequestModel {
       validatedByAgentId: validatedByAgentId ?? this.validatedByAgentId,
       validatedByAgentName: validatedByAgentName ?? this.validatedByAgentName,
       validationDate: validationDate ?? this.validationDate,
+      validatedByAdminId: validatedByAdminId ?? this.validatedByAdminId,
+      validatedByAdminName: validatedByAdminName ?? this.validatedByAdminName,
+      validationAdminDate: validationAdminDate ?? this.validationAdminDate,
       statut: statut ?? this.statut,
       createdAt: createdAt ?? this.createdAt,
       lastModifiedAt: lastModifiedAt ?? this.lastModifiedAt,

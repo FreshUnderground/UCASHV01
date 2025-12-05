@@ -10,6 +10,7 @@ import 'historique_clotures_report.dart';
 import 'credits_inter_shops_report.dart';
 import 'commissions_report.dart';
 import '../cloture_agent_widget.dart';
+import 'dettes_intershop_report.dart';
 
 import 'admin_flot_report.dart';
 import 'company_net_position_report.dart';
@@ -38,6 +39,7 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
     const Tab(icon: Icon(Icons.list_alt), text: 'Historique Clôtures'),
     const Tab(icon: Icon(Icons.monetization_on), text: 'Commissions'),
     const Tab(icon: Icon(Icons.swap_horiz), text: 'Crédits Inter-Shops'),
+    const Tab(icon: Icon(Icons.account_balance_wallet), text: 'Dettes Intershop'),
     const Tab(icon: Icon(Icons.local_shipping), text: 'Mouvements FLOT'),
   ];
 
@@ -48,6 +50,7 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
     const Tab(icon: Icon(Icons.list_alt), text: 'Clôtures'),
     const Tab(icon: Icon(Icons.monetization_on), text: 'Commissions'),
     const Tab(icon: Icon(Icons.swap_horiz), text: 'Crédits'),
+    const Tab(icon: Icon(Icons.account_balance_wallet), text: 'Dettes'),
     const Tab(icon: Icon(Icons.local_shipping), text: 'FLOT'),
   ];
 
@@ -290,6 +293,13 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
                     
                     // Crédits inter-shops
                     CreditsInterShopsReport(
+                      shopId: _selectedShopId,
+                      startDate: _startDate,
+                      endDate: _endDate,
+                    ),
+                    
+                    // Dettes Intershop
+                    DettesIntershopReport(
                       shopId: _selectedShopId,
                       startDate: _startDate,
                       endDate: _endDate,

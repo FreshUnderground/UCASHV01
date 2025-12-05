@@ -153,18 +153,18 @@ class ClotureVirtuelleParSimService {
     final soldeActuel = soldeAnterieur + montantCaptures - montantServies - montantRetraits - montantDepots;
     
     // === CALCULER CASH DISPONIBLE ===
-    // Cash Disponible = Cash reçu lors des captures - Cash servi aux clients
-    final cashDisponible = montantCaptures - cashServi;
+    // Le cash est GLOBAL et sera défini par le widget
+    // Ici on le met à 0 par défaut, il sera écrasé lors de la saisie
+    final cashDisponible = 0.0;
     
-    // === FRAIS ===
-    // Formule officielle: Frais Antérieur + Frais Encaissés du Jour - Sorties Frais du Jour
-    // Pour le virtuel, les frais sont perçus sur chaque transaction servie
+    // === FRAIS (AUTOMATIQUE) ===
+    // Formule: Frais Antérieur + Frais Encaissés du Jour
+    // Les frais sont perçus sur chaque transaction servie
     final fraisAnterieur = derniereCloture?.fraisTotal ?? 0.0;
-    final sortieFraisDuJour = 0.0; // TODO: Implémenter les sorties de frais si nécessaire
-    final fraisTotal = fraisAnterieur + fraisDuJour - sortieFraisDuJour;
+    final fraisTotal = fraisAnterieur + fraisDuJour; // AUTOMATIQUE, pas de saisie manuelle
     
-    debugPrint('💰 Frais pour ${sim.numero}: Antérieur=$fraisAnterieur + Du Jour=$fraisDuJour - Sortie=$sortieFraisDuJour = Total=$fraisTotal');
-    debugPrint('📱 SIM ${sim.numero}: Solde=${soldeActuel.toStringAsFixed(2)}, Cash=${cashDisponible.toStringAsFixed(2)}, Frais=${fraisTotal.toStringAsFixed(2)}');
+    debugPrint('💰 Frais pour ${sim.numero}: Antérieur=$fraisAnterieur + Du Jour=$fraisDuJour = Total=$fraisTotal (AUTOMATIQUE)');
+    debugPrint('📱 SIM ${sim.numero}: Solde=${soldeActuel.toStringAsFixed(2)}, Frais=${fraisTotal.toStringAsFixed(2)}');
     
     return ClotureVirtuelleParSimModel(
       shopId: sim.shopId,

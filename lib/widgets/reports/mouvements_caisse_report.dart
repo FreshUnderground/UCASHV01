@@ -10,6 +10,7 @@ import '../../services/operation_service.dart';
 import '../../services/shop_service.dart';
 import '../../services/flot_service.dart';
 import '../../services/local_db.dart';
+import '../../services/document_header_service.dart';
 import '../../models/shop_model.dart';
 import '../../models/operation_model.dart';
 import '../../utils/responsive_utils.dart';
@@ -168,40 +169,47 @@ class _MouvementsCaisseReportState extends State<MouvementsCaisseReport> {
           .where((op) => op.type == OperationType.retrait && op.devise == 'USD')
           .fold<double>(0.0, (sum, op) => sum + op.montantNet);
       
-      // 4. FLOTs du jour (filtrés par la plage de dates)
-      final todayFlots = flotService.flots.where((flot) {
-        final flotDate = flot.dateOp;
-        final isInRange = (widget.startDate == null || flotDate.isAfter(widget.startDate!) || flotDate.isAtSameMomentAs(widget.startDate!)) &&
-                          (widget.endDate == null || flotDate.isBefore(widget.endDate!) || flotDate.isAtSameMomentAs(widget.endDate!));
-        return (flot.shopSourceId == widget.shopId || flot.shopDestinationId == widget.shopId) && isInRange;
-      }).toList();
+      // 4. FLOTs du jour - NOUVEAU: Utiliser operations avec type=flotShopToShop
+      // Filtrer les FLOTs depuis les opérations déjà filtrées par date
+      final todayFlots = filteredOps
+          .where((op) => op.type == OperationType.flotShopToShop)
+          .toList();
       
-      // FLOT Reçu (reçus et servis)
+      // FLOT Reçu (reçus et servis) - destination = notre shop, statut validée
       final flotRecu = todayFlots
-          .where((flot) => flot.shopDestinationId == widget.shopId && flot.statut == OperationStatus.validee && flot.devise == 'USD')
+          .where((flot) => flot.shopDestinationId == widget.shopId && 
+                          flot.statut == OperationStatus.validee && 
+                          flot.devise == 'USD')
           .fold<double>(0.0, (sum, flot) => sum + flot.montantNet);
       
-      // FLOT En Cours (en route vers ce shop)
+      // FLOT En Cours (en route vers ce shop) - destination = notre shop, statut en attente
       final flotEnCours = todayFlots
-          .where((flot) => flot.shopDestinationId == widget.shopId && flot.statut == OperationStatus.enAttente && flot.devise == 'USD')
+          .where((flot) => flot.shopDestinationId == widget.shopId && 
+                          flot.statut == OperationStatus.enAttente && 
+                          flot.devise == 'USD')
           .fold<double>(0.0, (sum, flot) => sum + flot.montantNet);
       
-      // FLOT Servi (envoyés et servis)
+      // FLOT Servi (envoyés et servis) - source = notre shop, statut validée
       final flotServi = todayFlots
-          .where((flot) => flot.shopSourceId == widget.shopId && flot.statut == OperationStatus.validee && flot.devise == 'USD')
+          .where((flot) => flot.shopSourceId == widget.shopId && 
+                          flot.statut == OperationStatus.validee && 
+                          flot.devise == 'USD')
           .fold<double>(0.0, (sum, flot) => sum + flot.montantNet);
       
-      // 5. Transferts Reçus
+      // 5. Transferts Reçus (client nous paie - ENTRÉE)
+      // - Transfer National/International Sortant: Shop SOURCE reçoit le montant brut du client
       final transfertRecu = filteredOps
-          .where((op) => (op.type == OperationType.transfertNational || op.type == OperationType.transfertInternationalEntrant) && 
-                         op.shopDestinationId == widget.shopId && op.devise == 'USD')
-          .fold<double>(0.0, (sum, op) => sum + op.montantNet);
-      
-      // 6. Transferts Servis
-      final transfertServi = filteredOps
           .where((op) => (op.type == OperationType.transfertNational || op.type == OperationType.transfertInternationalSortant) && 
                          op.shopSourceId == widget.shopId && op.devise == 'USD')
           .fold<double>(0.0, (sum, op) => sum + op.montantBrut);
+      
+      // 6. Transferts Servis (on sert le bénéficiaire - SORTIE)
+      // - Transfer National: Shop DESTINATION sert le montant net au bénéficiaire
+      // - Transfer International Entrant: Shop DESTINATION sert le montant net au bénéficiaire
+      final transfertServi = filteredOps
+          .where((op) => ((op.type == OperationType.transfertNational || op.type == OperationType.transfertInternationalEntrant) && 
+                          op.shopDestinationId == widget.shopId) && op.devise == 'USD')
+          .fold<double>(0.0, (sum, op) => sum + op.montantNet);
       
       // FORMULE FINALE
       cashDisponibleJour = (soldeAnterieur + depots + flotRecu + flotEnCours + transfertRecu) - 
@@ -282,21 +290,37 @@ class _MouvementsCaisseReportState extends State<MouvementsCaisseReport> {
   }
 
   // Determine if operation is an entry for the shop
+  // LOGIQUE MÉTIER:
+  // - Dépôt: CLIENT donne argent → ENTRÉE
+  // - Retrait: CLIENT prend argent → SORTIE
+  // - Transfert National/International Sortant: CLIENT PAIE (shop source) → ENTRÉE (montantBrut)
+  // - Transfert National: Shop destination SERT → SORTIE (montantNet)
+  // - Transfert International Entrant: Shop destination SERT → SORTIE (montantNet)
+  // - FLOT: Shop destination REÇOIT → ENTRÉE, Shop source ENVOIE → SORTIE
   bool _isEntreeForShop(OperationModel operation, int shopId) {
     switch (operation.type) {
       case OperationType.depot:
         return operation.shopSourceId == shopId; // Deposit is entry
       case OperationType.retrait:
-        return false; // Withdrawal is exit
+        return false; // Withdrawal is always exit
       case OperationType.transfertNational:
+        // Shop source: entry (client pays), Shop destination: exit (serves beneficiary)
+        if (operation.shopSourceId == shopId) return true; // Client pays us
+        if (operation.shopDestinationId == shopId) return false; // We serve beneficiary
+        return false;
       case OperationType.transfertInternationalSortant:
-        // Transfer created by this shop = entry (receives money from client)
+        // Transfer outgoing: shop source receives money from client = entry
         return operation.shopSourceId == shopId;
       case OperationType.transfertInternationalEntrant:
-        // Transfer received by this shop = exit (serves money to beneficiary)
-        return operation.shopDestinationId == shopId && operation.shopSourceId != shopId;
+        // Transfer incoming: shop destination serves money to beneficiary = exit
+        return false; // Always exit for the shop that serves
       case OperationType.virement:
-        return operation.shopSourceId == shopId;
+      case OperationType.retraitMobileMoney:
+        return false; // Mobile money withdrawal is exit (cash out)
+      case OperationType.flotShopToShop:
+        // FLOT reçu = entrée (shop destination)
+        // FLOT envoyé = sortie (shop source)
+        return operation.shopDestinationId == shopId;
       default:
         return false;
     }
@@ -1418,6 +1442,11 @@ class _MouvementsCaisseReportState extends State<MouvementsCaisseReport> {
     final totaux = _reportData!['totaux'] as Map<String, dynamic>;
     final mouvements = _reportData!['mouvements'] as List<Map<String, dynamic>>;
     
+    // Charger le header depuis DocumentHeaderService (synchronisé avec MySQL)
+    final headerService = DocumentHeaderService();
+    await headerService.initialize();
+    final header = headerService.getHeaderOrDefault();
+    
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
@@ -1433,23 +1462,64 @@ class _MouvementsCaisseReportState extends State<MouvementsCaisseReport> {
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Text(
-                  'MOUVEMENTS DE CAISSE',
-                  style: pw.TextStyle(
-                    fontSize: 20,
-                    fontWeight: pw.FontWeight.bold,
-                    color: PdfColors.white,
-                  ),
-                ),
-                pw.SizedBox(height: 8),
-                pw.Text(
-                  'Shop: ${shop['designation']}',
-                  style: const pw.TextStyle(fontSize: 14, color: PdfColors.white),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          header.companyName,
+                          style: pw.TextStyle(
+                            fontSize: 18,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.white,
+                          ),
+                        ),
+                        if (header.companySlogan?.isNotEmpty ?? false)
+                          pw.Text(
+                            header.companySlogan!,
+                            style: pw.TextStyle(fontSize: 9, color: PdfColors.white),
+                          ),
+                        if (header.address?.isNotEmpty ?? false)
+                          pw.Text(
+                            header.address!,
+                            style: pw.TextStyle(fontSize: 10, color: PdfColors.white),
+                          ),
+                        if (header.phone?.isNotEmpty ?? false)
+                          pw.Text(
+                            header.phone!,
+                            style: pw.TextStyle(fontSize: 10, color: PdfColors.white),
+                          ),
+                      ],
+                    ),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        pw.Text(
+                          'MOUVEMENTS DE CAISSE',
+                          style: pw.TextStyle(
+                            fontSize: 20,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.white,
+                          ),
+                        ),
+                        pw.SizedBox(height: 8),
+                        pw.Text(
+                          'Shop: ${shop['designation']}',
+                          style: const pw.TextStyle(fontSize: 14, color: PdfColors.white),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
                 if (periode['debut'] != null && periode['fin'] != null)
-                  pw.Text(
-                    'Période: ${_formatDate(DateTime.parse(periode['debut']))} - ${_formatDate(DateTime.parse(periode['fin']))}',
-                    style: const pw.TextStyle(fontSize: 12, color: PdfColors.white),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.only(top: 8),
+                    child: pw.Text(
+                      'Période: ${_formatDate(DateTime.parse(periode['debut']))} - ${_formatDate(DateTime.parse(periode['fin']))}',
+                      style: const pw.TextStyle(fontSize: 12, color: PdfColors.white),
+                    ),
                   ),
               ],
             ),

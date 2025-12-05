@@ -25,7 +25,25 @@ class AgentDeletionValidationWidget extends StatelessWidget {
             ],
           ),
           body: pendingRequests.isEmpty
-              ? const Center(child: Text('Aucune demande en attente'))
+              ? const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.check_circle, size: 64, color: Colors.green),
+                      SizedBox(height: 16),
+                      Text(
+                        'Aucune demande en attente',
+                        textAlign: TextAlign.center,
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'Les demandes de suppression validées par\nles administrateurs apparaîtront ici.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                )
               : ListView.builder(
                   itemCount: pendingRequests.length,
                   itemBuilder: (context, index) {
@@ -51,6 +69,8 @@ class AgentDeletionValidationWidget extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Demandé par: ${request.requestedByAdminName}'),
+            if (request.validatedByAdminName != null)
+              Text('Validé par admin: ${request.validatedByAdminName}'),
             Text('Date: ${_formatDate(request.requestDate)}'),
             if (request.destinataire != null)
               Text('Destinataire: ${request.destinataire}'),
@@ -117,8 +137,8 @@ class AgentDeletionValidationWidget extends StatelessWidget {
         title: Text(approve ? 'Approuver la suppression' : 'Refuser la suppression'),
         content: Text(
           approve
-              ? 'Confirmer la suppression définitive de cette opération ?'
-              : 'Refuser cette demande de suppression ?',
+              ? 'Cette demande a été validée par un administrateur.\nConfirmer la suppression définitive de cette opération ?\nCette action est irréversible.'
+              : 'Refuser cette demande de suppression validée par un administrateur ?',
         ),
         actions: [
           TextButton(

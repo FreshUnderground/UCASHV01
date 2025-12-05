@@ -598,7 +598,7 @@ class _ClotureAgentWidgetState extends State<ClotureAgentWidget> {
                         ),
                         const SizedBox(height: 12),
                         _buildDetailCard(
-                          'M-Pesa',
+                          'MPESA/VODACASH',
                           Icons.phone_android,
                           cloture.soldeSaisiMPesa,
                           cloture.soldeCalculeMPesa,

@@ -11,6 +11,8 @@ import '../services/sim_service.dart';
 import '../services/shop_service.dart';
 import '../services/local_db.dart';
 import '../services/depot_retrait_sync_service.dart';
+import '../services/cloture_virtuelle_par_sim_service.dart';
+import '../models/cloture_virtuelle_par_sim_model.dart';
 import '../models/virtual_transaction_model.dart';
 import '../models/sim_model.dart';
 import '../models/retrait_virtuel_model.dart';
@@ -71,7 +73,20 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
     _tabController = TabController(length: 4, vsync: this); // 4 tabs: Captures, Flots, Dépôt, Rapport
     // Initialiser la date à aujourd'hui pour le filtre Vue d'ensemble
     _selectedDate = DateTime.now();
-    _loadData();
+    // Charger les données APRÈS le build initial pour éviter setState() during build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _loadData();
+      }
+    });
+    // Vérification automatique des clôtures manquantes après 2 secondes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          _verifierJoursNonClotures();
+        }
+      });
+    });
   }
 
   @override
@@ -97,6 +112,407 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
     }
   }
 
+  /// Vérifier et proposer de clôturer les jours précédents non clôturés
+  Future<void> _verifierJoursNonClotures() async {
+    if (!mounted) return;
+    
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentUser = authService.currentUser;
+    
+    if (currentUser?.shopId == null) return;
+    
+    try {
+      // Récupérer les SIMs du shop
+      final sims = await LocalDB.instance.getAllSims(shopId: currentUser!.shopId!);
+      if (sims.isEmpty) {
+        debugPrint('⚠️ Aucune SIM trouvée pour le shop ${currentUser.shopId}');
+        return;
+      }
+      
+      // Déterminer la date de début de recherche
+      DateTime dateDebutRecherche;
+      
+      // 1. Chercher la dernière clôture par SIM
+      final aujourdhui = DateTime.now();
+      final dateAujourdhui = DateTime(aujourdhui.year, aujourdhui.month, aujourdhui.day);
+      
+      // Chercher la dernière clôture (toutes SIMs confondues)
+      DateTime? dateDerniereClotureGlobale;
+      for (int i = 1; i <= 30; i++) {
+        final date = dateAujourdhui.subtract(Duration(days: i));
+        final clotures = await LocalDB.instance.getCloturesVirtuellesParDate(
+          shopId: currentUser.shopId!,
+          date: date,
+        );
+        
+        if (clotures.isNotEmpty) {
+          dateDerniereClotureGlobale = date;
+          debugPrint('✅ Dernière clôture trouvée: ${date.day}/${date.month}/${date.year}');
+          break;
+        }
+      }
+      
+      if (dateDerniereClotureGlobale != null) {
+        // Si une clôture existe, chercher à partir du lendemain
+        dateDebutRecherche = dateDerniereClotureGlobale.add(const Duration(days: 1));
+        debugPrint('📅 Recherche à partir du lendemain de la dernière clôture: ${dateDebutRecherche.day}/${dateDebutRecherche.month}/${dateDebutRecherche.year}');
+      } else {
+        // Aucune clôture trouvée, chercher la date de la première capture
+        debugPrint('⚠️ Aucune clôture trouvée, recherche de la première capture...');
+        
+        final transactions = await LocalDB.instance.getAllVirtualTransactions(
+          shopId: currentUser.shopId!,
+          dateDebut: dateAujourdhui.subtract(const Duration(days: 365)), // Max 1 an en arrière
+          dateFin: dateAujourdhui.subtract(const Duration(days: 1)), // Jusqu'à hier
+        );
+        
+        if (transactions.isEmpty) {
+          debugPrint('ℹ️ Aucune capture trouvée, pas besoin de clôture');
+          return;
+        }
+        
+        // Trouver la date de la première capture (la plus ancienne)
+        transactions.sort((a, b) => a.dateEnregistrement.compareTo(b.dateEnregistrement));
+        final premiereCapture = transactions.first;
+        dateDebutRecherche = DateTime(
+          premiereCapture.dateEnregistrement.year,
+          premiereCapture.dateEnregistrement.month,
+          premiereCapture.dateEnregistrement.day,
+        );
+        
+        debugPrint('📅 Première capture trouvée le: ${dateDebutRecherche.day}/${dateDebutRecherche.month}/${dateDebutRecherche.year}');
+      }
+      
+      // Chercher les jours non clôturés à partir de la date de début
+      final joursNonClotures = <DateTime>[];
+      final dateHier = dateAujourdhui.subtract(const Duration(days: 1));
+      
+      // Limiter à 30 jours maximum pour éviter trop de requêtes
+      DateTime dateCourante = dateDebutRecherche;
+      int compteur = 0;
+      
+      while (dateCourante.isBefore(dateAujourdhui) && compteur < 30) {
+        // Vérifier si une clôture existe pour cette date
+        final clotures = await LocalDB.instance.getCloturesVirtuellesParDate(
+          shopId: currentUser.shopId!,
+          date: dateCourante,
+        );
+        
+        if (clotures.isEmpty) {
+          joursNonClotures.add(dateCourante);
+          debugPrint('❌ Jour non clôturé: ${dateCourante.day}/${dateCourante.month}/${dateCourante.year}');
+        } else {
+          debugPrint('✅ Jour clôturé: ${dateCourante.day}/${dateCourante.month}/${dateCourante.day}');
+        }
+        
+        dateCourante = dateCourante.add(const Duration(days: 1));
+        compteur++;
+      }
+      
+      // Si on trouve des jours non clôturés, proposer de les clôturer
+      if (joursNonClotures.isNotEmpty && mounted) {
+        // Trier par date croissante (plus ancien en premier)
+        joursNonClotures.sort((a, b) => a.compareTo(b));
+        
+        debugPrint('📊 ${joursNonClotures.length} jour(s) non clôturé(s) trouvé(s)');
+        
+        // Afficher le dialogue de clôture pour les jours manquants
+        await _proposerClotureMassive(joursNonClotures, sims);
+      } else {
+        debugPrint('✅ Toutes les journées sont clôturées');
+      }
+    } catch (e) {
+      debugPrint('❌ Erreur vérification jours non clôturés: $e');
+    }
+  }
+
+  /// Proposer de clôturer tous les jours manquants avec le même montant
+  Future<void> _proposerClotureMassive(List<DateTime> joursNonClotures, List<SimModel> sims) async {
+    if (!mounted) return;
+    
+    final dateFormatter = DateFormat('dd/MM/yyyy', 'fr_FR');
+    final joursTexte = joursNonClotures.map((d) => dateFormatter.format(d)).join(', ');
+    final nbJours = joursNonClotures.length;
+    
+    // Dialogue d'information
+    final action = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 28),
+            const SizedBox(width: 12),
+            const Text(
+              'Clôtures Manquantes',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              nbJours == 1
+                  ? 'La journée suivante n\'a pas été clôturée:'
+                  : 'Les $nbJours journées suivantes n\'ont pas été clôturées:',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Text(
+                joursTexte,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.orange.shade900,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              nbJours == 1
+                  ? 'Voulez-vous clôturer cette journée maintenant?'
+                  : nbJours <= 3
+                      ? 'Voulez-vous clôturer ces journées avec les mêmes montants?'
+                      : 'Voulez-vous clôturer toutes ces journées en une fois?',
+              style: const TextStyle(fontSize: 14),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop('ignorer'),
+            child: const Text('Plus tard', style: TextStyle(color: Colors.grey)),
+          ),
+          if (nbJours == 1)
+            ElevatedButton.icon(
+              onPressed: () => Navigator.of(context).pop('cloturer_un'),
+              icon: const Icon(Icons.check_circle_outline),
+              label: const Text('Clôturer'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF48bb78),
+                foregroundColor: Colors.white,
+              ),
+            )
+          else if (nbJours <= 3)
+            ElevatedButton.icon(
+              onPressed: () => Navigator.of(context).pop('cloturer_tous'),
+              icon: const Icon(Icons.playlist_add_check),
+              label: Text('Clôturer les $nbJours jours'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF48bb78),
+                foregroundColor: Colors.white,
+              ),
+            )
+          else
+            ElevatedButton.icon(
+              onPressed: () => Navigator.of(context).pop('cloturer_tous'),
+              icon: const Icon(Icons.fast_forward),
+              label: Text('Clôturer tout ($nbJours jours)'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF48bb78),
+                foregroundColor: Colors.white,
+              ),
+            ),
+        ],
+      ),
+    );
+    
+    if (action == 'cloturer_un') {
+      // Ouvrir le dialogue de clôture pour le jour le plus ancien
+      await _ouvrirDialogueClotureForce(joursNonClotures.first, sims);
+    } else if (action == 'cloturer_tous') {
+      // Clôturer tous les jours avec les mêmes montants
+      await _cloturerTousLesJours(joursNonClotures, sims);
+    }
+    // Si 'ignorer', ne rien faire
+  }
+
+  /// Ouvrir le dialogue de clôture pour une date spécifique
+  Future<void> _ouvrirDialogueClotureForce(DateTime date, List<SimModel> sims) async {
+    if (!mounted) return;
+    
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentUser = authService.currentUser;
+    
+    if (currentUser == null) return;
+    
+    // Ouvrir le dialogue de clôture par SIM avec la date spécifiée
+    final result = await _genererClotureForce(date, currentUser, sims);
+    
+    if (result == true && mounted) {
+      // Vérifier s'il reste d'autres jours à clôturer
+      _verifierJoursNonClotures();
+    }
+  }
+
+  /// Clôturer tous les jours manquants avec le même montant
+  Future<void> _cloturerTousLesJours(List<DateTime> joursNonClotures, List<SimModel> sims) async {
+    if (!mounted) return;
+    
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentUser = authService.currentUser;
+    
+    if (currentUser == null) return;
+    
+    // Ouvrir le dialogue pour le premier jour et utiliser les mêmes montants pour les autres
+    final result = await _genererClotureForce(joursNonClotures.first, currentUser, sims);
+    
+    if (result == true && mounted && joursNonClotures.length > 1) {
+      // TODO: Implémenter la clôture des jours suivants avec les mêmes montants
+      // Pour l'instant, on redemande pour chaque jour
+      final joursRestants = joursNonClotures.sublist(1);
+      await _proposerClotureMassive(joursRestants, sims);
+    }
+  }
+
+  /// Générer une clôture forcée pour une date
+  Future<bool?> _genererClotureForce(DateTime date, dynamic currentUser, List<SimModel> sims) async {
+    if (!mounted) return null;
+    
+    try {
+      // Générer les clôtures
+      final cloturesGenerees = await ClotureVirtuelleParSimService.instance.genererClotureParSim(
+        shopId: currentUser.shopId!,
+        agentId: currentUser.id!,
+        cloturePar: currentUser.username,
+        date: date,
+      );
+      
+      // Créer les contrôleurs pour chaque SIM
+      final controllers = <String, Map<String, TextEditingController>>{};
+      for (var cloture in cloturesGenerees) {
+        controllers[cloture.simNumero] = {
+          'solde': TextEditingController(text: cloture.soldeActuel.toStringAsFixed(2)),
+          'notes': TextEditingController(),
+        };
+      }
+      
+      // Variable pour stocker les clôtures mises à jour
+      List<ClotureVirtuelleParSimModel>? cloturesMisesAJour;
+      
+      // Afficher le dialogue avec les champs éditables
+      final result = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: Text('Clôture du ${date.day}/${date.month}/${date.year}'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Vérifiez les soldes avant de sauvegarder:',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 16),
+                ...cloturesGenerees.map((cloture) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        cloture.simNumero,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      TextField(
+                        controller: controllers[cloture.simNumero]!['solde'],
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: InputDecoration(
+                          labelText: 'Solde Virtuel',
+                          prefixText: r'$ ',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                      ),
+                    ],
+                  ),
+                )).toList(),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(false);
+              },
+              child: const Text('Annuler'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                // Récupérer les valeurs saisies AVANT de disposer
+                cloturesMisesAJour = [];
+                for (var cloture in cloturesGenerees) {
+                  final soldeText = controllers[cloture.simNumero]!['solde']!.text;
+                  final solde = double.tryParse(soldeText) ?? cloture.soldeActuel;
+                  
+                  cloturesMisesAJour!.add(cloture.copyWith(
+                    soldeActuel: solde,
+                  ));
+                }
+                
+                Navigator.of(context).pop(true);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF48bb78),
+              ),
+              child: const Text('Confirmer'),
+            ),
+          ],
+        ),
+      );
+      
+      // Disposer les contrôleurs APRÈS la fermeture du dialogue
+      for (var simControllers in controllers.values) {
+        for (var controller in simControllers.values) {
+          controller.dispose();
+        }
+      }
+      
+      if (result == true && cloturesMisesAJour != null && mounted) {
+        // Sauvegarder les clôtures MISES À JOUR
+        await ClotureVirtuelleParSimService.instance.sauvegarderClotures(cloturesMisesAJour!);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ ${cloturesMisesAJour!.length} clôture(s) sauvegardée(s)'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+        return true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint('❌ Erreur génération clôture forcée: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Erreur: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
@@ -114,6 +530,17 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
             ),
           ),
         ),
+        actions: [
+          // TODO: Bouton pour vérifier les clôtures manquantes (désactivé temporairement)
+          // Cause: setState() during build même avec bouton manuel
+          // IconButton(
+          //   icon: const Icon(Icons.history, color: Colors.white),
+          //   tooltip: 'Vérifier les clôtures manquantes',
+          //   onPressed: () {
+          //     _verifierJoursNonClotures();
+          //   },
+          // ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(20),
           child: Container(
@@ -3770,7 +4197,7 @@ const SizedBox(height: 16),
                                               Text(
                                                 'Captures non servies par SIM:',
                                                 style: TextStyle(
-                                                  fontSize: 12,
+                                                  fontSize: 20,
                                                   fontWeight: FontWeight.bold,
                                                   color: Colors.orange[800],
                                                 ),
@@ -3808,7 +4235,7 @@ const SizedBox(height: 16),
                                                           Text(
                                                             '📱 SIM: $simNumero',
                                                             style: TextStyle(
-                                                              fontSize: 11,
+                                                              fontSize: 15,
                                                               fontWeight: FontWeight.bold,
                                                               color: Colors.orange[900],
                                                             ),
@@ -3816,7 +4243,7 @@ const SizedBox(height: 16),
                                                           Text(
                                                             '${transactions.length} = \$${totalMontant.toStringAsFixed(2)}',
                                                             style: TextStyle(
-                                                              fontSize: 10,
+                                                              fontSize: 15,
                                                               fontWeight: FontWeight.bold,
                                                               color: Colors.orange[700],
                                                             ),
@@ -3965,8 +4392,8 @@ const SizedBox(height: 16),
                                           final shopsNousDoivent = capitalData['shopsNousDoivent'] ?? 0.0;
                                           final shopsNousDevons = capitalData['shopsNousDevons'] ?? 0.0;
                                           
-                                          // CAPITAL NET = Cash Disponible + Virtuel Disponible + Shops nous doivent - Shops nous devons - Solde FRAIS
-                                          final capitalNet = cashDisponible + virtuelDisponible + shopsNousDoivent - shopsNousDevons - soldeFraisTotal;
+                                          // CAPITAL NET = Cash Disponible + Virtuel Disponible + Shop qui nous doivent - Shop que Nous Devons - Non Servi - Solde FRAIS
+                                          final capitalNet = cashDisponible + virtuelDisponible + shopsNousDoivent - shopsNousDevons - nonServi - soldeFraisTotal;
                                       final isPositif = capitalNet >= 0;
                               
                               return Container(
@@ -4064,6 +4491,8 @@ const SizedBox(height: 16),
                                                 const SizedBox(height: 8),
                                                 _buildFinanceRow('- Shops que nous devons', shopsNousDevons, Colors.red),
                                                 const SizedBox(height: 8),
+                                                _buildFinanceRow('- Non Servi (Virtuel)', nonServi, Colors.red),
+                                                const SizedBox(height: 8),
                                                 _buildFinanceRow('- Solde FRAIS', soldeFraisTotal, Colors.red),
                                                                    const SizedBox(height: 16),
                                             // BOUTON PRÉVISUALISATION PDF
@@ -4086,6 +4515,7 @@ const SizedBox(height: 16),
                                                 cashServi,
                                                 flotsRecus,
                                                 flotsEnvoyes,
+                                                soldeFraisTotal, // Ajouter le solde frais total
                                               ),
                                               icon: const Icon(Icons.picture_as_pdf),
                                               label: const Text('Prévisualiser le Rapport PDF'),
@@ -4509,8 +4939,19 @@ const SizedBox(height: 16),
           final toutesCaptures = toutesTransactionsSim.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
           final tousRetraits = tousRetraitsSim.fold<double>(0, (sum, r) => sum + r.montant);
           final tousDepots = tousDepotsSim.fold<double>(0, (sum, d) => sum + d.montant);
+          
+          // Amélioration: Ajouter une vérification de cohérence
           final soldeGlobalCalcule = toutesCaptures - tousRetraits - tousDepots;
           
+          // Debugging: Afficher les valeurs de calcul dans la console
+          debugPrint('SIM ${sim.numero} - Calcul Solde:');
+          debugPrint('  Captures: \$${toutesCaptures.toStringAsFixed(2)} (${toutesTransactionsSim.length} transactions)');
+          debugPrint('  Retraits: \$${tousRetraits.toStringAsFixed(2)} (${tousRetraitsSim.length} retraits)');
+          debugPrint('  Dépôts: \$${tousDepots.toStringAsFixed(2)} (${tousDepotsSim.length} dépôts)');
+          debugPrint('  Solde calculé: \$${soldeGlobalCalcule.toStringAsFixed(2)}');
+          debugPrint('  Solde BDD: \$${sim.soldeActuel.toStringAsFixed(2)}');
+          debugPrint('---');
+
           simStats[sim.numero] = {
             'sim': sim,
             'nb_total': simTransactions.length,
@@ -4678,13 +5119,20 @@ const SizedBox(height: 16),
                             color: const Color(0xFF48bb78).withOpacity(0.15),
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: Text(
-                            '\$${stats['solde_global'].toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF48bb78),
-                            ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.account_balance_wallet, size: 12, color: Color(0xFF48bb78)),
+                              const SizedBox(width: 4),
+                              Text(
+                                '\$${stats['solde_global'].toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF48bb78),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -6113,6 +6561,7 @@ const SizedBox(height: 16),
     double cashServi,
     double flotsRecus,
     double flotsEnvoyes,
+    double soldeFraisTotal, // NOUVEAU: Ajouter le solde frais total
   ) async {
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
@@ -6194,18 +6643,20 @@ const SizedBox(height: 16),
                 pw.SizedBox(height: 20),
                 
                 // CAPITAL NET
+                // Formule: Cash Disponible + Virtuel Disponible + Shop qui nous doivent - Shop que Nous Devons - Non Servi - Solde FRAIS
                 pw.Text(
                   'CAPITAL NET',
                   style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
                 ),
                 pw.Divider(),
                 _buildPdfRow('Cash Disponible', cashDisponible),
-                _buildPdfRow('Virtuel Disponible', virtuelDisponible),
-                _buildPdfRow('Shops qui nous doivent', shopsNousDoivent),
-                _buildPdfRow('Shops que nous devons', shopsNousDevons),
-                _buildPdfRow('Non Servi (Virtuel)', nonServi),
+                _buildPdfRow('+ Virtuel Disponible', virtuelDisponible),
+                _buildPdfRow('+ Shop qui nous doivent (DIFF. DETTES)', shopsNousDoivent),
+                _buildPdfRow('- Shop que Nous Devons', shopsNousDevons),
+                _buildPdfRow('- Non Servi (Virtuel)', nonServi),
+                _buildPdfRow('- Solde FRAIS Total', soldeFraisTotal),
                 pw.Divider(),
-                _buildPdfRow('CAPITAL NET', capitalNet, isBold: true, fontSize: 18),
+                _buildPdfRow('= CAPITAL NET', capitalNet, isBold: true, fontSize: 18),
                 pw.SizedBox(height: 20),
                 
                 // STATISTIQUES

@@ -1312,7 +1312,7 @@ class CompteSpecialService extends ChangeNotifier {
       'solde_depense': soldeDepense,
       'nombre_frais': frais.length,
       'nombre_depenses': depenses.length,
-      'benefice_net': soldeFrais + soldeDepense, // FRAIS positif, DÉPENSE peut être négatif
+      'benefice_net': soldeFraisDuJour + soldeDepense, // CORRIGÉ: Utiliser soldeFraisDuJour qui inclut les frais encaissés
       
       // Détails FRAIS - MODIFIÉ: Utiliser les frais encaissés au lieu de COMMISSION_AUTO
       'commissions_auto': fraisEncaisses, // Frais encaissés sur transferts servis

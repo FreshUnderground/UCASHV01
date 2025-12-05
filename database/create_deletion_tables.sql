@@ -35,8 +35,13 @@ CREATE TABLE IF NOT EXISTS `deletion_requests` (
   `validated_by_agent_name` varchar(100) DEFAULT NULL,
   `validation_date` timestamp NULL DEFAULT NULL,
   
+  -- Validation par un admin (inter-admin)
+  `validated_by_admin_id` int(11) DEFAULT NULL,
+  `validated_by_admin_name` varchar(100) DEFAULT NULL,
+  `validation_admin_date` timestamp NULL DEFAULT NULL,
+  
   -- Statut de la demande
-  `statut` enum('en_attente','validee','refusee','annulee') DEFAULT 'en_attente',
+  `statut` enum('en_attente','admin_validee','agent_validee','refusee','annulee') DEFAULT 'en_attente',
   
   -- Métadonnées
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
@@ -143,6 +148,12 @@ CREATE INDEX idx_corbeille_code_ops ON operations_corbeille(code_ops);
 
 -- Index pour filtrer les demandes en attente
 CREATE INDEX idx_deletion_pending ON deletion_requests(statut, request_date);
+
+-- Index pour les validations admin
+CREATE INDEX idx_deletion_admin_validated ON deletion_requests(validated_by_admin_id, validation_admin_date);
+
+-- Index pour les validations agent
+CREATE INDEX idx_deletion_agent_validated ON deletion_requests(validated_by_agent_id, validation_date);
 
 -- Index pour filtrer les éléments non restaurés de la corbeille
 CREATE INDEX idx_corbeille_active ON operations_corbeille(is_restored, deleted_at);

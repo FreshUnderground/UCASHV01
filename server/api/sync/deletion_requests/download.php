@@ -1,11 +1,28 @@
 <?php
 /**
- * API: Download Deletion Requests 
+ * API: Download Deletion Requests
  * Method: GET
- * Params: 
- *   - last_sync: timestamp (optional) - get only changes after this time
- *   - statut: filter by status (optional)
+ * Returns: List of deletion requests
  */
+
+// Disable error display
+error_reporting(E_ALL);
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+
+// Capture fatal errors
+register_shutdown_function(function() {
+    $error = error_get_last();
+    if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Erreur PHP fatale: ' . $error['message'],
+            'file' => $error['file'],
+            'line' => $error['line']
+        ]);
+    }
+});
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
@@ -17,52 +34,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
+// Include config for database connection
 require_once __DIR__ . '/../../../config/database.php';
 
 try {
-    $database = new Database();
-    $db = $database->getConnection();
+    // Use the $pdo connection from config/database.php
+    $db = $pdo;
     
-    $last_sync = $_GET['last_sync'] ?? null;
-    $statut = $_GET['statut'] ?? null;
+    // Get all deletion requests
+    $stmt = $db->query("
+        SELECT * FROM deletion_requests 
+        ORDER BY request_date DESC
+    ");
     
-    // Construire la requête
-    $query = "SELECT * FROM deletion_requests WHERE 1=1";
-    
-    if ($last_sync) {
-        $query .= " AND last_modified_at > :last_sync";
-    }
-    
-    if ($statut) {
-        $query .= " AND statut = :statut";
-    }
-    
-    $query .= " ORDER BY request_date DESC";
-    
-    $stmt = $db->prepare($query);
-    
-    if ($last_sync) {
-        $stmt->bindParam(':last_sync', $last_sync);
-    }
-    
-    if ($statut) {
-        $stmt->bindParam(':statut', $statut);
-    }
-    
-    $stmt->execute();
     $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    // Convertir les statuts MySQL vers index enum
-    $statutMap = [
-        'en_attente' => 0,
-        'validee' => 1,
-        'refusee' => 2,
-        'annulee' => 3
-    ];
-    
-    foreach ($requests as &$request) {
-        $request['statut'] = $statutMap[$request['statut']] ?? 0;
-    }
+    error_log("[DELETION_REQUESTS] Downloaded " . count($requests) . " requests");
     
     echo json_encode([
         'success' => true,
@@ -71,10 +58,11 @@ try {
     ]);
     
 } catch (Exception $e) {
+    error_log("[DELETION_REQUESTS] ERROR: " . $e->getMessage());
     http_response_code(500);
     echo json_encode([
         'success' => false,
-        'message' => 'Erreur serveur: ' . $e->getMessage()
+        'message' => 'Erreur serveur: ' . $e->getMessage(),
+        'error_type' => get_class($e)
     ]);
 }
-?>

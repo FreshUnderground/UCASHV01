@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Run Deletion Tables Migration</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #7f8c8d;
+            margin-bottom: 30px;
+        }
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #2980b9;
+        }
+        button:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+        }
+        #output {
+            margin-top: 20px;
+            padding: 20px;
+            background: #ecf0f1;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .success { color: #27ae60; }
+        .error { color: #e74c3c; }
+        .warning { color: #f39c12; }
+        .info { color: #3498db; }
+        .loading {
+            display: none;
+            margin-top: 10px;
+            color: #3498db;
+        }
+        .loading.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Deletion Tables Migration</h1>
+        <p class="subtitle">Create deletion_requests and operations_corbeille tables</p>
+        
+        <button onclick="runMigration()" id="runBtn">▶ Run Migration</button>
+        <button onclick="checkTables()" id="checkBtn">🔍 Check Tables</button>
+        
+        <div class="loading" id="loading">⏳ Processing...</div>
+        
+        <div id="output"></div>
+    </div>
+
+    <script>
+        const output = document.getElementById('output');
+        const loading = document.getElementById('loading');
+        const runBtn = document.getElementById('runBtn');
+        const checkBtn = document.getElementById('checkBtn');
+
+        function log(message, type = 'info') {
+            const line = document.createElement('div');
+            line.className = type;
+            line.textContent = message;
+            output.appendChild(line);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function clearOutput() {
+            output.innerHTML = '';
+        }
+
+        async function runMigration() {
+            clearOutput();
+            loading.classList.add('active');
+            runBtn.disabled = true;
+            checkBtn.disabled = true;
+
+            try {
+                const response = await fetch('run_deletion_tables_migration.php');
+                const text = await response.text();
+                
+                // Parse and format output
+                const lines = text.split('\n');
+                lines.forEach(line => {
+                    if (line.includes('✅') || line.includes('successful')) {
+                        log(line, 'success');
+                    } else if (line.includes('❌') || line.includes('ERROR') || line.includes('Failed')) {
+                        log(line, 'error');
+                    } else if (line.includes('⚠️') || line.includes('Warning')) {
+                        log(line, 'warning');
+                    } else if (line.trim()) {
+                        log(line, 'info');
+                    }
+                });
+
+                if (!response.ok) {
+                    log('\n❌ HTTP Error: ' + response.status, 'error');
+                }
+            } catch (error) {
+                log('❌ Error: ' + error.message, 'error');
+            } finally {
+                loading.classList.remove('active');
+                runBtn.disabled = false;
+                checkBtn.disabled = false;
+            }
+        }
+
+        async function checkTables() {
+            clearOutput();
+            loading.classList.add('active');
+            runBtn.disabled = true;
+            checkBtn.disabled = true;
+
+            try {
+                const response = await fetch('check_deletion_tables.php');
+                const data = await response.json();
+                
+                if (data.success) {
+                    log('🔍 Checking deletion tables...\n', 'info');
+                    
+                    data.tables.forEach(table => {
+                        if (table.exists) {
+                            log(`✅ Table '${table.name}' exists`, 'success');
+                            log(`   Columns: ${table.columns}`, 'info');
+                            log(`   Records: ${table.records}\n`, 'info');
+                        } else {
+                            log(`❌ Table '${table.name}' NOT found\n`, 'error');
+                        }
+                    });
+                } else {
+                    log('❌ ' + data.message, 'error');
+                }
+            } catch (error) {
+                log('❌ Error: ' + error.message, 'error');
+            } finally {
+                loading.classList.remove('active');
+                runBtn.disabled = false;
+                checkBtn.disabled = false;
+            }
+        }
+
+        // Auto-check on load
+        window.addEventListener('load', checkTables);
+    </script>
+</body>
+</html>

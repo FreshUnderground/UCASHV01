@@ -56,7 +56,7 @@ class ProductionConfig {
   static const List<String> paymentMethods = [
     'Cash',
     'Airtel Money',
-    'Vodacash',
+    'MPESA/VODACASH',
     'Orange Money'
   ];
   

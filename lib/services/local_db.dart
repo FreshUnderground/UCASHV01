@@ -19,7 +19,6 @@ import '../models/virtual_transaction_model.dart';
 import '../models/retrait_virtuel_model.dart';
 import '../models/cloture_virtuelle_model.dart';
 import '../models/depot_client_model.dart';
-import '../models/cloture_virtuelle_par_sim_model.dart';
 
 class LocalDB {
   static final LocalDB _instance = LocalDB._internal();
@@ -278,62 +277,241 @@ class LocalDB {
   }
 
 
+  // ===== GESTION DES ADMINISTRATEURS (MAX 2) =====
+  
+  static const int maxAdmins = 2;
+  
+  // Récupérer tous les admins (sans l'admin par défaut temporaire)
+  Future<List<UserModel>> getAllAdmins() async {
+    final prefs = await database;
+    final admins = <UserModel>[];
+    
+    final keys = prefs.getKeys();
+    for (String key in keys) {
+      if (key.startsWith('admin_') && key != 'admin_default_temp') {
+        final adminData = prefs.getString(key);
+        if (adminData != null) {
+          try {
+            final admin = UserModel.fromJson(jsonDecode(adminData));
+            if (admin.role == 'ADMIN') {
+              admins.add(admin);
+            }
+          } catch (e) {
+            debugPrint('Erreur lors de la lecture de l\'admin $key: $e');
+          }
+        }
+      }
+    }
+    return admins;
+  }
+  
+  // Compter le nombre d'admins
+  Future<int> countAdmins() async {
+    final admins = await getAllAdmins();
+    return admins.length;
+  }
+  
+  // Vérifier si on peut créer un nouvel admin
+  Future<bool> canCreateAdmin() async {
+    final count = await countAdmins();
+    return count < maxAdmins;
+  }
+  
+  // Créer un nouvel administrateur
+  Future<Map<String, dynamic>> createAdmin({
+    required String username,
+    required String password,
+    String? nom,
+    String? telephone,
+    String? email,
+  }) async {
+    try {
+      // Vérifier le nombre maximum
+      final canCreate = await canCreateAdmin();
+      if (!canCreate) {
+        return {
+          'success': false,
+          'message': 'Nombre maximum d\'administrateurs atteint (2 max)'
+        };
+      }
+      
+      // Vérifier si le username existe déjà
+      final existingAdmin = await getAdminByUsername(username);
+      if (existingAdmin != null) {
+        return {
+          'success': false,
+          'message': 'Ce nom d\'utilisateur existe déjà'
+        };
+      }
+      
+      final prefs = await database;
+      final admins = await getAllAdmins();
+      
+      // Générer un ID unique (basé sur le nombre d'admins)
+      final newId = admins.isEmpty ? 1 : (admins.map((a) => a.id ?? 0).reduce((a, b) => a > b ? a : b) + 1);
+      
+      final newAdmin = UserModel(
+        id: newId,
+        username: username,
+        password: password,
+        role: 'ADMIN',
+        nom: nom,
+        telephone: telephone,
+        shopId: null, // Admin n'a pas besoin de shop
+        createdAt: DateTime.now(),
+      );
+      
+      // Sauvegarder localement
+      await prefs.setString('admin_$newId', jsonEncode(newAdmin.toJson()));
+      
+      // Supprimer l'admin par défaut si c'est le premier admin personnalisé créé
+      await _removeDefaultAdminIfNeeded();
+      
+      debugPrint('✅ Admin créé: $username (ID: $newId)');
+      
+      return {
+        'success': true,
+        'message': 'Administrateur créé avec succès',
+        'admin': newAdmin
+      };
+    } catch (e) {
+      debugPrint('❌ Erreur lors de la création de l\'admin: $e');
+      return {
+        'success': false,
+        'message': 'Erreur: $e'
+      };
+    }
+  }
+  
+  // Récupérer un admin par username
+  Future<UserModel?> getAdminByUsername(String username) async {
+    final admins = await getAllAdmins();
+    try {
+      return admins.firstWhere((admin) => admin.username == username);
+    } catch (e) {
+      return null;
+    }
+  }
+  
+  // Récupérer un admin par ID
+  Future<UserModel?> getAdminById(int id) async {
+    final prefs = await database;
+    final adminData = prefs.getString('admin_$id');
+    if (adminData != null) {
+      try {
+        return UserModel.fromJson(jsonDecode(adminData));
+      } catch (e) {
+        debugPrint('Erreur lors de la récupération de l\'admin $id: $e');
+      }
+    }
+    return null;
+  }
+  
+  // Mettre à jour un admin
+  Future<Map<String, dynamic>> updateAdmin(UserModel admin) async {
+    try {
+      if (admin.id == null) {
+        return {
+          'success': false,
+          'message': 'ID de l\'administrateur manquant'
+        };
+      }
+      
+      final prefs = await database;
+      await prefs.setString('admin_${admin.id}', jsonEncode(admin.toJson()));
+      
+      debugPrint('✅ Admin mis à jour: ${admin.username}');
+      
+      return {
+        'success': true,
+        'message': 'Administrateur mis à jour avec succès'
+      };
+    } catch (e) {
+      debugPrint('❌ Erreur lors de la mise à jour de l\'admin: $e');
+      return {
+        'success': false,
+        'message': 'Erreur: $e'
+      };
+    }
+  }
+  
+  // Supprimer un admin
+  Future<Map<String, dynamic>> deleteAdmin(int id) async {
+    try {
+      final admins = await getAllAdmins();
+      
+      // Empêcher la suppression s'il ne reste qu'un seul admin
+      if (admins.length <= 1) {
+        return {
+          'success': false,
+          'message': 'Impossible de supprimer le dernier administrateur'
+        };
+      }
+      
+      final prefs = await database;
+      await prefs.remove('admin_$id');
+      
+      debugPrint('✅ Admin supprimé: ID $id');
+      
+      return {
+        'success': true,
+        'message': 'Administrateur supprimé avec succès'
+      };
+    } catch (e) {
+      debugPrint('❌ Erreur lors de la suppression de l\'admin: $e');
+      return {
+        'success': false,
+        'message': 'Erreur: $e'
+      };
+    }
+  }
+  
   // Initialiser l'admin par défaut (PROTÉGÉ)
   Future<void> initializeDefaultAdmin() async {
     final prefs = await database;
     
-    // Vérifier si l'admin existe déjà (clé protégée)
-    final existingAdmin = prefs.getString('admin_default');
-    if (existingAdmin == null) {
+    // Vérifier si un admin existe déjà
+    final admins = await getAllAdmins();
+    if (admins.isEmpty) {
       final admin = UserModel(
-        id: 1,
+        id: 0, // ID spécial pour l'admin par défaut
         username: 'admin',
         password: 'admin123',
         role: 'ADMIN',
-        shopId: null, // Admin n'a pas besoin de shop
+        shopId: null,
         createdAt: DateTime.now(),
       );
-      await prefs.setString('admin_default', jsonEncode(admin.toJson()));
-      debugPrint('🔐 Admin par défaut créé: admin/admin123 (PROTÉGÉ)');
+      await prefs.setString('admin_default_temp', jsonEncode(admin.toJson()));
+      debugPrint('🔐 Admin par défaut temporaire créé: admin/admin123 (sera supprimé après création du premier admin)');
     } else {
-      debugPrint('🔐 Admin par défaut déjà présent (PROTÉGÉ)');
+      debugPrint('🔐 Admin(s) déjà présent(s): ${admins.length}');
     }
   }
 
   // Vérifier et restaurer l'admin si nécessaire
   Future<void> ensureAdminExists() async {
-    final prefs = await database;
-    
-    // Vérifier si l'admin existe
-    final existingAdmin = prefs.getString('admin_default');
-    if (existingAdmin == null) {
-      debugPrint('⚠️  Admin manquant ! Restauration en cours...');
+    final admins = await getAllAdmins();
+    if (admins.isEmpty) {
+      debugPrint('⚠️  Aucun admin trouvé ! Création de l\'admin par défaut...');
       await initializeDefaultAdmin();
-    } else {
-      try {
-        final adminData = jsonDecode(existingAdmin);
-        if (adminData['username'] != 'admin' || adminData['role'] != 'ADMIN') {
-          debugPrint('⚠️  Admin corrompu ! Restauration en cours...');
-          await initializeDefaultAdmin();
-        }
-      } catch (e) {
-        debugPrint('⚠️  Admin corrompu (parsing error) ! Restauration en cours...');
-        await initializeDefaultAdmin();
-      }
     }
   }
 
-  // Récupérer l'admin par défaut
+  // Récupérer l'admin par défaut (le premier admin ou l'admin temporaire)
   Future<UserModel?> getDefaultAdmin() async {
+    final admins = await getAllAdmins();
+    if (admins.isNotEmpty) {
+      return admins.first;
+    }
+    
+    // Si aucun admin personnalisé, vérifier l'admin temporaire
     final prefs = await database;
-    final adminData = prefs.getString('admin_default');
-    if (adminData != null) {
+    final tempAdminData = prefs.getString('admin_default_temp');
+    if (tempAdminData != null) {
       try {
-        return UserModel.fromJson(jsonDecode(adminData));
+        return UserModel.fromJson(jsonDecode(tempAdminData));
       } catch (e) {
-        debugPrint('Erreur lors de la récupération de l\'admin: $e');
-        await initializeDefaultAdmin(); // Recréer si corrompu
-        return getDefaultAdmin(); // Réessayer
+        debugPrint('Erreur lors de la récupération de l\'admin temporaire: $e');
       }
     }
     return null;
@@ -391,14 +569,54 @@ class LocalDB {
     debugPrint('Toutes les données supprimées sauf l\'admin');
   }
 
+  // Supprimer l'admin par défaut temporaire si un admin personnalisé existe
+  Future<void> _removeDefaultAdminIfNeeded() async {
+    final prefs = await database;
+    final tempAdminData = prefs.getString('admin_default_temp');
+    
+    if (tempAdminData != null) {
+      await prefs.remove('admin_default_temp');
+      debugPrint('🗑️ Admin par défaut temporaire supprimé (admin personnalisé créé)');
+    }
+  }
+  
+  // Nettoyer l'admin par défaut au démarrage de la session
+  Future<void> cleanupDefaultAdminOnStartup() async {
+    final admins = await getAllAdmins();
+    if (admins.isNotEmpty) {
+      // Il y a au moins un admin personnalisé, supprimer l'admin temporaire
+      await _removeDefaultAdminIfNeeded();
+    }
+  }
+
   // Méthodes pour les agents
   Future<UserModel?> getAgentByCredentials(String username, String password) async {
-    final prefs = await database;
+    // Vérifier d'abord dans les admins personnalisés
+    final admins = await getAllAdmins();
+    for (var admin in admins) {
+      if (admin.username == username && admin.password == password) {
+        return admin;
+      }
+    }
     
-    // Chercher tous les agents stockés dynamiquement
+    // Vérifier l'admin par défaut temporaire
+    final prefs = await database;
+    final tempAdminData = prefs.getString('admin_default_temp');
+    if (tempAdminData != null) {
+      try {
+        final tempAdmin = UserModel.fromJson(jsonDecode(tempAdminData));
+        if (tempAdmin.username == username && tempAdmin.password == password) {
+          return tempAdmin;
+        }
+      } catch (e) {
+        debugPrint('Erreur lors de la lecture de l\'admin temporaire: $e');
+      }
+    }
+    
+    // Chercher dans les agents
     final keys = prefs.getKeys();
     for (String key in keys) {
-      if (key.startsWith('agent_')) {
+      if (key.startsWith('agent_') && !key.startsWith('admin_')) {
         final agentData = prefs.getString(key);
         if (agentData != null) {
           final agent = UserModel.fromJson(jsonDecode(agentData));
@@ -718,6 +936,19 @@ class LocalDB {
   Future<void> updateOperation(OperationModel operation) async {
     if (operation.id == null) throw Exception('Operation ID is required for update');
     await saveOperation(operation);
+  }
+  
+  /// Update operation by CodeOps (unique identifier - more reliable than ID)
+  Future<void> updateOperationByCodeOps(OperationModel operation) async {
+    // First, find the operation by CodeOps to get its ID
+    final existingOp = await getOperationByCodeOps(operation.codeOps);
+    if (existingOp == null) {
+      throw Exception('Operation not found with CodeOps: ${operation.codeOps}');
+    }
+    
+    // Update using the existing ID
+    final operationWithId = operation.copyWith(id: existingOp.id);
+    await saveOperation(operationWithId);
   }
 
   Future<void> deleteOperation(int operationId) async {

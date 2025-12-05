@@ -305,7 +305,7 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
                         
             // Nom de l'expéditeur
             Text(
-              '${_transferType == OperationType.transfertNational ? '4' : '3'}. Nom de l\'expéditeur',
+              '${_transferType == OperationType.transfertNational ? '4' : '3'}. Nom de l\'expéditeur *',
               style: TextStyle(
                 fontSize: labelFontSize,
                 fontWeight: FontWeight.bold,
@@ -327,6 +327,12 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
                 ),
               ),
               style: TextStyle(fontSize: isMobile ? 16 : 18),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Le nom de l\'expéditeur est requis';
+                }
+                return null;
+              },
             ),
 
             // Téléphone de l'expéditeur
@@ -838,14 +844,12 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
 
       final montant = double.parse(_montantController.text);
       
-      // Create notes with image info and expediteur if provided
+      // Create notes with image info and expediteur
       String notes = '';
       if (_selectedImage != null) {
         notes += ' - Photo: ${_selectedImage!.path}';
       }
-      if (_expediteurController.text.isNotEmpty) {
-        notes += ' - Expéditeur: ${_expediteurController.text}';
-      }
+      notes += ' - Expéditeur: ${_expediteurController.text}';
       
       // Store only the phone number in notes if provided (as per specification)
       String? telephoneExpediteur = _expediteurPhoneController.text.isNotEmpty ? _expediteurPhoneController.text : null;
@@ -872,7 +876,7 @@ class _TransferDestinationDialogState extends State<TransferDestinationDialog> {
         destinataire: _destinataireController.text,
         telephoneDestinataire: _destinatairePhoneController.text.isNotEmpty ? _destinatairePhoneController.text : null,
         notes: telephoneExpediteur, // Store only phone number or null
-        observation: _expediteurController.text.isNotEmpty ? _expediteurController.text : null, // Store expediteur name
+        observation: _expediteurController.text, // Store expediteur name (now required)
         statut: OperationStatus.enAttente,
         dateOp: DateTime.now(),
         lastModifiedAt: DateTime.now(),

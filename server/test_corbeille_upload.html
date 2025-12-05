@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Corbeille Upload</title>
+    <style>
+        body { font-family: monospace; padding: 20px; }
+        pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        .success { color: green; }
+        .error { color: red; }
+        button { padding: 10px 20px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Test Corbeille Upload</h1>
+    <button onclick="testUpload()">📤 Test Upload</button>
+    <button onclick="testDownload()">📥 Test Download</button>
+    <div id="result"></div>
+
+    <script>
+        async function testUpload() {
+            const result = document.getElementById('result');
+            result.innerHTML = '<p>Uploading test data...</p>';
+            
+            // Sample corbeille item
+            const testData = [{
+                code_ops: "TEST251203120000999",
+                type: "TRANSFERT_NATIONAL",
+                shop_source_id: 1234,
+                shop_source_designation: "Test Source",
+                shop_destination_id: 5678,
+                shop_destination_designation: "Test Destination",
+                agent_id: 1,
+                agent_username: "test_agent",
+                client_id: null,
+                client_nom: "Test Client",
+                montant_brut: 1000.00,
+                commission: 15.00,
+                montant_net: 985.00,
+                devise: "USD",
+                mode_paiement: "cash",
+                destinataire: "Test Destinataire",
+                telephone_destinataire: "0123456789",
+                reference: null,
+                sim_numero: null,
+                statut: "terminee",
+                notes: "Test notes",
+                observation: "Test observation",
+                date_op: "2025-12-03 12:00:00",
+                date_validation: null,
+                created_at_original: "2025-12-03 12:00:00",
+                last_modified_at_original: "2025-12-03 12:00:00",
+                last_modified_by_original: "test_user",
+                deleted_at: "2025-12-03 12:00:00",
+                is_restored: 0,
+                is_synced: 0
+            }];
+            
+            try {
+                const response = await fetch('api/sync/corbeille/upload.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(testData)
+                });
+                
+                const text = await response.text();
+                
+                result.innerHTML = `
+                    <h3>Status: ${response.status}</h3>
+                    <h3>Response:</h3>
+                    <pre>${escapeHtml(text)}</pre>
+                `;
+                
+                try {
+                    const json = JSON.parse(text);
+                    result.innerHTML += `
+                        <h3 class="success">✅ Valid JSON</h3>
+                        <pre>${JSON.stringify(json, null, 2)}</pre>
+                    `;
+                } catch (e) {
+                    result.innerHTML += `
+                        <h3 class="error">❌ Invalid JSON</h3>
+                        <p>${e.message}</p>
+                    `;
+                }
+            } catch (error) {
+                result.innerHTML = `
+                    <h3 class="error">❌ Error</h3>
+                    <pre>${error.message}</pre>
+                `;
+            }
+        }
+        
+        async function testDownload() {
+            const result = document.getElementById('result');
+            result.innerHTML = '<p>Downloading...</p>';
+            
+            try {
+                const response = await fetch('api/sync/corbeille/download.php?is_restored=0');
+                const text = await response.text();
+                
+                result.innerHTML = `
+                    <h3>Status: ${response.status}</h3>
+                    <h3>Response:</h3>
+                    <pre>${escapeHtml(text)}</pre>
+                `;
+                
+                try {
+                    const json = JSON.parse(text);
+                    result.innerHTML += `
+                        <h3 class="success">✅ ${json.count} items in corbeille</h3>
+                        <pre>${JSON.stringify(json, null, 2)}</pre>
+                    `;
+                } catch (e) {
+                    result.innerHTML += `
+                        <h3 class="error">❌ Invalid JSON</h3>
+                        <p>${e.message}</p>
+                    `;
+                }
+            } catch (error) {
+                result.innerHTML = `
+                    <h3 class="error">❌ Error</h3>
+                    <pre>${error.message}</pre>
+                `;
+            }
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

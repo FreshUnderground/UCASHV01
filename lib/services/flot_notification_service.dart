@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/operation_model.dart';
-import 'agent_auth_service.dart';
 
 /// Service de notification pour les flots entrants
 /// Vérifie en permanence les nouveaux flots destinés au shop de l'utilisateur
@@ -27,21 +26,22 @@ class FlotNotificationService extends ChangeNotifier {
   
   /// Démarre la vérification automatique des flots entrants
   void startMonitoring({
-    required AgentAuthService authService,
+    required int shopId,
     required List<OperationModel> Function() getFlots,
   }) {
     stopMonitoring();
     
-    final currentShopId = authService.currentAgent?.shopId;
-    if (currentShopId == null) {
-      debugPrint('⚠️ FlotNotificationService: Aucun shop ID, impossible de démarrer la surveillance');
+    if (shopId <= 0) {
+      debugPrint('⚠️ FlotNotificationService: Shop ID invalide ($shopId), impossible de démarrer la surveillance');
       return;
     }
+    
+    final currentShopId = shopId;
     
     // Stocker la référence pour accéder aux flots
     _getFlots = getFlots;
     
-    debugPrint('🔔 FlotNotificationService: Démarrage de la surveillance des flots pour shop $currentShopId');
+    debugPrint('🔔 FlotNotificationService: Démarrage de la surveillance des flots pour shop $shopId');
     
     // Charger les IDs déjà notifiés depuis le stockage
     _loadNotifiedFlotIds();
@@ -141,7 +141,7 @@ class FlotNotificationService extends ChangeNotifier {
       case ModePaiement.airtelMoney:
         return 'Airtel Money';
       case ModePaiement.mPesa:
-        return 'M-Pesa';
+        return 'MPESA/VODACASH';
       case ModePaiement.orangeMoney:
         return 'Orange Money';
     }

@@ -1,5 +1,3 @@
-// ignore_for_file: unnecessary_string_interpolations
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:printing/printing.dart';
@@ -14,6 +12,7 @@ import '../../services/shop_service.dart';
 import '../../services/auth_service.dart';
 import '../depot_dialog.dart';
 import '../retrait_dialog.dart';
+import '../edit_operation_dialog.dart';
 
 class ReleveCompteClientReport extends StatefulWidget {
   final int clientId;
@@ -607,12 +606,13 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
                 ),
                 if (widget.isAdmin)
                   const SizedBox(
-                    width: 40,
+                    width: 80,
                     child: Text(
-                      '',
+                      'Actions',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                       ),
+                      textAlign: TextAlign.center,
                     ),
                   ),
               ],
@@ -1314,13 +1314,27 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
               ),
               if (widget.isAdmin)
                 SizedBox(
-                  width: 40,
-                  child: IconButton(
-                    icon: const Icon(Icons.delete, size: 18, color: Colors.red),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: () => _deleteOperation(transaction),
-                    tooltip: 'Supprimer',
+                  width: 80,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit, size: 18, color: Colors.blue),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () => _editOperation(transaction),
+                        tooltip: 'Modifier',
+                      ),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: const Icon(Icons.delete, size: 18),
+                        color: Colors.red,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () => _deleteOperation(transaction),
+                        tooltip: 'Supprimer',
+                      ),
+                    ],
                   ),
                 ),
             ],
@@ -1328,6 +1342,18 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
         );
       },
     );
+  }
+
+  Future<void> _editOperation(Map<String, dynamic> transaction) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => EditOperationDialog(transaction: transaction),
+    );
+
+    if (result == true) {
+      // Reload the report after successful edit
+      await _loadReport();
+    }
   }
 
   Future<void> _deleteOperation(Map<String, dynamic> transaction) async {
@@ -1355,20 +1381,25 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
     if (confirm != true) return;
 
     try {
-      // Get operation ID from transaction
-      final operationId = transaction['id'] as int?;
-      if (operationId == null) {
+      // Get CodeOps from transaction (unique identifier)
+      final codeOps = transaction['code_ops'] as String?;
+      if (codeOps == null || codeOps.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('❌ Impossible de supprimer: ID d\'opération manquant'),
+            content: Text('❌ Impossible de supprimer: Code opération manquant'),
             backgroundColor: Colors.red,
           ),
         );
         return;
       }
 
-      // Delete the operation
-      await OperationService().deleteOperation(operationId);
+      // Delete the operation using CodeOps
+      final operationService = Provider.of<OperationService>(context, listen: false);
+      final success = await operationService.deleteOperationByCodeOps(codeOps);
+      
+      if (!success) {
+        throw Exception('Échec de la suppression');
+      }
 
       // Reload the report
       await _loadReport();

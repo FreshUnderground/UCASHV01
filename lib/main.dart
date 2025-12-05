@@ -89,6 +89,10 @@ class _UCashAppState extends State<UCashApp> {
       await LocalDB.instance.initializeDefaultAdmin();
       await LocalDB.instance.ensureAdminExists();
       
+      // Nettoyer l'admin par défaut temporaire si un admin personnalisé existe
+      await LocalDB.instance.cleanupDefaultAdminOnStartup();
+      debugPrint('🧹 Vérification de l\'admin par défaut effectuée');
+      
       _updateLoadingState('Initialisation des services de base...', 0.2);
 
       // Initialize the sync service (base uniquement, pas de sync auto)
@@ -187,7 +191,14 @@ class _UCashAppState extends State<UCashApp> {
         ChangeNotifierProvider(create: (_) => AgentService.instance),
         ChangeNotifierProvider(create: (_) => ClientService()),
         ChangeNotifierProvider(create: (_) => TransactionService()),
-        ChangeNotifierProvider(create: (_) => OperationService()),
+        ChangeNotifierProvider(create: (_) {
+          final service = OperationService();
+          // Démarrer la synchronisation automatique des opérations non synchronisées
+          Future.delayed(const Duration(seconds: 5), () {
+            service.startUnsyncedOperationsSync();
+          });
+          return service;
+        }),
         ChangeNotifierProvider(create: (_) => RatesService.instance),
         ChangeNotifierProvider(create: (_) => ReportService()),
         ChangeNotifierProvider(create: (_) => FlotService.instance),

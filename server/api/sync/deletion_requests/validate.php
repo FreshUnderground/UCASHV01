@@ -1,14 +1,28 @@
 <?php
 /**
- * API: Validate Deletion Request (Agent validates and deletes operation)
+ * API: Validate Deletion Request
  * Method: POST
- * Body: {
- *   "code_ops": "...",
- *   "validated_by_agent_id": 123,
- *   "validated_by_agent_name": "...",
- *   "action": "approve" | "reject"
- * }
+ * Body: {code_ops, validated_by_agent_id, validated_by_agent_name, action: "approve"|"reject"}
  */
+
+// Disable error display
+error_reporting(E_ALL);
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+
+// Capture fatal errors
+register_shutdown_function(function() {
+    $error = error_get_last();
+    if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        http_response_code(500);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Erreur PHP fatale: ' . $error['message'],
+            'file' => $error['file'],
+            'line' => $error['line']
+        ]);
+    }
+});
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
@@ -20,195 +34,184 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
+// Include config for database connection
 require_once __DIR__ . '/../../../config/database.php';
 
 try {
-    $database = new Database();
-    $db = $database->getConnection();
+    // Use the $pdo connection from config/database.php
+    $db = $pdo;
     
     $json = file_get_contents('php://input');
     $data = json_decode($json, true);
     
-    if (!isset($data['code_ops']) || !isset($data['action'])) {
-        echo json_encode([
-            'success' => false,
-            'message' => 'Paramètres manquants'
-        ]);
-        exit;
+    $codeOps = $data['code_ops'] ?? null;
+    $agentId = $data['validated_by_agent_id'] ?? null;
+    $agentName = $data['validated_by_agent_name'] ?? null;
+    $action = $data['action'] ?? null; // "approve" or "reject"
+    
+    if (!$codeOps || !$agentId || !$agentName || !$action) {
+        throw new Exception('Missing required fields');
     }
     
-    $code_ops = $data['code_ops'];
-    $action = $data['action']; // 'approve' or 'reject'
-    $agent_id = $data['validated_by_agent_id'] ?? null;
-    $agent_name = $data['validated_by_agent_name'] ?? 'agent';
+    $statut = ($action === 'approve') ? 'validee' : 'refusee';
     
-    // Commencer une transaction
-    $db->beginTransaction();
+    // Update deletion request
+    $stmt = $db->prepare("
+        UPDATE deletion_requests SET
+            validated_by_agent_id = :agent_id,
+            validated_by_agent_name = :agent_name,
+            validation_date = :validation_date,
+            statut = :statut,
+            last_modified_at = :last_modified_at,
+            last_modified_by = :last_modified_by
+        WHERE code_ops = :code_ops
+    ");
     
-    try {
-        // 1. Récupérer la demande de suppression
-        $stmt = $db->prepare("
-            SELECT * FROM deletion_requests 
-            WHERE code_ops = :code_ops AND statut = 'en_attente'
-        ");
-        $stmt->bindParam(':code_ops', $code_ops);
-        $stmt->execute();
-        $request = $stmt->fetch(PDO::FETCH_ASSOC);
-        
-        if (!$request) {
-            throw new Exception('Demande de suppression non trouvée ou déjà traitée');
-        }
-        
+    $now = date('Y-m-d H:i:s');
+    
+    $result = $stmt->execute([
+        ':agent_id' => $agentId,
+        ':agent_name' => $agentName,
+        ':validation_date' => $now,
+        ':statut' => $statut,
+        ':last_modified_at' => $now,
+        ':last_modified_by' => "agent_$agentName",
+        ':code_ops' => $codeOps
+    ]);
+    
+    if ($result && $stmt->rowCount() > 0) {
+        // If approved, save to corbeille BEFORE deleting
         if ($action === 'approve') {
-            // 2. Récupérer l'opération complète
-            $stmt = $db->prepare("
-                SELECT * FROM operations WHERE code_ops = :code_ops
-            ");
-            $stmt->bindParam(':code_ops', $code_ops);
-            $stmt->execute();
-            $operation = $stmt->fetch(PDO::FETCH_ASSOC);
+            // Get the operation details before deleting
+            $opStmt = $db->prepare("SELECT * FROM operations WHERE code_ops = ?");
+            $opStmt->execute([$codeOps]);
+            $operation = $opStmt->fetch(PDO::FETCH_ASSOC);
             
-            if (!$operation) {
-                throw new Exception('Opération non trouvée');
+            if ($operation) {
+                // Save to operations_corbeille
+                $corbeilleStmt = $db->prepare("
+                    INSERT INTO operations_corbeille (
+                        original_operation_id, code_ops, type,
+                        shop_source_id, shop_source_designation,
+                        shop_destination_id, shop_destination_designation,
+                        agent_id, agent_username,
+                        client_id, client_nom,
+                        montant_brut, commission, montant_net, devise,
+                        mode_paiement, destinataire, telephone_destinataire,
+                        reference, sim_numero, statut, notes, observation,
+                        date_op, date_validation,
+                        created_at_original, last_modified_at_original, last_modified_by_original,
+                        validated_by_agent_id, validated_by_agent_name,
+                        deleted_at, is_restored, is_synced
+                    ) VALUES (
+                        :original_operation_id, :code_ops, :type,
+                        :shop_source_id, :shop_source_designation,
+                        :shop_destination_id, :shop_destination_designation,
+                        :agent_id, :agent_username,
+                        :client_id, :client_nom,
+                        :montant_brut, :commission, :montant_net, :devise,
+                        :mode_paiement, :destinataire, :telephone_destinataire,
+                        :reference, :sim_numero, :statut, :notes, :observation,
+                        :date_op, :date_validation,
+                        :created_at_original, :last_modified_at_original, :last_modified_by_original,
+                        :validated_by_agent_id, :validated_by_agent_name,
+                        :deleted_at, :is_restored, :is_synced
+                    )
+                ");
+                
+                // Map operation type from enum to string
+                $typeMap = [
+                    0 => 'TRANSFERT_NATIONAL',
+                    1 => 'TRANSFERT_INTERNATIONAL',
+                    2 => 'DEPOT',
+                    3 => 'RETRAIT',
+                    4 => 'CHANGE',
+                    5 => 'PAIEMENT',
+                    6 => 'VIREMENT',
+                    7 => 'FLOT'
+                ];
+                $type = $typeMap[$operation['type']] ?? 'TRANSFERT_NATIONAL';
+                
+                // Map mode_paiement from enum to string
+                $modePaiementMap = [
+                    0 => 'cash',
+                    1 => 'mobileMoney',
+                    2 => 'banque',
+                    3 => 'cheque'
+                ];
+                $modePaiement = $modePaiementMap[$operation['mode_paiement']] ?? 'cash';
+                
+                // Map statut from enum to string
+                $statutMap = [
+                    0 => 'terminee',
+                    1 => 'enAttente',
+                    2 => 'annulee'
+                ];
+                $statutStr = $statutMap[$operation['statut']] ?? 'terminee';
+                
+                $corbeilleStmt->execute([
+                    ':original_operation_id' => $operation['id'],
+                    ':code_ops' => $operation['code_ops'],
+                    ':type' => $type,
+                    ':shop_source_id' => $operation['shop_source_id'],
+                    ':shop_source_designation' => $operation['shop_source_designation'],
+                    ':shop_destination_id' => $operation['shop_destination_id'],
+                    ':shop_destination_designation' => $operation['shop_destination_designation'],
+                    ':agent_id' => $operation['agent_id'],
+                    ':agent_username' => $operation['agent_username'],
+                    ':client_id' => $operation['client_id'],
+                    ':client_nom' => $operation['client_nom'],
+                    ':montant_brut' => $operation['montant_brut'],
+                    ':commission' => $operation['commission'],
+                    ':montant_net' => $operation['montant_net'],
+                    ':devise' => $operation['devise'],
+                    ':mode_paiement' => $modePaiement,
+                    ':destinataire' => $operation['destinataire'],
+                    ':telephone_destinataire' => $operation['telephone_destinataire'],
+                    ':reference' => $operation['reference'],
+                    ':sim_numero' => $operation['sim_numero'],
+                    ':statut' => $statutStr,
+                    ':notes' => $operation['notes'],
+                    ':observation' => $operation['observation'],
+                    ':date_op' => $operation['date_op'],
+                    ':date_validation' => $operation['date_validation'],
+                    ':created_at_original' => $operation['created_at'],
+                    ':last_modified_at_original' => $operation['last_modified_at'],
+                    ':last_modified_by_original' => $operation['last_modified_by'],
+                    ':validated_by_agent_id' => $agentId,
+                    ':validated_by_agent_name' => $agentName,
+                    ':deleted_at' => $now,
+                    ':is_restored' => 0,
+                    ':is_synced' => 1
+                ]);
+                
+                error_log("[DELETION_REQUESTS] Operation $codeOps saved to corbeille");
             }
             
-            // 3. Copier l'opération dans la corbeille
-            $stmt = $db->prepare("
-                INSERT INTO operations_corbeille (
-                    original_operation_id, code_ops, type,
-                    shop_source_id, shop_source_designation,
-                    shop_destination_id, shop_destination_designation,
-                    agent_id, agent_username,
-                    client_id, client_nom,
-                    montant_brut, commission, montant_net, devise,
-                    mode_paiement, destinataire, telephone_destinataire,
-                    reference, sim_numero, statut, notes, observation,
-                    date_op, date_validation,
-                    created_at_original, last_modified_at_original, last_modified_by_original,
-                    deleted_by_admin_id, deleted_by_admin_name,
-                    validated_by_agent_id, validated_by_agent_name,
-                    deletion_request_id, deletion_reason,
-                    deleted_at, is_synced, synced_at
-                ) VALUES (
-                    :original_id, :code_ops, :type,
-                    :shop_source_id, :shop_source_designation,
-                    :shop_destination_id, :shop_destination_designation,
-                    :agent_id, :agent_username,
-                    :client_id, :client_nom,
-                    :montant_brut, :commission, :montant_net, :devise,
-                    :mode_paiement, :destinataire, :telephone_destinataire,
-                    :reference, :sim_numero, :statut, :notes, :observation,
-                    :date_op, :date_validation,
-                    :created_at_original, :last_modified_at_original, :last_modified_by_original,
-                    :deleted_by_admin_id, :deleted_by_admin_name,
-                    :validated_by_agent_id, :validated_by_agent_name,
-                    :deletion_request_id, :deletion_reason,
-                    NOW(), 1, NOW()
-                )
-            ");
-            
-            $stmt->bindParam(':original_id', $operation['id']);
-            $stmt->bindParam(':code_ops', $operation['code_ops']);
-            $stmt->bindParam(':type', $operation['type']);
-            $stmt->bindParam(':shop_source_id', $operation['shop_source_id']);
-            $stmt->bindParam(':shop_source_designation', $operation['shop_source_designation']);
-            $stmt->bindParam(':shop_destination_id', $operation['shop_destination_id']);
-            $stmt->bindParam(':shop_destination_designation', $operation['shop_destination_designation']);
-            $stmt->bindParam(':agent_id', $operation['agent_id']);
-            $stmt->bindParam(':agent_username', $operation['agent_username']);
-            $stmt->bindParam(':client_id', $operation['client_id']);
-            $stmt->bindParam(':client_nom', $operation['client_nom']);
-            $stmt->bindParam(':montant_brut', $operation['montant_brut']);
-            $stmt->bindParam(':commission', $operation['commission']);
-            $stmt->bindParam(':montant_net', $operation['montant_net']);
-            $stmt->bindParam(':devise', $operation['devise']);
-            $stmt->bindParam(':mode_paiement', $operation['mode_paiement']);
-            $stmt->bindParam(':destinataire', $operation['destinataire']);
-            $stmt->bindParam(':telephone_destinataire', $operation['telephone_destinataire']);
-            $stmt->bindParam(':reference', $operation['reference']);
-            $stmt->bindParam(':sim_numero', $operation['sim_numero']);
-            $stmt->bindParam(':statut', $operation['statut']);
-            $stmt->bindParam(':notes', $operation['notes']);
-            $stmt->bindParam(':observation', $operation['observation']);
-            $stmt->bindParam(':date_op', $operation['date_op']);
-            $stmt->bindParam(':date_validation', $operation['date_validation']);
-            $stmt->bindParam(':created_at_original', $operation['created_at']);
-            $stmt->bindParam(':last_modified_at_original', $operation['last_modified_at']);
-            $stmt->bindParam(':last_modified_by_original', $operation['last_modified_by']);
-            $stmt->bindParam(':deleted_by_admin_id', $request['requested_by_admin_id']);
-            $stmt->bindParam(':deleted_by_admin_name', $request['requested_by_admin_name']);
-            $stmt->bindParam(':validated_by_agent_id', $agent_id);
-            $stmt->bindParam(':validated_by_agent_name', $agent_name);
-            $stmt->bindParam(':deletion_request_id', $request['id']);
-            $stmt->bindParam(':deletion_reason', $request['reason']);
-            
-            $stmt->execute();
-            
-            // 4. Supprimer l'opération de la table operations
-            $stmt = $db->prepare("DELETE FROM operations WHERE code_ops = :code_ops");
-            $stmt->bindParam(':code_ops', $code_ops);
-            $stmt->execute();
-            
-            // 5. Mettre à jour la demande de suppression (validée)
-            $stmt = $db->prepare("
-                UPDATE deletion_requests SET
-                    validated_by_agent_id = :agent_id,
-                    validated_by_agent_name = :agent_name,
-                    validation_date = NOW(),
-                    statut = 'validee',
-                    last_modified_at = NOW(),
-                    is_synced = 1,
-                    synced_at = NOW()
-                WHERE code_ops = :code_ops
-            ");
-            $stmt->bindParam(':agent_id', $agent_id);
-            $stmt->bindParam(':agent_name', $agent_name);
-            $stmt->bindParam(':code_ops', $code_ops);
-            $stmt->execute();
-            
-            $message = 'Opération supprimée avec succès et placée dans la corbeille';
-            
-        } else if ($action === 'reject') {
-            // Refuser la demande de suppression
-            $stmt = $db->prepare("
-                UPDATE deletion_requests SET
-                    validated_by_agent_id = :agent_id,
-                    validated_by_agent_name = :agent_name,
-                    validation_date = NOW(),
-                    statut = 'refusee',
-                    last_modified_at = NOW(),
-                    is_synced = 1,
-                    synced_at = NOW()
-                WHERE code_ops = :code_ops
-            ");
-            $stmt->bindParam(':agent_id', $agent_id);
-            $stmt->bindParam(':agent_name', $agent_name);
-            $stmt->bindParam(':code_ops', $code_ops);
-            $stmt->execute();
-            
-            $message = 'Demande de suppression refusée';
-        } else {
-            throw new Exception('Action invalide');
+            // Now delete the operation
+            $deleteStmt = $db->prepare("DELETE FROM operations WHERE code_ops = ?");
+            $deleteStmt->execute([$codeOps]);
+            error_log("[DELETION_REQUESTS] Operation $codeOps deleted from server");
         }
         
-        // Commit la transaction
-        $db->commit();
+        error_log("[DELETION_REQUESTS] Request $codeOps validated: $statut");
         
         echo json_encode([
             'success' => true,
-            'message' => $message
+            'message' => "Request validated: $statut",
+            'code_ops' => $codeOps,
+            'statut' => $statut
         ]);
-        
-    } catch (Exception $e) {
-        $db->rollBack();
-        throw $e;
+    } else {
+        throw new Exception("Request not found or already validated");
     }
     
 } catch (Exception $e) {
+    error_log("[DELETION_REQUESTS] ERROR: " . $e->getMessage());
     http_response_code(500);
     echo json_encode([
         'success' => false,
-        'message' => 'Erreur: ' . $e->getMessage()
+        'message' => 'Erreur serveur: ' . $e->getMessage(),
+        'error_type' => get_class($e)
     ]);
 }
-?>

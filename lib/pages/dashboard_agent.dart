@@ -18,6 +18,7 @@ import '../widgets/sync_monitor_widget.dart';
 import '../widgets/virtual_transactions_widget.dart' as virtual_widget;
 import '../widgets/language_selector.dart';
 import '../widgets/agent_deletion_validation_widget.dart';
+import '../widgets/reports/dettes_intershop_report.dart';
 import '../services/deletion_service.dart';
 
 class DashboardAgentPage extends StatefulWidget {
@@ -37,7 +38,8 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
     'FLOT',
     'Frais',
     'VIRTUEL',
-    'Suppressions', // Nouvelle entrée
+    'Dettes Intershop',
+    'Suppressions',
   ];
 
   final List<IconData> _menuIcons = [
@@ -47,7 +49,8 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
     Icons.local_shipping,
     Icons.account_balance,
     Icons.mobile_friendly,
-    Icons.delete_sweep, // Suppressions
+    Icons.swap_horiz,
+    Icons.delete_sweep,
   ];
 
   @override
@@ -618,7 +621,7 @@ Widget _buildMainContent() {
   final isMobile = size.width <= 768;
 
   // Widgets qui gèrent leur propre layout (ne pas les mettre dans SingleChildScrollView)
-  final widgetsWithOwnLayout = [0, 1, 2, 3, 4, 5, 6]; // Opérations, Validations, Rapports, FLOT, Frais, VIRTUEL, Suppressions
+  final widgetsWithOwnLayout = [0, 1, 2, 3, 4, 5, 6, 7]; // Opérations, Validations, Rapports, FLOT, Frais, VIRTUEL, Dettes, Suppressions
 
   Widget content = switch (_selectedIndex) {
     0 => _buildOperationsContent(),   // Opérations
@@ -627,7 +630,8 @@ Widget _buildMainContent() {
     3 => _buildFlotContent(),         // Gestion FLOT
     4 => _buildFraisContent(),        // Frais
     5 => _buildVirtuelContent(),      // VIRTUEL
-    6 => const AgentDeletionValidationWidget(), // Suppressions
+    6 => _buildDettesIntershopContent(), // Dettes Intershop
+    7 => const AgentDeletionValidationWidget(), // Suppressions
     _ => _buildOperationsContent(),
   };
 
@@ -666,6 +670,17 @@ Widget _buildMainContent() {
 
   Widget _buildVirtuelContent() {
     return const virtual_widget.VirtualTransactionsWidget();
+  }
+
+  Widget _buildDettesIntershopContent() {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final shopId = authService.currentUser?.shopId;
+    
+    return DettesIntershopReport(
+      shopId: shopId,
+      startDate: DateTime.now().subtract(const Duration(days: 30)),
+      endDate: DateTime.now(),
+    );
   }
 
   Future<void> _handleLogout() async {

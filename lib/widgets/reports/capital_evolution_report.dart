@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../services/shop_service.dart';
 import '../../services/local_db.dart';
 import '../../services/rapport_cloture_service.dart';
+import '../../services/document_header_service.dart';
 import '../../models/shop_model.dart';
 import '../../models/cloture_caisse_model.dart';
 
@@ -556,6 +557,11 @@ class _CapitalEvolutionReportState extends State<CapitalEvolutionReport> {
   Future<List<int>> _generatePDF() async {
     final pdf = pw.Document();
     
+    // Charger le header depuis DocumentHeaderService (synchronisé avec MySQL)
+    final headerService = DocumentHeaderService();
+    await headerService.initialize();
+    final header = headerService.getHeaderOrDefault();
+    
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
@@ -569,11 +575,51 @@ class _CapitalEvolutionReportState extends State<CapitalEvolutionReport> {
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text(
-                      'RAPPORT D\'EVOLUTION DU CAPITAL',
-                      style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.red700),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          header.companyName,
+                          style: pw.TextStyle(
+                            fontSize: 18,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.red700,
+                          ),
+                        ),
+                        if (header.companySlogan?.isNotEmpty ?? false)
+                          pw.Text(
+                            header.companySlogan!,
+                            style: pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+                          ),
+                        if (header.address?.isNotEmpty ?? false)
+                          pw.Text(
+                            header.address!,
+                            style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+                          ),
+                        if (header.phone?.isNotEmpty ?? false)
+                          pw.Text(
+                            header.phone!,
+                            style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+                          ),
+                      ],
                     ),
-                    pw.Text(DateFormat('dd/MM/yyyy').format(DateTime.now()), style: const pw.TextStyle(fontSize: 12)),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        pw.Text(
+                          'RAPPORT D\'EVOLUTION DU CAPITAL',
+                          style: pw.TextStyle(
+                            fontSize: 20,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.red700,
+                          ),
+                        ),
+                        pw.Text(
+                          DateFormat('dd/MM/yyyy').format(DateTime.now()),
+                          style: const pw.TextStyle(fontSize: 12),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
                 pw.SizedBox(height: 8),

@@ -102,6 +102,17 @@ class OperationCorbeilleModel {
     this.syncedAt,
   });
 
+  /// Helper method to parse double from dynamic value (handles String, int, double)
+  static double _parseDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) {
+      return double.tryParse(value) ?? 0.0;
+    }
+    return 0.0;
+  }
+
   factory OperationCorbeilleModel.fromJson(Map<String, dynamic> json) {
     return OperationCorbeilleModel(
       id: json['id'],
@@ -116,9 +127,9 @@ class OperationCorbeilleModel {
       agentUsername: json['agent_username'],
       clientId: json['client_id'],
       clientNom: json['client_nom'],
-      montantBrut: (json['montant_brut'] ?? 0).toDouble(),
-      commission: (json['commission'] ?? 0).toDouble(),
-      montantNet: (json['montant_net'] ?? 0).toDouble(),
+      montantBrut: _parseDouble(json['montant_brut']),
+      commission: _parseDouble(json['commission']),
+      montantNet: _parseDouble(json['montant_net']),
       devise: json['devise'] ?? 'USD',
       modePaiement: json['mode_paiement'] ?? 'cash',
       destinataire: json['destinataire'],

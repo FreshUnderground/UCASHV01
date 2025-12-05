@@ -2,14 +2,15 @@
 
 ## 📋 Vue d'ensemble
 
-Système de suppression d'opérations avec validation en 2 étapes et corbeille de restauration.
+Système de suppression d'opérations avec validation en 3 étapes et corbeille de restauration.
 
 ### Workflow complet:
-1. **Admin** crée une demande de suppression (avec filtres avancés)
-2. **Agent** valide ou refuse la demande
-3. Si validée: Opération déplacée vers corbeille + suppression locale et serveur
-4. **Restauration** possible depuis la corbeille
-5. **Synchronisation automatique** toutes les 2 minutes
+1. **Admin A** crée une demande de suppression (avec filtres avancés)
+2. **Admin B** valide la demande (inter-admin validation)
+3. **Agent** valide ou refuse la demande
+4. Si validée: Opération déplacée vers corbeille + suppression locale et serveur
+5. **Restauration** possible depuis la corbeille
+6. **Synchronisation automatique** toutes les 2 minutes
 
 ---
 
@@ -25,8 +26,9 @@ CREATE TABLE deletion_requests (
   id, code_ops, operation_type, montant, devise,
   destinataire, expediteur, client_nom,
   requested_by_admin_id, requested_by_admin_name,
+  validated_by_admin_id, validated_by_admin_name, validation_admin_date,
   validated_by_agent_id, validated_by_agent_name,
-  statut (en_attente|validee|refusee|annulee),
+  statut (en_attente|admin_validee|agent_validee|refusee|annulee),
   ...
 )
 ```
@@ -105,6 +107,23 @@ Navigator.push(
 - ✅ Raison de suppression (optionnelle)
 - ✅ Création de demande → statut `en_attente`
 
+### Pour l'Admin: Valider les demandes d'autres admins
+
+```dart
+import 'package:ucashv01/widgets/admin_deletion_validation_widget.dart';
+
+// Naviguer vers validation admin
+Navigator.push(
+  context,
+  MaterialPageRoute(builder: (_) => const AdminDeletionValidationWidget()),
+);
+```
+
+**Actions:**
+- ✅ Voir les demandes en attente de validation admin
+- ✅ Valider → Demande prête pour agent
+- ✅ Refuser → Demande refusée
+
 ### Pour l'Agent: Valider les demandes
 
 ```dart
@@ -118,7 +137,7 @@ Navigator.push(
 ```
 
 **Actions:**
-- ✅ Voir les demandes en attente
+- ✅ Voir les demandes validées par un admin
 - ✅ Approuver → Suppression définitive + corbeille
 - ✅ Refuser → Demande refusée
 
@@ -180,7 +199,7 @@ GET /api/sync/deletion_requests/download.php
 Params: ?last_sync=YYYY-MM-DD&statut=en_attente
 ```
 
-### 3. Validate/Reject Request
+### 3. Validate/Reject Request (Agent)
 ```
 POST /api/sync/deletion_requests/validate.php
 Body: {
@@ -188,6 +207,16 @@ Body: {
   "validated_by_agent_id": 123,
   "validated_by_agent_name": "agent1",
   "action": "approve" | "reject"
+}
+```
+
+### 4. Admin Validate Request
+```
+POST /api/sync/deletion_requests/admin_validate.php
+Body: {
+  "code_ops": "...",
+  "validated_by_admin_id": 456,
+  "validated_by_admin_name": "admin2"
 }
 ```
 
@@ -224,7 +253,7 @@ class DeletionRequestModel {
 }
 
 enum DeletionRequestStatus {
-  enAttente, validee, refusee, annulee
+  enAttente, adminValidee, agentValidee, refusee, annulee
 }
 ```
 
@@ -248,28 +277,37 @@ class OperationCorbeilleModel {
 
 ### Scénario complet:
 
-1. **Admin** ouvre `AdminDeletionPage`
+1. **Admin A** ouvre `AdminDeletionPage`
 2. Filtre les opérations (ex: tous les dépôts > 1000 USD)
 3. Sélectionne une opération à supprimer
 4. Entre la raison: "Erreur de saisie"
 5. Crée la demande → `DeletionRequest` créée avec statut `en_attente`
 6. **Synchronisation automatique (2 min)** → Upload vers serveur
 
-7. **Agent** ouvre `AgentDeletionValidationWidget`
+7. **Admin B** ouvre `AdminDeletionValidationWidget`
 8. Voit la demande en attente
 9. Lit les détails et la raison
-10. Approuve la suppression
-11. → Opération copiée vers `operations_corbeille`
-12. → Opération supprimée de `operations`
-13. → Demande mise à jour: statut `validee`
-14. **Synchronisation automatique (2 min)** → Upload vers serveur
+10. Valide la suppression
+11. → Demande mise à jour: statut `admin_validee`
+12. **Synchronisation automatique (2 min)** → Upload vers serveur
 
-15. **Admin** (ou autre) ouvre `TrashBinWidget`
-16. Voit l'opération supprimée dans la corbeille
-17. Décide de restaurer
-18. Clique sur "Restaurer"
-19. → Opération restaurée dans `operations`
-20. → Corbeille mise à jour: `is_restored = true`
+13. **Agent** ouvre `AgentDeletionValidationWidget`
+14. Voit la demande validée par admin
+15. Lit les détails et la raison
+16. Approuve la suppression
+17. → Opération copiée vers `operations_corbeille`
+18. → Opération supprimée de `operations`
+19. → Demande mise à jour: statut `agent_validee`
+20. **Synchronisation automatique (2 min)** → Upload vers serveur
+
+21. **Admin** (ou autre) ouvre `TrashBinWidget`
+22. Voit l'opération supprimée dans la corbeille
+23. Décide de restaurer
+24. Clique sur "Restaurer"
+25. → Opération restaurée dans `operations`
+26. → Corbeille mise à jour: `is_restored = true`
+
+> **Note:** Dans les environnements à un seul administrateur, le même administrateur peut à la fois créer et valider les demandes de suppression. Voir [DELETION_ADMIN_VALIDATION_EDGE_CASES.md](DELETION_ADMIN_VALIDATION_EDGE_CASES.md) pour plus de détails sur la gestion des cas particuliers.
 
 ---
 
@@ -354,6 +392,7 @@ await DeletionService.instance.loadCorbeille();
 
 ### Widgets Flutter:
 - `lib/widgets/admin_deletion_widget.dart` (Admin)
+- `lib/widgets/admin_deletion_validation_widget.dart` (Admin Validation)
 - `lib/widgets/agent_deletion_validation_widget.dart` (Agent)
 - `lib/widgets/trash_bin_widget.dart` (Corbeille)
 
@@ -373,6 +412,7 @@ await DeletionService.instance.loadCorbeille();
 - [x] Service de suppression avec auto-sync (2 min)
 - [x] API PHP endpoints
 - [x] UI Admin (filtres + création demande)
+- [x] UI Admin (validation inter-admin)
 - [x] UI Agent (validation/refus)
 - [x] UI Corbeille (restauration)
 - [x] Synchronisation automatique

@@ -7,6 +7,7 @@ import 'package:printing/printing.dart';
 import '../services/compte_special_service.dart';
 import '../services/auth_service.dart';
 import '../services/shop_service.dart';
+import '../services/document_header_service.dart';
 import '../models/compte_special_model.dart';
 
 /// Widget pour afficher et gérer les comptes spéciaux (FRAIS et DÉPENSE)
@@ -2256,9 +2257,10 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
         endDate: effectiveEndDate,
       );
       debugPrint('   📊 Stats pour la période:');
-      debugPrint('      - Total Frais: ${stats['totalFrais']}');
-      debugPrint('      - Retraits Frais: ${stats['retraitsFrais']}');
-      debugPrint('      - Solde Frais: ${stats['soldeFrais']}');
+      debugPrint('      - Solde Frais Jour: ${stats['solde_frais_jour']}');
+      debugPrint('      - Frais Antérieur: ${stats['frais_anterieur']}');
+      debugPrint('      - Frais Encaissés: ${stats['frais_encaisses_jour']}');
+      debugPrint('      - Sortie Frais: ${stats['sortie_frais_jour']}');
       
       // getFraisAsync combine _transactions (retraits) + operations (commissions)
       final frais = await service.getFraisAsync(
@@ -2302,12 +2304,17 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
       
       debugPrint('   ✅ Soldes cumulatifs calculés');
       
-      // Calculer les statistiques
-      final totalEntrees = frais.where((t) => t.montant > 0).fold<double>(0, (sum, t) => sum + t.montant);
-      final totalSorties = frais.where((t) => t.montant < 0).fold<double>(0, (sum, t) => sum + t.montant.abs());
-      final soldeFinal = totalEntrees - totalSorties;
+      // Utiliser les mêmes statistiques que l'UI pour cohérence
+      final totalEntrees = stats['frais_encaisses_jour'] ?? stats['commissions_auto'] ?? 0.0;
+      final totalSorties = stats['sortie_frais_jour'] ?? stats['retraits_frais'] ?? 0.0;
+      final soldeFinal = stats['solde_frais_jour'] ?? stats['solde_frais'] ?? 0.0;
       
       debugPrint('   📊 Stats - Entrées: $totalEntrees, Sorties: $totalSorties, Solde: $soldeFinal');
+      
+      // Charger le header depuis DocumentHeaderService (synchronisé avec MySQL)
+      final headerService = DocumentHeaderService();
+      await headerService.initialize();
+      final header = headerService.getHeaderOrDefault();
       
       // Générer le PDF
       pdf.addPage(
@@ -2334,6 +2341,43 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
                           pw.Text(
+                            header.companyName,
+                            style: pw.TextStyle(
+                              fontSize: 18,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.white,
+                            ),
+                          ),
+                          if (header.companySlogan?.isNotEmpty ?? false)
+                            pw.Text(
+                              header.companySlogan!,
+                              style: pw.TextStyle(
+                                fontSize: 9,
+                                color: PdfColors.white,
+                              ),
+                            ),
+                          if (header.address?.isNotEmpty ?? false)
+                            pw.Text(
+                              header.address!,
+                              style: pw.TextStyle(
+                                fontSize: 10,
+                                color: PdfColors.white,
+                              ),
+                            ),
+                          if (header.phone?.isNotEmpty ?? false)
+                            pw.Text(
+                              header.phone!,
+                              style: pw.TextStyle(
+                                fontSize: 10,
+                                color: PdfColors.white,
+                              ),
+                            ),
+                        ],
+                      ),
+                      pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.end,
+                        children: [
+                          pw.Text(
                             'RAPPORT COMPTE FRAIS',
                             style: pw.TextStyle(
                               fontSize: 20,
@@ -2349,22 +2393,23 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                               color: PdfColors.white,
                             ),
                           ),
-                        ],
-                      ),
-                      pw.Container(
-                        padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: pw.BoxDecoration(
-                          color: PdfColors.white,
-                          borderRadius: pw.BorderRadius.circular(8),
-                        ),
-                        child: pw.Text(
-                          '${frais.length}',
-                          style: pw.TextStyle(
-                            fontSize: 24,
-                            fontWeight: pw.FontWeight.bold,
-                            color: const PdfColor.fromInt(0xFF10B981),
+                          pw.SizedBox(height: 4),
+                          pw.Container(
+                            padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: pw.BoxDecoration(
+                              color: PdfColors.white,
+                              borderRadius: pw.BorderRadius.circular(8),
+                            ),
+                            child: pw.Text(
+                              '${frais.length}',
+                              style: pw.TextStyle(
+                                fontSize: 24,
+                                fontWeight: pw.FontWeight.bold,
+                                color: const PdfColor.fromInt(0xFF10B981),
+                              ),
+                            ),
                           ),
-                        ),
+                        ],
                       ),
                     ],
                   ),

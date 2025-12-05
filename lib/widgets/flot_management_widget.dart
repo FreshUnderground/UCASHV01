@@ -30,6 +30,7 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
   bool _isInitialized = false;
   Timer? _autoRefreshTimer;
   int _selectedTab = 0; // 0 = En attente, 1 = Mes Validations, 2 = Mes FLOTs
+  FlotNotificationService? _flotNotificationService;
 
   @override
   void initState() {
@@ -40,6 +41,8 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
   @override
   void dispose() {
     _autoRefreshTimer?.cancel();
+    _flotNotificationService?.stopMonitoring();
+    _flotNotificationService?.onNewFlotDetected = null; // Clear callback
     super.dispose();
   }
   
@@ -102,54 +105,57 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
   }
   
   void _startFlotNotifications(AuthService authService, OperationService operationService) {
-    final flotNotificationService = FlotNotificationService();
+    _flotNotificationService = FlotNotificationService();
+    final flotService = FlotService.instance;
+    
+    // Démarrer la surveillance avec startMonitoring (maintenant compatible avec AuthService)
+    _flotNotificationService!.startMonitoring(
+      shopId: authService.currentUser?.shopId ?? 0,
+      getFlots: () => flotService.flots,
+    );
     
     // Démarrer la surveillance avec un callback pour afficher les notifications
-    flotNotificationService.onNewFlotDetected = (title, message, flotId) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(message),
-              ],
-            ),
-            backgroundColor: Colors.purple.shade700,
-            duration: const Duration(seconds: 8),
-            action: SnackBarAction(
-              label: 'VOIR',
-              textColor: Colors.white,
-              onPressed: () {
-                // Basculer sur l'onglet "En attente"
-                if (mounted) {
-                  setState(() => _selectedTab = 0);
-                }
-              },
-            ),
-          ),
-        );
+    _flotNotificationService!.onNewFlotDetected = (title, message, flotId) {
+      // CRITICAL: Check if widget is still mounted before accessing context
+      if (!mounted) {
+        debugPrint('⚠️ [FLOT-NOTIF] Widget disposed, ignoring notification');
+        return;
       }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(message),
+            ],
+          ),
+          backgroundColor: Colors.purple.shade700,
+          duration: const Duration(seconds: 8),
+          action: SnackBarAction(
+            label: 'VOIR',
+            textColor: Colors.white,
+            onPressed: () {
+              // Basculer sur l'onglet "En attente"
+              if (mounted) {
+                setState(() => _selectedTab = 0);
+              }
+            },
+          ),
+        ),
+      );
     };
     
-    // Démarrer la surveillance
-    // Utiliser AgentAuthService si disponible, sinon adapter
-    debugPrint('🔔 [FLOT-NOTIF] Démarrage des notifications pour FLOTs entrants');
-    
-    // Note: FlotNotificationService attend AgentAuthService
-    // Si vous utilisez AuthService, vous devrez adapter ou créer un wrapper
-    // Pour l'instant, on utilise juste le callback manuel
-    
-    debugPrint('✅ [FLOT-NOTIF] Notifications activées');
+    debugPrint('✅ [FLOT-NOTIF] Surveillance des notifications FLOT démarrée');
   }
 
   Future<void> _chargerFlots() async {

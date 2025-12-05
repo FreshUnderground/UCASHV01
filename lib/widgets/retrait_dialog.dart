@@ -68,6 +68,7 @@ class _RetraitDialogState extends State<RetraitDialog> {
 
   @override
   Widget build(BuildContext context) {
+    debugPrint('🜁 RETRAIT DIALOG OPENED!');
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth <= 480;
     final fieldSpacing = ResponsiveDialogUtils.getFieldSpacing(context);
@@ -213,84 +214,153 @@ class _RetraitDialogState extends State<RetraitDialog> {
             
             Consumer<AuthService>(
               builder: (context, authService, child) {
-                final isAdmin = authService.currentUser?.role == 'admin';
+                final isAdmin = authService.currentUser?.role?.toUpperCase() == 'ADMIN';
+                debugPrint('🔐 RETRAIT DIALOG - User role: ${authService.currentUser?.role}, isAdmin: $isAdmin');
                 
-                return InkWell(
-                  onTap: isAdmin ? () async {
-                    final date = await showDatePicker(
-                      context: context,
-                      initialDate: _selectedDate,
-                      firstDate: DateTime(2020),
-                      lastDate: DateTime.now(),
-                      helpText: 'Sélectionner la date du retrait',
-                    );
-                    if (date != null) {
-                      setState(() {
-                        _selectedDate = date;
-                      });
-                    }
-                  } : null,
-                  child: Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: isMobile ? 12 : 16,
-                      vertical: isMobile ? 16 : 18,
-                    ),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.shade400),
-                      borderRadius: BorderRadius.circular(4),
-                      color: isAdmin ? Colors.white : Colors.grey.shade100,
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.calendar_today,
-                          size: ResponsiveDialogUtils.getIconSize(context),
-                          color: isAdmin ? Colors.orange : Colors.grey,
-                        ),
-                        SizedBox(width: isMobile ? 8 : 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Date',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey.shade600,
-                                ),
-                              ),
-                              Text(
-                                '${_selectedDate.day.toString().padLeft(2, '0')}/${_selectedDate.month.toString().padLeft(2, '0')}/${_selectedDate.year}',
-                                style: TextStyle(
-                                  fontSize: isMobile ? 16 : 18,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                            ],
+                return Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () async {
+                      if (!isAdmin) {
+                        debugPrint('⚠️ Non-admin - date non modifiable');
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Seul l\'admin peut modifier la date'),
+                            duration: Duration(seconds: 2),
+                            backgroundColor: Colors.orange,
                           ),
+                        );
+                        return;
+                      }
+                      
+                      debugPrint('📅 Admin clicked - Opening date picker...');
+                      
+                      try {
+                        final date = await showDatePicker(
+                          context: context,
+                          initialDate: _selectedDate,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime.now(),
+                          helpText: 'Sélectionner la date du retrait',
+                          cancelText: 'Annuler',
+                          confirmText: 'OK',
+                        );
+                        
+                        debugPrint('📍 Date returned: $date');
+                        
+                        if (date != null) {
+                          setState(() {
+                            _selectedDate = date;
+                          });
+                          debugPrint('✅ Date sélectionnée: ${date.toString()}');
+                        }
+                      } catch (e) {
+                        debugPrint('❌ Erreur date picker: $e');
+                      }
+                    },
+                    child: Ink(
+                      decoration: BoxDecoration(
+                        color: isAdmin ? Colors.white : Colors.grey.shade100,
+                        border: Border.all(
+                          color: isAdmin ? Colors.orange.shade300 : Colors.grey.shade400,
+                          width: 1.5,
                         ),
-                        if (!isAdmin)
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: isAdmin ? [
+                          BoxShadow(
+                            color: Colors.orange.withOpacity(0.1),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ] : null,
+                      ),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isMobile ? 16 : 20,
+                        vertical: isMobile ? 16 : 18,
+                      ),
+                      child: Row(
+                        children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: Colors.orange.shade100,
-                              borderRadius: BorderRadius.circular(4),
+                              color: (isAdmin ? Colors.orange : Colors.grey).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(6),
                             ),
-                            child: Text(
-                              "Aujourd'hui",
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.orange.shade800,
-                                fontWeight: FontWeight.w600,
+                            child: Icon(
+                              Icons.calendar_month,
+                              color: isAdmin ? Colors.orange : Colors.grey,
+                              size: isMobile ? 20 : 24,
+                            ),
+                          ),
+                          SizedBox(width: isMobile ? 12 : 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Date',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade600,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${_selectedDate.day.toString().padLeft(2, '0')}/${_selectedDate.month.toString().padLeft(2, '0')}/${_selectedDate.year}',
+                                  style: TextStyle(
+                                    fontSize: isMobile ? 16 : 18,
+                                    color: isAdmin ? Colors.black87 : Colors.grey.shade600,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (!isAdmin)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.shade50,
+                                border: Border.all(color: Colors.orange.shade200),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.lock_outline,
+                                    size: 14,
+                                    color: Colors.orange.shade700,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    "Aujourd'hui",
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.orange.shade800,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ),
-                        if (isAdmin)
-                          Icon(
-                            Icons.arrow_drop_down,
-                            color: Colors.grey.shade600,
-                          ),
-                      ],
+                          if (isAdmin)
+                            Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.shade50,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Icon(
+                                Icons.edit_calendar,
+                                size: 18,
+                                color: Colors.orange.shade700,
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                 );
@@ -370,9 +440,9 @@ class _RetraitDialogState extends State<RetraitDialog> {
             ),
             SizedBox(height: fieldSpacing),
             
-            // 5. Observation (new field)
+            // 5. Observation
             Text(
-              '5. Observation (facultatif)',
+              '5. Observation *',
               style: TextStyle(
                 fontSize: labelFontSize,
                 fontWeight: FontWeight.bold,
@@ -394,6 +464,12 @@ class _RetraitDialogState extends State<RetraitDialog> {
               ),
               maxLines: 3,
               style: TextStyle(fontSize: isMobile ? 14 : 16),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'L\'observation est requise';
+                }
+                return null;
+              },
             ),
             SizedBox(height: fieldSpacing),
 
@@ -555,7 +631,7 @@ class _RetraitDialogState extends State<RetraitDialog> {
         statut: OperationStatus.terminee,
         dateOp: _selectedDate,
         notes: 'Retrait du compte client',
-        observation: _observationController.text.isNotEmpty ? _observationController.text : null,
+        observation: _observationController.text, // Now required
       );
 
       // Créer l'opération (cela mettra à jour automatiquement les soldes)
@@ -651,7 +727,7 @@ class _RetraitDialogState extends State<RetraitDialog> {
       case ModePaiement.airtelMoney:
         return 'Airtel Money';
       case ModePaiement.mPesa:
-        return 'M-Pesa';
+        return 'MPESA/VODACASH';
       case ModePaiement.orangeMoney:
         return 'Orange Money';
     }

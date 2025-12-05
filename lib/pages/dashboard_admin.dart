@@ -24,6 +24,7 @@ import '../widgets/sync_monitor_widget.dart';
 import '../widgets/audit_history_widget.dart';
 import '../widgets/reconciliation_report_widget.dart';
 import '../widgets/virtual_transactions_widget.dart' as virtual_widget;
+import '../widgets/admin_management_widget.dart';
 import '../widgets/admin_sim_management_widget.dart';
 import '../widgets/language_selector.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
@@ -35,6 +36,7 @@ import '../widgets/admin_deletion_widget.dart';
 import '../widgets/trash_bin_widget.dart';
 import '../services/deletion_service.dart';
 import '../widgets/partner_net_position_widget.dart';
+import '../widgets/reports/dettes_intershop_report.dart';
 
 class DashboardAdminPage extends StatefulWidget {
   const DashboardAdminPage({super.key});
@@ -55,12 +57,14 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
     l10n.expenses,
     l10n.shops,
     l10n.agents,
+    'Administrateurs',
     l10n.partners,
     l10n.ratesAndCommissions,
     l10n.reports,
+    'Dettes Intershop',
     l10n.configuration,
-    'Suppressions', // Nouvelle entrée
-    'Corbeille', // Nouvelle entrée
+    'Suppressions',
+    'Corbeille',
   ];
 
   final List<IconData> _menuIcons = [
@@ -68,12 +72,14 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
     Icons.account_balance_wallet,
     Icons.store,
     Icons.people,
+    Icons.admin_panel_settings,
     Icons.account_circle,
     Icons.currency_exchange,
     Icons.analytics,
+    Icons.swap_horiz,
     Icons.settings,
-    Icons.delete_outline, // Suppressions
-    Icons.restore_from_trash, // Corbeille
+    Icons.delete_outline,
+    Icons.restore_from_trash,
   ];
 
   @override
@@ -477,11 +483,11 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
                       ),
                     ),
                     onTap: () async {
-                      if (index == 4) {
+                      if (index == 5) {
                         await _handlePartenairesSelection();
-                      } else if (index == 8) {
-                        await _handleSuppressionsSelection();
                       } else if (index == 9) {
+                        await _handleSuppressionsSelection();
+                      } else if (index == 10) {
                         await _handleCorbeilleSelection();
                       } else {
                         setState(() {
@@ -510,17 +516,21 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
       case 3:
         return _buildAgentsContent();
       case 4:
-        return _isSyncingClients ? _buildSyncingClientsIndicator() : _buildClientsContent();
+        return _buildAdminManagementContent();
       case 5:
-        return _buildTauxCommissionsContent();
+        return _isSyncingClients ? _buildSyncingClientsIndicator() : _buildClientsContent();
       case 6:
-        return _buildReportsContent();
+        return _buildTauxCommissionsContent();
       case 7:
-        return _buildConfigurationContent();
+        return _buildReportsContent();
       case 8:
-        return _isSyncingDeletions ? _buildSyncingIndicator('Synchronisation des opérations...') : const AdminDeletionPage(); // Suppressions
+        return _buildDettesIntershopContent();
       case 9:
-        return _isSyncingTrash ? _buildSyncingIndicator('Chargement de la corbeille...') : const TrashBinWidget(); // Corbeille
+        return _buildConfigurationContent();
+      case 10:
+        return _isSyncingDeletions ? _buildSyncingIndicator('Synchronisation des opérations...') : const AdminDeletionPage();
+      case 11:
+        return _isSyncingTrash ? _buildSyncingIndicator('Chargement de la corbeille...') : const TrashBinWidget(showAll: true);
       default:
         return _buildDashboardContent();
     }
@@ -685,6 +695,17 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
     return SingleChildScrollView(
       padding: EdgeInsets.all(isMobile ? 16 : (isTablet ? 20 : 24)),
       child: const AgentsManagementComplete(),
+    );
+  }
+
+  Widget _buildAdminManagementContent() {
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width <= 768;
+    final isTablet = size.width > 768 && size.width <= 1024;
+    
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(isMobile ? 16 : (isTablet ? 20 : 24)),
+      child: const AdminManagementWidget(),
     );
   }
 
@@ -941,6 +962,14 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
 
   Widget _buildReportsContent() {
     return const AdminReportsWidget();
+  }
+
+  Widget _buildDettesIntershopContent() {
+    return DettesIntershopReport(
+      shopId: null, // Admin peut voir tous les shops
+      startDate: DateTime.now().subtract(const Duration(days: 30)),
+      endDate: DateTime.now(),
+    );
   }
 
   Widget _buildFraisDepensesContent() {

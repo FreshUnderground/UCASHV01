@@ -4,6 +4,7 @@ import '../models/operation_model.dart';
 import '../models/shop_model.dart';
 import '../models/flot_model.dart' as flot_model;
 import '../models/cloture_caisse_model.dart';
+import '../models/cloture_virtuelle_par_sim_model.dart';
 import '../models/compte_special_model.dart';
 import 'local_db.dart';
 import 'flot_service.dart';
@@ -176,10 +177,34 @@ class RapportClotureService {
   }
 
   /// Récupérer le solde antérieur (du jour précédent)
+  /// NOUVEAU: Inclut automatiquement la somme des soldes des SIMs de la clôture virtuelle
   Future<Map<String, double>> _getSoldeAnterieur(int shopId, DateTime dateRapport) async {
-    // Récupérer la clôture du jour précédent
+    // Récupérer la clôture CASH du jour précédent
     final jourPrecedent = dateRapport.subtract(const Duration(days: 1));
     final cloturePrecedente = await LocalDB.instance.getClotureCaisseByDate(shopId, jourPrecedent);
+    
+    // NOUVEAU: Récupérer les clôtures virtuelles PAR SIM du jour précédent
+    final cloturesSimsHierMaps = await LocalDB.instance.getCloturesVirtuellesParDate(
+      shopId: shopId,
+      date: jourPrecedent,
+    );
+    
+    // Convertir en modèles
+    final cloturesSimsHier = cloturesSimsHierMaps
+        .map((map) => ClotureVirtuelleParSimModel.fromMap(map as Map<String, dynamic>))
+        .toList();
+    
+    // Calculer la SOMME des soldes des SIMs d'hier
+    double soldeTotalSimsHier = 0.0;
+    if (cloturesSimsHier.isNotEmpty) {
+      soldeTotalSimsHier = cloturesSimsHier.fold<double>(
+        0.0,
+        (sum, clotureSim) => sum + (clotureSim.soldeActuel ?? 0.0),
+      );
+      debugPrint('💰 Somme des soldes SIMs d\'hier: ${soldeTotalSimsHier.toStringAsFixed(2)} USD (${cloturesSimsHier.length} SIM(s))');
+    } else {
+      debugPrint('ℹ️ Aucune clôture virtuelle par SIM trouvée pour hier');
+    }
     
     if (cloturePrecedente != null) {
       debugPrint('📋 Solde antérieur trouvé (clôture du ${jourPrecedent.toIso8601String().split('T')[0]}):');
@@ -190,10 +215,12 @@ class RapportClotureService {
       debugPrint('   TOTAL SAISI: ${cloturePrecedente.soldeSaisiTotal} USD (Calculé: ${cloturePrecedente.soldeCalculeTotal})');
       debugPrint('   ÉCART TOTAL: ${cloturePrecedente.ecartTotal} USD');
       debugPrint('   FRAIS ANTÉRIEUR: ${cloturePrecedente.soldeFraisAnterieur} USD');
+      debugPrint('   + SOLDE VIRTUEL (SIMs): ${soldeTotalSimsHier.toStringAsFixed(2)} USD');
       
-      // Utiliser les montants SAISIS comme solde antérieur (ce que l'agent a compté)
+      // NOUVEAU: Utiliser les montants SAISIS + SOLDE VIRTUEL comme solde antérieur
+      // Le solde virtuel est ajouté au Cash car c'est de l'argent mobile
       return {
-        'cash': cloturePrecedente.soldeSaisiCash,
+        'cash': cloturePrecedente.soldeSaisiCash + soldeTotalSimsHier,  // Cash + Virtuel
         'airtelMoney': cloturePrecedente.soldeSaisiAirtelMoney,
         'mPesa': cloturePrecedente.soldeSaisiMPesa,
         'orangeMoney': cloturePrecedente.soldeSaisiOrangeMoney,
@@ -201,7 +228,19 @@ class RapportClotureService {
       };
     }
     
-    // Si aucune clôture précédente, retourner 0 (premier jour d'utilisation)
+    // Si aucune clôture CASH précédente, mais il y a des clôtures virtuelles
+    if (soldeTotalSimsHier > 0) {
+      debugPrint('ℹ️ Aucune clôture CASH, mais solde virtuel trouvé: ${soldeTotalSimsHier.toStringAsFixed(2)} USD');
+      return {
+        'cash': soldeTotalSimsHier,  // Le virtuel devient le cash de départ
+        'airtelMoney': 0.0,
+        'mPesa': 0.0,
+        'orangeMoney': 0.0,
+        'soldeFraisAnterieur': 0.0,
+      };
+    }
+    
+    // Si aucune clôture précédente (ni cash ni virtuelle), retourner 0 (premier jour d'utilisation)
     debugPrint('ℹ️ Aucun solde antérieur (pas de clôture du jour précédent)');
     return {
       'cash': 0.0,
@@ -572,7 +611,10 @@ class RapportClotureService {
     }
     
     // 3. FLOTS EN COURS - Deux sens selon qui a initié
-    for (final flot in flotService.flots) {
+    // NOUVEAU: Utiliser operations avec type=flotShopToShop au lieu de flotService.flots
+    final allFlots = operations.where((op) => op.type == OperationType.flotShopToShop).toList();
+    
+    for (final flot in allFlots) {
       if (flot.statut == OperationStatus.enAttente && flot.devise == 'USD') {
         if (flot.shopSourceId == shopId) {
           // NOUS avons envoyé en cours → Ils nous doivent rembourser
@@ -593,7 +635,7 @@ class RapportClotureService {
     }
     
     // 4. FLOTS REÇUS ET SERVIS (shopDestinationId = nous) → On leur doit rembourser
-    for (final flot in flotService.flots) {
+    for (final flot in allFlots) {
       if (flot.shopDestinationId == shopId &&
           flot.statut == OperationStatus.validee &&
           flot.devise == 'USD') {
@@ -606,7 +648,7 @@ class RapportClotureService {
     }
     
     // 5. FLOTS ENVOYÉS ET SERVIS (shopSourceId = nous) → Ils nous doivent rembourser
-    for (final flot in flotService.flots) {
+    for (final flot in allFlots) {
       if (flot.shopSourceId == shopId &&
           flot.statut == OperationStatus.validee &&
           flot.devise == 'USD') {

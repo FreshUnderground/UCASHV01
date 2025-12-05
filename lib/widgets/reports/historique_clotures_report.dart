@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../services/local_db.dart';
 import '../../services/auth_service.dart';
+import '../../services/document_header_service.dart';
 import '../../models/cloture_caisse_model.dart';
 
 class HistoriqueCloturesReport extends StatefulWidget {
@@ -180,6 +181,11 @@ class _HistoriqueCloturesReportState extends State<HistoriqueCloturesReport> {
   Future<pw.Document> _generatePDF() async {
     final pdf = pw.Document();
     
+    // Charger le header depuis DocumentHeaderService (synchronisé avec MySQL)
+    final headerService = DocumentHeaderService();
+    await headerService.initialize();
+    final header = headerService.getHeaderOrDefault();
+    
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
@@ -200,7 +206,13 @@ class _HistoriqueCloturesReportState extends State<HistoriqueCloturesReport> {
                     pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
-                        pw.Text('UCASH', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                        pw.Text(header.companyName, style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+                        if (header.companySlogan?.isNotEmpty ?? false)
+                          pw.Text(header.companySlogan!, style: pw.TextStyle(fontSize: 9, color: PdfColors.white)),
+                        if (header.address?.isNotEmpty ?? false)
+                          pw.Text(header.address!, style: pw.TextStyle(fontSize: 10, color: PdfColors.white)),
+                        if (header.phone?.isNotEmpty ?? false)
+                          pw.Text(header.phone!, style: pw.TextStyle(fontSize: 10, color: PdfColors.white)),
                         pw.Text('Historique des Clôtures', style: pw.TextStyle(fontSize: 10, color: PdfColors.white)),
                       ],
                     ),

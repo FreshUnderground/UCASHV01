@@ -341,7 +341,7 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
             
             // 4. Nom de l'expéditeur
             Text(
-              '4. Nom de l\'expéditeur',
+              '4. Nom de l\'expéditeur *',
               style: TextStyle(
                 fontSize: labelFontSize,
                 fontWeight: FontWeight.bold,
@@ -353,7 +353,7 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
             TextFormField(
               controller: _expediteurController,
               decoration: InputDecoration(
-                labelText: 'Nom de l\'expéditeur (optionnel)',
+                labelText: 'Nom de l\'expéditeur',
                 border: const OutlineInputBorder(),
                 prefixIcon: Icon(Icons.person_outline, size: ResponsiveDialogUtils.getIconSize(context)),
                 contentPadding: EdgeInsets.symmetric(
@@ -362,6 +362,12 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
                 ),
               ),
               style: TextStyle(fontSize: isMobile ? 16 : 18),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Le nom de l\'expéditeur est requis';
+                }
+                return null;
+              },
             ),
             SizedBox(height: fieldSpacing),
             
@@ -664,10 +670,8 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
         notes += ' - Photo: ${_selectedImage!.path}';
       }
       
-      // Add expediteur info to notes if provided
-      if (_expediteurController.text.isNotEmpty) {
-        notes += ' - Expéditeur: ${_expediteurController.text}';
-      }
+      // Add expediteur info to notes
+      notes += ' - Expéditeur: ${_expediteurController.text}';
       
       // Créer l'opération de transfert simple
       final operation = OperationModel(
@@ -685,7 +689,7 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
         destinataire: _destinataireController.text,
         reference: _referenceController.text,
         notes: notes,
-        observation: _expediteurController.text.isNotEmpty ? _expediteurController.text : null, // Store expediteur in observation field
+        observation: _expediteurController.text, // Store expediteur in observation field (now required)
         statut: OperationStatus.enAttente,
         dateOp: DateTime.now(),
         lastModifiedAt: DateTime.now(),

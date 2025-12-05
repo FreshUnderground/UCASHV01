@@ -1334,7 +1334,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
       case flot_model.ModePaiement.airtelMoney:
         return 'Airtel Money';
       case flot_model.ModePaiement.mPesa:
-        return 'M-Pesa';
+        return 'MPESA/VODACASH';
       case flot_model.ModePaiement.orangeMoney:
         return 'Orange Money';
       default:

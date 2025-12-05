@@ -7,13 +7,17 @@ import '../services/auth_service.dart';
 
 /// Widget Corbeille: Restaurer les opérations supprimées
 class TrashBinWidget extends StatelessWidget {
-  const TrashBinWidget({Key? key}) : super(key: key);
+  final bool showAll; // Si true, affiche TOUT (admin), sinon seulement les non-synced (agent)
+  
+  const TrashBinWidget({Key? key, this.showAll = false}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Consumer<DeletionService>(
       builder: (context, service, _) {
-        final trash = service.activeTrash;
+        // Admin: afficher TOUS les éléments (synchronisés ou non)
+        // Agent: afficher seulement les éléments en attente de sync
+        final trash = showAll ? service.allTrash : service.activeTrash;
         
         return Scaffold(
           appBar: AppBar(
@@ -51,8 +55,13 @@ class TrashBinWidget extends StatelessWidget {
   Widget _buildTrashCard(BuildContext context, OperationCorbeilleModel item) {
     return Card(
       margin: const EdgeInsets.all(8),
+      // Bordure verte si synchronisé (sur le serveur)
+      color: item.isSynced ? Colors.green[50] : null,
       child: ExpansionTile(
-        leading: const Icon(Icons.delete, color: Colors.red),
+        leading: Icon(
+          Icons.delete, 
+          color: item.isSynced ? Colors.green : Colors.red,
+        ),
         title: Text(
           '${item.type} - ${item.montantNet.toStringAsFixed(2)} ${item.devise}',
           style: const TextStyle(fontWeight: FontWeight.bold),
@@ -64,6 +73,29 @@ class TrashBinWidget extends StatelessWidget {
             Text('Supprimé le: ${_formatDate(item.deletedAt)}'),
             if (item.deletedByAdminName != null)
               Text('Par: ${item.deletedByAdminName}'),
+            // Indicateur de synchronisation
+            if (item.isSynced)
+              const Row(
+                children: [
+                  Icon(Icons.cloud_done, size: 16, color: Colors.green),
+                  SizedBox(width: 4),
+                  Text(
+                    'Synchronisé sur le serveur',
+                    style: TextStyle(color: Colors.green, fontSize: 12),
+                  ),
+                ],
+              )
+            else
+              const Row(
+                children: [
+                  Icon(Icons.cloud_upload, size: 16, color: Colors.orange),
+                  SizedBox(width: 4),
+                  Text(
+                    'En attente de synchronisation',
+                    style: TextStyle(color: Colors.orange, fontSize: 12),
+                  ),
+                ],
+              ),
           ],
         ),
         children: [

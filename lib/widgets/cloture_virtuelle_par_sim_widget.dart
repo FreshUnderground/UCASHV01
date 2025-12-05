@@ -2,10 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/cloture_virtuelle_par_sim_model.dart';
 import '../models/sim_model.dart';
+import '../models/retrait_virtuel_model.dart';
+import '../models/operation_model.dart';
+import '../models/compte_special_model.dart';
+import '../models/virtual_transaction_model.dart';
+import '../models/depot_client_model.dart';
 import '../services/cloture_virtuelle_par_sim_service.dart';
 import '../services/sim_service.dart';
 import '../services/auth_service.dart';
 import '../services/local_db.dart';
+import '../services/compte_special_service.dart';
 
 /// Widget pour la clôture virtuelle détaillée par SIM
 class ClotureVirtuelleParSimWidget extends StatefulWidget {
@@ -651,41 +657,49 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
       return;
     }
 
-    // Afficher le dialog de saisie pour chaque SIM
-    final saisies = await _showSaisieDialog(shopSims);
-    
-    if (saisies == null) return; // Annulé
-
     setState(() => _isGenerating = true);
 
     try {
-      final clotures = await ClotureVirtuelleParSimService.instance.genererClotureParSim(
+      // Générer les clôtures avec les frais calculés automatiquement
+      final cloturesGenerees = await ClotureVirtuelleParSimService.instance.genererClotureParSim(
         shopId: authService.currentUser!.shopId!,
         agentId: authService.currentUser!.id!,
         cloturePar: authService.currentUser!.username,
         date: _dateCloture,
       );
 
+      // Afficher le dialog de saisie pour chaque SIM avec les frais calculés
+      final saisies = await _showSaisieDialog(shopSims, cloturesGenerees);
+      
+      if (saisies == null) {
+        setState(() => _isGenerating = false);
+        return; // Annulé
+      }
+
       // Appliquer les valeurs saisies pour chaque SIM
-      for (int i = 0; i < clotures.length; i++) {
-        final simNumero = clotures[i].simNumero;
+      // Le cash global est le même pour toutes les SIMs (on le divise)
+      final cashGlobal = saisies.values.first['cashGlobal'] as double;
+      final cashParSim = cloturesGenerees.isNotEmpty ? cashGlobal / cloturesGenerees.length : 0.0;
+      
+      for (int i = 0; i < cloturesGenerees.length; i++) {
+        final simNumero = cloturesGenerees[i].simNumero;
         final saisie = saisies[simNumero];
         
         if (saisie != null) {
-          clotures[i] = clotures[i].copyWith(
+          cloturesGenerees[i] = cloturesGenerees[i].copyWith(
             soldeActuel: saisie['solde'] as double,
-            cashDisponible: saisie['cashDisponible'] as double,
+            cashDisponible: cashParSim, // Cash réparti équitablement
             notes: (saisie['notes'] as String).isNotEmpty ? saisie['notes'] as String : null,
           );
         }
       }
 
       setState(() {
-        _cloturesGenerees = clotures;
+        _cloturesGenerees = cloturesGenerees;
         _isGenerating = false;
       });
 
-      if (clotures.isEmpty) {
+      if (cloturesGenerees.isEmpty) {
         _showError('Aucune clôture générée. Vérifiez que des SIMs existent.');
       }
     } catch (e) {
@@ -695,18 +709,100 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
   }
 
   /// Dialog de saisie: afficher chaque SIM avec solde calculé modifiable
-  /// Similaire au formulaire de clôture caisse
-  Future<Map<String, Map<String, dynamic>>?> _showSaisieDialog(List<SimModel> sims) async {
+  /// Cash global + Soldes par SIM (frais automatiques)
+  Future<Map<String, Map<String, dynamic>>?> _showSaisieDialog(List<SimModel> sims, List<ClotureVirtuelleParSimModel> cloturesGenerees) async {
     // Controllers pour chaque SIM
     final controllers = <String, Map<String, TextEditingController>>{};
     
+    // Créer un mapping des clôtures par numéro de SIM pour accès rapide
+    final Map<String, ClotureVirtuelleParSimModel> cloturesParSim = {
+      for (var cloture in cloturesGenerees) cloture.simNumero: cloture
+    };
+    
     // Pré-calculer les valeurs pour chaque SIM depuis les clôtures générées
-    // On utilise le service pour calculer automatiquement
     final dateDebut = DateTime(_dateCloture.year, _dateCloture.month, _dateCloture.day);
     final dateFin = DateTime(_dateCloture.year, _dateCloture.month, _dateCloture.day, 23, 59, 59);
     
+    // Cash GLOBAL (utiliser la MÊME formule que virtual_transactions_widget.dart ligne 3344)
+    // FORMULE: Cash Dispo = Solde Antérieur + FLOT Reçu - FLOT Envoyé + Dépôts Clients - Cash Servi
+    double cashGlobalInitial = 0.0;
+    try {
+      // 1. Solde Antérieur (capitalInitialCash) - de la dernière clôture CAISSE
+      final yesterday = dateDebut.subtract(const Duration(days: 1));
+      final clotureHier = await LocalDB.instance.getClotureCaisseByDate(sims.first.shopId, yesterday);
+      final soldeAnterieur = clotureHier?.soldeSaisiTotal ?? 0.0;
+      
+      // 2. FLOTs (flotsRecus et flotsEnvoyes) - Opérations de type FLOT
+      final operations = await LocalDB.instance.getAllOperations();
+      
+      final flotsRecus = operations.where((op) =>
+        op.type == OperationType.flotShopToShop &&
+        op.shopDestinationId == sims.first.shopId &&
+        (op.statut == OperationStatus.validee || op.statut == OperationStatus.enAttente) &&
+        op.createdAt != null &&
+        op.createdAt!.isAfter(dateDebut.subtract(const Duration(seconds: 1))) &&
+        op.createdAt!.isBefore(dateFin.add(const Duration(seconds: 1)))
+      ).fold<double>(0.0, (sum, op) => sum + op.montantNet);
+      
+      final flotsEnvoyes = operations.where((op) =>
+        op.type == OperationType.flotShopToShop &&
+        op.shopSourceId == sims.first.shopId &&
+        (op.statut == OperationStatus.validee || op.statut == OperationStatus.enAttente) &&
+        op.createdAt != null &&
+        op.createdAt!.isAfter(dateDebut.subtract(const Duration(seconds: 1))) &&
+        op.createdAt!.isBefore(dateFin.add(const Duration(seconds: 1)))
+      ).fold<double>(0.0, (sum, op) => sum + op.montantNet);
+      
+      // 3. Dépôts Clients (depotsClients)
+      final depots = await LocalDB.instance.getAllDepotsClients(shopId: sims.first.shopId);
+      final depotsClients = depots.where((d) =>
+        d.dateDepot.isAfter(dateDebut.subtract(const Duration(seconds: 1))) &&
+        d.dateDepot.isBefore(dateFin.add(const Duration(seconds: 1)))
+      ).fold<double>(0.0, (sum, d) => sum + d.montant);
+      
+      // 4. Cash Servi (cashServiValue) - Montant virtuel servi (après capture)
+      final transactionsDuJour = await LocalDB.instance.getAllVirtualTransactions(
+        shopId: sims.first.shopId,
+        dateDebut: dateDebut,
+        dateFin: dateFin,
+      );
+      
+      final cashServi = transactionsDuJour
+          .where((t) => t.statut == VirtualTransactionStatus.validee)
+          .fold<double>(0.0, (sum, t) => sum + t.montantVirtuel);
+      
+      // APPLIQUER LA FORMULE EXACTE (ligne 3344 de virtual_transactions_widget.dart)
+      cashGlobalInitial = soldeAnterieur + flotsRecus - flotsEnvoyes + depotsClients - cashServi;
+      
+      debugPrint('💰 Cash Disponible (formule Vue d\'Ensemble - ligne 3344):');
+      debugPrint('   Solde Antérieur (capitalInitialCash): \$${soldeAnterieur.toStringAsFixed(2)}');
+      debugPrint('   + FLOTs Reçus: \$${flotsRecus.toStringAsFixed(2)}');
+      debugPrint('   - FLOTs Envoyés: \$${flotsEnvoyes.toStringAsFixed(2)}');
+      debugPrint('   + Dépôts Clients: \$${depotsClients.toStringAsFixed(2)}');
+      debugPrint('   - Cash Servi: \$${cashServi.toStringAsFixed(2)}');
+      debugPrint('   = Cash Disponible: \$${cashGlobalInitial.toStringAsFixed(2)}');
+    } catch (e) {
+      debugPrint('❌ Erreur calcul cash disponible: $e');
+      cashGlobalInitial = 0.0;
+    }
+    
+    final cashGlobalController = TextEditingController(text: cashGlobalInitial.toStringAsFixed(2));
+    
+    // Récupérer les données communes pour tous les SIMs (pour le calcul du Virtuel Disponible)
+    final transactionsDuJour = await LocalDB.instance.getAllVirtualTransactions(
+      shopId: sims.first.shopId,
+      dateDebut: dateDebut,
+      dateFin: dateFin,
+    );
+    
+    final depots = await LocalDB.instance.getAllDepotsClients(shopId: sims.first.shopId);
+    final depotsDuJour = depots.where((d) =>
+      d.dateDepot.isAfter(dateDebut.subtract(const Duration(seconds: 1))) &&
+      d.dateDepot.isBefore(dateFin.add(const Duration(seconds: 1)))
+    ).toList();
+    
     for (var sim in sims) {
-      // Récupérer la dernière clôture pour obtenir les valeurs calculées
+      // Récupérer la dernière clôture pour obtenir le solde, cash et frais
       final derniereClotureMap = await LocalDB.instance.getDerniereClotureParSim(
         simNumero: sim.numero,
         avant: dateDebut,
@@ -716,14 +812,48 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
           ? ClotureVirtuelleParSimModel.fromMap(derniereClotureMap as Map<String, dynamic>)
           : null;
       
-      // Calculer le cash disponible: on prend le solde de la dernière clôture ou le solde actuel
       final soldeCalcule = derniereCloture?.soldeActuel ?? sim.soldeActuel;
-      final cashDisponibleCalcule = derniereCloture?.cashDisponible ?? 0.0;
+      
+      // CALCULER LE VIRTUEL DISPONIBLE (formule ligne 3610 de virtual_transactions_widget.dart)
+      // FORMULE: Virtuel Dispo = Solde Antérieur + Captures - Retraits - Dépôts Clients
+      
+      // 1. Solde Antérieur Virtuel (de la dernière clôture)
+      final soldeAnterieurVirtuel = derniereCloture?.soldeActuel ?? 0.0;
+      
+      // 2. Captures du jour pour cette SIM
+      final capturesSim = transactionsDuJour.where((t) => 
+        t.simNumero == sim.numero &&
+        t.statut == VirtualTransactionStatus.validee
+      ).fold<double>(0.0, (sum, t) => sum + t.montantVirtuel);
+      
+      // 3. Retraits du jour pour cette SIM
+      final retraitsSim = await LocalDB.instance.getAllRetraitsVirtuels(
+        shopSourceId: sims.first.shopId,
+        dateDebut: dateDebut,
+        dateFin: dateFin,
+      );
+      final retraitsMontantSim = retraitsSim.where((r) => r.simNumero == sim.numero)
+          .fold<double>(0.0, (sum, r) => sum + r.montant);
+      
+      // 4. Dépôts Clients du jour pour cette SIM
+      final depotsSim = depotsDuJour.where((d) => d.simNumero == sim.numero)
+          .fold<double>(0.0, (sum, d) => sum + d.montant);
+      
+      // FORMULE FINALE
+      final virtuelDisponible = soldeAnterieurVirtuel + capturesSim - retraitsMontantSim - depotsSim;
       
       controllers[sim.numero] = {
         'solde': TextEditingController(text: soldeCalcule.toStringAsFixed(2)),
-        'cashDisponible': TextEditingController(text: cashDisponibleCalcule.toStringAsFixed(2)),
         'notes': TextEditingController(),
+        // Stocker les valeurs de la dernière clôture pour affichage
+        'cashDisponible': TextEditingController(text: (derniereCloture?.cashDisponible ?? 0.0).toStringAsFixed(2)),
+        'fraisAnterieur': TextEditingController(text: (derniereCloture?.fraisTotal ?? 0.0).toStringAsFixed(2)),
+        'soldeAnterieur': TextEditingController(text: (derniereCloture?.soldeActuel ?? 0.0).toStringAsFixed(2)),
+        // Stocker les composantes du Virtuel Disponible
+        'virtuelDisponible': TextEditingController(text: virtuelDisponible.toStringAsFixed(2)),
+        'capturesDuJour': TextEditingController(text: capturesSim.toStringAsFixed(2)),
+        'retraitsDuJour': TextEditingController(text: retraitsMontantSim.toStringAsFixed(2)),
+        'depotsDuJour': TextEditingController(text: depotsSim.toStringAsFixed(2)),
       };
     }
     
@@ -742,10 +872,9 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
             return Container(
               width: maxWidth,
               constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.85,
+                maxHeight: MediaQuery.of(context).size.height * 0.9,
               ),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
                 children: [
                   // Header
                   Container(
@@ -768,16 +897,16 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
                                 'Clôture Virtuelle par SIM',
                                 style: TextStyle(
                                   color: Colors.white,
-                                  fontSize: isMobile ? 18 : 20,
+                                  fontSize: isMobile ? 10 : 20,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                '${sims.length} SIM(s) • Vérifiez et ajustez les montants',
+                                '${sims.length} SIM(s) • Cash global + Soldes individuels',
                                 style: const TextStyle(
                                   color: Colors.white70,
-                                  fontSize: 14,
+                                  fontSize: 10,
                                 ),
                               ),
                             ],
@@ -787,234 +916,463 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
                     ),
                   ),
 
-                  // Info banner
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    color: Colors.blue.shade50,
-                    child: Row(
-                      children: [
-                        Icon(Icons.info_outline, size: 18, color: Colors.blue.shade700),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Montants calculés automatiquement. Modifiez si nécessaire.',
-                            style: TextStyle(fontSize: 12, color: Colors.blue.shade800),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Liste des SIMs avec saisie
+                  // Contenu scrollable
                   Expanded(
-                    child: ListView.builder(
-                      padding: EdgeInsets.all(isMobile ? 12 : 16),
-                      itemCount: sims.length,
-                      itemBuilder: (context, index) {
-                        final sim = sims[index];
-                        final simControllers = controllers[sim.numero]!;
-                        final soldeCalcule = double.tryParse(simControllers['solde']!.text) ?? 0.0;
-                        
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 16),
-                          elevation: 3,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            side: BorderSide(
-                              color: _getOperatorColor(sim.operateur).withOpacity(0.3),
-                              width: 2,
+                    child: SingleChildScrollView(
+                      child: Column(
+                        children: [
+                          // Cash Global Section
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [Colors.amber.shade50, Colors.orange.shade50],
+                              ),
+                              border: Border(
+                                bottom: BorderSide(color: Colors.orange.shade200, width: 2),
+                              ),
                             ),
-                          ),
-                          child: Padding(
-                            padding: EdgeInsets.all(isMobile ? 14 : 18),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // Header SIM
                                 Row(
                                   children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(10),
-                                      decoration: BoxDecoration(
-                                        color: _getOperatorColor(sim.operateur).withOpacity(0.15),
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(
-                                          color: _getOperatorColor(sim.operateur),
-                                          width: 2,
+                                    Icon(Icons.account_balance_wallet, color: Colors.orange.shade700, size: 24),
+                                    const SizedBox(width: 8),
+                                    const Expanded(
+                                      child: Text(
+                                        'Cash Global',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.black87,
                                         ),
-                                      ),
-                                      child: Icon(
-                                        Icons.sim_card,
-                                        color: _getOperatorColor(sim.operateur),
-                                        size: 22,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            sim.numero,
-                                            style: TextStyle(
-                                              fontSize: isMobile ? 15 : 17,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                            decoration: BoxDecoration(
-                                              color: _getOperatorColor(sim.operateur).withOpacity(0.1),
-                                              borderRadius: BorderRadius.circular(4),
-                                            ),
-                                            child: Text(
-                                              sim.operateur,
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w600,
-                                                color: _getOperatorColor(sim.operateur),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
                                       ),
                                     ),
                                   ],
                                 ),
-                                
-                                const Divider(height: 24),
-                                
-                                // Champs de saisie côte à côte
-                                Row(
-                                  children: [
-                                    // Solde Calculé
-                                    Expanded(
-                                      child: TextField(
+                                const SizedBox(height: 6),
+                                TextField(
+                                  controller: cashGlobalController,
+                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFFDC6B19),
+                                  ),
+                                  decoration: InputDecoration(
+                                    labelText: 'Comptage cash physique',
+                                    labelStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                                    hintText: '0.00',
+                                    prefixText: r'$ ',
+                                    prefixStyle: const TextStyle(
+                                      color: Color(0xFFDC6B19),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(color: Colors.orange.shade300, width: 2),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(color: Colors.orange.shade300, width: 2),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: BorderSide(color: Colors.orange.shade600, width: 2),
+                                    ),
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Liste des SIMs avec saisie
+                          ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            padding: EdgeInsets.all(isMobile ? 12 : 16),
+                            itemCount: sims.length,
+                            itemBuilder: (context, index) {
+                              final sim = sims[index];
+                              final simControllers = controllers[sim.numero]!;
+                              final soldeCalcule = double.tryParse(simControllers['solde']!.text) ?? 0.0;
+                              
+                              // Récupérer les frais calculés pour cette SIM (clôture en cours de génération)
+                              final clotureSim = cloturesParSim[sim.numero];
+                              final fraisCalcules = clotureSim?.fraisTotal ?? 0.0;
+                              final fraisAnterieur = clotureSim?.fraisAnterieur ?? 0.0;
+                              final fraisDuJour = clotureSim?.fraisDuJour ?? 0.0;
+                              
+                              // Récupérer les valeurs de la dernière clôture (stockées dans controllers)
+                              final cashDisponibleAnterieur = double.tryParse(simControllers['cashDisponible']!.text) ?? 0.0;
+                              final fraisAnterieurDerniereCloture = double.tryParse(simControllers['fraisAnterieur']!.text) ?? 0.0;
+                              final soldeAnterieur = double.tryParse(simControllers['soldeAnterieur']!.text) ?? 0.0;
+                              
+                              // Récupérer les valeurs du Virtuel Disponible
+                              final virtuelDisponible = double.tryParse(simControllers['virtuelDisponible']!.text) ?? 0.0;
+                              final capturesDuJour = double.tryParse(simControllers['capturesDuJour']!.text) ?? 0.0;
+                              final retraitsDuJour = double.tryParse(simControllers['retraitsDuJour']!.text) ?? 0.0;
+                              final depotsDuJour = double.tryParse(simControllers['depotsDuJour']!.text) ?? 0.0;
+                              
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 16),
+                                elevation: 3,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  side: BorderSide(
+                                    color: _getOperatorColor(sim.operateur).withOpacity(0.3),
+                                    width: 2,
+                                  ),
+                                ),
+                                child: Padding(
+                                  padding: EdgeInsets.all(isMobile ? 14 : 18),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      // Header SIM
+                                      Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(10),
+                                            decoration: BoxDecoration(
+                                              color: _getOperatorColor(sim.operateur).withOpacity(0.15),
+                                              borderRadius: BorderRadius.circular(10),
+                                              border: Border.all(
+                                                color: _getOperatorColor(sim.operateur),
+                                                width: 2,
+                                              ),
+                                            ),
+                                            child: Icon(
+                                              Icons.sim_card,
+                                              color: _getOperatorColor(sim.operateur),
+                                              size: 22,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  sim.numero,
+                                                  style: TextStyle(
+                                                    fontSize: isMobile ? 15 : 17,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                  decoration: BoxDecoration(
+                                                    color: _getOperatorColor(sim.operateur).withOpacity(0.1),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: Text(
+                                                    sim.operateur,
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: _getOperatorColor(sim.operateur),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),                                     
+                                      const SizedBox(height: 16),
+                                      
+                                      // VIRTUEL DISPONIBLE (formule ligne 3610 de virtual_transactions_widget.dart)
+                                      Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: Colors.purple.shade50,
+                                          borderRadius: BorderRadius.circular(10),
+                                          border: Border.all(
+                                            color: Colors.purple.shade200,
+                                            width: 1,
+                                          ),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Icon(Icons.cloud_upload, color: Colors.purple.shade700, size: 18),
+                                                const SizedBox(width: 8),
+                                                const Text(
+                                                  'Virtuel Disponible',
+                                                  style: TextStyle(
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.purple,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 8),
+                                            // Solde Antérieur
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Text(
+                                                  'Solde Antérieur:',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors.grey.shade700,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  '\$${soldeAnterieur.toStringAsFixed(2)}',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.grey.shade800,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            // Captures
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Text(
+                                                  '+ Captures du jour:',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors.grey.shade700,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  '\$${capturesDuJour.toStringAsFixed(2)}',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.green.shade700,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            // Retraits
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Text(
+                                                  '- Retraits (FLOT):',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors.grey.shade700,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  '\$${retraitsDuJour.toStringAsFixed(2)}',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.red.shade700,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            // Dépôts Clients
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Text(
+                                                  '- Dépôts Clients:',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: Colors.grey.shade700,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  '\$${depotsDuJour.toStringAsFixed(2)}',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.red.shade700,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 8),
+                                            const Divider(height: 1),
+                                            const SizedBox(height: 8),
+                                            // Résultat final
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                const Text(
+                                                  '= Virtuel Disponible:',
+                                                  style: TextStyle(
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.purple,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  '\$${virtuelDisponible.toStringAsFixed(2)}',
+                                                  style: TextStyle(
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: virtuelDisponible >= 0 ? Colors.purple.shade700 : Colors.red.shade700,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      
+                                      const SizedBox(height: 16),
+                                      
+                                      // Solde Virtuel (seul champ modifiable)
+                                      TextField(
                                         controller: simControllers['solde'],
                                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                         style: TextStyle(
-                                          fontSize: 16,
+                                          fontSize: 18,
                                           fontWeight: FontWeight.bold,
                                           color: soldeCalcule >= 0 ? Colors.green.shade700 : Colors.red.shade700,
                                         ),
                                         decoration: InputDecoration(
                                           labelText: 'Solde Virtuel',
-                                          labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                          labelStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                                           hintText: '0.00',
-                                          prefixText: '\$ ',
+                                          prefixText: r'$ ',
                                           prefixStyle: TextStyle(
                                             color: soldeCalcule >= 0 ? Colors.green : Colors.red,
                                             fontWeight: FontWeight.bold,
+                                            fontSize: 18,
                                           ),
-                                          helperText: 'Calculé: \$${sim.soldeActuel.toStringAsFixed(2)}',
+                                          helperText: 'Solde dans la SIM • Calculé: \$${sim.soldeActuel.toStringAsFixed(2)}',
                                           helperStyle: const TextStyle(fontSize: 11),
                                           border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(10),
+                                            borderRadius: BorderRadius.circular(12),
                                           ),
                                           filled: true,
                                           fillColor: (soldeCalcule >= 0 ? Colors.green : Colors.red).withOpacity(0.05),
-                                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    
-                                    // Cash Disponible
-                                    Expanded(
-                                      child: TextField(
-                                        controller: simControllers['cashDisponible'],
-                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFF2563eb),
+                                      
+                                      const SizedBox(height: 16),
+                                      
+                                      // Frais calculés automatiquement (affichage seulement)
+                                      Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: Colors.purple.shade50,
+                                          borderRadius: BorderRadius.circular(10),
+                                          border: Border.all(
+                                            color: Colors.purple.shade200,
+                                            width: 1,
+                                          ),
                                         ),
-                                        decoration: InputDecoration(
-                                          labelText: 'Cash Disponible',
-                                          labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                                          hintText: '0.00',
-                                          prefixText: '\$ ',
-                                          prefixStyle: const TextStyle(
-                                            color: Color(0xFF2563eb),
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                          helperText: 'Comptage physique',
-                                          helperStyle: const TextStyle(fontSize: 11),
-                                          border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(10),
-                                          ),
-                                          filled: true,
-                                          fillColor: Colors.blue.withOpacity(0.05),
-                                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.calculate, color: Colors.purple.shade700, size: 20),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  const Text(
+                                                    'Frais Calculés',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: Colors.purple,
+                                                    ),
+                                                  ),
+                                                 
+                                                  Text(
+                                                    'Total: \$${fraisCalcules.toStringAsFixed(2)}',
+                                                    style: const TextStyle(
+                                                      fontSize: 13,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: Colors.purple,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+
+                          // Notes globales
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 16),
+                            child: TextField(
+                              controller: notesGlobales,
+                              maxLines: 2,
+                              decoration: InputDecoration(
+                                labelText: '📝 Notes globales (optionnel)',
+                                hintText: 'Remarques sur cette clôture...',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                filled: true,
+                                fillColor: Colors.grey.shade50,
+                                contentPadding: const EdgeInsets.all(14),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+
+                          // Actions
+                          Container(
+                            padding: EdgeInsets.all(isMobile ? 12 : 16),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[100],
+                              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: () => Navigator.of(context).pop(false),
+                                    icon: const Icon(Icons.cancel),
+                                    label: const Text('Annuler'),
+                                    style: OutlinedButton.styleFrom(
+                                      padding: EdgeInsets.symmetric(vertical: isMobile ? 10 : 14),
                                     ),
-                                  ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                   child: ElevatedButton.icon(
+                                    onPressed: () => Navigator.of(context).pop(true),
+                                    icon: const Icon(Icons.check_circle),
+                                    label: const Text('Clôturer'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF48bb78),
+                                      foregroundColor: Colors.white,
+                                      padding: EdgeInsets.symmetric(vertical: isMobile ? 12 : 14),
+                                      textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
                           ),
-                        );
-                      },
-                    ),
-                  ),
-
-                  // Notes globales
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 16),
-                    child: TextField(
-                      controller: notesGlobales,
-                      maxLines: 2,
-                      decoration: InputDecoration(
-                        labelText: '📝 Notes globales (optionnel)',
-                        hintText: 'Remarques sur cette clôture...',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        filled: true,
-                        fillColor: Colors.grey.shade50,
-                        contentPadding: const EdgeInsets.all(14),
+                        ],
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Actions
-                  Container(
-                    padding: EdgeInsets.all(isMobile ? 12 : 16),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () => Navigator.of(context).pop(false),
-                            icon: const Icon(Icons.cancel),
-                            label: const Text('Annuler'),
-                            style: OutlinedButton.styleFrom(
-                              padding: EdgeInsets.symmetric(vertical: isMobile ? 12 : 14),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          flex: 2,
-                          child: ElevatedButton.icon(
-                            onPressed: () => Navigator.of(context).pop(true),
-                            icon: const Icon(Icons.check_circle),
-                            label: const Text('Clôturer'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF48bb78),
-                              foregroundColor: Colors.white,
-                              padding: EdgeInsets.symmetric(vertical: isMobile ? 12 : 14),
-                              textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                        ),
-                      ],
                     ),
                   ),
                 ],
@@ -1029,12 +1387,14 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
     Map<String, Map<String, dynamic>>? saisies;
     
     if (result == true) {
+      final cashGlobal = double.tryParse(cashGlobalController.text) ?? 0.0;
+      
       saisies = <String, Map<String, dynamic>>{};
       for (var sim in sims) {
         final simControllers = controllers[sim.numero]!;
         saisies[sim.numero] = {
           'solde': double.tryParse(simControllers['solde']!.text) ?? 0.0,
-          'cashDisponible': double.tryParse(simControllers['cashDisponible']!.text) ?? 0.0,
+          'cashGlobal': cashGlobal, // CASH GLOBAL partagé
           'notes': notesGlobales.text.trim(),
         };
       }
@@ -1044,6 +1404,7 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
     for (var simControllers in controllers.values) {
       simControllers.values.forEach((c) => c.dispose());
     }
+    cashGlobalController.dispose();
     notesGlobales.dispose();
 
     return saisies;
