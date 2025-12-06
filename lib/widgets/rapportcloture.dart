@@ -860,7 +860,7 @@ class _RapportClotureState extends State<RapportCloture> {
   Widget _buildRightColumn(RapportClotureModel rapport) {
     return Column(
       children: [
-        // Partenaires Servis (anciennement Clients Nous Doivent)
+        // Partenaires Servis (anciennement Clients Nous qui Doivent)
         _buildSection(
           '5️⃣ Partenaires Servis',
           [
@@ -879,7 +879,7 @@ class _RapportClotureState extends State<RapportCloture> {
         ),
         const SizedBox(height: 16),
 
-        // Dépôts Partenaires (anciennement Clients Nous Devons)
+        // Dépôts Partenaires (anciennement Clients Nous que Devons)
         _buildSection(
           '6️⃣ Dépôts Partenaires',
           [
@@ -898,9 +898,9 @@ class _RapportClotureState extends State<RapportCloture> {
         ),
         const SizedBox(height: 16),
 
-        // Shops Qui nous Doivent
+        // Shops Qui Nous qui Doivent
         _buildSection(
-          '7️⃣ Shops Qui nous Doivent (DIFF. DETTES)',
+          '7️⃣ Shops Qui Nous qui Doivent (DIFF. DETTES)',
           [
             Text('${rapport.shopsNousDoivent.length} shop(s)', style: const TextStyle(fontWeight: FontWeight.bold)),
             const Divider(),
@@ -917,9 +917,9 @@ class _RapportClotureState extends State<RapportCloture> {
         ),
         const SizedBox(height: 16),
 
-        // Shops Nous Devons
+        // Shops Nous que Devons
         _buildSection(
-          '8️⃣ Shop Que nous devons',
+          '8️⃣ Shop Que Nous que Devons',
           [
             Text('${rapport.shopsNousDevons.length} shop(s)', style: const TextStyle(fontWeight: FontWeight.bold)),
             const Divider(),
@@ -975,7 +975,7 @@ class _RapportClotureState extends State<RapportCloture> {
             _buildCashRow('+ Partenaires Servis', rapport.totalClientsNousDoivent),
             _buildCashRow('+ DIFF. DETTES', rapport.totalShopsNousDoivent),
             _buildCashRow('- Dépôts Partenaires', rapport.totalClientsNousDevons),
-            _buildCashRow('- Shops Que Nous Devons', rapport.totalShopsNousDevons),
+            _buildCashRow('- Shops Que Nous que Devons', rapport.totalShopsNousDevons),
             _buildCashRow('- Solde Frais du jour', rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour),
             const Divider(thickness: 2, color: Colors.blue),
             _buildTotalRow('= CAPITAL NET', rapport.capitalNet - (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour), bold: true, color: (rapport.capitalNet - (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour)) >= 0 ? Colors.blue : Colors.red),

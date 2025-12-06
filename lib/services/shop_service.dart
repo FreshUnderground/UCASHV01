@@ -207,6 +207,51 @@ class ShopService extends ChangeNotifier {
     }
   }
 
+  /// Obtenir la désignation d'un shop par son ID
+  /// Retourne la désignation du shop, ou un fallback "Shop #ID" si non trouvé
+  /// Utiliser cette méthode partout dans l'UI pour afficher le nom d'un shop
+  /// 
+  /// Exemple d'utilisation:
+  /// ```dart
+  /// Text(ShopService.instance.getShopDesignation(shopId))
+  /// // ou avec Provider:
+  /// Text(context.read<ShopService>().getShopDesignation(shopId))
+  /// ```
+  String getShopDesignation(int? shopId, {String? existingDesignation}) {
+    // Si une désignation valide est déjà fournie, l'utiliser
+    if (existingDesignation != null && existingDesignation.isNotEmpty) {
+      return existingDesignation;
+    }
+    
+    // Si pas d'ID, retourner un placeholder
+    if (shopId == null) {
+      return 'Shop inconnu';
+    }
+    
+    // Chercher dans la liste des shops
+    try {
+      final shop = _shops.firstWhere((s) => s.id == shopId);
+      if (shop.designation.isNotEmpty) {
+        return shop.designation;
+      }
+    } catch (e) {
+      // Shop non trouvé dans le cache
+    }
+    
+    // Fallback: afficher l'ID du shop
+    return 'Shop #$shopId';
+  }
+
+  /// Obtenir la désignation du shop source d'une opération ou d'un flot
+  String getShopSourceDesignation(int? shopSourceId, {String? existingDesignation}) {
+    return getShopDesignation(shopSourceId, existingDesignation: existingDesignation);
+  }
+
+  /// Obtenir la désignation du shop destination d'une opération ou d'un flot
+  String getShopDestinationDesignation(int? shopDestinationId, {String? existingDesignation}) {
+    return getShopDesignation(shopDestinationId, existingDesignation: existingDesignation);
+  }
+
   // Créer les caisses par défaut pour un nouveau shop
   Future<void> _createDefaultCaisses(int shopId, double capitalCash, double capitalAirtel, double capitalMPesa, double capitalOrange) async {
     final caisseData = {

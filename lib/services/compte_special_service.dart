@@ -1255,15 +1255,26 @@ class CompteSpecialService extends ChangeNotifier {
     final depots = depenses.where((t) => t.typeTransaction == TypeTransactionCompte.DEPOT).toList();
     final sorties = depenses.where((t) => t.typeTransaction == TypeTransactionCompte.SORTIE).toList();
     
+    // Calculer les montants du jour pour DÉPENSE
+    final depotsDuJour = depots.fold(0.0, (sum, t) => sum + t.montant);
+    final sortiesDuJour = sorties.fold(0.0, (sum, t) => sum + t.montant.abs());
+    
     // Calculer le Solde FRAIS
-    // LOGIQUE: Solde FRAIS = Total Frais encaissés - Total Sorties Frais
-    // Pour éviter de tout recalculer:
-    //   - SANS filtre de date: Utiliser le solde actuel (soldeFrais = tous les frais - toutes les sorties)
-    //   - AVEC filtre de date: Frais Antérieur (clôture précédente) + Frais du jour - Sortie du jour
+    // BUSINESS LOGIC: Solde FRAIS = Total Frais encaissés - Total Sorties Frais
+    // This represents the net balance of the FRAIS account, where:
+    // - Credits: Commissions earned from serving transfers (fraisEncaisses)
+    // - Debits: Withdrawals from the FRAIS account (retraits)
+    // For performance reasons:
+    //   - WITHOUT date filter: Use current balance (soldeFrais = all fees - all withdrawals)
+    //   - WITH date filter: Previous balance + daily fees - daily withdrawals
     
     double soldeFraisAnterieur = 0.0;
     double sortieFraisDuJour = retraits.fold(0.0, (sum, t) => sum + t.montant.abs());
     double soldeFraisDuJour;
+    
+    // NOUVEAU: Calculer le Solde DÉPENSE Antérieur
+    double soldeDepenseAnterieur = 0.0;
+    double soldeDepenseDuJour;
     
     if (startDate != null || endDate != null) {
       // AVEC FILTRE DE DATE: Utiliser Frais Antérieur de la clôture précédente
@@ -1296,15 +1307,41 @@ class CompteSpecialService extends ChangeNotifier {
         debugPrint('❌ Erreur chargement clôture: $e');
       }
       
+      // NOUVEAU: Calculer le Solde DÉPENSE Antérieur (toutes les transactions DÉPENSE avant startDate)
+      if (startDate != null) {
+        try {
+          final startOfDay = DateTime(startDate.year, startDate.month, startDate.day);
+          final depenseAnterieur = _transactions.where((t) {
+            if (t.type != TypeCompteSpecial.DEPENSE) return false;
+            if (shopId != null && t.shopId != shopId) return false;
+            final effectiveDate = _getEffectiveDate(t);
+            return effectiveDate.isBefore(startOfDay);
+          }).fold(0.0, (sum, t) => sum + t.montant);
+          
+          soldeDepenseAnterieur = depenseAnterieur;
+          debugPrint('💾 Dépense Antérieur (avant $startDate): ${soldeDepenseAnterieur.toStringAsFixed(2)} USD');
+        } catch (e) {
+          debugPrint('❌ Erreur calcul Dépense Antérieur: $e');
+        }
+      }
+      
       // Formule: Frais Antérieur + Frais encaissés - Sortie Frais
       soldeFraisDuJour = soldeFraisAnterieur + fraisEncaisses - sortieFraisDuJour;
       debugPrint('📊 Avec filtre: Frais Ant ($soldeFraisAnterieur) + Encaissés ($fraisEncaisses) - Sortie ($sortieFraisDuJour) = $soldeFraisDuJour');
+      
+      // Formule DÉPENSE: Dépense Antérieur + Dépôts du jour - Sorties du jour
+      soldeDepenseDuJour = soldeDepenseAnterieur + depotsDuJour - sortiesDuJour;
+      debugPrint('📊 Avec filtre: Dépense Ant ($soldeDepenseAnterieur) + Dépôts ($depotsDuJour) - Sorties ($sortiesDuJour) = $soldeDepenseDuJour');
     } else {
       // SANS FILTRE: Calculer le solde global = Total frais encaissés - Total sorties
       // NE PAS utiliser soldeFrais car il ne contient que les transactions de la table comptes_speciaux
       // Il faut inclure fraisEncaisses (des transferts servis)
       soldeFraisDuJour = fraisEncaisses - sortieFraisDuJour;
       debugPrint('📊 Sans filtre: Frais encaissés ($fraisEncaisses) - Sortie ($sortieFraisDuJour) = $soldeFraisDuJour');
+      
+      // SANS FILTRE: Solde DÉPENSE = somme de toutes les transactions
+      soldeDepenseDuJour = soldeDepense;
+      debugPrint('📊 Sans filtre: Solde DÉPENSE total = $soldeDepenseDuJour');
     }
     
     return {
@@ -1312,7 +1349,7 @@ class CompteSpecialService extends ChangeNotifier {
       'solde_depense': soldeDepense,
       'nombre_frais': frais.length,
       'nombre_depenses': depenses.length,
-      'benefice_net': soldeFraisDuJour + soldeDepense, // CORRIGÉ: Utiliser soldeFraisDuJour qui inclut les frais encaissés
+      'benefice_net': soldeFraisDuJour + soldeDepenseDuJour, // CORRIGÉ: Utiliser les soldes du jour
       
       // Détails FRAIS - MODIFIÉ: Utiliser les frais encaissés au lieu de COMMISSION_AUTO
       'commissions_auto': fraisEncaisses, // Frais encaissés sur transferts servis
@@ -1335,11 +1372,15 @@ class CompteSpecialService extends ChangeNotifier {
         'statut': op.statut.name,
       }).toList(),
       
-      // Détails DÉPENSE
-      'depots_boss': depots.fold(0.0, (sum, t) => sum + t.montant),
+      // Détails DÉPENSE - NOUVEAU: Avec formule Antérieur + Dépôts - Sorties
+      'depense_anterieur': soldeDepenseAnterieur,
+      'depots_boss': depotsDuJour,
+      'depots_jour': depotsDuJour,
       'nombre_depots': depots.length,
-      'sorties': sorties.fold(0.0, (sum, t) => sum + t.montant.abs()),
+      'sorties': sortiesDuJour,
+      'sorties_jour': sortiesDuJour,
       'nombre_sorties': sorties.length,
+      'solde_depense_jour': soldeDepenseDuJour,
     };
   }
   

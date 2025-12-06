@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'dart:math' as math;
 
 /// Configuration centralisée pour la synchronisation
 /// 
@@ -8,11 +9,12 @@ class SyncConfig {
   /// ========== TIMING CONFIGURATION ==========
   
   /// Intervalle de synchronisation FAST (données critiques)
-  /// Tables: operations, flots, clients, comptes_speciaux, sims, virtual_transactions
+  /// Tables: operations (incl. flots as type=flotShopToShop), clients, comptes_speciaux, sims, virtual_transactions
   static const Duration fastSyncInterval = Duration(minutes: 2);
   
   /// Intervalle de synchronisation SLOW (données de configuration)
   /// Tables: shops, agents, commissions, cloture_caisse, document_headers
+  /// Note: flots are handled as operations with type=flotShopToShop
   static const Duration slowSyncInterval = Duration(minutes: 10);
   
   /// Délai avant retry des syncs échouées
@@ -64,24 +66,40 @@ class SyncConfig {
   /// ========== RETRY CONFIGURATION ==========
   
   /// Nombre maximum de tentatives pour une sync échouée
-  static const int maxRetries = 2;
+  /// Augmenté de 2 à 5 pour une meilleure résilience
+  static const int maxRetries = 5;
   
-  /// Délais progressifs pour les retries (backoff exponentiel)
+  /// Délais progressifs pour les retries (backoff exponentiel avec jitter)
+  /// Implémentation améliorée avec jitter pour éviter le thundering herd
   static const List<Duration> retryDelays = [
-    Duration(seconds: 3),   // 1ère tentative: 3s
-    Duration(seconds: 10),  // 2ème tentative: 10s
+    Duration(seconds: 1),    // 1ère tentative: 1s
+    Duration(seconds: 3),    // 2ème tentative: 3s
+    Duration(seconds: 7),    // 3ème tentative: 7s
+    Duration(seconds: 15),   // 4ème tentative: 15s
+    Duration(seconds: 30),   // 5ème tentative: 30s
   ];
+  
+  /// Facteur de jitter pour les délais de retry (0.0 à 1.0)
+  /// Ajout de jitter pour éviter la synchronisation des retries
+  static const double retryJitterFactor = 0.3;
   
   /// ========== OFFLINE MODE CONFIGURATION ==========
   
   /// Nombre maximum d'opérations en queue offline
+  /// Note: Includes flots as operations with type=flotShopToShop
   static const int maxPendingOperations = 1000;
   
-  /// Nombre maximum de flots en queue offline
+  /// Ancien paramètre - flots are now handled as operations
+  /// Conservé pour compatibilité mais non utilisé
   static const int maxPendingFlots = 500;
   
   /// Durée de conservation des opérations en attente
   static const Duration pendingDataRetention = Duration(days: 7);
+  
+  /// Priorité des opérations en attente (0 = haute, 1 = moyenne, 2 = basse)
+  static const int highPriority = 0;
+  static const int mediumPriority = 1;
+  static const int lowPriority = 2;
   
   /// ========== MONITORING CONFIGURATION ==========
   
@@ -102,11 +120,11 @@ class SyncConfig {
   
   /// ========== NETWORK OPTIMIZATION ==========
   
-  /// Compresser les requêtes HTTP (future implémentation)
-  static const bool enableCompression = false;
+  /// Compresser les requêtes HTTP
+  static const bool enableCompression = true;
   
   /// Utiliser la sync delta (seulement champs modifiés)
-  static const bool enableDeltaSync = false;
+  static const bool enableDeltaSync = true;
   
   /// Taille maximale de batch pour uploads
   static const int maxUploadBatchSize = 100;
@@ -116,12 +134,12 @@ class SyncConfig {
   /// Tables critiques qui doivent TOUJOURS être synchronisées
   static const List<String> criticalTables = [
     'operations',
-    'flots',
     'clients',
     'comptes_speciaux',
   ];
   
   /// Tables qui peuvent tolérer un délai de sync plus long
+  /// Note: 'flots' are now handled as 'operations' with type=flotShopToShop
   static const List<String> nonCriticalTables = [
     'document_headers',
     'cloture_caisse',
@@ -132,11 +150,26 @@ class SyncConfig {
   /// ========== HELPER METHODS ==========
   
   /// Obtenir le délai de retry pour une tentative donnée
+  /// Ajout de jitter pour éviter le thundering herd
   static Duration getRetryDelay(int attempt) {
     if (attempt >= retryDelays.length) {
       return retryDelays.last;
     }
-    return retryDelays[attempt];
+    
+    final baseDelay = retryDelays[attempt];
+    
+    // Ajout de jitter aléatoire
+    if (retryJitterFactor > 0) {
+      // Générer un facteur de jitter entre -retryJitterFactor et +retryJitterFactor
+      final jitter = (math.Random().nextDouble() * 2 - 1) * retryJitterFactor;
+      final jitterAmount = baseDelay.inMilliseconds * jitter;
+      final jitteredDelay = baseDelay.inMilliseconds + jitterAmount.toInt();
+      
+      // Assurer que le délai reste positif
+      return Duration(milliseconds: jitteredDelay > 0 ? jitteredDelay : baseDelay.inMilliseconds);
+    }
+    
+    return baseDelay;
   }
   
   /// Vérifier si une table est critique
@@ -150,7 +183,6 @@ class SyncConfig {
       'timing': {
         'fast_sync_interval': '${fastSyncInterval.inMinutes} min',
         'slow_sync_interval': '${slowSyncInterval.inMinutes} min',
-        'retry_delay': '${retryDelay.inSeconds}s',
         'sync_timeout': '${syncTimeout.inSeconds}s',
       },
       'consistency': {
@@ -166,10 +198,11 @@ class SyncConfig {
       'retry': {
         'max_retries': maxRetries,
         'retry_delays': retryDelays.map((d) => '${d.inSeconds}s').toList(),
+        'jitter_factor': retryJitterFactor,
       },
       'offline': {
         'max_pending_operations': maxPendingOperations,
-        'max_pending_flots': maxPendingFlots,
+        'max_pending_flots': maxPendingFlots, // Deprecated: flots now handled as operations
         'retention_days': pendingDataRetention.inDays,
       },
       'monitoring': {

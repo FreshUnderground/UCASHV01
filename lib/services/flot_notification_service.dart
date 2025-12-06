@@ -5,6 +5,7 @@ import '../models/operation_model.dart';
 
 /// Service de notification pour les flots entrants
 /// Vérifie en permanence les nouveaux flots destinés au shop de l'utilisateur
+/// NOTE: Les flots sont maintenant gérés comme des operations avec type=flotShopToShop
 class FlotNotificationService extends ChangeNotifier {
   static final FlotNotificationService _instance = FlotNotificationService._internal();
   factory FlotNotificationService() => _instance;
@@ -25,6 +26,7 @@ class FlotNotificationService extends ChangeNotifier {
   void Function(String title, String message, int flotId)? onNewFlotDetected;
   
   /// Démarre la vérification automatique des flots entrants
+  /// NOTE: Les flots sont maintenant gérés comme des operations avec type=flotShopToShop
   void startMonitoring({
     required int shopId,
     required List<OperationModel> Function() getFlots,
@@ -42,6 +44,7 @@ class FlotNotificationService extends ChangeNotifier {
     _getFlots = getFlots;
     
     debugPrint('🔔 FlotNotificationService: Démarrage de la surveillance des flots pour shop $shopId');
+    debugPrint('   NOTE: Les flots sont maintenant gérés comme des operations avec type=flotShopToShop');
     
     // Charger les IDs déjà notifiés depuis le stockage
     _loadNotifiedFlotIds();
@@ -65,6 +68,7 @@ class FlotNotificationService extends ChangeNotifier {
   }
   
   /// Vérifie les nouveaux flots en route
+  /// NOTE: Les flots sont maintenant gérés comme des operations avec type=flotShopToShop
   void _checkForNewFlots(int shopId) {
     try {
       // Vérifier que nous avons accès aux flots
@@ -75,6 +79,7 @@ class FlotNotificationService extends ChangeNotifier {
       
       final allFlots = _getFlots!();
       debugPrint('📊 Vérification flots: ${allFlots.length} flots en mémoire');
+      debugPrint('   NOTE: Les flots sont maintenant gérés comme des operations avec type=flotShopToShop');
       
       // Récupérer les flots en route pour ce shop (destination)
       final pendingFlots = allFlots.where((flot) {
@@ -84,6 +89,7 @@ class FlotNotificationService extends ChangeNotifier {
       }).toList();
       
       debugPrint('🔍 ${pendingFlots.length} flots en route pour shop $shopId');
+      debugPrint('   NOTE: Les flots sont maintenant gérés comme des operations avec type=flotShopToShop');
       
       // Mettre à jour le compteur
       final oldCount = _pendingFlotsCount;
@@ -94,6 +100,7 @@ class FlotNotificationService extends ChangeNotifier {
       }
       
       // Vérifier les nouveaux flots (non encore notifiés)
+      bool hasNewFlots = false;
       for (final flot in pendingFlots) {
         // Ignorer les flots sans ID
         if (flot.id == null) {
@@ -105,6 +112,7 @@ class FlotNotificationService extends ChangeNotifier {
           debugPrint('🔔 Nouveau flot détecté: ID ${flot.id}, Montant: ${flot.montantNet} ${flot.devise}');
           debugPrint('   Source: ${flot.shopSourceDesignation} -> Destination: ${flot.shopDestinationDesignation}');
           debugPrint('   Envoyé par: ${flot.agentUsername ?? "Inconnu"}');
+          debugPrint('   NOTE: Ce flot est maintenant une operation avec type=flotShopToShop');
           
           // Marquer comme notifié
           _notifiedFlotIds.add(flot.id!);
@@ -121,8 +129,16 @@ class FlotNotificationService extends ChangeNotifier {
             );
           }
           
+          hasNewFlots = true;
           notifyListeners();
         }
+      }
+      
+      // Si de nouveaux flots ont été détectés, forcer un rafraîchissement
+      if (hasNewFlots) {
+        // Trigger a refresh event that can be listened to by other services
+        // This will help ensure TransferSyncService gets updated data
+        notifyListeners();
       }
       
       // Nettoyer les IDs des flots déjà servis/annulés
@@ -148,6 +164,7 @@ class FlotNotificationService extends ChangeNotifier {
   }
   
   /// Nettoie les IDs des flots qui ne sont plus en route
+  /// NOTE: Les flots sont maintenant gérés comme des operations avec type=flotShopToShop
   void _cleanupNotifiedIds(List<OperationModel> allFlots) {
     final pendingIds = allFlots
         .where((flot) => flot.statut == OperationStatus.enAttente && 
@@ -166,6 +183,7 @@ class FlotNotificationService extends ChangeNotifier {
   }
   
   /// Charge les IDs déjà notifiés depuis SharedPreferences
+  /// NOTE: Les flots sont maintenant gérés comme des operations avec type=flotShopToShop
   Future<void> _loadNotifiedFlotIds() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -179,6 +197,7 @@ class FlotNotificationService extends ChangeNotifier {
   }
   
   /// Sauvegarde les IDs notifiés dans SharedPreferences
+  /// NOTE: Les flots sont maintenant gérés comme des operations avec type=flotShopToShop
   Future<void> _saveNotifiedFlotIds() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -192,6 +211,7 @@ class FlotNotificationService extends ChangeNotifier {
   }
   
   /// Réinitialise les notifications (utile après réception d'un flot)
+  /// NOTE: Les flots sont maintenant gérés comme des operations avec type=flotShopToShop
   void resetNotifications() {
     _notifiedFlotIds.clear();
     _saveNotifiedFlotIds();

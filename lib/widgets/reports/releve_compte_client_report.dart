@@ -19,6 +19,7 @@ class ReleveCompteClientReport extends StatefulWidget {
   final DateTime? startDate;
   final DateTime? endDate;
   final bool isAdmin;
+  final bool embedded; // When true, returns content without SingleChildScrollView
 
   const ReleveCompteClientReport({
     super.key,
@@ -26,6 +27,7 @@ class ReleveCompteClientReport extends StatefulWidget {
     this.startDate,
     this.endDate,
     this.isAdmin = false,
+    this.embedded = false,
   });
 
   @override
@@ -132,20 +134,27 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
       );
     }
 
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildClientInfo(),
+        const SizedBox(height: 8),
+        _buildSoldeActuel(),
+        const SizedBox(height: 8),
+        _buildStatistiques(),
+        const SizedBox(height: 8),
+        _buildTransactionsList(),
+      ],
+    );
+
+    // If embedded, return content directly without scroll wrapper
+    if (widget.embedded) {
+      return content;
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(1),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildClientInfo(),
-          const SizedBox(height: 8),
-          _buildSoldeActuel(),
-          const SizedBox(height: 8),
-          _buildStatistiques(),
-          const SizedBox(height: 8),
-          _buildTransactionsList(),
-        ],
-      ),
+      child: content,
     );
   }
 

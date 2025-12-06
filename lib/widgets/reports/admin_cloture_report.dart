@@ -580,7 +580,7 @@ class _AdminClotureReportState extends State<AdminClotureReport> {
               children: [
                 const Expanded(
                   child: Text(
-                    'Formule: Cash Disponible + Clients qui nous doivent + Shops qui nous doivent - Clients que nous devons - Shops que nous devons',
+                    'Formule: Cash Disponible + Clients qui Nous qui Doivent + Shops qui Nous qui Doivent - Clients que Nous que Devons - Shops que Nous que Devons',
                     style: TextStyle(
                       fontStyle: FontStyle.italic,
                       color: Colors.grey,
@@ -591,10 +591,10 @@ class _AdminClotureReportState extends State<AdminClotureReport> {
             ),
             const SizedBox(height: 8),
             _buildCashRow('Cash Disponible', rapport.cashDisponibleTotal),
-            _buildCashRow('Clients qui nous doivent', rapport.totalClientsNousDoivent),
-            _buildCashRow('Shops qui nous doivent', rapport.totalShopsNousDoivent),
-            _buildCashRow('Clients que nous devons', rapport.totalClientsNousDevons),
-            _buildCashRow('Shops que nous devons', rapport.totalShopsNousDevons),
+            _buildCashRow('Clients qui Nous qui Doivent', rapport.totalClientsNousDoivent),
+            _buildCashRow('Shops qui Nous qui Doivent', rapport.totalShopsNousDoivent),
+            _buildCashRow('Clients que Nous que Devons', rapport.totalClientsNousDevons),
+            _buildCashRow('Shops que Nous que Devons', rapport.totalShopsNousDevons),
             const Divider(),
             _buildTotalRow(
               'Capital Net',
@@ -612,7 +612,7 @@ class _AdminClotureReportState extends State<AdminClotureReport> {
               children: [
                 Expanded(
                   child: Text(
-                    'Clients qui nous doivent (Solde Négatif)',
+                    'Clients qui Nous qui Doivent (Solde Négatif)',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.red[700],
@@ -657,7 +657,7 @@ class _AdminClotureReportState extends State<AdminClotureReport> {
               children: [
                 Expanded(
                   child: Text(
-                    'Clients que nous devons (Solde Positif)',
+                    'Clients que Nous que Devons (Solde Positif)',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.green[700],

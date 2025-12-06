@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/rates_service.dart';
 import '../services/shop_service.dart';
 import '../services/connectivity_service.dart';
+import '../services/sync_service.dart';
 import '../models/commission_model.dart';
 import '../models/shop_model.dart';
 import '../utils/shop_designation_resolver.dart';
@@ -19,6 +21,7 @@ class FraisTransfertWidget extends StatefulWidget {
 
 class _FraisTransfertWidgetState extends State<FraisTransfertWidget> {
   bool _isLoading = false;
+  bool _isSyncing = false;
   String? _errorMessage;
 
   @override
@@ -63,6 +66,80 @@ class _FraisTransfertWidgetState extends State<FraisTransfertWidget> {
         setState(() {
           _isLoading = false;
         });
+      }
+    }
+  }
+
+  /// Synchronise les frais (commissions) depuis le serveur
+  Future<void> _syncFromServer() async {
+    if (_isSyncing) return;
+    
+    final connectivityService = ConnectivityService.instance;
+    if (!connectivityService.isOnline) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.wifi_off, color: Colors.white),
+                SizedBox(width: 12),
+                Text('Pas de connexion internet'),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+    
+    setState(() => _isSyncing = true);
+    
+    try {
+      debugPrint('🔄 Synchronisation des frais depuis le serveur...');
+      
+      // Réinitialiser le timestamp pour forcer un téléchargement complet
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('last_sync_commissions');
+      debugPrint('🗑️ Timestamp commissions réinitialisé');
+      
+      // Télécharger les commissions depuis le serveur
+      final syncService = SyncService();
+      await syncService.downloadTableData('commissions', 'agent_sync', 'admin');
+      
+      // Recharger en mémoire
+      await RatesService.instance.loadRatesAndCommissions();
+      
+      debugPrint('✅ ${RatesService.instance.commissions.length} commissions téléchargées');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 12),
+                Text('✅ ${RatesService.instance.commissions.length} frais synchronisés'),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('❌ Erreur sync frais: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSyncing = false);
       }
     }
   }
@@ -158,14 +235,26 @@ class _FraisTransfertWidgetState extends State<FraisTransfertWidget> {
             ),
             const SizedBox(height: 20),
 
-            // Bouton de rafraîchissement
+            // Bouton de rafraîchissement - Synchronise depuis le serveur
             Align(
               alignment: Alignment.centerRight,
-              child: IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: _loadData,
-                tooltip: 'Actualiser',
-              ),
+              child: _isSyncing
+                  ? const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFDC2626)),
+                        ),
+                      ),
+                    )
+                  : IconButton(
+                      icon: const Icon(Icons.refresh, color: Color(0xFFDC2626)),
+                      onPressed: _syncFromServer,
+                      tooltip: 'Synchroniser les frais depuis le serveur',
+                    ),
             ),
 
             // Liste des frais de transfert

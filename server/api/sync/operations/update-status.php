@@ -76,10 +76,24 @@ try {
     error_log("[UPDATE-STATUS] Opération trouvée. Ancien statut: {$operation['statut']}");
     
     // Mettre à jour le statut
-    $update_query = "UPDATE operations 
-                     SET statut = :statut, 
-                         last_modified_at = NOW()
-                     WHERE code_ops = :code_ops";
+    // CRITIQUE: Si le nouveau statut est 'validee' ou 'terminee', mettre à jour date_validation aussi
+    $should_set_date_validation = in_array($new_status, ['validee', 'terminee']);
+    
+    if ($should_set_date_validation) {
+        $update_query = "UPDATE operations 
+                         SET statut = :statut, 
+                             date_validation = COALESCE(date_validation, NOW()),
+                             last_modified_at = NOW(),
+                             is_synced = 0
+                         WHERE code_ops = :code_ops";
+        error_log("[UPDATE-STATUS] Mise à jour avec date_validation car statut=$new_status");
+    } else {
+        $update_query = "UPDATE operations 
+                         SET statut = :statut, 
+                             last_modified_at = NOW(),
+                             is_synced = 0
+                         WHERE code_ops = :code_ops";
+    }
     
     $update_stmt = $pdo->prepare($update_query);
     $update_stmt->bindParam(':statut', $new_status);
@@ -89,7 +103,13 @@ try {
         // Vérifier que la mise à jour a bien eu lieu
         $affected_rows = $update_stmt->rowCount();
         
-        error_log("[UPDATE-STATUS] Mise à jour réussie. Lignes affectées: $affected_rows");
+        // Récupérer les données mises à jour incluant date_validation
+        $fetch_stmt = $pdo->prepare("SELECT date_validation, last_modified_at FROM operations WHERE code_ops = :code_ops LIMIT 1");
+        $fetch_stmt->bindParam(':code_ops', $code_ops);
+        $fetch_stmt->execute();
+        $updated_data = $fetch_stmt->fetch(PDO::FETCH_ASSOC);
+        
+        error_log("[UPDATE-STATUS] Mise à jour réussie. Lignes affectées: $affected_rows, date_validation: " . ($updated_data['date_validation'] ?? 'NULL'));
         
         echo json_encode([
             'success' => true,
@@ -98,6 +118,8 @@ try {
                 'code_ops' => $code_ops,
                 'old_status' => $operation['statut'],
                 'new_status' => $new_status,
+                'date_validation' => $updated_data['date_validation'] ?? null,
+                'last_modified_at' => $updated_data['last_modified_at'] ?? null,
                 'affected_rows' => $affected_rows
             ]
         ]);

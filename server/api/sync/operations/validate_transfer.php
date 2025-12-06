@@ -225,6 +225,7 @@ try {
         SET 
             statut = 'validee',
             mode_paiement = :mode_paiement,
+            date_validation = NOW(),
             last_modified_at = NOW(),
             last_modified_by = :validated_by,
             is_synced = 0,

@@ -491,10 +491,13 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
     if (_selectedClient == null) return const SizedBox.shrink();
     
     return Expanded(
-      child: Column(
-        children: [
-          // Modern header with gradient background
-          Container(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.only(bottom: 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Modern header with gradient background
+            Container(
             padding: EdgeInsets.all(isMobile ? 16 : 24),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
@@ -764,17 +767,17 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
           ),
           const SizedBox(height: 16),
           
-          // Statement report with smooth transition
-          Expanded(
-            child: ReleveCompteClientReport(
-              key: ValueKey('${_selectedClient!.id}_${_startDate}_${_endDate}'),
-              clientId: _selectedClient!.id!,
-              startDate: _startDate,
-              endDate: _endDate,
-              isAdmin: true,
-            ),
+          // Statement report - embedded mode (no internal scroll)
+          ReleveCompteClientReport(
+            key: ValueKey('${_selectedClient!.id}_${_startDate}_${_endDate}'),
+            clientId: _selectedClient!.id!,
+            startDate: _startDate,
+            endDate: _endDate,
+            isAdmin: true,
+            embedded: true,
           ),
         ],
+        ),
       ),
     );
   }
@@ -837,25 +840,35 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
   }
 
   void _showDepotDialog(ClientModel client) {
-    showDialog(
+    showDialog<bool>(
       context: context,
       builder: (context) => DepotDialog(preselectedClient: client),
-    ).then((_) {
+    ).then((result) async {
       // Rafraîchir l'affichage après la fermeture du dialogue
-      if (mounted) {
-        setState(() {});
+      if (mounted && result == true) {
+        // Recharger les opérations pour mettre à jour les soldes
+        final operationService = Provider.of<OperationService>(context, listen: false);
+        await operationService.loadOperations();
+        if (mounted) {
+          setState(() {});
+        }
       }
     });
   }
 
   void _showRetraitDialog(ClientModel client) {
-    showDialog(
+    showDialog<bool>(
       context: context,
       builder: (context) => RetraitDialog(preselectedClient: client),
-    ).then((_) {
+    ).then((result) async {
       // Rafraîchir l'affichage après la fermeture du dialogue
-      if (mounted) {
-        setState(() {});
+      if (mounted && result == true) {
+        // Recharger les opérations pour mettre à jour les soldes
+        final operationService = Provider.of<OperationService>(context, listen: false);
+        await operationService.loadOperations();
+        if (mounted) {
+          setState(() {});
+        }
       }
     });
   }

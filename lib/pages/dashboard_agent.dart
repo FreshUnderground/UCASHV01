@@ -5,6 +5,7 @@ import '../services/sync_service.dart';
 import '../services/operation_service.dart';
 import '../services/transfer_notification_service.dart';
 import '../services/transfer_sync_service.dart';
+import '../services/rapport_cloture_service.dart';
 import '../widgets/connectivity_indicator.dart';
 import '../widgets/footer_widget.dart';
 import '../widgets/reports/agent_reports_widget.dart' as reports;
@@ -19,7 +20,9 @@ import '../widgets/virtual_transactions_widget.dart' as virtual_widget;
 import '../widgets/language_selector.dart';
 import '../widgets/agent_deletion_validation_widget.dart';
 import '../widgets/reports/dettes_intershop_report.dart';
+import '../widgets/cloture_required_dialog.dart';
 import '../services/deletion_service.dart';
+import '../services/connectivity_service.dart';
 
 class DashboardAgentPage extends StatefulWidget {
   const DashboardAgentPage({super.key});
@@ -30,6 +33,8 @@ class DashboardAgentPage extends StatefulWidget {
 
 class _DashboardAgentPageState extends State<DashboardAgentPage> {
   int _selectedIndex = 0;
+  List<DateTime>? _joursNonClotures; // Cache des jours non clôturés
+  bool _isCheckingClosure = false;
 
   final List<String> _menuItems = [
     'Opérations',
@@ -65,7 +70,8 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
       
       if (shopId != null && shopId > 0) {
         try {
-          final transferSyncService = TransferSyncService();
+          // Use the singleton instance from Provider instead of creating a new one
+          final transferSyncService = Provider.of<TransferSyncService>(context, listen: false);
           await transferSyncService.initialize(shopId);
           debugPrint('✅ TransferSyncService initialisé pour shop: $shopId');
         } catch (e) {
@@ -131,6 +137,9 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
       
       // Trigger synchronization of operation data when dashboard opens
       _triggerOperationSync();
+      
+      // Vérifier les clôtures au démarrage
+      _checkClotureAtStartup();
     });
   }
   
@@ -141,7 +150,8 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
       
       // Only proceed if user is an agent with a shop ID
       if (authService.currentUser?.role == 'AGENT' && authService.currentUser?.shopId != null) {
-        final transferSyncService = TransferSyncService();
+        // Use the singleton instance from Provider instead of creating a new one
+        final transferSyncService = Provider.of<TransferSyncService>(context, listen: false);
         debugPrint('🔄 Déclenchement de la synchronisation des opérations...');
         
         // Force a refresh from API to get latest operation data
@@ -174,6 +184,215 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
     }
   }
   
+    // Vérifier les clôtures au démarrage
+  Future<void> _checkClotureAtStartup() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final shopId = authService.currentUser?.shopId;
+    
+    if (shopId != null && shopId > 0) {
+      final joursNonClotures = await RapportClotureService.instance.verifierAccesMenusAgent(shopId);
+      if (mounted) {
+        setState(() {
+          _joursNonClotures = joursNonClotures;
+        });
+      }
+    }
+  }
+  
+  // Vérifier si l'accès au menu est autorisé (indices 0, 1, 3 = Operations, Validations, FLOT)
+  // Retourne true si l'accès est autorisé, false sinon
+  Future<bool> _verifierAccesMenu(int index) async {
+    // Seuls les menus Operations (0), Validations (1), et FLOT (3) nécessitent la vérification
+    if (index != 0 && index != 1 && index != 3) {
+      return true; // Autres menus accessibles sans vérification
+    }
+    
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final shopId = authService.currentUser?.shopId;
+    
+    if (shopId == null || shopId <= 0) {
+      return true; // Pas de shop ID, on laisse passer
+    }
+    
+    // TOUJOURS vérifier depuis LocalDB (pas de cache pour éviter les faux positifs)
+    debugPrint('🔍 Vérification des clôtures pour shop $shopId...');
+    setState(() => _isCheckingClosure = true);
+    
+    final joursNonClotures = await RapportClotureService.instance.verifierAccesMenusAgent(shopId);
+    
+    if (mounted) {
+      setState(() {
+        _joursNonClotures = joursNonClotures;
+        _isCheckingClosure = false;
+      });
+    }
+    
+    // Si pas de jours non clôturés, accès autorisé
+    if (joursNonClotures == null || joursNonClotures.isEmpty) {
+      debugPrint('✅ Toutes les journées sont clôturées - accès autorisé');
+      return true;
+    }
+    
+    debugPrint('⚠️ ${joursNonClotures.length} jour(s) non clôturé(s) - affichage du dialog');
+    
+    // Afficher le dialog de clôture
+    final result = await ClotureRequiredDialog.show(
+      context,
+      shopId: shopId,
+      joursNonClotures: joursNonClotures,
+    );
+    
+    if (result) {
+      // Clôtures effectuées, attendre un peu et recharger le cache
+      debugPrint('🔄 Re-vérification après clôture...');
+      await Future.delayed(const Duration(milliseconds: 300));
+      
+      final newJoursNonClotures = await RapportClotureService.instance.verifierAccesMenusAgent(shopId);
+      if (mounted) {
+        setState(() {
+          _joursNonClotures = newJoursNonClotures;
+        });
+      }
+      
+      // Vérifier si toutes les clôtures ont bien été enregistrées
+      if (newJoursNonClotures == null || newJoursNonClotures.isEmpty) {
+        debugPrint('✅ Toutes les clôtures confirmées - accès autorisé');
+        return true;
+      } else {
+        debugPrint('⚠️ Encore ${newJoursNonClotures.length} jour(s) non clôturé(s)');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Encore ${newJoursNonClotures.length} jour(s) à clôturer. Veuillez réessayer.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return false;
+      }
+    }
+    
+    return false; // Accès refusé
+  }
+  
+  // Handler de sélection de menu avec vérification de clôture
+  Future<void> _selectMenuItem(int index) async {
+    final canAccess = await _verifierAccesMenu(index);
+    if (canAccess && mounted) {
+      // Si c'est le menu Rapports (index 2), synchroniser d'abord si connecté
+      if (index == 2) {
+        await _syncBeforeCloture();
+      }
+      setState(() {
+        _selectedIndex = index;
+      });
+    }
+  }
+
+  /// Synchroniser les données avant d'accéder aux rapports/clôtures
+  /// Seulement si la connexion internet est disponible
+  Future<void> _syncBeforeCloture() async {
+    // Vérifier la connectivité
+    final isConnected = ConnectivityService.instance.isOnline;
+    
+    if (!isConnected) {
+      debugPrint('📡 Pas de connexion - synchronisation ignorée');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.wifi_off, color: Colors.white),
+                SizedBox(width: 12),
+                Text('Mode hors-ligne - données locales uniquement'),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+    
+    // Afficher le dialog de synchronisation
+    if (!mounted) return;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(height: 16),
+            CircularProgressIndicator(color: Color(0xFF48bb78)),
+            SizedBox(height: 24),
+            Text(
+              '🔄 Synchronisation en cours...',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Récupération des dernières données',
+              style: TextStyle(fontSize: 14, color: Colors.grey),
+            ),
+            SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+    
+    try {
+      debugPrint('🔄 [RAPPORTS] Synchronisation des opérations avant clôture...');
+      
+      // Synchroniser UNIQUEMENT la table operations via TransferSyncService
+      final transferSyncService = Provider.of<TransferSyncService>(context, listen: false);
+      await transferSyncService.forceRefreshFromAPI();
+      
+      debugPrint('✅ [RAPPORTS] Opérations synchronisées');
+      
+      // Fermer le dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 12),
+                Text('Données synchronisées avec succès'),
+              ],
+            ),
+            backgroundColor: Color(0xFF48bb78),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('⚠️ [RAPPORTS] Erreur sync: $e');
+      
+      // Fermer le dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: const [
+                Icon(Icons.warning_amber, color: Colors.white),
+                SizedBox(width: 12),
+                Expanded(child: Text('Synchronisation partielle - utilisation des données locales')),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   void dispose() {
     // Arrêter la surveillance des transferts
@@ -405,29 +624,51 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
               itemCount: _menuItems.length,
               itemBuilder: (context, index) {
                 return ListTile(
-                  leading: Icon(_menuIcons[index]),
-                  title: Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          _menuItems[index],
-                          style: TextStyle(fontSize: isMobile ? 13 : 14),
-                          overflow: TextOverflow.ellipsis,
+                    leading: Icon(_menuIcons[index]),
+                    title: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            _menuItems[index],
+                            style: TextStyle(fontSize: isMobile ? 13 : 14),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      ),
-                      if (index == 1) // Index 1 = Validations
-                        _buildValidationBadge(),
-                    ],
-                  ),
-                  selected: _selectedIndex == index,
-                  selectedTileColor: Colors.green[50],
-                  onTap: () {
-                    setState(() {
-                      _selectedIndex = index;
-                    });
-                    Navigator.pop(context);
-                  },
-                );
+                        if (index == 1) // Index 1 = Validations
+                          _buildValidationBadge(),
+                        // Indicateur de clôture requise pour menus bloqués
+                        if ((index == 0 || index == 1 || index == 3) && 
+                            _joursNonClotures != null && 
+                            _joursNonClotures!.isNotEmpty)
+                          Container(
+                            margin: const EdgeInsets.only(left: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.lock, color: Colors.white, size: 12),
+                          ),
+                      ],
+                    ),
+                    selected: _selectedIndex == index,
+                    selectedTileColor: Colors.green[50],
+                    onTap: () async {
+                      final canAccess = await _verifierAccesMenu(index);
+                      if (canAccess && mounted) {
+                        Navigator.pop(context);
+                        // Si c'est le menu Rapports (index 2), synchroniser d'abord
+                        if (index == 2) {
+                          await _syncBeforeCloture();
+                        }
+                        if (mounted) {
+                          setState(() {
+                            _selectedIndex = index;
+                          });
+                        }
+                      }
+                    },
+                  );
               },
             ),
           ),
@@ -517,12 +758,34 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
                         ),
                         if (index == 1) // Index 1 = Validations
                           _buildValidationBadge(),
+                        // Indicateur de clôture requise pour menus bloqués
+                        if ((index == 0 || index == 1 || index == 3) && 
+                            _joursNonClotures != null && 
+                            _joursNonClotures!.isNotEmpty)
+                          Container(
+                            margin: const EdgeInsets.only(left: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.lock, color: Colors.white, size: 12),
+                          ),
                       ],
                     ),
-                    onTap: () {
-                      setState(() {
-                        _selectedIndex = index;
-                      });
+                    onTap: () async {
+                      final canAccess = await _verifierAccesMenu(index);
+                      if (canAccess && mounted) {
+                        // Si c'est le menu Rapports (index 2), synchroniser d'abord
+                        if (index == 2) {
+                          await _syncBeforeCloture();
+                        }
+                        if (mounted) {
+                          setState(() {
+                            _selectedIndex = index;
+                          });
+                        }
+                      }
                     },
                   ),
                 );
@@ -553,10 +816,20 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
         }
         return index;
       })(),
-      onTap: (bottomIndex) {
-        setState(() {
-          _selectedIndex = bottomNavItems[bottomIndex]['index'] as int;
-        });
+      onTap: (bottomIndex) async {
+        final targetIndex = bottomNavItems[bottomIndex]['index'] as int;
+        final canAccess = await _verifierAccesMenu(targetIndex);
+        if (canAccess && mounted) {
+          // Si c'est le menu Rapports (index 2), synchroniser d'abord
+          if (targetIndex == 2) {
+            await _syncBeforeCloture();
+          }
+          if (mounted) {
+            setState(() {
+              _selectedIndex = targetIndex;
+            });
+          }
+        }
       },
       type: BottomNavigationBarType.fixed,
       selectedItemColor: const Color(0xFF48bb78),
@@ -575,6 +848,12 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
                   right: -8,
                   top: -4,
                   child: _buildValidationBadge(),
+                ),
+              if (index == 3) // Index 3 = FLOT
+                Positioned(
+                  right: -8,
+                  top: -4,
+                  child: _buildFlotBadge(),
                 ),
             ],
           ),
@@ -605,6 +884,39 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
           ),
           child: Text(
             '$pendingCount',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFlotBadge() {
+    return Consumer<TransferSyncService>(
+      builder: (context, transferSync, child) {
+        final authService = Provider.of<AuthService>(context, listen: false);
+        final currentShopId = authService.currentUser?.shopId;
+        
+        if (currentShopId == null) return const SizedBox.shrink();
+        
+        // Get pending FLOTs count
+        final pendingFlotsCount = transferSync.getPendingFlotsForShop(currentShopId).length;
+        
+        if (pendingFlotsCount == 0) return const SizedBox.shrink();
+        
+        return Container(
+          margin: const EdgeInsets.only(left: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.blue, // Blue color for FLOTs to differentiate from validations
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            '$pendingFlotsCount',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 10,

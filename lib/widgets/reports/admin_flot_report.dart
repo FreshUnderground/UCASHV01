@@ -652,7 +652,7 @@ class _AdminFlotReportState extends State<AdminFlotReport> {
                     children: [
                       const Text('De:', style: TextStyle(color: Colors.grey, fontSize: 12)),
                       Text(
-                        flot.shopSourceDesignation ?? 'N/A',
+                        ShopService.instance.getShopDesignation(flot.shopSourceId, existingDesignation: flot.shopSourceDesignation),
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ],
@@ -666,7 +666,7 @@ class _AdminFlotReportState extends State<AdminFlotReport> {
                     children: [
                       const Text('Vers:', style: TextStyle(color: Colors.grey, fontSize: 12)),
                       Text(
-                        flot.shopDestinationDesignation ?? 'N/A',
+                        ShopService.instance.getShopDesignation(flot.shopDestinationId, existingDesignation: flot.shopDestinationDesignation),
                         style: const TextStyle(fontWeight: FontWeight.bold),
                         textAlign: TextAlign.right,
                       ),

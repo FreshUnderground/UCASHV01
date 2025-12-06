@@ -8,6 +8,7 @@ import '../services/compte_special_service.dart';
 import '../services/auth_service.dart';
 import '../services/shop_service.dart';
 import '../services/document_header_service.dart';
+import '../services/sync_service.dart';
 import '../models/compte_special_model.dart';
 
 /// Widget pour afficher et gérer les comptes spéciaux (FRAIS et DÉPENSE)
@@ -35,6 +36,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
   DateTime? _endDate;
   int? _selectedShopId;
   bool _showFilters = false; // MODIFIÉ: Masquer les filtres par défaut
+  bool _isDownloading = false; // État de téléchargement
 
   @override
   void initState() {
@@ -73,6 +75,160 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
   Future<void> _loadData() async {
     await CompteSpecialService.instance.loadTransactions(shopId: _selectedShopId);
     setState(() {}); // Force rebuild
+  }
+
+  /// Télécharge tous les comptes spéciaux depuis le serveur
+  Future<void> _downloadAllFromServer({String? type}) async {
+    if (_isDownloading) return;
+    
+    setState(() => _isDownloading = true);
+    
+    try {
+      final syncService = SyncService();
+      final result = await syncService.downloadAllComptesSpeciaux(
+        type: type,
+        shopId: _selectedShopId,
+      );
+      
+      if (!mounted) return;
+      
+      if (result['success'] == true) {
+        // Recharger les données après le téléchargement
+        await _loadData();
+        
+        final summary = result['summary'] ?? {};
+        final message = type == 'FRAIS'
+            ? 'Téléchargement réussi: ${summary['nombre_frais'] ?? 0} FRAIS (\$${_numberFormat.format(summary['total_frais'] ?? 0)})'
+            : type == 'DEPENSE'
+                ? 'Téléchargement réussi: ${summary['nombre_depense'] ?? 0} DÉPENSES (\$${_numberFormat.format(summary['total_depense'] ?? 0)})'
+                : 'Téléchargement réussi: ${result['count']} comptes spéciaux';
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(child: Text(message)),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(child: Text('Erreur: ${result['message']}')),
+              ],
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erreur de téléchargement: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isDownloading = false);
+      }
+    }
+  }
+
+  /// Affiche le menu de téléchargement
+  void _showDownloadMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Télécharger depuis le serveur',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Sélectionnez le type de données à télécharger',
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 24),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.trending_up, color: Colors.green),
+                  ),
+                  title: const Text('Télécharger tous les FRAIS'),
+                  subtitle: const Text('Commissions et frais encaissés'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _downloadAllFromServer(type: 'FRAIS');
+                  },
+                ),
+                const Divider(),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.receipt_long, color: Colors.blue),
+                  ),
+                  title: const Text('Télécharger toutes les DÉPENSES'),
+                  subtitle: const Text('Dépôts et sorties'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _downloadAllFromServer(type: 'DEPENSE');
+                  },
+                ),
+                const Divider(),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.download, color: Colors.purple),
+                  ),
+                  title: const Text('Télécharger TOUT'),
+                  subtitle: const Text('Tous les comptes spéciaux'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _downloadAllFromServer();
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -181,6 +337,28 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
             ],
           ),
         ),
+        // Bouton de téléchargement (admin seulement)
+        if (widget.isAdmin)
+          _isDownloading
+            ? const Padding(
+                padding: EdgeInsets.all(12),
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFDC2626)),
+                  ),
+                ),
+              )
+            : IconButton(
+                onPressed: () => _showDownloadMenu(context),
+                icon: const Icon(
+                  Icons.cloud_download,
+                  color: Color(0xFFDC2626),
+                ),
+                tooltip: 'Télécharger depuis le serveur',
+              ),
         // Bouton pour afficher/masquer les filtres
         IconButton(
           onPressed: () {
@@ -405,6 +583,37 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
   }
 
   Widget _buildSummaryCards(Map<String, dynamic> stats, bool isWide, bool isMedium) {
+    // Déterminer si un filtre de date est appliqué
+    final hasDateFilter = _startDate != null || _endDate != null;
+    
+    // Détails FRAIS selon le contexte:
+    // - Avec filtre de date: Frais Antérieur + Frais encaissés - Sortie
+    // - Sans filtre: Total Frais encaissés - Total Sortie (pas de "Frais Antérieur")
+    final List<Map<String, dynamic>> fraisDetails = hasDateFilter
+        ? [
+            {'label': 'Frais Antérieur', 'value': stats['frais_anterieur'] ?? 0.0},
+            {'label': '+ Frais encaissés', 'value': stats['frais_encaisses_jour'] ?? stats['commissions_auto']},
+            {'label': '- Sortie Frais', 'value': stats['sortie_frais_jour'] ?? stats['retraits_frais']},
+          ]
+        : [
+            {'label': 'Total Frais encaissés', 'value': stats['frais_encaisses_jour'] ?? stats['commissions_auto']},
+            {'label': '- Total Sortie Frais', 'value': stats['sortie_frais_jour'] ?? stats['retraits_frais']},
+          ];
+    
+    // Détails DÉPENSE selon le contexte:
+    // - Avec filtre de date: Dépense Antérieur + Dépôts - Sorties
+    // - Sans filtre: Total Dépôts - Total Sorties (pas de "Dépense Antérieur")
+    final List<Map<String, dynamic>> depenseDetails = hasDateFilter
+        ? [
+            {'label': 'Dépense Antérieur', 'value': stats['depense_anterieur'] ?? 0.0},
+            {'label': '+ Dépôts', 'value': stats['depots_jour'] ?? stats['depots_boss'] ?? 0.0},
+            {'label': '- Sorties', 'value': stats['sorties_jour'] ?? stats['sorties'] ?? 0.0},
+          ]
+        : [
+            {'label': 'Total Dépôts', 'value': stats['depots_boss'] ?? 0.0},
+            {'label': '- Total Sorties', 'value': stats['sorties'] ?? 0.0},
+          ];
+    
     // Toujours afficher en 3 colonnes sur 1 ligne (sauf mobile)
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -422,28 +631,21 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                 gradient: const LinearGradient(
                   colors: [Color(0xFF10B981), Color(0xFF059669)],
                 ),
-                details: [
-                  {'label': 'Frais Antérieur', 'value': stats['frais_anterieur'] ?? 0.0},
-                  {'label': '+ Frais encaissés', 'value': stats['frais_encaisses_jour'] ?? stats['commissions_auto']},
-                  {'label': '- Sortie Frais', 'value': stats['sortie_frais_jour'] ?? stats['retraits_frais']},
-                ],
+                details: fraisDetails,
                 onTap: null, // TODO: Ajouter détails plus tard
               ),
               const SizedBox(height: 16),
               _buildModernCard(
                 title: 'Compte DÉPENSE',
-                amount: stats['solde_depense'],
+                amount: stats['solde_depense_jour'] ?? stats['solde_depense'],
                 count: stats['nombre_depenses'],
                 icon: Icons.receipt_long,
                 gradient: LinearGradient(
-                  colors: stats['solde_depense'] >= 0 
+                  colors: (stats['solde_depense_jour'] ?? stats['solde_depense'] ?? 0.0) >= 0 
                     ? [const Color(0xFF3B82F6), const Color(0xFF2563EB)]
                     : [const Color(0xFFEF4444), const Color(0xFFDC2626)],
                 ),
-                details: [
-                  {'label': 'Dépôts', 'value': stats['depots_boss']},
-                  {'label': 'Sorties', 'value': stats['sorties']},
-                ],
+                details: depenseDetails,
               ),
             ],
           );
@@ -461,11 +663,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                 gradient: const LinearGradient(
                   colors: [Color(0xFF10B981), Color(0xFF059669)],
                 ),
-                details: [
-                  {'label': 'Frais Antérieur', 'value': stats['frais_anterieur'] ?? 0.0},
-                  {'label': '+ Frais encaissés', 'value': stats['frais_encaisses_jour'] ?? stats['commissions_auto']},
-                  {'label': '- Sortie Frais', 'value': stats['sortie_frais_jour'] ?? stats['retraits_frais']},
-                ],
+                details: fraisDetails,
                 onTap: null, // TODO: Ajouter détails plus tard
               ),
             ),
@@ -473,18 +671,15 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
             Expanded(
               child: _buildModernCard(
                 title: 'Compte DÉPENSE',
-                amount: stats['solde_depense'],
+                amount: stats['solde_depense_jour'] ?? stats['solde_depense'],
                 count: stats['nombre_depenses'],
                 icon: Icons.receipt_long,
                 gradient: LinearGradient(
-                  colors: stats['solde_depense'] >= 0 
+                  colors: (stats['solde_depense_jour'] ?? stats['solde_depense'] ?? 0.0) >= 0 
                     ? [const Color(0xFF3B82F6), const Color(0xFF2563EB)]
                     : [const Color(0xFFEF4444), const Color(0xFFDC2626)],
                 ),
-                details: [
-                  {'label': 'Dépôts', 'value': stats['depots_boss']},
-                  {'label': 'Sorties', 'value': stats['sorties']},
-                ],
+                details: depenseDetails,
               ),
             ),
             const SizedBox(width: 16),

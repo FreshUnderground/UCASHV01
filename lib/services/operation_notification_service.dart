@@ -4,6 +4,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:vibration/vibration.dart';
 import '../models/operation_model.dart';
+import 'shop_service.dart';
 
 /// Service de notification pour les opérations importantes
 /// Fournit des notifications sonores, vibrantes et visuelles pour les opérations critiques
@@ -17,6 +18,10 @@ class OperationNotificationService extends ChangeNotifier {
   
   bool _initialized = false;
   bool get initialized => _initialized;
+  
+  // Track if sound asset is available to avoid repeated error logs
+  bool _soundAssetChecked = false;
+  bool _soundAssetAvailable = false;
 
   /// Initialise le service de notifications
   Future<void> initialize() async {
@@ -98,18 +103,24 @@ class OperationNotificationService extends ChangeNotifier {
   
   /// Joue un son d'alerte
   Future<void> _playAlertSound() async {
+    // Skip if we already know the sound asset is not available
+    if (_soundAssetChecked && !_soundAssetAvailable) {
+      return;
+    }
+    
     try {
       // Play a beep sound using AudioPlayer
       await _audioPlayer.play(AssetSource('sounds/notification.mp3'));
+      _soundAssetChecked = true;
+      _soundAssetAvailable = true;
     } catch (e) {
-      debugPrint('⚠️ Son non disponible: $e');
-      // Fallback to system beep if custom sound fails
-      try {
-        // For now, we'll just log that we're trying to play a sound
-        debugPrint('🎵 Playing system beep sound');
-      } catch (e2) {
-        debugPrint('⚠️ Son système non disponible: $e2');
+      // Only log the error once
+      if (!_soundAssetChecked) {
+        debugPrint('ℹ️ Son de notification non configuré (sounds/notification.mp3)');
+        _soundAssetChecked = true;
+        _soundAssetAvailable = false;
       }
+      // Silently continue - vibration and notification still work
     }
   }
   
@@ -188,7 +199,7 @@ class OperationNotificationService extends ChangeNotifier {
       case OperationType.virement:
         return '$amount - Virement interne';
       case OperationType.flotShopToShop:
-        return '$amount - ${operation.shopSourceDesignation ?? "Shop"} → ${operation.shopDestinationDesignation ?? "Shop"}';
+        return '$amount - ${ShopService.instance.getShopDesignation(operation.shopSourceId, existingDesignation: operation.shopSourceDesignation)} → ${ShopService.instance.getShopDesignation(operation.shopDestinationId, existingDesignation: operation.shopDestinationDesignation)}';
     }
   }
   

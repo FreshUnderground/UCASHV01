@@ -19,6 +19,7 @@ class DeletionRequestModel {
   final String? destinataire;
   final String? expediteur;
   final String? clientNom;
+  final String? observation;
   
   // Informations de la demande
   final int requestedByAdminId;
@@ -58,6 +59,7 @@ class DeletionRequestModel {
     this.destinataire,
     this.expediteur,
     this.clientNom,
+    this.observation,
     required this.requestedByAdminId,
     required this.requestedByAdminName,
     required this.requestDate,
@@ -85,6 +87,7 @@ class DeletionRequestModel {
       montant: _parseDouble(json['montant']),
       devise: json['devise'] ?? 'USD',
       destinataire: json['destinataire'],
+      observation: json['observation'],
       expediteur: json['expediteur'],
       clientNom: json['client_nom'],
       requestedByAdminId: json['requested_by_admin_id'] ?? 0,
@@ -126,6 +129,7 @@ class DeletionRequestModel {
       'operation_type': operationType,
       'montant': montant,
       'devise': devise,
+      'observation': observation,
       'destinataire': destinataire,
       'expediteur': expediteur,
       'client_nom': clientNom,

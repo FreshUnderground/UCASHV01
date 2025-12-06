@@ -47,6 +47,9 @@ CREATE TABLE IF NOT EXISTS `cloture_caisse` (
   `shop_id` INT(11) NOT NULL COMMENT 'ID du shop',
   `date_cloture` DATE NOT NULL COMMENT 'Date de fin de journée',
   
+  -- SOLDE FRAIS (pour calculer l'anterieur du jour suivant)
+  `solde_frais_anterieur` DECIMAL(15,2) NOT NULL DEFAULT 0.00 COMMENT 'Solde du compte FRAIS au moment de la cloture',
+  
   -- Montants SAISIS par l'agent (comptage physique)
   `solde_saisi_cash` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
   `solde_saisi_airtel_money` DECIMAL(15,2) NOT NULL DEFAULT 0.00,

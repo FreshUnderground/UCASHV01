@@ -186,6 +186,8 @@ class ClotureVirtuelleService {
       final nombreRetraits = allRetraits.length;
       
       // CASH ENTRANT lors des remboursements de retraits virtuels
+      // BUSINESS LOGIC: When a virtual withdrawal is refunded, cash enters the system
+      // This represents physical cash coming in when a virtual withdrawal is reversed
       final cashEntrantRetraitsRembourses = montantRetraitsRembourses;
       
       // === NOUVEAU: FLOTs PHYSIQUES (entre shops) ===

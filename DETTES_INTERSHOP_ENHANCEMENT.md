@@ -3,15 +3,15 @@
 ## 🎯 Objectifs des améliorations
 
 ### Amélioration 1 : Dettes par Shop
-L'utilisateur a demandé d'afficher **"Dettes /shop que nous devons ou qui nous doit. et selon la periode selectionner"**
+L'utilisateur a demandé d'afficher **"Dettes /shop que Nous que Devons ou qui nous doit. et selon la periode selectionner"**
 
 ### Amélioration 2 : Évolution Quotidienne
 L'utilisateur a demandé un suivi jour par jour :
 **"25/12/2024 : Dette Antérieur : 500$ Créance 3000 Dettes 15300 Solde : 11800"**
 
 Cette amélioration ajoute une section au rapport qui affiche clairement :
-- ✅ **Shops qui nous doivent** (créances)
-- ✅ **Shops que nous devons** (dettes)
+- ✅ **Shops qui Nous qui Doivent** (créances)
+- ✅ **Shops que Nous que Devons** (dettes)
 - ✅ Basé sur la période sélectionnée
 - ✅ Avec le solde net par shop
 
@@ -85,10 +85,10 @@ La section s'affiche **UNIQUEMENT** lorsqu'un shop spécifique est sélectionné
 
 ### Contenu de la Section
 
-#### 📗 Shops qui nous doivent (Créances)
+#### 📗 Shops qui Nous qui Doivent (Créances)
 ```
 ┌─────────────────────────────────────────┐
-│ 🔼 Shops qui nous doivent    [2 shops]  │
+│ 🔼 Shops qui Nous qui Doivent    [2 shops]  │
 ├─────────────────────────────────────────┤
 │ 🏪 Shop NGANGAZU                        │
 │    ➤ 15,000.00 USD                      │
@@ -100,10 +100,10 @@ La section s'affiche **UNIQUEMENT** lorsqu'un shop spécifique est sélectionné
 └─────────────────────────────────────────┘
 ```
 
-#### 📕 Shops que nous devons (Dettes)
+#### 📕 Shops que Nous que Devons (Dettes)
 ```
 ┌─────────────────────────────────────────┐
-│ 🔽 Shops que nous devons     [1 shop]   │
+│ 🔽 Shops que Nous que Devons     [1 shop]   │
 ├─────────────────────────────────────────┤
 │ 🏪 Shop GOMA                            │
 │    ➤ 12,300.00 USD                      │
@@ -186,8 +186,8 @@ return {
 
 | Type | Couleur | Usage |
 |------|---------|-------|
-| **Créances** | 🟢 Vert | Shops qui nous doivent |
-| **Dettes** | 🔴 Rouge | Shops que nous devons |
+| **Créances** | 🟢 Vert | Shops qui Nous qui Doivent |
+| **Dettes** | 🔴 Rouge | Shops que Nous que Devons |
 | **Solde Positif** | 🟢 Vert | Solde net créancier |
 | **Solde Négatif** | 🔴 Rouge | Solde net débiteur |
 
@@ -195,16 +195,16 @@ return {
 
 ### Exemple 1 : Shop avec Créances Uniquement
 **Shop MOKU** consulte le rapport pour la période du 1-30 Nov 2024 :
-- **Shops qui nous doivent** :
+- **Shops qui Nous qui Doivent** :
   - NGANGAZU : 15,000 USD
   - BUKAVU : 8,500 USD
-- **Shops que nous devons** : (aucun)
+- **Shops que Nous que Devons** : (aucun)
 
 ### Exemple 2 : Shop avec Créances et Dettes
 **Shop GOMA** consulte le rapport :
-- **Shops qui nous doivent** :
+- **Shops qui Nous qui Doivent** :
   - BUKAVU : 5,000 USD
-- **Shops que nous devons** :
+- **Shops que Nous que Devons** :
   - MOKU : 12,300 USD
   - NGANGAZU : 7,200 USD
 
@@ -225,10 +225,10 @@ return {
 ## 🔍 Exemples de Requêtes Résolues
 
 ### Question : "Quel shop me doit le plus d'argent ?"
-**Réponse** : Première carte dans "Shops qui nous doivent"
+**Réponse** : Première carte dans "Shops qui Nous qui Doivent"
 
 ### Question : "À combien se monte ma dette envers Shop NGANGAZU ?"
-**Réponse** : Chercher NGANGAZU dans "Shops que nous devons"
+**Réponse** : Chercher NGANGAZU dans "Shops que Nous que Devons"
 
 ### Question : "Ai-je des dettes et créances avec le même shop ?"
 **Réponse** : Visible dans le détail de chaque carte
@@ -247,8 +247,8 @@ Pour chaque opération:
 Calculer solde net par shop
         ↓
 Séparer en deux listes:
-  - Solde > 0 → Shops qui nous doivent
-  - Solde < 0 → Shops que nous devons
+  - Solde > 0 → Shops qui Nous qui Doivent
+  - Solde < 0 → Shops que Nous que Devons
         ↓
 Trier et afficher
 ```

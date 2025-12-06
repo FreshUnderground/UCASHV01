@@ -713,7 +713,7 @@ class _TransferValidationWidgetState extends State<TransferValidationWidget> {
                         _buildInfoRow(Icons.person_outline, 'Expéditeur', 
                           transfer.observation != null && transfer.observation!.isNotEmpty 
                             ? transfer.observation! 
-                            : (transfer.clientNom ?? 'N/A'), 
+                            : (transfer.clientNom ?? 'Non spécifié'), 
                           isMobile),
                       ],
                     ),
@@ -745,7 +745,7 @@ class _TransferValidationWidgetState extends State<TransferValidationWidget> {
                   children: [
                     Expanded(
                       child: Text(
-                        transfer.shopSourceDesignation ?? 'N/A',
+                        ShopService.instance.getShopDesignation(transfer.shopSourceId, existingDesignation: transfer.shopSourceDesignation),
                         style: TextStyle(
                           fontSize: isMobile ? 12 : 13,
                           fontWeight: FontWeight.w600,
@@ -757,7 +757,7 @@ class _TransferValidationWidgetState extends State<TransferValidationWidget> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        transfer.shopDestinationDesignation ?? 'N/A',
+                        ShopService.instance.getShopDesignation(transfer.shopDestinationId, existingDesignation: transfer.shopDestinationDesignation),
                         style: TextStyle(
                           fontSize: isMobile ? 12 : 13,
                           fontWeight: FontWeight.w600,
@@ -848,8 +848,8 @@ class _TransferValidationWidgetState extends State<TransferValidationWidget> {
               _buildDetailRow('Destinataire', transfer.destinataire ?? 'N/A'),
               _buildDetailRow('Téléphone', transfer.telephoneDestinataire ?? 'N/A'),
               const Divider(),
-              _buildDetailRow('Shop source', transfer.shopSourceDesignation ?? 'N/A'),
-              _buildDetailRow('Shop destination', transfer.shopDestinationDesignation ?? 'N/A'),
+              _buildDetailRow('Shop source', ShopService.instance.getShopDesignation(transfer.shopSourceId, existingDesignation: transfer.shopSourceDesignation)),
+              _buildDetailRow('Shop destination', ShopService.instance.getShopDesignation(transfer.shopDestinationId, existingDesignation: transfer.shopDestinationDesignation)),
               const Divider(),
               _buildDetailRow('Montant', '${transfer.montantNet.toStringAsFixed(2)} ${transfer.devise}'),
               _buildDetailRow('Commission', '${transfer.commission.toStringAsFixed(2)} ${transfer.devise}'),
@@ -947,6 +947,7 @@ class _TransferValidationWidgetState extends State<TransferValidationWidget> {
       debugPrint('🔄 [VALIDATION] Début validation: ${transfer.codeOps} → $newStatus');
       
       // Utiliser le service pour valider (server-first)
+      // Si validateTransfer lance une exception, elle sera attrapée par le bloc catch
       final success = await transferSync.validateTransfer(transfer.codeOps ?? '', newStatus);
       
       if (success) {
@@ -971,11 +972,22 @@ class _TransferValidationWidgetState extends State<TransferValidationWidget> {
         // Le service a déjà rechargé les données depuis l'API
         debugPrint('✅ [VALIDATION] Données rafraîchies automatiquement');
       } else {
+        // Seulement lever une exception générique si validateTransfer retourne explicitement false
+        // et n'a pas lancé d'exception
         throw Exception('Échec de la validation sur le serveur');
       }
       
-    } catch (e) {
-      debugPrint('❌ [VALIDATION] Erreur: $e');
+    } on Exception catch (e) {
+      debugPrint('❌ [VALIDATION] Exception: $e');
+      
+      // Messages d'erreur spécifiques
+      String errorMessage = e.toString().replaceAll('Exception: ', '');
+      String userMessage = 'Vérifiez votre connexion et réessayez';
+      
+      // Cas spécifique pour le transfert non trouvé (404)
+      if (errorMessage.contains('Transfert non trouvé sur le serveur')) {
+        userMessage = 'Ce transfert n\'existe plus sur le serveur. La liste a été mise à jour automatiquement.';
+      }
       
       // En cas d'erreur serveur, afficher message d'erreur clair
       if (mounted) {
@@ -991,13 +1003,45 @@ class _TransferValidationWidgetState extends State<TransferValidationWidget> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Erreur: $e',
+                  'Erreur: $errorMessage',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  userMessage,
+                  style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('❌ [VALIDATION] Erreur inattendue: $e');
+      
+      // En cas d'erreur inattendue, afficher message d'erreur clair
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '❌ Échec de la validation',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Une erreur inattendue s\'est produite',
                   style: const TextStyle(fontSize: 12),
                 ),
                 const SizedBox(height: 4),
                 const Text(
                   'Vérifiez votre connexion et réessayez',
-                  style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic),
+                  style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic),
                 ),
               ],
             ),

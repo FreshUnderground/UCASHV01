@@ -149,7 +149,13 @@ class ClotureVirtuelleParSimService {
     double montantDepots = depots.fold<double>(0.0, (sum, d) => sum + d.montant);
     
     // === CALCULER SOLDE ACTUEL ===
-    // Solde Actuel = Solde Antérieur + Captures - Servies - Retraits - Dépôts
+    // BUSINESS LOGIC: Solde Actuel = Solde Antérieur + Captures - Servies - Retraits - Dépôts
+    // This formula represents the virtual balance evolution for a SIM card:
+    // - Starting balance (soldeAnterieur)
+    // - Add all captured virtual amounts (captures)
+    // - Subtract served transactions (servies) - money converted to cash
+    // - Subtract withdrawals (retraits) - money given to clients
+    // - Subtract client deposits (depots) - virtual to cash conversions
     final soldeActuel = soldeAnterieur + montantCaptures - montantServies - montantRetraits - montantDepots;
     
     // === CALCULER CASH DISPONIBLE ===

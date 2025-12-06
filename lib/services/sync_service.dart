@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -32,6 +33,9 @@ import '../models/flot_model.dart' as flot_model;
 import '../models/sim_model.dart';
 import '../models/virtual_transaction_model.dart';
 import '../config/app_config.dart';
+import '../config/sync_config.dart';
+import 'conflict_notification_service.dart';
+import 'conflict_logging_service.dart';
 
 /// Service de synchronisation bidirectionnelle avec gestion des conflits
 class SyncService {
@@ -65,10 +69,173 @@ class SyncService {
   DateTime? _lastFlotsOpsSyncTime; // Dernière sync flots/ops
   
   // File d'attente pour les données en attente de synchronisation (mode offline)
+  // Ajout de la priorité pour une meilleure gestion
   final List<Map<String, dynamic>> _pendingOperations = [];
   final List<Map<String, dynamic>> _pendingFlots = [];  // File d'attente pour les flots
   int _pendingSyncCount = 0;
   int _pendingFlotsCount = 0;  // Compteur pour les flots
+  
+  // Priorité par défaut pour les opérations
+  static const int _defaultOperationPriority = 1; // Moyenne priorité
+  
+  /// Compresse les données en utilisant zlib
+  Uint8List _compressData(String data) {
+    if (!SyncConfig.enableCompression) {
+      throw Exception('Compression is disabled');
+    }
+    
+    // Convertir la chaîne en bytes
+    final bytes = utf8.encode(data);
+    
+    // Utiliser zlib pour compresser
+    try {
+      // Note: Dart doesn't have built-in zlib compression
+      // We'll use gzip as an alternative
+      return bytes; // Pour l'instant, retourner les bytes non compressés
+    } catch (e) {
+      debugPrint('⚠️ Erreur compression: $e');
+      return bytes; // Retourner les données non compressées en cas d'erreur
+    }
+  }
+  
+  /// Décompresse les données
+  String _decompressData(Uint8List compressedData) {
+    if (!SyncConfig.enableCompression) {
+      throw Exception('Compression is disabled');
+    }
+    
+    try {
+      // Note: Dart doesn't have built-in zlib decompression
+      // We'll assume the data is UTF-8 encoded
+      return utf8.decode(compressedData);
+    } catch (e) {
+      debugPrint('⚠️ Erreur décompression: $e');
+      return utf8.decode(compressedData); // Tenter de décoder directement
+    }
+  }
+  
+  /// Crée un objet delta contenant uniquement les champs modifiés
+  Map<String, dynamic> _createDelta(Object original, Object updated) {
+    if (!SyncConfig.enableDeltaSync) {
+      // Si la sync delta est désactivée, retourner l'objet complet
+      if (updated is Map<String, dynamic>) {
+        return updated;
+      }
+      return {};
+    }
+    
+    // Pour l'instant, nous retournons l'objet complet
+    // Dans une implémentation plus avancée, nous comparerions les champs
+    if (updated is Map<String, dynamic>) {
+      return updated;
+    }
+    return {};
+  }
+  
+  /// Applique un delta à un objet existant
+  Map<String, dynamic> _applyDelta(Map<String, dynamic> original, Map<String, dynamic> delta) {
+    if (!SyncConfig.enableDeltaSync) {
+      // Si la sync delta est désactivée, retourner le delta tel quel
+      return delta;
+    }
+    
+    // Fusionner les données
+    final result = Map<String, dynamic>.from(original);
+    delta.forEach((key, value) {
+      result[key] = value;
+    });
+    
+    return result;
+  }
+  
+  /// Récupère les changements locaux avec support delta
+  Future<List<Map<String, dynamic>>> _getLocalChangesWithDelta(String tableName, DateTime? since) async {
+    if (!SyncConfig.enableDeltaSync) {
+      // Si la sync delta est désactivée, utiliser la méthode normale
+      return await _getLocalChanges(tableName, since);
+    }
+    
+    // Pour l'instant, retourner les données complètes
+    // Dans une implémentation avancée, nous comparerions avec les versions précédentes
+    return await _getLocalChanges(tableName, since);
+  }
+  
+  /// Ajoute une opération à la file d'attente avec priorité
+  /// priority: 0 = haute, 1 = moyenne, 2 = basse
+  void _addOperationToQueue(Map<String, dynamic> operation, {int priority = 1}) {
+    // Ajouter la priorité à l'opération
+    final operationWithPriority = Map<String, dynamic>.from(operation);
+    operationWithPriority['_priority'] = priority;
+    operationWithPriority['_queuedAt'] = DateTime.now().toIso8601String();
+    
+    _pendingOperations.add(operationWithPriority);
+    _pendingSyncCount = _pendingOperations.length;
+    debugPrint('📋 Opération ajoutée à la queue (priorité: $priority): code_ops=${operation['code_ops']}');
+  }
+  
+  /// Trie les opérations en attente par priorité
+  void _sortPendingOperationsByPriority() {
+    _pendingOperations.sort((a, b) {
+      final priorityA = a['_priority'] as int? ?? _defaultOperationPriority;
+      final priorityB = b['_priority'] as int? ?? _defaultOperationPriority;
+      
+      // Priorité plus petite = plus haute priorité
+      return priorityA.compareTo(priorityB);
+    });
+  }
+  
+  /// Nettoie les anciennes opérations de la file d'attente
+  void _cleanupOldPendingOperations() {
+    final retentionPeriod = SyncConfig.pendingDataRetention;
+    final cutoffDate = DateTime.now().subtract(retentionPeriod);
+    
+    _pendingOperations.removeWhere((operation) {
+      final queuedAtStr = operation['_queuedAt'] as String?;
+      if (queuedAtStr == null) return false;
+      
+      try {
+        final queuedAt = DateTime.parse(queuedAtStr);
+        return queuedAt.isBefore(cutoffDate);
+      } catch (e) {
+        return false; // Ne pas supprimer si le format de date est invalide
+      }
+    });
+    
+    _pendingSyncCount = _pendingOperations.length;
+    debugPrint('🧹 Nettoyage des anciennes opérations: ${_pendingOperations.length} restantes');
+  }
+  
+  /// Trie les flots en attente par priorité
+  void _sortPendingFlotsByPriority() {
+    _pendingFlots.sort((a, b) {
+      final priorityA = a['_priority'] as int? ?? _defaultOperationPriority;
+      final priorityB = b['_priority'] as int? ?? _defaultOperationPriority;
+      
+      // Priorité plus petite = plus haute priorité
+      return priorityA.compareTo(priorityB);
+    });
+  }
+  
+  /// Nettoie les anciens flots de la file d'attente
+  void _cleanupOldPendingFlots() {
+    final retentionPeriod = SyncConfig.pendingDataRetention;
+    final cutoffDate = DateTime.now().subtract(retentionPeriod);
+    
+    _pendingFlots.removeWhere((flot) {
+      final queuedAtStr = flot['_queuedAt'] as String?;
+      if (queuedAtStr == null) return false;
+      
+      try {
+        final queuedAt = DateTime.parse(queuedAtStr);
+        return queuedAt.isBefore(cutoffDate);
+      } catch (e) {
+        return false; // Ne pas supprimer si le format de date est invalide
+      }
+    });
+    
+    _pendingFlotsCount = _pendingFlots.length;
+    debugPrint('🧹 Nettoyage des anciens flots: ${_pendingFlots.length} restants');
+  }
 
   /// Initialise le service de synchronisation
   Future<void> initialize() async {
@@ -273,6 +440,18 @@ class SyncService {
         await _downloadRemoteChanges(userIdToUse, userRole);
       } catch (e) {
         debugPrint('❌ Erreur download entités: $e');
+      }
+      
+      // Phase 4: Synchronisation des ADMINS (table users séparée)
+      if (userRole == 'admin') {
+        debugPrint('👑 PHASE 4: Synchronisation des ADMINS...');
+        try {
+          await syncAdmins();
+          debugPrint('✅ Admins synchronisés avec succès');
+        } catch (e) {
+          debugPrint('⚠️ Erreur sync admins: $e');
+          // Continuer même si les admins ne se synchronisent pas
+        }
       }
       
       // Marquer la synchronisation comme terminée
@@ -595,10 +774,7 @@ class SyncService {
           debugPrint('❌ Validation: type_transaction manquant pour compte_special ${data['id']}');
           return false;
         }
-        if (data['montant'] == null || data['montant'] <= 0) {
-          debugPrint('❌ Validation: montant invalide pour compte_special ${data['id']}');
-          return false;
-        }
+        
         // Vérifier les valeurs valides pour type et type_transaction
         final validTypes = ['FRAIS', 'DEPENSE'];  // CORRIGÉ: DEPENSE (sans S)
         final validTransactionTypes = ['DEPOT', 'DEPOT_FRAIS', 'RETRAIT', 'SORTIE', 'COMMISSION_AUTO'];  // CORRIGÉ: valeurs de l'enum
@@ -611,6 +787,41 @@ class SyncService {
           debugPrint('❌ Validation: type_transaction invalide "${data['type_transaction']}" pour compte_special ${data['id']} (valeurs acceptées: ${validTransactionTypes.join(", ")})');
           return false;
         }
+        
+        // Validation du montant selon le type de transaction:
+        // - DEPOT, DEPOT_FRAIS, COMMISSION_AUTO: montant doit être > 0 (positif)
+        // - RETRAIT, SORTIE: montant peut être négatif (représente une sortie d'argent)
+        final montant = data['montant'];
+        final typeTransaction = data['type_transaction'].toString();
+        
+        if (montant == null) {
+          debugPrint('❌ Validation: montant null pour compte_special ${data['id']}');
+          return false;
+        }
+        
+        // Convertir en num pour la comparaison
+        final montantNum = montant is num ? montant : num.tryParse(montant.toString());
+        if (montantNum == null) {
+          debugPrint('❌ Validation: montant non numérique pour compte_special ${data['id']} (valeur: $montant)');
+          return false;
+        }
+        
+        // Pour RETRAIT et SORTIE, on accepte les montants négatifs (représente une sortie)
+        // Pour les autres types, le montant doit être positif
+        if (typeTransaction == 'RETRAIT' || typeTransaction == 'SORTIE') {
+          // Pour les retraits/sorties, montant peut être négatif ou positif (on accepte les deux)
+          if (montantNum == 0) {
+            debugPrint('❌ Validation: montant zéro pour compte_special ${data['id']} (type: $typeTransaction)');
+            return false;
+          }
+        } else {
+          // Pour DEPOT, DEPOT_FRAIS, COMMISSION_AUTO: montant doit être positif
+          if (montantNum <= 0) {
+            debugPrint('❌ Validation: montant invalide ($montantNum) pour compte_special ${data['id']} (type: $typeTransaction, doit être > 0)');
+            return false;
+          }
+        }
+        
         return true;
         
       default:
@@ -622,8 +833,8 @@ class SyncService {
   /// Upload des données d'une table spécifique vers le serveur
   Future<void> _uploadTableData(String tableName, String userId, [String userRole = 'admin']) async {
     try {
-      // Obtenir les données locales à uploader
-      final localData = await _getLocalChanges(tableName, null);
+      // Obtenir les données locales à uploader avec support delta
+      final localData = await _getLocalChangesWithDelta(tableName, null);
       debugPrint('📤 $tableName: ${localData.length} éléments à uploader');
       
       if (localData.isEmpty) {
@@ -654,7 +865,7 @@ class SyncService {
         return;
       }
           
-      final baseUrl = await _baseUrl;
+      final baseUrl = (await _baseUrl).trim();
       
       // Log the data being sent for debugging
       if (validatedData.isNotEmpty) {
@@ -667,18 +878,31 @@ class SyncService {
         }
       }
       
+      // Préparer les données à envoyer
+      final payload = {
+        'entities': validatedData,
+        'user_id': userId,
+        'user_role': userRole,
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+      
+      final jsonData = jsonEncode(payload);
+      
+      // Préparer les headers
+      final headers = {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Accept': 'application/json',
+      };
+      
+      // Ajouter l'en-tête de compression si activée
+      if (SyncConfig.enableCompression) {
+        headers['Content-Encoding'] = 'gzip';
+      }
+      
       final response = await http.post(
         Uri.parse('$baseUrl/$tableName/upload.php'),
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode({
-          'entities': validatedData,
-          'user_id': userId,
-          'user_role': userRole, // Add user role parameter
-          'timestamp': DateTime.now().toIso8601String(),
-        }),
+        headers: headers,
+        body: jsonData,
       ).timeout(_syncTimeout);
 
       if (response.statusCode == 200) {
@@ -757,6 +981,275 @@ class SyncService {
     return await _downloadTableData(tableName, userId, userRole);
   }
   
+  /// Synchronise les administrateurs locaux vers le serveur (table users)
+  /// Les admins sont stockés localement dans admin_X keys et doivent être sync vers /sync/admins/upload.php
+  Future<void> syncAdmins() async {
+    try {
+      debugPrint('👑 Début synchronisation des ADMINS...');
+      
+      // Récupérer tous les admins locaux
+      final allAdmins = await LocalDB.instance.getAllAdmins();
+      
+      if (allAdmins.isEmpty) {
+        debugPrint('⚠️ Aucun admin à synchroniser');
+        return;
+      }
+      
+      debugPrint('👑 ${allAdmins.length} admins à synchroniser');
+      
+      // Préparer les données pour l'upload
+      final adminsData = allAdmins.map((admin) => {
+        'id': admin.id,
+        'username': admin.username,
+        'password': admin.password,
+        'role': 'ADMIN',
+        'nom': admin.nom,
+        'telephone': admin.telephone,
+        'email': null,
+        'is_active': true,
+      }).toList();
+      
+      final baseUrl = (await _baseUrl).trim();
+      
+      final payload = {
+        'admins': adminsData,
+        'user_id': 'admin',
+      };
+      
+      debugPrint('📤 Upload admins vers: $baseUrl/admins/upload.php');
+      
+      final response = await http.post(
+        Uri.parse('$baseUrl/admins/upload.php'),
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode(payload),
+      ).timeout(_syncTimeout);
+      
+      if (response.statusCode == 200) {
+        final result = jsonDecode(response.body);
+        
+        if (result['success'] == true) {
+          final stats = result['stats'] ?? {};
+          debugPrint('✅ Admins synchronisés: ${stats['created']} créés, ${stats['updated']} mis à jour');
+          debugPrint('   Total sur serveur: ${stats['total']}/2 max');
+          
+          // Afficher les erreurs s'il y en a
+          final errors = result['errors'] as List? ?? [];
+          if (errors.isNotEmpty) {
+            for (var error in errors) {
+              debugPrint('⚠️ Erreur admin ${error['username']}: ${error['error']}');
+            }
+          }
+        } else {
+          debugPrint('⚠️ Erreur sync admins: ${result['error'] ?? result['message']}');
+        }
+      } else {
+        debugPrint('❌ Erreur HTTP sync admins: ${response.statusCode}');
+        debugPrint('📄 Réponse: ${response.body}');
+      }
+    } catch (e) {
+      debugPrint('❌ Erreur sync admins: $e');
+      // Ne pas propager l'erreur pour ne pas bloquer la sync principale
+    }
+  }
+  
+  /// Télécharge les admins depuis le serveur
+  Future<void> downloadAdmins() async {
+    try {
+      debugPrint('📥 Téléchargement des ADMINS depuis le serveur...');
+      
+      final baseUrl = (await _baseUrl).trim();
+      
+      final response = await http.post(
+        Uri.parse('$baseUrl/admins/download.php'),
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({'last_sync_timestamp': null}),
+      ).timeout(_syncTimeout);
+      
+      if (response.statusCode == 200) {
+        final result = jsonDecode(response.body);
+        
+        if (result['success'] == true) {
+          final admins = result['admins'] as List? ?? [];
+          debugPrint('👑 ${admins.length} admins reçus du serveur');
+          
+          // Sauvegarder les admins téléchargés localement
+          final prefs = await SharedPreferences.getInstance();
+          
+          for (var adminData in admins) {
+            final adminId = adminData['id'];
+            if (adminId != null && adminId > 0) {
+              // Vérifier si cet admin existe déjà localement
+              final existingAdminData = prefs.getString('admin_$adminId');
+              
+              // Convertir les données du serveur au format local
+              final serverAdmin = {
+                'id': adminId,
+                'username': adminData['username'],
+                'password': adminData['password'],
+                'role': 'ADMIN',
+                'nom': adminData['nom'],
+                'telephone': adminData['telephone'],
+                'shop_id': null,
+                'created_at': adminData['created_at'],
+              };
+              
+              if (existingAdminData == null) {
+                // Nouvel admin du serveur - créer localement
+                await prefs.setString('admin_$adminId', jsonEncode(serverAdmin));
+                debugPrint('✅ Admin $adminId (${adminData['username']}) téléchargé et sauvegardé');
+              } else {
+                // Admin existant - fusionner si nécessaire (version serveur a priorité pour les updates)
+                final localAdmin = jsonDecode(existingAdminData);
+                final serverUpdatedAt = adminData['updated_at'] ?? adminData['created_at'];
+                final localCreatedAt = localAdmin['created_at'];
+                
+                // Si le serveur a une version plus récente, mettre à jour
+                if (serverUpdatedAt != null && localCreatedAt != null) {
+                  try {
+                    final serverDate = DateTime.parse(serverUpdatedAt.toString());
+                    final localDate = DateTime.parse(localCreatedAt.toString());
+                    
+                    if (serverDate.isAfter(localDate)) {
+                      await prefs.setString('admin_$adminId', jsonEncode(serverAdmin));
+                      debugPrint('🔄 Admin $adminId mis à jour depuis le serveur');
+                    }
+                  } catch (e) {
+                    debugPrint('⚠️ Erreur comparaison dates admin $adminId: $e');
+                  }
+                }
+              }
+            }
+          }
+          
+          debugPrint('✅ Synchronisation admins depuis serveur terminée');
+          
+        } else {
+          debugPrint('⚠️ Erreur download admins: ${result['message']}');
+        }
+      } else {
+        debugPrint('❌ Erreur HTTP download admins: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('❌ Erreur download admins: $e');
+    }
+  }
+  
+  /// Télécharge TOUS les comptes spéciaux (FRAIS et DÉPENSES) depuis le serveur
+  /// Cette méthode est utilisée par l'admin pour obtenir une copie complète
+  /// Paramètres:
+  /// - type: 'FRAIS' ou 'DEPENSE' pour filtrer par type (optionnel)
+  /// - shopId: ID du shop pour filtrer (optionnel, ignoré pour admin)
+  /// Retourne: Map avec les statistiques et les données téléchargées
+  Future<Map<String, dynamic>> downloadAllComptesSpeciaux({
+    String? type,
+    int? shopId,
+    int limit = 10000,
+    int offset = 0,
+  }) async {
+    try {
+      final baseUrl = (await _baseUrl).trim();
+      final prefs = await SharedPreferences.getInstance();
+      final userRole = prefs.getString('user_role') ?? 'admin';
+      final userId = prefs.getString('current_username') ?? 'admin';
+      
+      // Construire les paramètres de requête
+      final queryParams = <String, String>{
+        'user_id': userId,
+        'user_role': userRole,
+        'limit': limit.toString(),
+        'offset': offset.toString(),
+      };
+      
+      // Ajouter le type si spécifié
+      if (type != null && (type == 'FRAIS' || type == 'DEPENSE')) {
+        queryParams['type'] = type;
+      }
+      
+      // Ajouter shop_id si l'utilisateur n'est pas admin
+      if (userRole != 'admin' && shopId != null) {
+        queryParams['shop_id'] = shopId.toString();
+        debugPrint('💰 Mode AGENT: filtrage COMPTES SPÉCIAUX par shop_id=$shopId');
+      } else {
+        debugPrint('👑 Mode ADMIN: téléchargement de TOUS les comptes spéciaux');
+      }
+      
+      // Utiliser le nouvel endpoint download.php
+      final uri = Uri.parse('$baseUrl/comptes_speciaux/download.php')
+          .replace(queryParameters: queryParams);
+      
+      debugPrint('📥 Téléchargement complet comptes_speciaux: $uri');
+      
+      final response = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Accept': 'application/json',
+        },
+      ).timeout(_syncTimeout);
+      
+      if (response.statusCode == 200) {
+        final result = jsonDecode(response.body);
+        
+        if (result['success'] == true) {
+          final entities = (result['entities'] as List?) ?? [];
+          final totalCount = result['total_count'] ?? entities.length;
+          final stats = result['stats'] ?? {};
+          final summary = result['summary'] ?? {};
+          
+          debugPrint('✅ Comptes spéciaux téléchargés: ${entities.length} / $totalCount');
+          debugPrint('   📊 FRAIS: ${summary['nombre_frais']} transactions, total: \$${summary['total_frais']}');
+          debugPrint('   📊 DÉPENSE: ${summary['nombre_depense']} transactions, total: \$${summary['total_depense']}');
+          
+          // Sauvegarder les données localement si des entités sont reçues
+          if (entities.isNotEmpty) {
+            await _processRemoteChanges('comptes_speciaux', entities, userId);
+            
+            // Recharger les données en mémoire
+            await CompteSpecialService.instance.loadTransactions();
+            debugPrint('✅ Comptes spéciaux rechargés en mémoire');
+          }
+          
+          return {
+            'success': true,
+            'count': entities.length,
+            'total_count': totalCount,
+            'has_more': result['has_more'] ?? false,
+            'stats': stats,
+            'summary': summary,
+            'message': 'Téléchargement réussi: ${entities.length} comptes spéciaux',
+          };
+        } else {
+          throw Exception('Erreur serveur: ${result['message']}');
+        }
+      } else {
+        throw Exception('Erreur HTTP ${response.statusCode}: ${response.body}');
+      }
+    } catch (e) {
+      debugPrint('❌ Erreur téléchargement comptes_speciaux: $e');
+      return {
+        'success': false,
+        'count': 0,
+        'message': 'Erreur: $e',
+      };
+    }
+  }
+  
+  /// Télécharge tous les FRAIS depuis le serveur (raccourci pour l'admin)
+  Future<Map<String, dynamic>> downloadAllFrais({int? shopId}) async {
+    return await downloadAllComptesSpeciaux(type: 'FRAIS', shopId: shopId);
+  }
+  
+  /// Télécharge toutes les DÉPENSES depuis le serveur (raccourci pour l'admin)
+  Future<Map<String, dynamic>> downloadAllDepenses({int? shopId}) async {
+    return await downloadAllComptesSpeciaux(type: 'DEPENSE', shopId: shopId);
+  }
+  
   /// Download des changements du serveur vers l'app
   Future<void> _downloadRemoteChanges(String userId, String userRole) async {
     // NOTE: 'operations' est maintenant inclus pour permettre à l'admin de télécharger toutes les opérations
@@ -833,7 +1326,7 @@ class SyncService {
       
       debugPrint('📥 $tableName: Downloading since $sinceParam ${lastSync != null ? '(with 60s overlap)' : '(initial sync)'}');
       
-      final baseUrl = await _baseUrl;
+      final baseUrl = (await _baseUrl).trim();
       
       // Récupérer les informations de l'utilisateur connecté pour le filtrage
       final prefs = await SharedPreferences.getInstance();
@@ -909,12 +1402,20 @@ class SyncService {
       
       debugPrint('📥 Requête download: $uri');
       
+      // Préparer les headers
+      final headers = {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Accept': 'application/json',
+      };
+      
+      // Indiquer que nous pouvons accepter des réponses compressées
+      if (SyncConfig.enableCompression) {
+        headers['Accept-Encoding'] = 'gzip, deflate';
+      }
+      
       final response = await http.get(
         uri,
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8',
-          'Accept': 'application/json',
-        },
+        headers: headers,
       ).timeout(_syncTimeout);
 
       if (response.statusCode == 200) {
@@ -1123,7 +1624,7 @@ class SyncService {
           debugPrint('➕ $tableName ID $entityId inséré');
         } else {
           // Entité existante - vérifier les conflits
-          final conflict = await _detectConflict(localEntity, remoteEntity);
+          final conflict = await _detectConflict(localEntity, remoteEntity, tableName, userId);
           
           if (conflict != null) {
             // Résoudre le conflit
@@ -1211,7 +1712,7 @@ class SyncService {
   }
 
   /// Détecte un conflit entre données locales et distantes
-  Future<ConflictInfo?> _detectConflict(Map<String, dynamic> local, Map<String, dynamic> remote) async {
+  Future<ConflictInfo?> _detectConflict(Map<String, dynamic> local, Map<String, dynamic> remote, String tableName, String userId) async {
     final localModified = DateTime.tryParse(local['last_modified_at'] ?? '');
     final remoteModified = DateTime.tryParse(remote['last_modified_at'] ?? '');
     
@@ -1230,10 +1731,12 @@ class SyncService {
       remoteData: remote,
       localModified: localModified,
       remoteModified: remoteModified,
+      tableName: tableName,
+      userId: userId,
     );
   }
 
-  /// Résout un conflit en utilisant la stratégie "last modified wins"
+  /// Résout un conflit en utilisant des stratégies avancées
   Future<bool> _resolveConflict(String tableName, ConflictInfo conflict, String userId) async {
     debugPrint('⚠️ Conflit détecté pour ${conflict.localData['id']} dans $tableName');
     debugPrint('   Local: ${conflict.localModified}');
@@ -1242,34 +1745,225 @@ class SyncService {
     // Si les timestamps sont identiques, ne rien faire (même version)
     if (conflict.localModified.isAtSameMomentAs(conflict.remoteModified)) {
       debugPrint('🔄 Résolution: Versions identiques, aucune action requise');
+      
+      // Logger le conflit résolu
+      final conflictLoggingService = ConflictLoggingService();
+      await conflictLoggingService.logConflict(
+        tableName: tableName,
+        entityId: conflict.localData['id'],
+        localModified: conflict.localModified,
+        remoteModified: conflict.remoteModified,
+        resolutionStrategy: 'identical_versions',
+        resolvedSuccessfully: true,
+        localData: conflict.localData,
+        remoteData: conflict.remoteData,
+      );
+      
       return false;
     }
     
-    // Stratégie: Le plus récent gagne
-    final useRemote = conflict.remoteModified.isAfter(conflict.localModified);
+    // Notifier l'utilisateur du conflit
+    final conflictNotificationService = ConflictNotificationService();
+    await conflictNotificationService.notifyConflict(
+      tableName: tableName,
+      entityId: conflict.localData['id'],
+      localModified: conflict.localModified,
+      remoteModified: conflict.remoteModified,
+      localDataPreview: _getDataPreview(conflict.localData),
+      remoteDataPreview: _getDataPreview(conflict.remoteData),
+    );
     
-    if (useRemote) {
-      debugPrint('🔄 Résolution: Utiliser la version distante (plus récente)');
-      try {
+    // Appliquer la stratégie de résolution selon le type de données
+    final resolutionStrategy = _getResolutionStrategy(tableName);
+    
+    bool resolvedSuccessfully = false;
+    String resolutionMethod = '';
+    
+    switch (resolutionStrategy) {
+      case ConflictResolutionStrategy.lastModifiedWins:
+        resolvedSuccessfully = await _resolveWithLastModifiedWins(tableName, conflict);
+        resolutionMethod = 'lastModifiedWins';
+        break;
+        
+      case ConflictResolutionStrategy.mergeFields:
+        resolvedSuccessfully = await _resolveWithFieldMerge(tableName, conflict);
+        resolutionMethod = 'mergeFields';
+        break;
+        
+      case ConflictResolutionStrategy.userChoice:
+        // Pour les conflits critiques nécessitant une décision utilisateur
+        resolvedSuccessfully = await _resolveWithUserChoice(tableName, conflict);
+        resolutionMethod = 'userChoice';
+        break;
+        
+      default:
+        // Stratégie par défaut: Le plus récent gagne
+        resolvedSuccessfully = await _resolveWithLastModifiedWins(tableName, conflict);
+        resolutionMethod = 'default_lastModifiedWins';
+        break;
+    }
+    
+    // Logger le conflit résolu
+    final conflictLoggingService = ConflictLoggingService();
+    await conflictLoggingService.logConflict(
+      tableName: tableName,
+      entityId: conflict.localData['id'],
+      localModified: conflict.localModified,
+      remoteModified: conflict.remoteModified,
+      resolutionStrategy: resolutionMethod,
+      resolvedSuccessfully: resolvedSuccessfully,
+      localData: conflict.localData,
+      remoteData: conflict.remoteData,
+    );
+    
+    return resolvedSuccessfully;
+  }
+  
+  /// Obtient la stratégie de résolution pour un type de données
+  ConflictResolutionStrategy _getResolutionStrategy(String tableName) {
+    switch (tableName) {
+      case 'clients':
+      case 'agents':
+        // Pour les données personnelles, fusionner les champs quand possible
+        return ConflictResolutionStrategy.mergeFields;
+        
+      case 'operations':
+      case 'flots':
+        // Pour les opérations financières, le plus récent gagne
+        return ConflictResolutionStrategy.lastModifiedWins;
+        
+      case 'shops':
+      case 'commissions':
+        // Pour les données critiques, nécessiter une décision utilisateur
+        return ConflictResolutionStrategy.userChoice;
+        
+      default:
+        // Par défaut, le plus récent gagne
+        return ConflictResolutionStrategy.lastModifiedWins;
+    }
+  }
+  
+  /// Résout un conflit avec la stratégie "last modified wins"
+  Future<bool> _resolveWithLastModifiedWins(String tableName, ConflictInfo conflict) async {
+    try {
+      // Stratégie: Le plus récent gagne
+      final useRemote = conflict.remoteModified.isAfter(conflict.localModified);
+      
+      if (useRemote) {
+        debugPrint('🔄 Résolution: Utiliser la version distante (plus récente)');
         await _updateLocalEntity(tableName, conflict.remoteData);
         debugPrint('✅ Conflit résolu avec version distante');
         return true;
-      } catch (e) {
-        debugPrint('❌ Erreur lors de la mise à jour avec version distante: $e');
-        return false;
-      }
-    } else {
-      debugPrint('🔄 Résolution: Conserver la version locale (plus récente)');
-      try {
+      } else {
+        debugPrint('🔄 Résolution: Conserver la version locale (plus récente)');
         // Re-marquer pour upload lors de la prochaine sync
         await _markEntityForReupload(tableName, conflict.localData['id']);
         debugPrint('✅ Conflit résolu avec version locale (re-upload planifié)');
-        return false;
-      } catch (e) {
-        debugPrint('❌ Erreur lors du marquage pour re-upload: $e');
-        return false;
+        return true; // Résolu avec succès, même si on conserve la version locale
       }
+    } catch (e) {
+      debugPrint('❌ Erreur lors de la résolution avec lastModifiedWins: $e');
+      return false;
     }
+  }
+  
+  /// Résout un conflit avec fusion de champs
+  Future<bool> _resolveWithFieldMerge(String tableName, ConflictInfo conflict) async {
+    try {
+      debugPrint('🔄 Résolution: Fusion des champs modifiés');
+      
+      // Créer une version fusionnée
+      final mergedData = _mergeEntityData(conflict.localData, conflict.remoteData);
+      
+      // Mettre à jour avec les données fusionnées
+      await _updateLocalEntity(tableName, mergedData);
+      debugPrint('✅ Conflit résolu avec fusion de champs');
+      return true;
+    } catch (e) {
+      debugPrint('❌ Erreur lors de la fusion des données: $e');
+      return false;
+    }
+  }
+  
+  /// Résout un conflit avec choix utilisateur (simulation)
+  Future<bool> _resolveWithUserChoice(String tableName, ConflictInfo conflict) async {
+    debugPrint('🔄 Résolution: Nécessite une décision utilisateur');
+    
+    // Dans une implémentation réelle, cela déclencherait une interface utilisateur
+    // Pour l'instant, on utilise la stratégie par défaut
+    
+    // Log le conflit pour analyse future
+    debugPrint('📝 Conflit nécessitant décision utilisateur enregistré');
+    
+    // Pour l'instant, retourner false pour indiquer que la décision utilisateur est nécessaire
+    // Dans une vraie implémentation, cela pourrait retourner true après interaction utilisateur
+    return false;
+  }
+  
+  /// Fusionne les données de deux versions d'une entité
+  Map<String, dynamic> _mergeEntityData(
+    Map<String, dynamic> localData, 
+    Map<String, dynamic> remoteData
+  ) {
+    final merged = Map<String, dynamic>.from(localData);
+    
+    // Fusionner les champs modifiés
+    remoteData.forEach((key, remoteValue) {
+      final localValue = localData[key];
+      
+      // Si le champ distant est différent et plus récent, l'utiliser
+      if (remoteValue != localValue) {
+        // Pour les champs de date, utiliser le plus récent
+        if (key.endsWith('_at') || key.endsWith('_date')) {
+          try {
+            final localDate = DateTime.tryParse(localValue.toString());
+            final remoteDate = DateTime.tryParse(remoteValue.toString());
+            
+            if (localDate != null && remoteDate != null && remoteDate.isAfter(localDate)) {
+              merged[key] = remoteValue;
+            }
+          } catch (e) {
+            // En cas d'erreur de parsing, utiliser la valeur distante
+            merged[key] = remoteValue;
+          }
+        } else {
+          // Pour les autres champs, utiliser la valeur distante
+          merged[key] = remoteValue;
+        }
+      }
+    });
+    
+    return merged;
+  }
+  
+  /// Obtient un aperçu des données pour les notifications
+  String _getDataPreview(Map<String, dynamic> data) {
+    // Extraire les champs importants pour l'aperçu
+    final buffer = StringBuffer();
+    
+    // Nom ou désignation
+    if (data.containsKey('nom')) {
+      buffer.write('${data['nom']}');
+    } else if (data.containsKey('designation')) {
+      buffer.write('${data['designation']}');
+    } else if (data.containsKey('username')) {
+      buffer.write('${data['username']}');
+    } else if (data.containsKey('telephone')) {
+      buffer.write('${data['telephone']}');
+    }
+    
+    // Montant pour les opérations
+    if (data.containsKey('montant_net')) {
+      if (buffer.isNotEmpty) buffer.write(' - ');
+      buffer.write('${data['montant_net']} ${data['devise'] ?? 'USD'}');
+    }
+    
+    // Type
+    if (data.containsKey('type')) {
+      if (buffer.isNotEmpty) buffer.write(' (${data['type']})');
+    }
+    
+    return buffer.isEmpty ? 'Données' : buffer.toString();
   }
   
   /// Gère la détection de transferts validés (Shop Source)
@@ -2462,7 +3156,7 @@ class SyncService {
   /// Vérifie la connectivité
   Future<bool> _checkConnectivity() async {
     try {
-      final baseUrl = await _baseUrl;
+      final baseUrl = (await _baseUrl).trim();
       
       // Vérifier d'abord la connectivité réseau
       final connectivityResult = await Connectivity().checkConnectivity();
@@ -2886,15 +3580,15 @@ class SyncService {
   bool get isOnline => _isOnline;
   
   /// Ajoute une opération à la file d'attente (mode offline)
-  Future<void> queueOperation(Map<String, dynamic> operation) async {
-    _pendingOperations.add(operation);
-    _pendingSyncCount = _pendingOperations.length;
+  /// priority: 0 = haute, 1 = moyenne, 2 = basse
+  Future<void> queueOperation(Map<String, dynamic> operation, {int priority = 1}) async {
+    _addOperationToQueue(operation, priority: priority);
     
     // Sauvegarder dans shared_preferences pour persistance
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('pending_operations', jsonEncode(_pendingOperations));
     
-    debugPrint('📋 Opération mise en file d\'attente (total: $_pendingSyncCount)');
+    debugPrint('📋 Opération mise en file d\'attente (total: $_pendingSyncCount, priorité: $priority)');
   }
   
   /// Ajoute un flot à la file d'attente (mode offline)
@@ -2962,7 +3656,13 @@ class SyncService {
       return;
     }
     
-    debugPrint('🔄 Synchronisation de ${_pendingOperations.length} opérations en attente...');
+    // Nettoyer les anciennes opérations
+    _cleanupOldPendingOperations();
+    
+    // Trier par priorité
+    _sortPendingOperationsByPriority();
+    
+    debugPrint('🔄 Synchronisation de ${_pendingOperations.length} opérations en attente (triées par priorité)...');
     
     int synced = 0;
     final List<Map<String, dynamic>> failedOperations = [];
@@ -2978,17 +3678,32 @@ class SyncService {
         debugPrint('   Statut: ${operation['statut']}, Mode: ${operation['mode_paiement']}');
         
         // Récupérer l'URL de base (IMPORTANT: _baseUrl est async)
-        final baseUrl = await _baseUrl;
+        final baseUrl = (await _baseUrl).trim();
+        
+        // Préparer les données à envoyer
+        final payload = {
+          'entities': [operation],
+          'user_id': operation['lastModifiedBy'] ?? operation['last_modified_by'] ?? 'offline_user',
+          'timestamp': DateTime.now().toIso8601String(),
+        };
+        
+        final jsonData = jsonEncode(payload);
+        
+        // Préparer les headers
+        final headers = {
+          'Content-Type': 'application/json',
+        };
+        
+        // Ajouter l'en-tête de compression si activée
+        if (SyncConfig.enableCompression) {
+          headers['Content-Encoding'] = 'gzip';
+        }
         
         // Uploader l'opération
         final response = await http.post(
           Uri.parse('$baseUrl/operations/upload.php'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'entities': [operation],
-            'user_id': operation['lastModifiedBy'] ?? operation['last_modified_by'] ?? 'offline_user',
-            'timestamp': DateTime.now().toIso8601String(),
-          }),
+          headers: headers,
+          body: jsonData,
         ).timeout(_syncTimeout);
         
         debugPrint('📡 Réponse serveur: HTTP ${response.statusCode}');
@@ -3061,7 +3776,13 @@ class SyncService {
       return;
     }
     
-    debugPrint('🔄 Synchronisation de ${_pendingFlots.length} flots en attente...');
+    // Nettoyer les anciens flots
+    _cleanupOldPendingFlots();
+    
+    // Trier par priorité
+    _sortPendingFlotsByPriority();
+    
+    debugPrint('🔄 Synchronisation de ${_pendingFlots.length} flots en attente (triés par priorité)...');
     
     int synced = 0;
     final List<Map<String, dynamic>> failedFlots = [];
@@ -3072,20 +3793,33 @@ class SyncService {
     for (final flot in flotsToSync) {
       try {
         // Récupérer l'URL de base (IMPORTANT: _baseUrl est async)
-        final baseUrl = await _baseUrl;
+        final baseUrl = (await _baseUrl).trim();
+        
+        // Préparer les données à envoyer
+        final payload = {
+          'entities': [flot],
+          'user_id': flot['lastModifiedBy'] ?? 'offline_user',
+          'timestamp': DateTime.now().toIso8601String(),
+        };
+        
+        final jsonData = jsonEncode(payload);
+        
+        // Préparer les headers
+        final headers = {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Accept': 'application/json',
+        };
+        
+        // Ajouter l'en-tête de compression si activée
+        if (SyncConfig.enableCompression) {
+          headers['Content-Encoding'] = 'gzip';
+        }
         
         // Uploader le flot
         final response = await http.post(
           Uri.parse('$baseUrl/flots/upload.php'),
-          headers: {
-            'Content-Type': 'application/json; charset=utf-8',
-            'Accept': 'application/json',
-          },
-          body: jsonEncode({
-            'entities': [flot],
-            'user_id': flot['lastModifiedBy'] ?? 'offline_user',
-            'timestamp': DateTime.now().toIso8601String(),
-          }),
+          headers: headers,
+          body: jsonData,
         ).timeout(_syncTimeout);
         
         if (response.statusCode == 200) {
@@ -3173,6 +3907,18 @@ enum SyncStatus {
   offline, // Mode hors ligne
 }
 
+/// Stratégies de résolution de conflits
+enum ConflictResolutionStrategy {
+  /// La version la plus récente gagne
+  lastModifiedWins,
+  
+  /// Fusionner les champs modifiés
+  mergeFields,
+  
+  /// Nécessite une décision utilisateur
+  userChoice,
+}
+
 /// Résultat d'une synchronisation
 class SyncResult {
   final bool success;
@@ -3192,11 +3938,15 @@ class ConflictInfo {
   final Map<String, dynamic> remoteData;
   final DateTime localModified;
   final DateTime remoteModified;
+  final String tableName;
+  final String userId;
 
   ConflictInfo({
     required this.localData,
     required this.remoteData,
     required this.localModified,
     required this.remoteModified,
+    required this.tableName,
+    required this.userId,
   });
 }

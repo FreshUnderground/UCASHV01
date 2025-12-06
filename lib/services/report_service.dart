@@ -49,17 +49,24 @@ class ReportService extends ChangeNotifier {
       final allOperations = await LocalDB.instance.getAllOperations();
       
       // Filtrer par shop si spécifié
+      // IMPORTANT: Pour les rapports inter-shops, inclure les opérations où ce shop est SOURCE OU DESTINATION
       if (shopId != null) {
-        _operations = allOperations.where((op) => op.shopSourceId == shopId).toList();
+        _operations = allOperations.where((op) => 
+          op.shopSourceId == shopId || op.shopDestinationId == shopId
+        ).toList();
       } else {
         _operations = allOperations;
       }
 
       // Filtrer par période si spécifiée
+      // IMPORTANT: Utiliser comparaison par date seulement (sans heure) pour inclure toute la journée
       if (startDate != null && endDate != null) {
+        final startDateOnly = DateTime(startDate.year, startDate.month, startDate.day);
+        final endDateOnly = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
+        
         _operations = _operations.where((op) {
-          return op.dateOp.isAfter(startDate.subtract(const Duration(days: 1))) &&
-                 op.dateOp.isBefore(endDate.add(const Duration(days: 1)));
+          final opDateOnly = DateTime(op.dateOp.year, op.dateOp.month, op.dateOp.day, op.dateOp.hour, op.dateOp.minute, op.dateOp.second);
+          return !opDateOnly.isBefore(startDateOnly) && !opDateOnly.isAfter(endDateOnly);
         }).toList();
       }
 
@@ -521,7 +528,7 @@ class ReportService extends ChangeNotifier {
        op.type == OperationType.transfertInternationalSortant)
     ).toList();
 
-    // Transferts entrants : les autres shops (SOURCE) nous doivent de l'argent (car nous sommes DESTINATION)
+    // Transferts entrants : les autres shops (SOURCE) Nous qui Doivent de l'argent (car nous sommes DESTINATION)
     final transfertsEntrants = _operations.where((op) => 
       op.shopDestinationId == shopId && 
       (op.statut == OperationStatus.validee || op.statut == OperationStatus.terminee) && // Validés ou terminés
@@ -611,7 +618,7 @@ class ReportService extends ChangeNotifier {
         creancesParShop[destinationId] = (creancesParShop[destinationId] ?? 0) + flot.montant;
       } else if (flot.shopDestinationId == shopId) {
         // FLOT reçu par nous depuis un autre shop
-        // = L'AUTRE SHOP a donné de l'argent, donc NOUS DEVONS à L'AUTRE SHOP
+        // = L'AUTRE SHOP a donné de l'argent, donc Nous que Devons à L'AUTRE SHOP
         final sourceId = flot.shopSourceId;
         dettesParShop[sourceId] = (dettesParShop[sourceId] ?? 0) + flot.montant;
       }
@@ -631,7 +638,11 @@ class ReportService extends ChangeNotifier {
     }
 
     // Appliquer la formule finale du capital selon la logique métier UCASH :
-    // Capital Net = Capital Total + Créances - Dettes
+    // BUSINESS LOGIC: Capital Net = Capital Total + Créances - Dettes
+    // This represents the true financial position of the shop:
+    // - Starting capital position (capitalTotal)
+    // - Add amounts owed to this shop by clients and other shops (creances)
+    // - Subtract amounts this shop owes to clients and other shops (dettes)
     final capitalNet = capitalTotal + creances - dettes;
 
     return {
@@ -1000,7 +1011,7 @@ class ReportService extends ChangeNotifier {
       } else {
         // Ce shop a initié le transfert → dette
         typeMouvement = 'transfert_initie';
-        description = 'Transfert initié - Nous devons ${transfert.montantBrut.toStringAsFixed(2)} USD à ${shopDestination.designation}';
+        description = 'Transfert initié - Nous que Devons ${transfert.montantBrut.toStringAsFixed(2)} USD à ${shopDestination.designation}';
         totalDettes += transfert.montantBrut;
       }
 
@@ -1009,6 +1020,7 @@ class ReportService extends ChangeNotifier {
         'shopSource': shopSource.designation,
         'shopDestination': shopDestination.designation,
         'montant': transfert.montantBrut,
+        'commission': transfert.commission, // Frais/commission du transfert
         'typeMouvement': typeMouvement,
         'description': description,
         'isCreance': isCreance,
@@ -1092,7 +1104,7 @@ class ReportService extends ChangeNotifier {
         typeMouvement = flot.statut == OperationStatus.validee ? 'flot_recu' : 'flot_envoye';
         description = 'Flot ${flot.statut.name} - ${shopSource.designation} → ${shopDestination.designation}';
       } else if (flot.shopSourceId == shopId) {
-        // Ce shop a envoyé le flot → créance (ils nous doivent)
+        // Ce shop a envoyé le flot → créance (ils Nous qui Doivent)
         typeMouvement = 'flot_envoye';
         description = 'Flot envoyé - ${shopDestination.designation} nous doit ${flot.montantNet.toStringAsFixed(2)} USD';
         isCreance = true;
@@ -1100,7 +1112,7 @@ class ReportService extends ChangeNotifier {
       } else {
         // Ce shop a reçu le flot → dette (on leur doit)
         typeMouvement = 'flot_recu';
-        description = 'Flot reçu - Nous devons ${flot.montantNet.toStringAsFixed(2)} USD à ${shopSource.designation}';
+        description = 'Flot reçu - Nous que Devons ${flot.montantNet.toStringAsFixed(2)} USD à ${shopSource.designation}';
         totalDettes += flot.montantNet;
       }
 
@@ -1109,6 +1121,7 @@ class ReportService extends ChangeNotifier {
         'shopSource': shopSource.designation,
         'shopDestination': shopDestination.designation,
         'montant': flot.montantNet,
+        'commission': flot.commission, // Frais/commission du flot
         'typeMouvement': typeMouvement,
         'description': description,
         'isCreance': isCreance,
@@ -1171,6 +1184,30 @@ class ReportService extends ChangeNotifier {
     // Calculer le solde pour chaque jour
     for (final jour in mouvementsParJour.values) {
       jour['solde'] = (jour['creances'] as double) - (jour['dettes'] as double);
+    }
+
+    // IMPORTANT: Inclure TOUS les jours de la période (même sans opérations)
+    // Ceci permet d'afficher la journée en cours même si non cloturée
+    if (startDate != null && endDate != null) {
+      DateTime currentDate = DateTime(startDate.year, startDate.month, startDate.day);
+      final lastDate = DateTime(endDate.year, endDate.month, endDate.day);
+      
+      while (!currentDate.isAfter(lastDate)) {
+        final dateKey = currentDate.toIso8601String().split('T')[0];
+        
+        // Ajouter le jour s'il n'existe pas encore
+        if (!mouvementsParJour.containsKey(dateKey)) {
+          mouvementsParJour[dateKey] = {
+            'date': dateKey,
+            'creances': 0.0,
+            'dettes': 0.0,
+            'solde': 0.0,
+            'nombreOperations': 0,
+          };
+        }
+        
+        currentDate = currentDate.add(const Duration(days: 1));
+      }
     }
 
     // Calculer l'évolution quotidienne avec solde cumulé

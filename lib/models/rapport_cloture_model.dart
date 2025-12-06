@@ -232,10 +232,10 @@ class RapportClotureModel {
       'clients_nous_devons': clientsNousDevons.map((c) => c.toJson()).toList(),
       'shops_nous_doivent': shopsNousDoivent.map((s) => s.toJson()).toList(),
       'shops_nous_devons': shopsNousDevons.map((s) => s.toJson()).toList(),
-      'flots_recus_details': flotsRecusDetails.map((f) => f.toJson()).toList(),
-      'flots_recus_groupes': flotsRecusGroupes, // Map<String, double>
-      'flots_envoyes': flotsEnvoyes.map((f) => f.toJson()).toList(),
-      'flots_envoyes_groupes': flotsEnvoyesGroupes, // Map<String, double>
+      'flots_recus_details': flotsRecusDetails.map((f) => f.toJson()).toList(), // Maintenant gérés comme operations
+      'flots_recus_groupes': flotsRecusGroupes, // Map<String, double> - Maintenant gérés comme operations
+      'flots_envoyes': flotsEnvoyes.map((f) => f.toJson()).toList(), // Maintenant gérés comme operations
+      'flots_envoyes_groupes': flotsEnvoyesGroupes, // Map<String, double> - Maintenant gérés comme operations
       'depots_clients_details': depotsClientsDetails.map((d) => d.toJson()).toList(),
       'retraits_clients_details': retraitsClientsDetails.map((r) => r.toJson()).toList(),
       'transferts_en_attente_details': transfertsEnAttenteDetails.map((t) => t.toJson()).toList(),
@@ -310,6 +310,7 @@ class CompteShopResume {
 }
 
 /// Résumé d'un FLOT pour le rapport de clôture
+/// NOTE: Les FLOTs sont maintenant gérés comme des operations avec type=flotShopToShop
 class FlotResume {
   final int flotId;
   final String shopSourceDesignation;

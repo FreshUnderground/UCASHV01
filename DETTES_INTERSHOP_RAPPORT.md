@@ -36,13 +36,13 @@ Le rapport affiche 4 cartes principales :
 ### 2. Dettes par Shop (Quand un shop est sélectionné)
 Affiche deux listes détaillées :
 
-#### 📗 Shops qui nous doivent (Créances)
+#### 📗 Shops qui Nous qui Doivent (Créances)
 - Liste des shops avec leur créance
 - Montant total par shop
 - Détail créances vs dettes si les deux existent
 - Trié par montant décroissant
 
-#### 📕 Shops que nous devons (Dettes)
+#### 📕 Shops que Nous que Devons (Dettes)
 - Liste des shops à qui on doit de l'argent
 - Montant total par shop
 - Détail créances vs dettes si les deux existent
@@ -78,8 +78,8 @@ Lorsqu'un shop spécifique est sélectionné, le rapport calcule :
   - Créances = montants que l'autre shop nous doit
   - Dettes = montants qu'on doit à l'autre shop
   - Solde = Créances - Dettes
-- **Si Solde > 0** : Shop nous doit (affiché dans "Shops qui nous doivent")
-- **Si Solde < 0** : On doit au shop (affiché dans "Shops que nous devons")
+- **Si Solde > 0** : Shop nous doit (affiché dans "Shops qui Nous qui Doivent")
+- **Si Solde < 0** : On doit au shop (affiché dans "Shops que Nous que Devons")
 
 ### Pour les Transferts
 ```
@@ -146,8 +146,8 @@ Le rapport compile automatiquement :
 
 ## 🎨 Code Couleur
 
-- **Vert** 🟢 : Créances (les autres nous doivent)
-- **Rouge** 🔴 : Dettes (nous devons aux autres)
+- **Vert** 🟢 : Créances (les autres Nous qui Doivent)
+- **Rouge** 🔴 : Dettes (Nous que Devons aux autres)
 - **Bleu** 🔵 : Nombre de mouvements
 - **Orange** 🟠 : Transferts initiés
 - **Violet** 🟣 : FLOTs reçus

@@ -877,7 +877,7 @@ class _RapportClotureEmbeddedState extends State<RapportClotureEmbedded> {
             ),
             const SizedBox(height: 4),
             const Text(
-              'Formule: Cash Disponible + Ceux qui nous doivent - Ceux que nous devons',
+              'Formule: Cash Disponible + Ceux qui Nous qui Doivent - Ceux que Nous que Devons',
               style: TextStyle(
                 fontSize: 10,
                 fontStyle: FontStyle.italic,
@@ -899,9 +899,9 @@ class _RapportClotureEmbeddedState extends State<RapportClotureEmbedded> {
             const SizedBox(height: 6),
             _buildCapitalBreakdown('Cash Disponible', rapport.cashDisponibleTotal, Colors.green),
             _buildCapitalBreakdown('+ Partenaires Servis', rapport.totalClientsNousDoivent, Colors.red),
-            _buildCapitalBreakdown('+ Shops Nous Doivent', rapport.totalShopsNousDoivent, Colors.orange),
+            _buildCapitalBreakdown('+ Shops Nous qui Doivent', rapport.totalShopsNousDoivent, Colors.orange),
             _buildCapitalBreakdown('- Dépôts Partenaires', -rapport.totalClientsNousDevons, Colors.green),
-            _buildCapitalBreakdown('- Shops Nous Devons', -rapport.totalShopsNousDevons, Colors.purple),
+            _buildCapitalBreakdown('- Shops Nous que Devons', -rapport.totalShopsNousDevons, Colors.purple),
             const SizedBox(height: 6),
             const Divider(thickness: 2),
             const SizedBox(height: 6),
@@ -995,7 +995,7 @@ class _RapportClotureEmbeddedState extends State<RapportClotureEmbedded> {
     return Column(
       children: [
         // Masqué: Opérations Clients
-        // Partenaires Servis (anciennement Clients Nous Doivent)
+        // Partenaires Servis (anciennement Clients Nous qui Doivent)
         _buildSection(
           '5️⃣ Partenaires Servis',
           [
@@ -1025,7 +1025,7 @@ class _RapportClotureEmbeddedState extends State<RapportClotureEmbedded> {
           Colors.red,
         ),
         const SizedBox(height: 12),
-        // Dépôts Partenaires (anciennement Clients Nous Devons)
+        // Dépôts Partenaires (anciennement Clients Nous que Devons)
         _buildSection(
           '6️⃣ Dépôts Partenaires',
           [

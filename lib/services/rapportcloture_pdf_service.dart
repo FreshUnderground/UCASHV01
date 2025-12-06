@@ -25,8 +25,8 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
   debugPrint('FLOTs Envoyés: ${rapport.flotsEnvoyes.length}');
   debugPrint('Partenaires Servis: ${rapport.clientsNousDoivent.length}');
   debugPrint('Dépôts Partenaires: ${rapport.clientsNousDevons.length}');
-  debugPrint('Shops Nous Doivent: ${rapport.shopsNousDoivent.length}');
-  debugPrint('Shops Nous Devons: ${rapport.shopsNousDevons.length}');
+  debugPrint('Shops Nous qui Doivent: ${rapport.shopsNousDoivent.length}');
+  debugPrint('Shops Nous que Devons: ${rapport.shopsNousDevons.length}');
   debugPrint('=====================================');
   
   // Utiliser MultiPage pour permettre le contenu de s'étendre sur plusieurs pages
@@ -219,7 +219,7 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                     ], PdfColors.green700),
                     pw.SizedBox(height: 8),
                     
-                    _buildSection('7. Shops Qui nous Doivent (DIFF. DETTES)', [
+                    _buildSection('7. Shops Qui Nous qui Doivent (DIFF. DETTES)', [
                       pw.Text('${rapport.shopsNousDoivent.length} shop(s)', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
                       pw.Divider(),
                       ...rapport.shopsNousDoivent.map((s) => _buildDetailRow(s.designation, s.localisation, s.montant, PdfColors.orange700)),
@@ -228,7 +228,7 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                     ], PdfColors.orange700),
                     pw.SizedBox(height: 8),
                     
-                    _buildSection('8. Shop Que nous devons', [
+                    _buildSection('8. Shop Que Nous que Devons', [
                       pw.Text('${rapport.shopsNousDevons.length} shop(s)', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
                       pw.Divider(),
                       ...rapport.shopsNousDevons.map((s) => _buildDetailRow(s.designation, s.localisation, s.montant, PdfColors.purple700)),
@@ -263,7 +263,7 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                 _buildRow('+ Partenaires Servis', rapport.totalClientsNousDoivent, color: PdfColors.red700),
                 _buildRow('+ DIFF. DETTES', rapport.totalShopsNousDoivent, color: PdfColors.orange700),
                 _buildRow('- Dépôts Partenaires', rapport.totalClientsNousDevons, color: PdfColors.green700),
-                _buildRow('- Shops Que Nous Devons', rapport.totalShopsNousDevons, color: PdfColors.purple700),
+                _buildRow('- Shops Que Nous que Devons', rapport.totalShopsNousDevons, color: PdfColors.purple700),
                 _buildRow('- Solde Frais du jour', rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour, color: PdfColors.grey700),
                 pw.Divider(thickness: 2, color: PdfColors.blue700),
                 _buildRow('= CAPITAL NET', rapport.capitalNet - (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour), color: (rapport.capitalNet - (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour)) >= 0 ? PdfColors.blue700 : PdfColors.red700, bold: true),

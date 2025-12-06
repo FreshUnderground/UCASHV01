@@ -40,6 +40,9 @@ class TransferSyncService extends ChangeNotifier {
       await _loadLocalPendingTransfers();
       debugPrint('✅ Cache local chargé: ${_pendingTransfers.length} transferts');
       
+      // Vérifier les opérations supprimées
+      await _checkForDeletedOperations();
+      
       // Démarrer la synchronisation automatique toutes les 30 secondes
       debugPrint('⏰ Démarrage auto-sync...');
       startAutoSync();
@@ -65,10 +68,193 @@ class TransferSyncService extends ChangeNotifier {
     }
   }
 
+  /// Supprimer complètement les opérations supprimées de toutes les sources de stockage locales
+  Future<void> _removeDeletedOperationsLocally(List<String> deletedCodeOpsList) async {
+    try {
+      if (deletedCodeOpsList.isEmpty) {
+        return;
+      }
+      
+      debugPrint('🗑️ Suppression locale de ${deletedCodeOpsList.length} opérations supprimées');
+      
+      final prefs = await SharedPreferences.getInstance();
+      
+      // 1. Supprimer des transferts en attente en mémoire
+      final initialPendingCount = _pendingTransfers.length;
+      _pendingTransfers.removeWhere((op) => 
+          op.codeOps != null && deletedCodeOpsList.contains(op.codeOps));
+      final removedFromPending = initialPendingCount - _pendingTransfers.length;
+      
+      // 2. Supprimer du cache des transferts en attente
+      int removedFromCache = 0;
+      final cachedJson = prefs.getString('pending_transfers_cache');
+      if (cachedJson != null) {
+        try {
+          final List<dynamic> cachedList = jsonDecode(cachedJson);
+          final cachedTransfers = cachedList
+              .map((json) => OperationModel.fromJson(json))
+              .toList();
+          
+          final initialCachedCount = cachedTransfers.length;
+          cachedTransfers.removeWhere((op) => 
+              op.codeOps != null && deletedCodeOpsList.contains(op.codeOps));
+          removedFromCache = initialCachedCount - cachedTransfers.length;
+          
+          if (removedFromCache > 0) {
+            await prefs.setString(
+              'pending_transfers_cache',
+              jsonEncode(cachedTransfers.map((op) => op.toJson()).toList()),
+            );
+            debugPrint('💾 $removedFromCache opérations supprimées du cache');
+          }
+        } catch (e) {
+          debugPrint('⚠️ Erreur lors de la suppression du cache: $e');
+        }
+      }
+      
+      // 3. Supprimer des transferts locaux (local_transfers)
+      int removedFromLocal = 0;
+      final localTransfersJson = prefs.getString('local_transfers');
+      if (localTransfersJson != null) {
+        try {
+          final List<dynamic> localList = jsonDecode(localTransfersJson);
+          final localTransfers = localList
+              .map((json) => OperationModel.fromJson(json))
+              .toList();
+          
+          final initialLocalCount = localTransfers.length;
+          localTransfers.removeWhere((op) => 
+              op.codeOps != null && deletedCodeOpsList.contains(op.codeOps));
+          removedFromLocal = initialLocalCount - localTransfers.length;
+          
+          if (removedFromLocal > 0) {
+            await prefs.setString(
+              'local_transfers',
+              jsonEncode(localTransfers.map((op) => op.toJson()).toList()),
+            );
+            debugPrint('💾 $removedFromLocal opérations supprimées de local_transfers');
+          }
+        } catch (e) {
+          debugPrint('⚠️ Erreur lors de la suppression de local_transfers: $e');
+        }
+      }
+      
+      // 4. Supprimer des validations en attente
+      int removedFromValidations = 0;
+      final validationsJson = prefs.getString('pending_validations');
+      if (validationsJson != null) {
+        try {
+          final List<dynamic> validationsList = jsonDecode(validationsJson);
+          final initialValidationsCount = validationsList.length;
+          validationsList.removeWhere((validation) => 
+              deletedCodeOpsList.contains(validation['code_ops']));
+          removedFromValidations = initialValidationsCount - validationsList.length;
+          
+          if (removedFromValidations > 0) {
+            await prefs.setString('pending_validations', jsonEncode(validationsList));
+            debugPrint('💾 $removedFromValidations validations supprimées');
+          }
+        } catch (e) {
+          debugPrint('⚠️ Erreur lors de la suppression des validations: $e');
+        }
+      }
+      
+      // 5. Supprimer des opérations dans LocalDB (using code_ops directly)
+      int removedFromLocalDB = 0;
+      try {
+        // Supprimer directement les opérations par code_ops
+        await LocalDB.instance.deleteOperationsByCodeOpsList(deletedCodeOpsList);
+        removedFromLocalDB = deletedCodeOpsList.length;
+      } catch (e) {
+        debugPrint('⚠️ Erreur lors de la suppression des opérations de LocalDB: $e');
+      }
+      
+      // 6. Notifier les listeners si des opérations ont été supprimées
+      if (removedFromPending > 0) {
+        await _savePendingTransfersToCache(); // Sauvegarder le cache mis à jour
+        debugPrint('✅ $removedFromPending opérations supprimées du cache en attente');
+      }
+      
+      final totalRemoved = removedFromPending + removedFromCache + removedFromLocal + 
+                          removedFromValidations + removedFromLocalDB;
+      debugPrint('✅ Nettoyage local terminé: $totalRemoved opérations supprimées au total ' +
+                 '($removedFromPending mémoire, $removedFromCache cache, $removedFromLocal local_transfers, ' +
+                 '$removedFromValidations validations, $removedFromLocalDB LocalDB)');
+      
+    } catch (e) {
+      debugPrint('❌ Erreur lors du nettoyage local: $e');
+    }
+  }
+
+  /// Vérifier les opérations supprimées sur le serveur
+  Future<void> _checkForDeletedOperations() async {
+    try {
+      if (_pendingTransfers.isEmpty) {
+        return;
+      }
+      
+      debugPrint('🔍 Vérification des opérations supprimées sur le serveur...');
+      
+      // Extraire les code_ops des transferts en attente
+      final codeOpsList = _pendingTransfers
+          .where((op) => op.codeOps != null && op.codeOps!.isNotEmpty)
+          .map((op) => op.codeOps!)
+          .toList();
+      
+      if (codeOpsList.isEmpty) {
+        return;
+      }
+      
+      // Appeler l'API pour vérifier les opérations supprimées
+      final baseUrl = await AppConfig.getApiBaseUrl();
+      final cleanUrl = baseUrl.trim();
+      final url = Uri.parse('$cleanUrl/sync/operations/check_deleted.php');
+      
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'code_ops_list': codeOpsList,
+        }),
+      ).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw TimeoutException('Timeout lors de la vérification des opérations supprimées');
+        },
+      );
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          final deletedOperations = List<String>.from(data['deleted_operations']);
+          
+          if (deletedOperations.isNotEmpty) {
+            debugPrint('🗑️ ${deletedOperations.length} opérations supprimées trouvées sur le serveur');
+            
+            // Supprimer les opérations locales de toutes les sources de stockage
+            await _removeDeletedOperationsLocally(deletedOperations);
+          } else {
+            debugPrint('✅ Aucune opération supprimée trouvée sur le serveur');
+          }
+        } else {
+          debugPrint('⚠️ Erreur lors de la vérification des opérations supprimées: ${data['error']}');
+        }
+      } else {
+        debugPrint('⚠️ Erreur HTTP ${response.statusCode} lors de la vérification des opérations supprimées');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Erreur lors de la vérification des opérations supprimées: $e');
+      // Ne pas bloquer le processus en cas d'erreur
+    }
+  }
+  
   /// Démarrer la synchronisation automatique
   void startAutoSync() {
     _syncTimer?.cancel();
-    _syncTimer = Timer.periodic(const Duration(minutes: 2), (timer) {
+    _syncTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
       if (!_isSyncing && _shopId > 0) {
         debugPrint('⏰ [🕒 ${DateTime.now().toIso8601String()}] Synchronisation auto des transferts (shop: $_shopId)...');
         syncTransfers();
@@ -78,7 +264,7 @@ class TransferSyncService extends ChangeNotifier {
         debugPrint('⏸️ Synchronisation ignorée: synchronisation déjà en cours');
       }
     });
-    debugPrint('✅ Synchronisation automatique démarrée (interval: 30 secondes, shop: $_shopId)');
+    debugPrint('✅ Synchronisation automatique démarrée (interval: 1 minute, shop: $_shopId)');
   }
 
   /// Arrêter la synchronisation automatique
@@ -167,11 +353,31 @@ class TransferSyncService extends ChangeNotifier {
           debugPrint('❌ [VALIDATE] Erreur serveur: ${data['message']}');
           return false;
         }
+      } else if (response.statusCode == 404) {
+        // Cas spécial: transfert non trouvé sur le serveur
+        debugPrint('❌ [VALIDATE] Erreur HTTP 404 - Transfert non trouvé sur le serveur');
+        debugPrint('📝 Réponse du serveur: ${response.body}');
+        
+        // Supprimer complètement le transfert de toutes les sources de stockage locales
+        await _removeDeletedOperationsLocally([codeOps]);
+        
+        // Rafraîchir depuis l'API pour s'assurer de l'état actuel
+        await forceRefreshFromAPI();
+        
+        // Signaler l'erreur spécifique
+        throw Exception('Transfert non trouvé sur le serveur. Il a peut-être déjà été traité ou supprimé.');
       } else {
         debugPrint('❌ [VALIDATE] Erreur HTTP ${response.statusCode}');
+        debugPrint('📝 Réponse du serveur: ${response.body}');
         return false;
       }
     } catch (e) {
+      // Ne pas attraper les exceptions spécifiques que nous voulons faire remonter
+      if (e is Exception && e.toString().contains('Transfert non trouvé sur le serveur')) {
+        // Laisser passer cette exception spécifique
+        rethrow;
+      }
+      
       debugPrint('❌ [VALIDATE] Erreur: $e');
       return false;
     }
@@ -200,18 +406,22 @@ class TransferSyncService extends ChangeNotifier {
 
     try {
       debugPrint('🔄 Début synchronisation pour shop: $_shopId');
-      debugPrint('   🎯 3 tâches: 1) Download TOUTES les ops, 2) Upload validations, 3) Update statuts');
+      debugPrint('   🎯 4 tâches: 1) Check deleted ops, 2) Download TOUTES les ops, 3) Upload validations, 4) Update statuts');
+
+      // TÂCHE 0: Vérifier les opérations supprimées
+      debugPrint('🔍 [TÂCHE 0/4] Vérification des opérations supprimées...');
+      await _checkForDeletedOperations();
 
       // TÂCHE 1: Télécharger TOUTES les opérations du shop (serveur → local)
-      debugPrint('📥 [TÂCHE 1/3] Download TOUTES les opérations du shop $_shopId...');
+      debugPrint('📥 [TÂCHE 1/4] Download TOUTES les opérations du shop $_shopId...');
       await _downloadPendingTransfers();
 
       // TÂCHE 2: Uploader nos validations locales (PAYÉ/ANNULÉ) vers le serveur (local → serveur)
-      debugPrint('📤 [TÂCHE 2/3] Upload de nos validations locales vers le serveur...');
+      debugPrint('📤 [TÂCHE 2/4] Upload de nos validations locales vers le serveur...');
       await _uploadLocalValidations();
 
       // TÂCHE 3: Mettre à jour les statuts locaux si changés sur le serveur
-      debugPrint('🔄 [TÂCHE 3/3] Update des statuts locaux depuis le serveur...');
+      debugPrint('🔄 [TÂCHE 3/4] Update des statuts locaux depuis le serveur...');
       await _updateTransferStatuses();
 
       _lastSyncTime = DateTime.now();
@@ -289,15 +499,14 @@ class TransferSyncService extends ChangeNotifier {
 
             debugPrint('📥 Opérations converties: ${serverOperations.length}');
             
-            // Afficher un résumé par type et statut
-            final typeCounts = <String, int>{};
-            final statusCounts = <String, int>{};
-            for (var op in serverOperations) {
-              typeCounts[op.type.name] = (typeCounts[op.type.name] ?? 0) + 1;
-              statusCounts[op.statut.toString()] = (statusCounts[op.statut.toString()] ?? 0) + 1;
-            }
-            debugPrint('📊 Par type: $typeCounts');
-            debugPrint('📊 Par statut: $statusCounts');
+            // Afficher un résumé par type et statut (OPTIMISÉ: résumé condensé)
+            final flotCount = serverOperations.where((op) => op.type == OperationType.flotShopToShop).length;
+            final transferCount = serverOperations.where((op) => 
+                op.type == OperationType.transfertNational ||
+                op.type == OperationType.transfertInternationalEntrant ||
+                op.type == OperationType.transfertInternationalSortant
+            ).length;
+            debugPrint('📥 Reçu: ${serverOperations.length} ops (Transferts: $transferCount, FLOTs: $flotCount)');
 
             debugPrint('📥 Sauvegarde ou mise à jour en local...');
             // Sauvegarder ou mettre à jour TOUTES les opérations en local (SharedPreferences + LocalDB)
@@ -323,7 +532,6 @@ class TransferSyncService extends ChangeNotifier {
                   // 1. Doit être un transfert OU un depot/retrait OU un FLOT
                   final isTransfer = op.type == OperationType.transfertNational ||
                      op.type == OperationType.transfertInternationalEntrant ||
-                     op.type == OperationType.flotShopToShop ||
                      op.type == OperationType.transfertInternationalSortant;
                      
                   final isDepotOrRetrait = op.type == OperationType.depot ||
@@ -334,31 +542,45 @@ class TransferSyncService extends ChangeNotifier {
                   // 2. Pour les transferts: doit être EN ATTENTE
                   // Pour les depot/retrait: peut être VALIDE ou TERMINE (pas d'attente)
                   // Pour les FLOTs: doit être EN ATTENTE
-                  final isPending = (isTransfer) 
-                      ? op.statut == OperationStatus.enAttente
-                      : (op.statut == OperationStatus.validee || op.statut == OperationStatus.terminee);
+                  bool isPending;
+                  if (isTransfer || isFlot) {
+                    // Transferts et FLOTs doivent être en attente
+                    isPending = op.statut == OperationStatus.enAttente;
+                  } else if (isDepotOrRetrait) {
+                    // Depot/Retrait peuvent être validés ou terminés
+                    isPending = (op.statut == OperationStatus.validee || op.statut == OperationStatus.terminee);
+                  } else {
+                    // Autres types, par défaut en attente
+                    isPending = op.statut == OperationStatus.enAttente;
+                  }
                   
                   // 3. Pour les transferts: ce shop doit être la DESTINATION (pour validation)
                   // Pour les depot/retrait: ce shop doit être la SOURCE
                   // Pour les FLOTs: ce shop doit être la DESTINATION (pour validation)
-                  final isForThisShop = (isTransfer)
-                      ? op.shopDestinationId == _shopId 
-                      : op.shopSourceId == _shopId;
+                  bool isForThisShop;
+                  if (isTransfer || isFlot) {
+                    // Pour les transferts et FLOTs: ce shop doit être la DESTINATION
+                    isForThisShop = op.shopDestinationId == _shopId;
+                  } else if (isDepotOrRetrait) {
+                    // Pour les depot/retrait: ce shop doit être la SOURCE
+                    isForThisShop = op.shopSourceId == _shopId;
+                  } else {
+                    // Par défaut, utiliser la destination
+                    isForThisShop = op.shopDestinationId == _shopId;
+                  }
                   
-                  return (isTransfer || isDepotOrRetrait || isFlot) && isPending && isForThisShop;
+                  // Debug logging uniquement pour les FLOTs en mode verbose
+                  // if (isFlot) debugPrint('   📦 FLOT: ${op.codeOps} pending=$isPending forShop=$isForThisShop');
+                  
+                  final shouldInclude = (isTransfer || isDepotOrRetrait || isFlot) && isPending && isForThisShop;
+                  
+                  return shouldInclude;
                 })
                 .toList();
-            
-            // Log uniquement le résumé (évite spam avec détails de chaque opération)
-            debugPrint('📊 [FILTER] ${_pendingTransfers.length} transferts EN ATTENTE (sur ${mergedOperations.length} opérations totales)');
-            
-            // Log détaillé optionnel: activer seulement pour debug approfondi
-            // if (_pendingTransfers.isNotEmpty) {
-            //   debugPrint('🔍 Détails transferts en attente:');
-            //   for (var op in _pendingTransfers) {
-            //     debugPrint('   🔸 ${op.codeOps}: ${op.type.name}, shop_src=${op.shopSourceId}, shop_dst=${op.shopDestinationId}, statut=${op.statut.name}');
-            //   }
-            // }
+
+            // Log uniquement le résumé (optimisé pour performance)
+            final pendingFlots = _pendingTransfers.where((op) => op.type == OperationType.flotShopToShop).length;
+            debugPrint('✅ Sync: ${_pendingTransfers.length} en attente (dont $pendingFlots FLOTs)');
 
             // Sauvegarder dans le cache
             await _savePendingTransfersToCache();
@@ -878,22 +1100,58 @@ class TransferSyncService extends ChangeNotifier {
     return filtered;
   }
   
-  /// Obtenir les FLOTs en attente pour un shop spécifique
   /// Retourne uniquement les FLOTs ENTRANTS (où le shop est destination)
   List<OperationModel> getPendingFlotsForShop(int shopId) {
+    debugPrint('🔍 getPendingFlotsForShop called with shopId: $shopId');
+    debugPrint('   Total pending transfers in service: ${_pendingTransfers.length}');
+    
     final filtered = _pendingTransfers.where((op) {
       // UNIQUEMENT les FLOTs
-      if (op.type != OperationType.flotShopToShop) return false;
+      if (op.type != OperationType.flotShopToShop) {
+        debugPrint('   ❌ Rejected (not flotShopToShop): codeOps=${op.codeOps}, type=${op.type?.name}');
+        return false;
+      }
       
       // FLOTs où notre shop est la destination (FLOTs entrants)
       final shopDest = op.shopDestinationId;
       final statut = op.statut;
       final shopMatch = shopDest == shopId;
       final statutMatch = statut == OperationStatus.enAttente;
+      
+      debugPrint('   🔍 Checking: codeOps=${op.codeOps}, shopDest=$shopDest, statut=${statut?.name}, shopMatch=$shopMatch, statutMatch=$statutMatch');
+      
+      // Additional debug info
+      if (!shopMatch) {
+        debugPrint('   ℹ️  Shop mismatch: expected $shopId, got $shopDest');
+      }
+      if (!statutMatch) {
+        debugPrint('   ℹ️  Status mismatch: expected enAttente, got ${statut?.name}');
+      }
+      
       return shopMatch && statutMatch;
     }).toList();
     
     debugPrint('📊 getPendingFlotsForShop($shopId): ${filtered.length} FLOTs en attente (sur ${_pendingTransfers.length} total)');
+    
+    // Log details of filtered FLOTs
+    if (filtered.isNotEmpty) {
+      debugPrint('   🔍 Filtered FLOTs details:');
+      for (var flot in filtered) {
+        debugPrint('     - ${flot.codeOps}: ${flot.montantNet} ${flot.devise}, shop_src=${flot.shopSourceId}, shop_dst=${flot.shopDestinationId}, statut=${flot.statut?.name}');
+      }
+    }
+    
+    // Also log ALL FLOTs in _pendingTransfers for debugging
+    final allFlots = _pendingTransfers.where((op) => op.type == OperationType.flotShopToShop).toList();
+    if (allFlots.isNotEmpty) {
+      debugPrint('   📦 ALL FLOTs in _pendingTransfers:');
+      for (var flot in allFlots) {
+        debugPrint('     - ${flot.codeOps}: shop_dst=${flot.shopDestinationId}, statut=${flot.statut?.name}, type=${flot.type?.name}');
+      }
+    } else {
+      debugPrint('   📦 No FLOTs found in _pendingTransfers');
+    }
+    
     return filtered;
   }
 

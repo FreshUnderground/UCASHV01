@@ -26,6 +26,8 @@ import 'services/connectivity_service.dart';
 import 'services/sim_service.dart';
 import 'services/virtual_transaction_service.dart';
 import 'services/deletion_service.dart';
+import 'services/conflict_notification_service.dart';
+import 'services/conflict_logging_service.dart';
 import 'pages/login_page.dart';
 import 'pages/agent_login_page.dart';
 import 'pages/client_login_page.dart';
@@ -118,6 +120,12 @@ class _UCashAppState extends State<UCashApp> {
       final deletionService = DeletionService.instance;
       deletionService.startAutoSync();
       debugPrint('✅ DeletionService initialisé avec auto-sync activé');
+      
+      // Initialize ConflictNotificationService
+      debugPrint('🔔 Initialisation de ConflictNotificationService...');
+      final conflictNotificationService = ConflictNotificationService();
+      await conflictNotificationService.initialize();
+      debugPrint('✅ ConflictNotificationService initialisé');
       
       _updateLoadingState('Chargement des données initiales...', 0.5);
 
@@ -212,6 +220,8 @@ class _UCashAppState extends State<UCashApp> {
         ChangeNotifierProvider(create: (_) => SimService.instance),
         ChangeNotifierProvider(create: (_) => VirtualTransactionService.instance),
         ChangeNotifierProvider(create: (_) => DeletionService.instance),
+        ChangeNotifierProvider(create: (_) => ConflictNotificationService()),
+        Provider(create: (_) => ConflictLoggingService()),
       ],
       child: Builder(
         builder: (context) {

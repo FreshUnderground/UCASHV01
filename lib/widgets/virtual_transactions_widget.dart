@@ -2391,7 +2391,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
       // Déterminer l'autre shop (celui avec qui on traite)
       int autreShopId;
       String autreShopName;
-      double montantSigne; // Positif = ils nous doivent, Négatif = on leur doit
+      double montantSigne; // Positif = ils Nous qui Doivent, Négatif = on leur doit
       
       if (shopId != null) {
         if (retrait.shopSourceId == shopId) {
@@ -2461,7 +2461,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
             };
           }
           
-          // On a REÇU du cash → réduit ce qu'ils nous doivent
+          // On a REÇU du cash → réduit ce qu'ils Nous qui Doivent
           soldesParShop[autreShopId]!['totalFlotsPhysiques'] += flot.montantNet;
           soldesParShop[autreShopId]!['flotsRecus'] += 1;
         }
@@ -2486,7 +2486,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
             };
           }
           
-          // On leur a ENVOYÉ du cash → augmente ce qu'ils nous doivent
+          // On leur a ENVOYÉ du cash → augmente ce qu'ils Nous qui Doivent
           soldesParShop[autreShopId]!['flotsEnvoyes'] += flot.montantNet;
           soldesParShop[autreShopId]!['flotsEnvoyesCount'] += 1;
         }
@@ -2577,7 +2577,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                       ),
                       const SizedBox(height: 16),
                       
-                      // Section: Ils nous doivent (solde > 0)
+                      // Section: Ils Nous qui Doivent (solde > 0)
                       ...() {
                         final ilsDoivent = soldesParShopList.where((s) => (s['solde'] as double) > 0).toList();
                         if (ilsDoivent.isEmpty) return <Widget>[];
@@ -2595,7 +2595,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                               ),
                               const SizedBox(width: 8),
                               const Text(
-                                'Ils nous doivent',
+                                'Ils Nous qui Doivent',
                                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.orange),
                               ),
                               const Spacer(),
@@ -3928,7 +3928,7 @@ const SizedBox(height: 16),
                                               crossAxisAlignment: CrossAxisAlignment.start,
                                               children: flotsRecusListe.map((flot) => 
                                                 Text(
-                                                  '• ${flot.shopSourceDesignation ?? "Shop #${flot.shopSourceId}"}: \$${flot.montantNet.toStringAsFixed(2)}',
+                                                  '• ${ShopService.instance.getShopDesignation(flot.shopSourceId, existingDesignation: flot.shopSourceDesignation)}: \$${flot.montantNet.toStringAsFixed(2)}',
                                                   style: TextStyle(
                                                     fontSize: 11, 
                                                     color: flot.statut == OperationStatus.validee ? Colors.green[700] : Colors.orange[700],
@@ -3947,7 +3947,7 @@ const SizedBox(height: 16),
                                               crossAxisAlignment: CrossAxisAlignment.start,
                                               children: flotsEnvoyesListe.map((flot) => 
                                                 Text(
-                                                  '• Vers ${flot.shopDestinationDesignation ?? "Shop #${flot.shopDestinationId}"}: \$${flot.montantNet.toStringAsFixed(2)} (${flot.statut == OperationStatus.validee ? "Validé" : "En attente"})',
+                                                  '• Vers ${ShopService.instance.getShopDesignation(flot.shopDestinationId, existingDesignation: flot.shopDestinationDesignation)}: \$${flot.montantNet.toStringAsFixed(2)} (${flot.statut == OperationStatus.validee ? "Validé" : "En attente"})',
                                                   style: TextStyle(
                                                     fontSize: 11, 
                                                     color: flot.statut == OperationStatus.validee ? Colors.orange[700] : Colors.orange[900],
@@ -4392,7 +4392,7 @@ const SizedBox(height: 16),
                                           final shopsNousDoivent = capitalData['shopsNousDoivent'] ?? 0.0;
                                           final shopsNousDevons = capitalData['shopsNousDevons'] ?? 0.0;
                                           
-                                          // CAPITAL NET = Cash Disponible + Virtuel Disponible + Shop qui nous doivent - Shop que Nous Devons - Non Servi - Solde FRAIS
+                                          // CAPITAL NET = Cash Disponible + Virtuel Disponible + Shop qui Nous qui Doivent - Shop que Nous que Devons - Non Servi - Solde FRAIS
                                           final capitalNet = cashDisponible + virtuelDisponible + shopsNousDoivent - shopsNousDevons - nonServi - soldeFraisTotal;
                                       final isPositif = capitalNet >= 0;
                               
@@ -4489,7 +4489,7 @@ const SizedBox(height: 16),
                                                 const SizedBox(height: 8),
                                                 _buildFinanceRow('+ DIFF. DETTES', shopsNousDoivent, Colors.green),
                                                 const SizedBox(height: 8),
-                                                _buildFinanceRow('- Shops que nous devons', shopsNousDevons, Colors.red),
+                                                _buildFinanceRow('- Shops que Nous que Devons', shopsNousDevons, Colors.red),
                                                 const SizedBox(height: 8),
                                                 _buildFinanceRow('- Non Servi (Virtuel)', nonServi, Colors.red),
                                                 const SizedBox(height: 8),
@@ -4557,7 +4557,7 @@ const SizedBox(height: 16),
                           ),
                           const SizedBox(height: 16),
 
-                          // NOUVELLE SECTION: Shops qui nous doivent
+                          // NOUVELLE SECTION: Shops qui Nous qui Doivent
                           FutureBuilder<Map<String, List<Map<String, dynamic>>>>(
                             future: _getShopBalancesDetails(shopIdFilter),
                             builder: (context, shopBalancesSnapshot) {
@@ -4571,7 +4571,7 @@ const SizedBox(height: 16),
                               
                               return Column(
                                 children: [
-                                  // Shops qui nous doivent (Créances)
+                                  // Shops qui Nous qui Doivent (Créances)
                                   if (shopsNousDoivent.isNotEmpty) ...[
                                     Card(
                                       elevation: 3,
@@ -4585,7 +4585,7 @@ const SizedBox(height: 16),
                                                 Icon(Icons.store, color: Colors.orange.shade700),
                                                 const SizedBox(width: 8),
                                                 Text(
-                                                  'Shops Qui Nous Doivent',
+                                                  'Shops Qui Nous qui Doivent',
                                                   style: TextStyle(
                                                     fontSize: 16,
                                                     fontWeight: FontWeight.bold,
@@ -4676,7 +4676,7 @@ const SizedBox(height: 16),
                                     const SizedBox(height: 16),
                                   ],
                                   
-                                  // Shops que nous devons (Dettes)
+                                  // Shops que Nous que Devons (Dettes)
                                   if (shopsNousDevons.isNotEmpty) ...[
                                     Card(
                                       elevation: 3,
@@ -4690,7 +4690,7 @@ const SizedBox(height: 16),
                                                 Icon(Icons.store, color: Colors.purple.shade700),
                                                 const SizedBox(width: 8),
                                                 Text(
-                                                  'Shops Que Nous Devons',
+                                                  'Shops Que Nous que Devons',
                                                   style: TextStyle(
                                                     fontSize: 16,
                                                     fontWeight: FontWeight.bold,
@@ -5879,7 +5879,7 @@ const SizedBox(height: 16),
     }
   }
 
-  /// Obtenir les détails des shops (qui nous doivent et que nous devons)
+  /// Obtenir les détails des shops (qui Nous qui Doivent et que Nous que Devons)
   Future<Map<String, List<Map<String, dynamic>>>> _getShopBalancesDetails(int? shopId) async {
     if (shopId == null) {
       return {
@@ -6643,7 +6643,7 @@ const SizedBox(height: 16),
                 pw.SizedBox(height: 20),
                 
                 // CAPITAL NET
-                // Formule: Cash Disponible + Virtuel Disponible + Shop qui nous doivent - Shop que Nous Devons - Non Servi - Solde FRAIS
+                // Formule: Cash Disponible + Virtuel Disponible + Shop qui Nous qui Doivent - Shop que Nous que Devons - Non Servi - Solde FRAIS
                 pw.Text(
                   'CAPITAL NET',
                   style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
@@ -6651,8 +6651,8 @@ const SizedBox(height: 16),
                 pw.Divider(),
                 _buildPdfRow('Cash Disponible', cashDisponible),
                 _buildPdfRow('+ Virtuel Disponible', virtuelDisponible),
-                _buildPdfRow('+ Shop qui nous doivent (DIFF. DETTES)', shopsNousDoivent),
-                _buildPdfRow('- Shop que Nous Devons', shopsNousDevons),
+                _buildPdfRow('+ Shop qui Nous qui Doivent (DIFF. DETTES)', shopsNousDoivent),
+                _buildPdfRow('- Shop que Nous que Devons', shopsNousDevons),
                 _buildPdfRow('- Non Servi (Virtuel)', nonServi),
                 _buildPdfRow('- Solde FRAIS Total', soldeFraisTotal),
                 pw.Divider(),

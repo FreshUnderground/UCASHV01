@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../services/sim_service.dart';
 import '../services/auth_service.dart';
 import '../services/operation_service.dart';
+import '../services/shop_service.dart';
 import '../models/sim_model.dart';
 import '../models/sim_movement_model.dart';
 import '../models/operation_model.dart';
@@ -258,7 +259,7 @@ class _AdminSimManagementWidgetState extends State<AdminSimManagementWidget> wit
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 4),
-            Text('${sim.operateur} • ${sim.shopDesignation ?? "Shop ${sim.shopId}"}'),
+            Text('${sim.operateur} • ${ShopService.instance.getShopDesignation(sim.shopId, existingDesignation: sim.shopDesignation)}'),
             const SizedBox(height: 4),
             Row(
               children: [
@@ -298,7 +299,7 @@ class _AdminSimManagementWidgetState extends State<AdminSimManagementWidget> wit
               children: [
                 _buildDetailRow('Numéro', sim.numero),
                 _buildDetailRow('Opérateur', sim.operateur),
-                _buildDetailRow('Shop', sim.shopDesignation ?? 'Shop ${sim.shopId}'),
+                _buildDetailRow('Shop', ShopService.instance.getShopDesignation(sim.shopId, existingDesignation: sim.shopDesignation)),
                 _buildDetailRow('Solde Initial', '${sim.soldeInitial.toStringAsFixed(2)} USD'),
                 _buildDetailRow('Solde Actuel', '${sim.soldeActuel.toStringAsFixed(2)} USD'),
                 _buildDetailRow('Statut', sim.statut.name.toUpperCase()),

@@ -859,8 +859,8 @@ class PdfService {
     required AgentModel agent,
     required ShopModel shop,
     required Map<String, double> soldesDisponibles, // {'USD': 1000.0, 'CDF': 50000.0}
-    required List<Map<String, dynamic>> partenairesServis, // Clients qui nous doivent
-    required List<Map<String, dynamic>> partenairesRecus, // Clients que nous devons
+    required List<Map<String, dynamic>> partenairesServis, // Clients qui Nous qui Doivent
+    required List<Map<String, dynamic>> partenairesRecus, // Clients que Nous que Devons
     DateTime? dateRapport,
   }) async {
     // Charger l'en-tête personnalisé
@@ -995,7 +995,7 @@ class PdfService {
                       'PARTENAIRES SERVIS',
                       [
                         pw.Text(
-                          '(Clients qui nous doivent)',
+                          '(Clients qui Nous qui Doivent)',
                           style: pw.TextStyle(
                             fontSize: 7,
                             color: PdfColors.grey700,
@@ -1049,7 +1049,7 @@ class PdfService {
                       'PARTENAIRES REÇUS',
                       [
                         pw.Text(
-                          '(Clients que nous devons)',
+                          '(Clients que Nous que Devons)',
                           style: pw.TextStyle(
                             fontSize: 7,
                             color: PdfColors.grey700,

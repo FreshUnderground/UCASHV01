@@ -930,6 +930,9 @@ class LocalDB {
       debugPrint('✅ Opération ${operation.codeOps} créée avec succès (ID: $operationId)');
     }
     
+    // Invalider le cache après modification
+    invalidateOperationsCache();
+    
     return updatedOperation;
   }
 
@@ -954,36 +957,130 @@ class LocalDB {
   Future<void> deleteOperation(int operationId) async {
     final prefs = await database;
     await prefs.remove('operation_$operationId');
+    // Invalider le cache après suppression
+    invalidateOperationsCache();
   }
 
-  Future<List<OperationModel>> getAllOperations() async {
+  // Cache pour les opérations (optimisation performance)
+  static List<OperationModel>? _operationsCache;
+  static DateTime? _cacheTimestamp;
+  static const Duration _cacheDuration = Duration(seconds: 30);
+
+  /// Invalide le cache des opérations (à appeler après save/update/delete)
+  void invalidateOperationsCache() {
+    _operationsCache = null;
+    _cacheTimestamp = null;
+  }
+
+  Future<List<OperationModel>> getAllOperations({bool forceRefresh = false}) async {
+    // Utiliser le cache si valide et pas de refresh forcé
+    if (!forceRefresh && 
+        _operationsCache != null && 
+        _cacheTimestamp != null &&
+        DateTime.now().difference(_cacheTimestamp!) < _cacheDuration) {
+      return _operationsCache!;
+    }
+    
     final prefs = await database;
     final operations = <OperationModel>[];
     
     final keys = prefs.getKeys();
-    int initialCapitalCount = 0;
     
     for (String key in keys) {
       if (key.startsWith('operation_')) {
         final operationData = prefs.getString(key);
         if (operationData != null) {
-          final operation = OperationModel.fromJson(jsonDecode(operationData));
-          operations.add(operation);
-          
-          // Compter et logger les opérations de capital initial
-          if (operation.destinataire == 'CAPITAL INITIAL') {
-            initialCapitalCount++;
-            debugPrint('💰 getAllOperations: Opération de capital initial trouvée - ID ${operation.id}, Montant: ${operation.montantNet} USD');
+          try {
+            final operation = OperationModel.fromJson(jsonDecode(operationData));
+            operations.add(operation);
+          } catch (e) {
+            // Ignorer les erreurs de parsing silencieusement pour performance
           }
         }
       }
     }
     
-    if (initialCapitalCount > 0) {
-      debugPrint('💰 getAllOperations: $initialCapitalCount opérations de capital initial chargées');
-    }
+    // Mettre en cache
+    _operationsCache = operations;
+    _cacheTimestamp = DateTime.now();
     
     return operations;
+  }
+
+  /// OPTIMISÉ: Récupère uniquement les opérations de type FLOT (flotShopToShop)
+  /// Évite de charger TOUTES les opérations puis filtrer
+  Future<List<OperationModel>> getFlotOperations({int? shopId}) async {
+    final prefs = await database;
+    final flots = <OperationModel>[];
+    
+    final keys = prefs.getKeys();
+    
+    for (String key in keys) {
+      if (key.startsWith('operation_')) {
+        final operationData = prefs.getString(key);
+        if (operationData != null) {
+          try {
+            final json = jsonDecode(operationData);
+            // Vérifier le type AVANT de créer l'objet complet (optimisation)
+            final typeValue = json['type'];
+            final isFlot = typeValue == 7 || 
+                           typeValue == 'flotShopToShop' || 
+                           typeValue == OperationType.flotShopToShop.index;
+            
+            if (isFlot) {
+              final operation = OperationModel.fromJson(json);
+              // Filtrer par shop si spécifié
+              if (shopId == null || 
+                  operation.shopSourceId == shopId || 
+                  operation.shopDestinationId == shopId) {
+                flots.add(operation);
+              }
+            }
+          } catch (e) {
+            // Ignorer les erreurs de parsing
+          }
+        }
+      }
+    }
+    
+    return flots;
+  }
+
+  /// OPTIMISÉ: Récupère les opérations en attente pour un shop (transferts + FLOTs)
+  Future<List<OperationModel>> getPendingOperationsForShop(int shopId) async {
+    final prefs = await database;
+    final pending = <OperationModel>[];
+    
+    final keys = prefs.getKeys();
+    
+    for (String key in keys) {
+      if (key.startsWith('operation_')) {
+        final operationData = prefs.getString(key);
+        if (operationData != null) {
+          try {
+            final json = jsonDecode(operationData);
+            // Vérifier le statut AVANT de créer l'objet complet
+            final statutValue = json['statut'];
+            final isEnAttente = statutValue == 0 || 
+                               statutValue == 'enAttente' || 
+                               statutValue == OperationStatus.enAttente.index;
+            
+            if (isEnAttente) {
+              final operation = OperationModel.fromJson(json);
+              // Vérifier si le shop est concerné
+              if (operation.shopSourceId == shopId || 
+                  operation.shopDestinationId == shopId) {
+                pending.add(operation);
+              }
+            }
+          } catch (e) {
+            // Ignorer les erreurs de parsing
+          }
+        }
+      }
+    }
+    
+    return pending;
   }
 
   Future<List<OperationModel>> getOperationsByAgent(int agentId) async {
@@ -1019,6 +1116,46 @@ class LocalDB {
       }
     }
     return null;
+  }
+
+  /// Delete operation by code_ops (more reliable than ID for identifying operations)
+  Future<void> deleteOperationByCodeOps(String codeOps) async {
+    try {
+      // First, find the operation by code_ops to get its ID
+      final operation = await getOperationByCodeOps(codeOps);
+      if (operation != null && operation.id != null) {
+        // Delete using the ID
+        await deleteOperation(operation.id!);
+        debugPrint('🗑️ Opération supprimée de LocalDB par code_ops: $codeOps (ID: ${operation.id})');
+      } else {
+        debugPrint('⚠️ Opération non trouvée pour code_ops: $codeOps');
+      }
+    } catch (e) {
+      debugPrint('❌ Erreur lors de la suppression de l\'opération par code_ops $codeOps: $e');
+    }
+  }
+
+  /// Delete multiple operations by code_ops list
+  Future<void> deleteOperationsByCodeOpsList(List<String> codeOpsList) async {
+    try {
+      int deletedCount = 0;
+      for (String codeOps in codeOpsList) {
+        try {
+          // Find and delete each operation
+          final operation = await getOperationByCodeOps(codeOps);
+          if (operation != null && operation.id != null) {
+            await deleteOperation(operation.id!);
+            deletedCount++;
+            debugPrint('🗑️ Opération supprimée: $codeOps (ID: ${operation.id})');
+          }
+        } catch (e) {
+          debugPrint('⚠️ Erreur lors de la suppression de $codeOps: $e');
+        }
+      }
+      debugPrint('✅ $deletedCount opérations supprimées de LocalDB par code_ops');
+    } catch (e) {
+      debugPrint('❌ Erreur lors de la suppression des opérations par code_ops: $e');
+    }
   }
 
   // === CRUD JOURNAL DE CAISSE ===

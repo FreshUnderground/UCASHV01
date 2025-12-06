@@ -478,8 +478,8 @@ class RapportClotureService {
   }
 
   /// Récupérer les transactions partenaires du jour
-  /// - "Clients Nous Devons" = "Dépôts Partenaires" : Partenaires qui ont déposé dans leur compte durant le jour
-  /// - "Clients Nous Doivent" = "Partenaires Servis" : Partenaires qui ont retiré de leur compte durant le jour
+  /// - "Clients Nous que Devons" = "Dépôts Partenaires" : Partenaires qui ont déposé dans leur compte durant le jour
+  /// - "Clients Nous qui Doivent" = "Partenaires Servis" : Partenaires qui ont retiré de leur compte durant le jour
   Future<Map<String, List<CompteClientResume>>> _getComptesClients(int shopId, DateTime dateRapport, List<OperationModel>? providedOperations) async {
     // Utiliser les opérations fournies (de "Mes Ops") ou charger depuis LocalDB
     final operations = providedOperations ?? await LocalDB.instance.getAllOperations();
@@ -555,10 +555,10 @@ class RapportClotureService {
   
   /// Calculer les dettes/créances inter-shops
   /// NOUVELLE LOGIQUE BASÉE SUR LES TRANSFERTS ET FLOTS
-  /// - Transferts servis PAR nous → Ils nous doivent
+  /// - Transferts servis PAR nous → Ils Nous qui Doivent
   /// - Transferts servis PAR eux → On leur doit
   /// - FLOTs reçus DE eux → On leur doit rembourser
-  /// - FLOTs envoyés À eux → Ils nous doivent rembourser
+  /// - FLOTs envoyés À eux → Ils Nous qui Doivent rembourser
   /// Le solde final détermine si c'est une dette ou une créance
   Future<Map<String, List<CompteShopResume>>> _getComptesShops(int shopId) async {
     final shops = await LocalDB.instance.getAllShops();
@@ -617,11 +617,11 @@ class RapportClotureService {
     for (final flot in allFlots) {
       if (flot.statut == OperationStatus.enAttente && flot.devise == 'USD') {
         if (flot.shopSourceId == shopId) {
-          // NOUS avons envoyé en cours → Ils nous doivent rembourser
+          // NOUS avons envoyé en cours → Ils Nous qui Doivent rembourser
           final autreShopId = flot.shopDestinationId;
           if (autreShopId != null && autreShopId != shopId) {
             soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + flot.montantNet;
-            debugPrint('   FLOT EN COURS envoyé PAR nous à Shop $autreShopId: Ils nous doivent +${flot.montantNet} USD');
+            debugPrint('   FLOT EN COURS envoyé PAR nous à Shop $autreShopId: Ils Nous qui Doivent +${flot.montantNet} USD');
           }
         } else if (flot.shopDestinationId == shopId) {
           // ILS ont envoyé en cours → On leur doit rembourser
@@ -647,7 +647,7 @@ class RapportClotureService {
       }
     }
     
-    // 5. FLOTS ENVOYÉS ET SERVIS (shopSourceId = nous) → Ils nous doivent rembourser
+    // 5. FLOTS ENVOYÉS ET SERVIS (shopSourceId = nous) → Ils Nous qui Doivent rembourser
     for (final flot in allFlots) {
       if (flot.shopSourceId == shopId &&
           flot.statut == OperationStatus.validee &&
@@ -655,7 +655,7 @@ class RapportClotureService {
         final autreShopId = flot.shopDestinationId;
         if (autreShopId != null && autreShopId != shopId) {
           soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + flot.montantNet;
-          debugPrint('   FLOT SERVI envoyé À Shop $autreShopId: Ils nous doivent +${flot.montantNet} USD');
+          debugPrint('   FLOT SERVI envoyé À Shop $autreShopId: Ils Nous qui Doivent +${flot.montantNet} USD');
         }
       }
     }
@@ -672,7 +672,7 @@ class RapportClotureService {
       if (shop == null) continue;
       
       if (solde > 0) {
-        // Ils nous doivent (créance)
+        // Ils Nous qui Doivent (créance)
         shopsNousDoivent.add(CompteShopResume(
           shopId: autreShopId,
           designation: shop.designation,
@@ -696,7 +696,7 @@ class RapportClotureService {
     final totalDettes = shopsNousDevons.fold(0.0, (sum, shop) => sum + shop.montant);
     
     debugPrint('📊 RÉSUMÉ INTER-SHOPS:');
-    debugPrint('   Total créances (ils nous doivent): ${totalCreances.toStringAsFixed(2)} USD');
+    debugPrint('   Total créances (ils Nous qui Doivent): ${totalCreances.toStringAsFixed(2)} USD');
     debugPrint('   Total dettes (on leur doit): ${totalDettes.toStringAsFixed(2)} USD');
     debugPrint('   Solde net: ${(totalCreances - totalDettes).toStringAsFixed(2)} USD');
     debugPrint('📊 === FIN CALCUL DETTES/CRÉANCES ===');
@@ -1170,6 +1170,172 @@ class RapportClotureService {
       DateTime dernierJourOuvrable = getDernierJourOuvrable(dateHier);
       debugPrint('⚠️ En cas d\'erreur, demande de clôture pour: ${dernierJourOuvrable.toIso8601String().split('T')[0]}');
       return dernierJourOuvrable;
+    }
+  }
+
+  /// Récupérer la dernière clôture de caisse d'un shop
+  Future<ClotureCaisseModel?> getDerniereCloture(int shopId) async {
+    try {
+      final clotures = await LocalDB.instance.getCloturesCaisseByShop(shopId);
+      if (clotures.isEmpty) {
+        debugPrint('ℹ️ Aucune clôture trouvée pour shop $shopId');
+        return null;
+      }
+      // La liste est déjà triée par date décroissante
+      final derniereCloture = clotures.first;
+      debugPrint('📋 Dernière clôture trouvée: ${derniereCloture.dateCloture.toIso8601String().split('T')[0]}');
+      return derniereCloture;
+    } catch (e) {
+      debugPrint('❌ Erreur récupération dernière clôture: $e');
+      return null;
+    }
+  }
+
+  /// Trouver TOUS les jours non clôturés depuis la dernière clôture jusqu'à hier
+  /// Retourne une liste de dates qui doivent être clôturées (ordre chronologique)
+  /// Si aucune clôture n'existe, retourne une liste vide (premier jour d'utilisation)
+  Future<List<DateTime>> getJoursNonClotures(int shopId, {int maxJours = 30}) async {
+    try {
+      final List<DateTime> joursNonClotures = [];
+      final aujourdhui = DateTime.now();
+      final dateAujourdhui = DateTime(aujourdhui.year, aujourdhui.month, aujourdhui.day);
+      final dateHier = dateAujourdhui.subtract(const Duration(days: 1));
+      
+      // Récupérer la dernière clôture
+      final derniereCloture = await getDerniereCloture(shopId);
+      
+      // Si aucune clôture n'existe, c'est le premier jour - pas besoin de clôturer
+      if (derniereCloture == null) {
+        debugPrint('ℹ️ Aucune clôture précédente - premier jour d\'utilisation');
+        return [];
+      }
+      
+      // Date de début de recherche = lendemain de la dernière clôture
+      DateTime dateDebut = DateTime(
+        derniereCloture.dateCloture.year,
+        derniereCloture.dateCloture.month,
+        derniereCloture.dateCloture.day,
+      ).add(const Duration(days: 1));
+      
+      debugPrint('🔍 Recherche jours non clôturés pour Shop $shopId');
+      debugPrint('   Dernière clôture: ${derniereCloture.dateCloture.toIso8601String().split('T')[0]}');
+      debugPrint('   Recherche du: ${dateDebut.toIso8601String().split('T')[0]} au ${dateHier.toIso8601String().split('T')[0]}');
+      
+      // Parcourir chaque jour depuis le lendemain de la dernière clôture jusqu'à hier
+      DateTime dateCourante = dateDebut;
+      int compteur = 0;
+      
+      while (!dateCourante.isAfter(dateHier) && compteur < maxJours) {
+        // Ignorer les dimanches (jour de repos)
+        if (dateCourante.weekday != DateTime.sunday) {
+          // Vérifier si ce jour est clôturé
+          final estCloturee = await journeeEstCloturee(shopId, dateCourante);
+          if (!estCloturee) {
+            joursNonClotures.add(dateCourante);
+            debugPrint('   ❌ Jour non clôturé: ${dateCourante.toIso8601String().split('T')[0]}');
+          }
+        } else {
+          debugPrint('   ⏭️ Dimanche ignoré: ${dateCourante.toIso8601String().split('T')[0]}');
+        }
+        
+        dateCourante = dateCourante.add(const Duration(days: 1));
+        compteur++;
+      }
+      
+      debugPrint('📊 ${joursNonClotures.length} jour(s) non clôturé(s) trouvé(s)');
+      return joursNonClotures;
+    } catch (e) {
+      debugPrint('❌ Erreur recherche jours non clôturés: $e');
+      return [];
+    }
+  }
+
+  /// Clôturer plusieurs jours avec les mêmes montants
+  /// Utilisé pour rattraper les jours non clôturés
+  Future<bool> cloturerPlusieursJours({
+    required int shopId,
+    required List<DateTime> dates,
+    required double soldeSaisiCash,
+    required double soldeSaisiAirtelMoney,
+    required double soldeSaisiMPesa,
+    required double soldeSaisiOrangeMoney,
+    required String cloturePar,
+  }) async {
+    try {
+      debugPrint('🔒 Clôture en masse de ${dates.length} jour(s) pour Shop $shopId');
+      
+      // Trier les dates par ordre chronologique
+      final datesTriees = List<DateTime>.from(dates);
+      datesTriees.sort((a, b) => a.compareTo(b));
+      
+      for (final date in datesTriees) {
+        debugPrint('   📅 Clôture du ${date.toIso8601String().split('T')[0]}...');
+        
+        await cloturerJournee(
+          shopId: shopId,
+          dateCloture: date,
+          cloturePar: cloturePar,
+          soldeSaisiCash: soldeSaisiCash,
+          soldeSaisiAirtelMoney: soldeSaisiAirtelMoney,
+          soldeSaisiMPesa: soldeSaisiMPesa,
+          soldeSaisiOrangeMoney: soldeSaisiOrangeMoney,
+          notes: 'Clôture groupée - Rattrapage de jours non clôturés',
+        );
+        
+        debugPrint('   ✅ Jour clôturé: ${date.toIso8601String().split('T')[0]}');
+      }
+      
+      debugPrint('✅ Clôture en masse terminée avec succès');
+      return true;
+    } catch (e) {
+      debugPrint('❌ Erreur lors de la clôture en masse: $e');
+      return false;
+    }
+  }
+
+  /// Vérifier si l'agent peut accéder aux menus opérationnels
+  /// (Operations, Validations, Flot)
+  /// Retourne null si OK, ou les dates non clôturées si besoin de clôturer
+  Future<List<DateTime>?> verifierAccesMenusAgent(int shopId) async {
+    try {
+      final aujourdhui = DateTime.now();
+      final dateAujourdhui = DateTime(aujourdhui.year, aujourdhui.month, aujourdhui.day);
+      
+      // Trouver le dernier jour ouvrable (hier, ou samedi si on est lundi)
+      DateTime dateHier = dateAujourdhui.subtract(const Duration(days: 1));
+      DateTime dernierJourOuvrable = getDernierJourOuvrable(dateHier);
+      
+      debugPrint('🔍 Vérification accès menus pour Shop $shopId');
+      debugPrint('   Aujourd\'hui: ${dateAujourdhui.toIso8601String().split('T')[0]}');
+      debugPrint('   Dernier jour ouvrable à vérifier: ${dernierJourOuvrable.toIso8601String().split('T')[0]}');
+      
+      // Vérifier directement si le dernier jour ouvrable est clôturé
+      final clotureHier = await LocalDB.instance.getClotureCaisseByDate(shopId, dernierJourOuvrable);
+      
+      if (clotureHier != null) {
+        debugPrint('✅ Clôture trouvée pour ${dernierJourOuvrable.toIso8601String().split('T')[0]} - accès autorisé');
+        debugPrint('   ID Clôture: ${clotureHier.id}');
+        debugPrint('   Date clôture: ${clotureHier.dateCloture.toIso8601String()}');
+        return null; // Accès autorisé
+      }
+      
+      // Le dernier jour ouvrable n'est pas clôturé - rechercher tous les jours non clôturés
+      debugPrint('⚠️ Pas de clôture pour ${dernierJourOuvrable.toIso8601String().split('T')[0]}');
+      
+      final joursNonClotures = await getJoursNonClotures(shopId);
+      
+      if (joursNonClotures.isEmpty) {
+        // Aucune clôture précédente - premier jour d'utilisation, autoriser
+        debugPrint('✅ Premier jour d\'utilisation - accès autorisé');
+        return null;
+      }
+      
+      debugPrint('⚠️ Accès menus bloqué - ${joursNonClotures.length} jour(s) à clôturer');
+      return joursNonClotures;
+    } catch (e) {
+      debugPrint('❌ Erreur vérification accès menus: $e');
+      // En cas d'erreur, permettre l'accès pour ne pas bloquer l'agent
+      return null;
     }
   }
 }

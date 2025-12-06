@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../lib/models/flot_model.dart';
 
 /// Script de diagnostic pour vérifier les FLOTs stockés localement
+/// NOTE: Les flots sont maintenant gérés comme des operations avec type=flotShopToShop
 void main() async {
   print('🔍 ===== DIAGNOSTIC DES FLOTS =====\n');
   
@@ -29,7 +30,7 @@ void main() async {
         final json = jsonDecode(flotData);
         final flot = FlotModel.fromJson(json);
         
-        print('  • FLOT #${flot.id}');
+        print('  • FLOT #${flot.id} (Maintenant géré comme operation)');
         print('    Reference: ${flot.reference}');
         print('    Montant: ${flot.montant} ${flot.devise}');
         print('    Source: Shop ${flot.shopSourceId} (${flot.shopSourceDesignation})');
@@ -40,7 +41,8 @@ void main() async {
         print('    Agent Envoyeur: ${flot.agentEnvoyeurUsername} (ID: ${flot.agentEnvoyeurId})');
         print('    Agent Récepteur: ${flot.agentRecepteurUsername ?? "N/A"} (ID: ${flot.agentRecepteurId ?? "N/A"})');
         print('    Synchronisé: ${flot.isSynced ? "✅ Oui" : "❌ Non"}');
-        print('    Synced At: ${flot.syncedAt ?? "Jamais"}\n');
+        print('    Synced At: ${flot.syncedAt ?? "Jamais"}');
+        print('    Note: Ce FLOT est maintenant une operation avec type=flotShopToShop\n');
       }
     } catch (e) {
       print('    ⚠️ Erreur lors du chargement de $key: $e\n');
@@ -57,6 +59,7 @@ void main() async {
       for (var i = 0; i < pending.length; i++) {
         final flotJson = pending[i] as Map<String, dynamic>;
         print('   ${i + 1}. Reference: ${flotJson['reference']}, Montant: ${flotJson['montant']}');
+        print('         Note: Ce FLOT est maintenant une operation avec type=flotShopToShop');
       }
     } catch (e) {
       print('⚠️ Erreur lors de la lecture des FLOTs en attente: $e');
@@ -72,5 +75,6 @@ void main() async {
   print('1. Vérifiez que le shop ID utilisé correspond à celui du FLOT');
   print('2. Si le FLOT n\'est pas synchronisé, vérifiez la connexion internet');
   print('3. Essayez de rafraîchir la page FLOT avec le bouton "Actualiser"');
-  print('4. Vérifiez les logs de synchronisation dans la console\n');
+  print('4. Vérifiez les logs de synchronisation dans la console');
+  print('5. NOTE: Les FLOTs sont maintenant gérés comme des operations avec type=flotShopToShop\n');
 }

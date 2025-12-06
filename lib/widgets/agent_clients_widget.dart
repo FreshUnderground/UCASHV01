@@ -24,7 +24,7 @@ class AgentClientsWidget extends StatefulWidget {
 class _AgentClientsWidgetState extends State<AgentClientsWidget> {
   String _searchQuery = '';
   bool _showActiveOnly = false;
-  String _balanceFilter = 'all'; // all, debit (ils nous doivent), credit (nous leur devons)
+  String _balanceFilter = 'all'; // all, debit (ils Nous qui Doivent), credit (nous leur devons)
 
   @override
   void initState() {
@@ -60,7 +60,7 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
         final totalBalanceUSD = balance['USD']!;
         
         if (_balanceFilter == 'debit') {
-          // Ils nous doivent (solde positif)
+          // Ils Nous qui Doivent (solde positif)
           matchesBalance = totalBalanceUSD > 0;
         } else if (_balanceFilter == 'credit') {
           // Nous leur devons (solde négatif)
@@ -293,7 +293,7 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
                   child: pw.Column(
                     children: [
                       pw.Text(
-                        'ILS NOUS DOIVENT',
+                        'ILS Nous qui Doivent',
                         style: pw.TextStyle(
                           fontSize: 12,
                           fontWeight: pw.FontWeight.bold,
@@ -369,7 +369,7 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
           // Clients who owe us
           if (clientsDebit.isNotEmpty) ...[
             pw.Text(
-              'ILS NOUS DOIVENT (${clientsDebit.length})',
+              'ILS Nous qui Doivent (${clientsDebit.length})',
               style: pw.TextStyle(
                 fontSize: 14,
                 fontWeight: pw.FontWeight.bold,
@@ -693,7 +693,7 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
                   ),
                   SizedBox(width: isMobile ? 6 : 8),
                   _buildBalanceTabButton(
-                    label: 'Ils nous doivent',
+                    label: 'Ils Nous qui Doivent',
                     icon: Icons.arrow_downward,
                     value: 'debit',
                     color: Colors.green,

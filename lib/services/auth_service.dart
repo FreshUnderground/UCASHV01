@@ -12,6 +12,7 @@ import 'agent_service.dart';
 import 'rates_service.dart';
 import 'shop_service.dart';
 import 'sync_service.dart';
+import 'connectivity_service.dart';
 
 class AuthService extends ChangeNotifier {
   UserModel? _currentUser;
@@ -177,9 +178,87 @@ class AuthService extends ChangeNotifier {
       }
       
       debugPrint('Échec de la connexion offline pour: $username');
+      
+      // 🔄 NOUVEAU: Si échec, tenter une synchronisation et réessayer
+      // Cela permet de récupérer un agent récemment ajouté sur le serveur
+      final syncedUser = await _syncAndRetryLogin(username, password);
+      if (syncedUser != null) {
+        return syncedUser;
+      }
+      
       return null;
     } catch (e) {
       debugPrint('Erreur lors de la connexion offline: $e');
+    }
+  }
+
+  /// Synchroniser les données (agents, shops, frais) et réessayer le login
+  /// Cela permet de récupérer un agent récemment ajouté sur le serveur
+  Future<UserModel?> _syncAndRetryLogin(String username, String password) async {
+    try {
+      // Vérifier si on est en ligne
+      final connectivityService = ConnectivityService.instance;
+      if (!connectivityService.isOnline) {
+        debugPrint('⚠️ Pas de connexion internet - impossible de synchroniser');
+        return null;
+      }
+      
+      debugPrint('🔄 Échec login offline - Tentative de synchronisation depuis le SERVEUR...');
+      debugPrint('🔄 Téléchargement des shops, agents et frais depuis le serveur...');
+      
+      // Synchroniser les données essentielles DEPUIS LE SERVEUR
+      try {
+        final syncService = SyncService();
+        
+        // IMPORTANT: Réinitialiser les timestamps de sync pour forcer un téléchargement COMPLET
+        // Cela permet de récupérer les agents récemment ajoutés qui pourraient être
+        // filtrés par le paramètre 'since'
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('last_sync_shops');
+        await prefs.remove('last_sync_agents');
+        await prefs.remove('last_sync_commissions');
+        debugPrint('🗑️ Timestamps de sync réinitialisés pour téléchargement COMPLET');
+        
+        // IMPORTANT: Télécharger d'abord les SHOPS (car agents dépendent des shops)
+        debugPrint('📥 [1/3] Téléchargement des SHOPS depuis le serveur...');
+        await syncService.downloadTableData('shops', 'login_sync', 'admin');
+        await ShopService.instance.loadShops(forceRefresh: true);
+        debugPrint('✅ ${ShopService.instance.shops.length} shops téléchargés');
+        
+        // Puis télécharger les AGENTS
+        debugPrint('📥 [2/3] Téléchargement des AGENTS depuis le serveur...');
+        await syncService.downloadTableData('agents', 'login_sync', 'admin');
+        await AgentService.instance.loadAgents(forceRefresh: true);
+        debugPrint('✅ ${AgentService.instance.agents.length} agents téléchargés');
+        
+        // Télécharger les COMMISSIONS (Frais)
+        debugPrint('📥 [3/3] Téléchargement des COMMISSIONS (Frais) depuis le serveur...');
+        await syncService.downloadTableData('commissions', 'login_sync', 'admin');
+        await RatesService.instance.loadRatesAndCommissions();
+        debugPrint('✅ ${RatesService.instance.commissions.length} commissions téléchargées');
+        
+        debugPrint('✅ Synchronisation depuis le serveur terminée');
+        
+        // Réessayer le login après synchronisation
+        final user = await LocalDB.instance.getAgentByCredentials(username, password);
+        
+        if (user != null) {
+          debugPrint('✅ Connexion réussie après synchronisation pour: ${user.username}');
+          return user;
+        } else {
+          debugPrint('❌ Agent "$username" toujours non trouvé après synchronisation serveur');
+          // Afficher les agents disponibles pour le débogage
+          final allAgents = await LocalDB.instance.getAllAgents();
+          debugPrint('📋 Agents disponibles: ${allAgents.map((a) => a.username).toList()}');
+        }
+      } catch (syncError) {
+        debugPrint('⚠️ Erreur lors de la synchronisation serveur: $syncError');
+      }
+      
+      return null;
+    } catch (e) {
+      debugPrint('❌ Erreur lors de la sync et retry login: $e');
+      return null;
     }
   }
 
@@ -313,29 +392,55 @@ class AuthService extends ChangeNotifier {
         final username = _currentUser!.username;
         final currentRole = _currentUser!.role; // Préserver le rôle actuel
         
-        // Si c'est un admin, vérifier d'abord l'admin par défaut
+        // ========== PROTECTION ADMIN ==========
+        // Si l'utilisateur actuel est un ADMIN, TOUJOURS vérifier dans les admins locaux
+        // pour éviter qu'un agent du serveur avec le même username écrase la session admin
         if (currentRole == 'ADMIN') {
-          // Vérifier si c'est l'admin par défaut
-          if (username == 'admin') {
-            final admin = await LocalDB.instance.getDefaultAdmin();
-            if (admin != null) {
-              _currentUser = admin;
-              debugPrint('✅ Admin par défaut rechargé: ${admin.username}');
-              
-              // Mettre à jour la session sauvegardée
-              await LocalDB.instance.saveUserSession(_currentUser!);
-              
-              // Notifier les listeners pour mettre à jour l'interface
-              notifyListeners();
-              
-              debugPrint('✅ Données admin rafraîchies avec succès');
-              // Pas besoin de shop pour l'admin
-              return;
+          debugPrint('🔐 Utilisateur ADMIN détecté: $username - Protection de session activée');
+          
+          // Chercher dans TOUS les admins locaux (pas seulement le défaut)
+          final allAdmins = await LocalDB.instance.getAllAdmins();
+          UserModel? localAdmin;
+          
+          // Chercher par username dans les admins personnalisés
+          for (var admin in allAdmins) {
+            if (admin.username == username) {
+              localAdmin = admin;
+              break;
             }
           }
+          
+          // Si pas trouvé, vérifier l'admin par défaut temporaire
+          if (localAdmin == null) {
+            final defaultAdmin = await LocalDB.instance.getDefaultAdmin();
+            if (defaultAdmin != null && defaultAdmin.username == username) {
+              localAdmin = defaultAdmin;
+            }
+          }
+          
+          if (localAdmin != null) {
+            // ADMIN TROUVÉ - Conserver la session admin protégée
+            _currentUser = localAdmin;
+            debugPrint('🔐 Admin rechargé depuis stockage protégé: ${localAdmin.username}');
+            
+            // Mettre à jour la session sauvegardée
+            await LocalDB.instance.saveUserSession(_currentUser!);
+            
+            // Notifier les listeners pour mettre à jour l'interface
+            notifyListeners();
+            
+            debugPrint('✅ Données admin rafraîchies avec succès (session protégée)');
+            // Pas besoin de shop pour l'admin
+            return;
+          } else {
+            // Admin non trouvé dans le stockage local - GARDER la session actuelle
+            debugPrint('⚠️ Admin $username non trouvé dans stockage local - Session conservée');
+            return;
+          }
         }
+        // ========== FIN PROTECTION ADMIN ==========
         
-        // Pour les agents ou admins dans la table agents, recharger depuis AgentService
+        // Pour les AGENTS uniquement, recharger depuis AgentService
         await AgentService.instance.loadAgents(forceRefresh: true);
         
         // Recharger l'utilisateur depuis AgentService
@@ -351,25 +456,31 @@ class AuthService extends ChangeNotifier {
               (agent) => agent.username == username,
             );
           } catch (e) {
-            debugPrint('⚠️ Agent/Admin non trouvé par username: $username');
+            debugPrint('⚠️ Agent non trouvé par username: $username');
           }
         }
         
         if (updatedAgent != null) {
-          // Convertir AgentModel en UserModel en PRÉSERVANT le rôle original
-          // (AgentModel.role contient le bon rôle depuis la BDD)
+          // SÉCURITÉ: Vérifier que l'agent trouvé n'est pas un ADMIN
+          // pour éviter de remplacer un admin par un agent du serveur
+          if (updatedAgent.role == 'ADMIN') {
+            debugPrint('⚠️ Agent trouvé avec role ADMIN - Ignoré pour protéger la session');
+            return;
+          }
+          
+          // Convertir AgentModel en UserModel
           _currentUser = UserModel(
             id: updatedAgent.id,
             username: updatedAgent.username,
             password: updatedAgent.password,
-            role: updatedAgent.role, // Utiliser le rôle depuis la BDD au lieu de hardcoder 'AGENT'
+            role: updatedAgent.role,
             shopId: updatedAgent.shopId,
             nom: updatedAgent.nom,
             telephone: updatedAgent.telephone,
             createdAt: updatedAgent.createdAt,
           );
           
-          debugPrint('✅ Utilisateur rechargé: ${updatedAgent.username} (Rôle: ${updatedAgent.role})');
+          debugPrint('✅ Agent rechargé: ${updatedAgent.username} (Rôle: ${updatedAgent.role})');
           
           // Rafraîchir le shop si l'utilisateur a un shopId
           if (updatedAgent.shopId != null) {
@@ -386,9 +497,9 @@ class AuthService extends ChangeNotifier {
           // Notifier les listeners pour mettre à jour l'interface
           notifyListeners();
           
-          debugPrint('✅ Données utilisateur rafraîchies avec succès');
+          debugPrint('✅ Données agent rafraîchies avec succès');
         } else {
-          debugPrint('⚠️ Utilisateur non trouvé lors du rafraîchissement');
+          debugPrint('⚠️ Agent non trouvé lors du rafraîchissement');
         }
       }
       

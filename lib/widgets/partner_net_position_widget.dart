@@ -8,8 +8,8 @@ import '../models/client_model.dart';
 import '../models/operation_model.dart';
 
 /// Widget pour afficher la situation nette des partenaires
-/// - Ceux qui nous doivent (solde négatif)
-/// - Ceux que nous devons (solde positif)
+/// - Ceux qui Nous qui Doivent (solde négatif)
+/// - Ceux que Nous que Devons (solde positif)
 class PartnerNetPositionWidget extends StatefulWidget {
   final int? shopId;
 
@@ -97,9 +97,9 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
         }).toList();
 
         // Calculer les soldes et séparer en deux catégories
-        // IMPORTANT: Solde négatif (-) = Ils nous doivent, Solde positif (+) = Nous leur devons
+        // IMPORTANT: Solde négatif (-) = Ils Nous qui Doivent, Solde positif (+) = Nous leur devons
         List<Map<String, dynamic>> partnersWeOwe = []; // Solde positif (+) = Nous leur devons
-        List<Map<String, dynamic>> partnersWhoOweUs = []; // Solde négatif (-) = Ils nous doivent
+        List<Map<String, dynamic>> partnersWhoOweUs = []; // Solde négatif (-) = Ils Nous qui Doivent
 
         for (final client in clients) {
           final balance = _calculateClientBalance(client.id!, operationService.operations);
@@ -111,7 +111,7 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
               'balance': balance,
             });
           } else if (balance < 0) {
-            // Solde NÉGATIF = Ils nous doivent (le client a plus retiré que déposé)
+            // Solde NÉGATIF = Ils Nous qui Doivent (le client a plus retiré que déposé)
             partnersWhoOweUs.add({
               'client': client,
               'balance': balance.abs(), // Afficher en valeur absolue
@@ -241,7 +241,7 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildSummaryItem(
-                  'Ils nous doivent',
+                  'Ils Nous qui Doivent',
                   totalWhoOweUs,
                   Colors.green,
                   Icons.arrow_downward,
@@ -335,7 +335,7 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
       children: [
         Expanded(
           child: _buildPartnerList(
-            'Ceux qui nous doivent',
+            'Ceux qui Nous qui Doivent',
             partnersWhoOweUs,
             totalWhoOweUs,
             Colors.green,
@@ -345,7 +345,7 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
         const SizedBox(width: 16),
         Expanded(
           child: _buildPartnerList(
-            'Ceux que nous devons',
+            'Ceux que Nous que Devons',
             partnersWeOwe,
             totalWeOwe,
             Colors.red,
@@ -378,7 +378,7 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
               tabs: const [
                 Tab(
                   icon: Icon(Icons.arrow_downward, size: 20),
-                  text: 'Ils nous doivent',
+                  text: 'Ils Nous qui Doivent',
                 ),
                 Tab(
                   icon: Icon(Icons.arrow_upward, size: 20),
@@ -392,14 +392,14 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
               physics: const NeverScrollableScrollPhysics(),
               children: [
                 _buildPartnerList(
-                  'Ceux qui nous doivent',
+                  'Ceux qui Nous qui Doivent',
                   partnersWhoOweUs,
                   totalWhoOweUs,
                   Colors.green,
                   Icons.arrow_downward,
                 ),
                 _buildPartnerList(
-                  'Ceux que nous devons',
+                  'Ceux que Nous que Devons',
                   partnersWeOwe,
                   totalWeOwe,
                   Colors.red,

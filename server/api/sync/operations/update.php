@@ -87,6 +87,7 @@ try {
             destinataire = :destinataire,
             observation = :observation,
             notes = :notes,
+            date_validation = :date_validation,
             last_modified_at = :last_modified_at,
             last_modified_by = :last_modified_by,
             is_synced = 1,
@@ -101,6 +102,7 @@ try {
         ':destinataire' => $data['destinataire'] ?? null,
         ':observation' => $data['observation'] ?? null,
         ':notes' => $data['notes'] ?? null,
+        ':date_validation' => $data['date_validation'] ?? null,
         ':last_modified_at' => $data['last_modified_at'] ?? $data['lastModifiedAt'] ?? date('Y-m-d H:i:s'),
         ':last_modified_by' => $data['last_modified_by'] ?? $data['lastModifiedBy'] ?? 'system',
         ':code_ops' => $codeOps

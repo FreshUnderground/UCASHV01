@@ -3,6 +3,7 @@ import '../models/operation_model.dart';
 import '../models/journal_caisse_model.dart';
 import 'local_db.dart';
 import 'operation_service.dart';
+import 'sync_service.dart';
 
 /// Service pour gérer les FLOTS (approvisionnement de liquidité entre shops)
 /// UTILISE MAINTENANT OperationModel avec type=flotShopToShop
@@ -22,47 +23,29 @@ class FlotService extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  /// Charger tous les flots (filtre operations avec type=flotShopToShop)
+  /// Charger tous les flots (OPTIMISÉ: utilise getFlotOperations() au lieu de getAllOperations())
   Future<void> loadFlots({int? shopId, bool isAdmin = false}) async {
     _setLoading(true);
     _currentShopId = shopId;
     _currentIsAdmin = isAdmin;
     
     try {
-      debugPrint('📦 loadFlots() called - shopId: $shopId, isAdmin: $isAdmin');
-      
-      // Récupérer TOUTES les operations de type flotShopToShop
-      final allOperations = await LocalDB.instance.getAllOperations();
-      final allFlots = allOperations.where((op) => 
-        op.type == OperationType.flotShopToShop
-      ).toList();
+      // OPTIMISÉ: Utiliser la méthode spécifique pour les FLOTs
+      // Au lieu de charger TOUTES les opérations puis filtrer
+      final allFlots = await LocalDB.instance.getFlotOperations(shopId: isAdmin ? null : shopId);
       
       if (isAdmin) {
         // Admin voit tous les flots
         _flots = allFlots;
-        debugPrint('📊 ADMIN - Tous les flots chargés: ${_flots.length}');
       } else if (shopId != null) {
-        // Shop voit seulement les flots où il est source ou destination
-        _flots = allFlots.where((f) => 
-          f.shopSourceId == shopId || f.shopDestinationId == shopId
-        ).toList();
-        
-        debugPrint('🏪 SHOP $shopId - Total flots: ${allFlots.length}, Filtrés: ${_flots.length}');
-        debugPrint('   └─ Critère: shopSourceId == $shopId OU shopDestinationId == $shopId');
-        
-        // Debug: Afficher le détail
-        final enCours = _flots.where((f) => f.statut == OperationStatus.enAttente).length;
-        final servis = _flots.where((f) => f.statut == OperationStatus.validee || f.statut == OperationStatus.terminee).length;
-        final annules = _flots.where((f) => f.statut == OperationStatus.annulee).length;
-        debugPrint('   → En attente: $enCours | Servis: $servis | Annulés: $annules');
+        // Les FLOTs sont déjà filtrés par getFlotOperations()
+        _flots = allFlots;
       } else {
         // Par défaut, charger tous les flots
         _flots = allFlots;
-        debugPrint('📊 Par défaut - Tous les flots chargés: ${_flots.length}');
       }
       
       _errorMessage = null;
-      debugPrint('💸 Flots chargés: ${_flots.length}');
     } catch (e) {
       _errorMessage = 'Erreur lors du chargement des flots: $e';
       debugPrint('❌ $_errorMessage');
@@ -84,6 +67,9 @@ class FlotService extends ChangeNotifier {
     String? notes,
   }) async {
     try {
+      // Générer la référence unique pour le FLOT
+      final flotReference = _generateReference(shopSourceId, shopDestinationId);
+      
       // Créer une opération de type flotShopToShop
       final newFlot = OperationModel(
         type: OperationType.flotShopToShop,  // ← Type spécifique FLOT
@@ -107,7 +93,8 @@ class FlotService extends ChangeNotifier {
         dateOp: DateTime.now(),
         notes: notes,
         
-        codeOps: _generateReference(shopSourceId, shopDestinationId),
+        codeOps: flotReference,
+        reference: flotReference,  // ← AUSSI définir reference pour l'affichage
         destinataire: shopDestinationDesignation,  // Nom du shop destination
         
         createdAt: DateTime.now(),
@@ -115,8 +102,22 @@ class FlotService extends ChangeNotifier {
         lastModifiedBy: 'agent_$agentEnvoyeurUsername',
       );
 
-      // Sauvegarder via LocalDB (synchronisation automatique via OperationService)
+      // Sauvegarder via LocalDB
       await LocalDB.instance.saveOperation(newFlot);
+      
+      // SYNC IMMÉDIATE: Ajouter le FLOT à la file d'attente pour upload immédiat
+      // (Ne pas attendre la sync périodique de 2 minutes)
+      try {
+        final syncService = SyncService();
+        await syncService.queueOperation(newFlot.toJson());
+        debugPrint('📤 FLOT ${newFlot.codeOps} mis en file d\'attente pour sync immédiate');
+        
+        // Déclencher la sync des opérations en attente
+        await syncService.syncPendingData();
+        debugPrint('✅ FLOT synchronisé immédiatement');
+      } catch (e) {
+        debugPrint('⚠️ Erreur sync immédiate FLOT (sera synchronisé plus tard): $e');
+      }
       
       // IMPORTANT: Réduire le capital du shop source immédiatement
       final shop = await LocalDB.instance.getShopById(shopSourceId);
@@ -183,6 +184,16 @@ class FlotService extends ChangeNotifier {
       // Mettre à jour via LocalDB
       await LocalDB.instance.updateOperation(flot);
       
+      // SYNC IMMÉDIATE: Uploader la mise à jour immédiatement
+      try {
+        final syncService = SyncService();
+        await syncService.queueOperation(flot.toJson());
+        await syncService.syncPendingData();
+        debugPrint('✅ FLOT ${flot.codeOps} synchronisé immédiatement');
+      } catch (e) {
+        debugPrint('⚠️ Erreur sync immédiate FLOT update: $e');
+      }
+      
       // Recharger avec les paramètres actuels
       await loadFlots(shopId: _currentShopId, isAdmin: _currentIsAdmin);
       
@@ -219,8 +230,18 @@ class FlotService extends ChangeNotifier {
         lastModifiedBy: 'agent_$agentRecepteurUsername',
       );
 
-      // Mettre à jour via LocalDB (synchronisation automatique)
+      // Mettre à jour via LocalDB
       await LocalDB.instance.updateOperation(updatedFlot);
+      
+      // SYNC IMMÉDIATE: Uploader le changement de statut immédiatement
+      try {
+        final syncService = SyncService();
+        await syncService.queueOperation(updatedFlot.toJson());
+        await syncService.syncPendingData();
+        debugPrint('✅ FLOT ${updatedFlot.codeOps} (servi) synchronisé immédiatement');
+      } catch (e) {
+        debugPrint('⚠️ Erreur sync immédiate FLOT servi: $e');
+      }
       
       // Recharger avec les paramètres actuels APRES la sync
       debugPrint('🔄 Rechargement des FLOTs...');

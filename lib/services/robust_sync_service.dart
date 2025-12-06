@@ -11,6 +11,7 @@ import 'flot_service.dart';
 import 'compte_special_service.dart';
 import 'client_service.dart';
 import '../config/app_config.dart';
+import '../config/sync_config.dart';
 
 /// Service de synchronisation robuste avec gestion avancée des erreurs
 /// 
@@ -37,6 +38,13 @@ class RobustSyncService {
   bool _isFastSyncing = false;
   bool _isSlowSyncing = false;
   bool _isOnline = false;
+  
+  // Circuit breaker pattern for preventing continuous retries when server is down
+  bool _circuitBreakerOpen = false;
+  int _failureCount = 0;
+  static const int _maxFailureThreshold = 5;
+  static const Duration _circuitBreakerTimeout = Duration(minutes: 5);
+  DateTime? _lastFailureTime;
   
   // Statistiques
   DateTime? _lastFastSync;
@@ -426,22 +434,82 @@ class RobustSyncService {
     }
   }
 
-  /// Exécute une sync avec retry automatique
+  /// Checks if the circuit breaker is open (server appears to be down)
+  bool _isCircuitBreakerOpen() {
+    if (!_circuitBreakerOpen) return false;
+    
+    // Check if enough time has passed to try again
+    if (_lastFailureTime != null) {
+      final elapsed = DateTime.now().difference(_lastFailureTime!);
+      if (elapsed > _circuitBreakerTimeout) {
+        debugPrint('⚡ Circuit breaker timeout expired, closing circuit');
+        _resetCircuitBreaker();
+        return false;
+      }
+    }
+    
+    return true;
+  }
+  
+  /// Opens the circuit breaker when too many failures occur
+  void _openCircuitBreaker() {
+    _circuitBreakerOpen = true;
+    _lastFailureTime = DateTime.now();
+    debugPrint('🚨 Circuit breaker OPENED due to repeated failures');
+  }
+  
+  /// Resets the circuit breaker after successful operations
+  void _resetCircuitBreaker() {
+    _circuitBreakerOpen = false;
+    _failureCount = 0;
+    _lastFailureTime = null;
+    debugPrint('✅ Circuit breaker RESET after successful operation');
+  }
+  
+  /// Records a failure and opens circuit breaker if threshold exceeded
+  void _recordFailure() {
+    _failureCount++;
+    debugPrint('⚠️ Failure recorded ($_failureCount/$_maxFailureThreshold)');
+    
+    if (_failureCount >= _maxFailureThreshold) {
+      _openCircuitBreaker();
+    }
+  }
+  
+  /// Records a successful operation and resets failure count
+  void _recordSuccess() {
+    _resetCircuitBreaker();
+  }
+
+  /// Exécute une sync avec retry automatique amélioré
+  /// Implémentation avec backoff exponentiel et jitter
   Future<bool> _syncWithRetry(String tableName, Future<void> Function() syncFunction) async {
-    const maxRetries = 2;
+    // Check circuit breaker before attempting sync
+    if (_isCircuitBreakerOpen()) {
+      debugPrint('🚫 $tableName sync skipped - circuit breaker is OPEN');
+      return false;
+    }
+    
+    const maxRetries = 5; // Utiliser la configuration améliorée
     int attempt = 0;
     
     while (attempt < maxRetries) {
       try {
         await syncFunction();
+        _recordSuccess(); // Record success and reset circuit breaker
         return true; // Succès
       } catch (e) {
+        _recordFailure(); // Record failure for circuit breaker
         attempt++;
         if (attempt < maxRetries) {
-          debugPrint('  ⚠️ $tableName échoué (tentative $attempt/$maxRetries), retry dans 3s...');
-          await Future.delayed(const Duration(seconds: 3));
+          // Utiliser la configuration améliorée avec jitter
+          final delay = SyncConfig.getRetryDelay(attempt - 1);
+          debugPrint('  ⚠️ $tableName échoué (tentative $attempt/$maxRetries), retry dans ${delay.inSeconds}s...');
+          await Future.delayed(delay);
         } else {
           debugPrint('  ❌ $tableName échoué après $maxRetries tentatives: $e');
+          // Log détaillé pour le suivi des problèmes
+          debugPrint('  📊 Détails de l\'erreur: ${e.toString()}');
           return false; // Échec définitif
         }
       }
@@ -484,7 +552,7 @@ class RobustSyncService {
       
       if (_isEnabled) {
         // Sync immédiate des données critiques
-        _performFastSync();
+        _performFastSync(); // Cette fonction est async mais nous ne voulons pas bloquer ici
         
         // Redémarrer les timers
         _startFastSyncTimer();
@@ -516,7 +584,7 @@ class RobustSyncService {
             debugPrint('🌐 Connectivité retrouvée - redémarrage sync');
             
             // Sync immédiate des données critiques
-            _performFastSync();
+            _performFastSync(); // Cette fonction est async mais nous ne voulons pas bloquer ici
             
             // Redémarrer les timers
             _startFastSyncTimer();
@@ -531,6 +599,12 @@ class RobustSyncService {
 
   /// Vérifie la connectivité et tente une synchronisation si en ligne
   Future<void> checkConnectivityAndSync() async {
+    // Check circuit breaker before attempting sync
+    if (_isCircuitBreakerOpen()) {
+      debugPrint('🚫 Connectivity check skipped - circuit breaker is OPEN');
+      return;
+    }
+    
     try {
       final connectivityResult = await Connectivity().checkConnectivity();
       final isNowOnline = connectivityResult != ConnectivityResult.none;
@@ -556,6 +630,7 @@ class RobustSyncService {
         await syncNow();
       }
     } catch (e) {
+      _recordFailure();
       debugPrint('⚠️ Erreur vérification connectivité et sync: $e');
     }
   }
@@ -588,6 +663,9 @@ class RobustSyncService {
       'isOnline': _isOnline,
       'isFastSyncing': _isFastSyncing,
       'isSlowSyncing': _isSlowSyncing,
+      'isCircuitBreakerOpen': _circuitBreakerOpen,
+      'failureCount': _failureCount,
+      'lastFailureTime': _lastFailureTime?.toIso8601String(),
       'lastFastSync': _lastFastSync?.toIso8601String(),
       'lastSlowSync': _lastSlowSync?.toIso8601String(),
       'fastSyncSuccess': _fastSyncSuccessCount,

@@ -10,11 +10,12 @@ import '../../models/shop_model.dart';
 import '../../models/client_model.dart';
 import '../../models/operation_model.dart';
 import '../../models/compte_special_model.dart';
+import '../calculation_tooltip.dart';
 
 /// Widget pour afficher la Situation Nette de l'Entreprise
 /// - Capital Net par Shop
-/// - Liste des partenaires qui nous doivent
-/// - Liste des partenaires que nous devons
+/// - Liste des partenaires qui Nous qui Doivent
+/// - Liste des partenaires que Nous que Devons
 /// - Total des frais retirés
 class CompanyNetPositionReport extends StatefulWidget {
   const CompanyNetPositionReport({super.key});
@@ -55,8 +56,198 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
     }
   }
 
+  /// Show details for Cash Disponible calculation
+  void _showCashDisponibleDetails(BuildContext context, double amount) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return CalculationDetailsDialog(
+          title: 'Cash Disponible Details',
+          description: 'Cash Disponible represents the actual physical cash available in the shop.',
+          formula: 'Cash Disponible = Solde Ouverture + Total Encaissements - Total Décaissements ± Ajustements',
+          businessLogic: 'This calculation follows the daily closure report logic where:\n'
+              '- Solde Ouverture: Starting cash balance\n'
+              '- Total Encaissements: All money received (deposits, incoming transfers)\n'
+              '- Total Décaissements: All money paid out (withdrawals, outgoing transfers)\n'
+              '- Ajustements: Manual adjustments for discrepancies',
+          components: [
+            CalculationComponent(
+              name: 'Solde Ouverture',
+              description: 'Starting cash balance for the day',
+              isPositive: true,
+            ),
+            CalculationComponent(
+              name: 'Encaissements',
+              description: 'Money received during the day (deposits, incoming transfers)',
+              isPositive: true,
+            ),
+            CalculationComponent(
+              name: 'Décaissements',
+              description: 'Money paid out during the day (withdrawals, outgoing transfers)',
+              isPositive: false,
+            ),
+            CalculationComponent(
+              name: 'Ajustements',
+              description: 'Manual adjustments for cash discrepancies',
+              isPositive: true, // Can be positive or negative
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Show details for Clients Nous qui Doivent calculation
+  void _showClientsNousDoiventDetails(BuildContext context, double amount) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return CalculationDetailsDialog(
+          title: 'Clients Nous qui Doivent Details',
+          description: 'Represents the total amount that clients owe to the company.',
+          formula: 'Clients Nous qui Doivent = Σ(Client Balances < 0)',
+          businessLogic: 'For each client, we calculate their balance:\n'
+              '- Deposits and incoming transfers increase the balance\n'
+              '- Withdrawals and outgoing transfers decrease the balance\n'
+              'When a client\'s balance is negative, it means they owe money to the company.',
+          components: [
+            CalculationComponent(
+              name: 'Client Balances',
+              description: 'Individual client account balances',
+              isPositive: true,
+            ),
+            CalculationComponent(
+              name: 'Negative Balances',
+              description: 'Only negative balances are counted as amounts owed to us',
+              isPositive: true,
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Show details for Shops Nous qui Doivent calculation
+  void _showShopsNousDoiventDetails(BuildContext context, double amount) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return CalculationDetailsDialog(
+          title: 'Shops Nous qui Doivent Details',
+          description: 'Represents amounts owed to our shops by other shops.',
+          formula: 'Shops Nous qui Doivent = Σ(Transfert National Amounts where current shop is destination)',
+          businessLogic: 'In national transfers:\n'
+              '- The source shop receives money from a client and owes it to the destination shop\n'
+              '- The destination shop is owed this amount until the transfer is completed',
+          components: [
+            CalculationComponent(
+              name: 'Transferts Nationaux',
+              description: 'National money transfers between shops',
+              isPositive: true,
+            ),
+            CalculationComponent(
+              name: 'Destination Shop',
+              description: 'Current shop is the destination and is owed money',
+              isPositive: true,
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Show details for Clients Nous que Devons calculation
+  void _showClientsNousDevonsDetails(BuildContext context, double amount) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return CalculationDetailsDialog(
+          title: 'Clients Nous que Devons Details',
+          description: 'Represents the total amount that the company owes to clients.',
+          formula: 'Clients Nous que Devons = Σ(Client Balances > 0)',
+          businessLogic: 'For each client, we calculate their balance:\n'
+              '- Deposits and incoming transfers increase the balance\n'
+              '- Withdrawals and outgoing transfers decrease the balance\n'
+              'When a client\'s balance is positive, it means we owe money to the client.',
+          components: [
+            CalculationComponent(
+              name: 'Client Balances',
+              description: 'Individual client account balances',
+              isPositive: false,
+            ),
+            CalculationComponent(
+              name: 'Positive Balances',
+              description: 'Only positive balances are counted as amounts we owe',
+              isPositive: false,
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Show details for Shops Nous que Devons calculation
+  void _showShopsNousDevonsDetails(BuildContext context, double amount) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return CalculationDetailsDialog(
+          title: 'Shops Nous que Devons Details',
+          description: 'Represents amounts that our shops owe to other shops.',
+          formula: 'Shops Nous que Devons = Σ(Transfert National Amounts where current shop is source)',
+          businessLogic: 'In national transfers:\n'
+              '- The source shop receives money from a client and owes it to the destination shop\n'
+              '- The source shop has a debt obligation to the destination shop',
+          components: [
+            CalculationComponent(
+              name: 'Transferts Nationaux',
+              description: 'National money transfers between shops',
+              isPositive: false,
+            ),
+            CalculationComponent(
+              name: 'Source Shop',
+              description: 'Current shop is the source and owes money',
+              isPositive: false,
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Show details for Frais Retirés calculation
+  void _showFraisRetiresDetails(BuildContext context, double amount) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return CalculationDetailsDialog(
+          title: 'Frais Retirés Details',
+          description: 'Represents withdrawals from the FRAIS special account.',
+          formula: 'Frais Retirés = Σ(Retraits from FRAIS account)',
+          businessLogic: 'The FRAIS account accumulates transaction fees:\n'
+              '- Fees are automatically credited to this special account\n'
+              '- Authorized personnel can withdraw from this account\n'
+              '- Withdrawals reduce the company\'s net capital',
+          components: [
+            CalculationComponent(
+              name: 'FRAIS Account',
+              description: 'Special account for accumulating transaction fees',
+              isPositive: false,
+            ),
+            CalculationComponent(
+              name: 'Withdrawals',
+              description: 'Amounts withdrawn from the FRAIS account',
+              isPositive: false,
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   /// Calculer le capital net d'un shop selon la formule de clôture
-  /// Capital Net = Cash Disponible + Créances (clients + shops) - Dettes (clients + shops)
+  /// SITUATION NETTE = Cash Disponible + Partenaires Servis + Shops qui nous doivent 
+  ///                   - Depots Partenaires - Shops que nous Devons - Frais du Jour
   /// UTILISE LA MÊME FORMULE QUE LE RAPPORT DE CLÔTURE JOURNALIÈRE
   Future<Map<String, dynamic>> _calculateShopNetCapitalDetails(
     ShopModel shop,
@@ -77,78 +268,39 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
     // Utiliser le Cash Disponible calculé par le rapport de clôture
     final cashDisponible = rapport.cashDisponibleTotal;
     
-    // 2. Calculer les créances/dettes clients
-    double clientsNousDoivent = 0.0;
-    double clientsNousDevons = 0.0;
-    final List<Map<String, dynamic>> clientsCreances = [];
-    final List<Map<String, dynamic>> clientsDettes = [];
+    // 2. Utiliser les créances/dettes clients du rapport de clôture
+    // Partenaires Servis = Clients qui nous doivent (solde négatif)
+    // Depots Partenaires = Clients que nous devons (solde positif)
+    final clientsNousDoivent = rapport.totalClientsNousDoivent;
+    final clientsNousDevons = rapport.totalClientsNousDevons;
     
-    for (final client in clients) {
-      final balance = _calculateClientBalance(client.id!, operations);
-      
-      if (balance < 0) {
-        // Le client nous doit (balance négatif = créance)
-        clientsNousDoivent += balance.abs();
-        clientsCreances.add({
-          'client': client,
-          'montant': balance.abs(),
-        });
-      } else if (balance > 0) {
-        // Nous devons au client (balance positif = dette)
-        clientsNousDevons += balance;
-        clientsDettes.add({
-          'client': client,
-          'montant': balance,
-        });
-      }
-    }
+    // 3. Utiliser les créances/dettes inter-shops du rapport de clôture
+    final shopsNousDoivent = rapport.totalShopsNousDoivent;
+    final shopsNousDevons = rapport.totalShopsNousDevons;
     
-    // 3. Calculer les créances/dettes inter-shops
-    double shopsNousDoivent = 0.0;
-    double shopsNousDevons = 0.0;
-    final Map<int, double> soldesParShop = {};
+    // 4. Frais du Jour du Rapport de Clôture
+    // Solde Frais = Solde Antérieur + Commissions du Jour - Retraits du Jour
+    final fraisDuJour = rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour;
     
-    // Transferts nationaux
-    for (final op in operations.where((o) => 
-        o.type == OperationType.transfertNational &&
-        (o.shopSourceId == shopId || o.shopDestinationId == shopId))) {
-      
-      if (op.shopSourceId == shopId) {
-        // Ce shop a reçu le transfert du client → doit le montant brut au shop destination
-        final destId = op.shopDestinationId!;
-        soldesParShop[destId] = (soldesParShop[destId] ?? 0) - op.montantBrut;
-      }
-      
-      if (op.shopDestinationId == shopId) {
-        // Ce shop doit servir le transfert → créance sur le shop source
-        final srcId = op.shopSourceId!;
-        soldesParShop[srcId] = (soldesParShop[srcId] ?? 0) + op.montantBrut;
-      }
-    }
-    
-    // Séparer les créances et dettes shops
-    for (final entry in soldesParShop.entries) {
-      if (entry.value > 0) {
-        shopsNousDoivent += entry.value;
-      } else if (entry.value < 0) {
-        shopsNousDevons += entry.value.abs();
-      }
-    }
-    
-    // 4. Le Capital Net est déjà calculé par le rapport de clôture avec la formule correcte
-    // CAPITAL NET = CASH DISPONIBLE + CRÉANCES - DETTES
-    final capitalNet = rapport.capitalNet;
+    // 5. Calculer la SITUATION NETTE selon la formule demandée:
+    // SITUATION NETTE = Cash Disponible + Partenaires Servis + Shops qui nous doivent 
+    //                   - Depots Partenaires - Shops que nous Devons - Frais du Jour
+    final situationNette = cashDisponible + clientsNousDoivent + shopsNousDoivent 
+                          - clientsNousDevons - shopsNousDevons - fraisDuJour;
     
     return {
       'shop': shop,
       'cashDisponible': cashDisponible,
-      'clientsNousDoivent': clientsNousDoivent,
-      'clientsNousDevons': clientsNousDevons,
-      'shopsNousDoivent': shopsNousDoivent,
-      'shopsNousDevons': shopsNousDevons,
-      'capitalNet': capitalNet,
-      'clientsCreances': clientsCreances,
-      'clientsDettes': clientsDettes,
+      'clientsNousDoivent': clientsNousDoivent,  // Partenaires Servis
+      'clientsNousDevons': clientsNousDevons,    // Depots Partenaires
+      'shopsNousDoivent': shopsNousDoivent,      // Shops qui nous doivent
+      'shopsNousDevons': shopsNousDevons,        // Shops que nous devons
+      'fraisDuJour': fraisDuJour,                // Frais du Jour (Rapport Cloture)
+      'soldeFraisAnterieur': rapport.soldeFraisAnterieur,
+      'commissionsFraisDuJour': rapport.commissionsFraisDuJour,
+      'retraitsFraisDuJour': rapport.retraitsFraisDuJour,
+      'situationNette': situationNette,          // Nouvelle formule Situation Nette
+      'capitalNet': rapport.capitalNet,          // Capital Net original (pour référence)
     };
   }
 
@@ -290,26 +442,28 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
             }
             
             final shopCapitals = snapshot.data!;
-            double totalCompanyCapital = 0.0;
+            double totalSituationNette = 0.0;
             double totalCashDisponible = 0.0;
             double totalClientsNousDoivent = 0.0;
             double totalClientsNousDevons = 0.0;
             double totalShopsNousDoivent = 0.0;
             double totalShopsNousDevons = 0.0;
+            double totalFraisDuJour = 0.0;
 
             for (final details in shopCapitals) {
-              totalCompanyCapital += details['capitalNet'] as double;
+              totalSituationNette += details['situationNette'] as double;
               totalCashDisponible += details['cashDisponible'] as double;
               totalClientsNousDoivent += details['clientsNousDoivent'] as double;
               totalClientsNousDevons += details['clientsNousDevons'] as double;
               totalShopsNousDoivent += details['shopsNousDoivent'] as double;
               totalShopsNousDevons += details['shopsNousDevons'] as double;
+              totalFraisDuJour += details['fraisDuJour'] as double;
             }
 
         // Trier par capital net décroissant
         shopCapitals.sort((a, b) => (b['capitalNet'] as double).compareTo(a['capitalNet'] as double));
 
-        // 2. Partenaires qui nous doivent / que nous devons
+        // 2. Partenaires qui Nous qui Doivent / que Nous que Devons
         final partnersWhoOweUs = <Map<String, dynamic>>[];
         final partnersWeOwe = <Map<String, dynamic>>[];
         double totalPartnersOweUs = 0.0;
@@ -331,21 +485,11 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
         partnersWhoOweUs.sort((a, b) => (b['balance'] as double).compareTo(a['balance'] as double));
         partnersWeOwe.sort((a, b) => (b['balance'] as double).compareTo(a['balance'] as double));
 
-        // 3. Total Frais Retirés
-        final compteSpecialService = CompteSpecialService.instance;
-        final totalFraisRetires = compteSpecialService.transactions
-            .where((t) => 
-                t.type == TypeCompteSpecial.FRAIS &&
-                t.typeTransaction == TypeTransactionCompte.RETRAIT &&
-                t.dateTransaction?.year == _selectedDate.year &&
-                t.dateTransaction?.month == _selectedDate.month &&
-                t.dateTransaction?.day == _selectedDate.day)
-            .fold(0.0, (sum, t) => sum + t.montant.abs());
-
-        // Calcul du Capital Net de l'Entreprise
-        // Note: Les créances/dettes inter-shops sont déjà comptabilisées dans chaque shop
-        // donc on utilise directement totalCompanyCapital
-        final companyNetCapital = totalCompanyCapital - totalFraisRetires;
+        // Calcul de la Situation Nette de l'Entreprise
+        // SITUATION NETTE = Cash Disponible + Partenaires Servis + Shops qui nous doivent 
+        //                   - Depots Partenaires - Shops que nous Devons - Frais du Jour
+        // Note: totalSituationNette est déjà calculé par shop avec la bonne formule
+        final companySituationNette = totalSituationNette;
 
             return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -357,8 +501,8 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
               totalClientsNousDevons,
               totalShopsNousDoivent,
               totalShopsNousDevons,
-              totalFraisRetires,
-              companyNetCapital,
+              totalFraisDuJour,
+              companySituationNette,
               isMobile,
             ),
             const SizedBox(height: 24),
@@ -374,7 +518,7 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
                 if (!isMobile) ...[
                   Expanded(
                     child: _buildPartnersList(
-                      'Ceux qui nous doivent',
+                      'Partenaires Servis (Nous doivent)',
                       partnersWhoOweUs,
                       totalPartnersOweUs,
                       Colors.green,
@@ -384,7 +528,7 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
                   const SizedBox(width: 16),
                   Expanded(
                     child: _buildPartnersList(
-                      'Ceux que nous devons',
+                      'Dépôts Partenaires (Nous devons)',
                       partnersWeOwe,
                       totalWeOwePartners,
                       Colors.red,
@@ -396,7 +540,7 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
                     child: Column(
                       children: [
                         _buildPartnersList(
-                          'Ceux qui nous doivent',
+                          'Partenaires Servis (Nous doivent)',
                           partnersWhoOweUs,
                           totalPartnersOweUs,
                           Colors.green,
@@ -404,7 +548,7 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
                         ),
                         const SizedBox(height: 16),
                         _buildPartnersList(
-                          'Ceux que nous devons',
+                          'Dépôts Partenaires (Nous devons)',
                           partnersWeOwe,
                           totalWeOwePartners,
                           Colors.red,
@@ -449,19 +593,19 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
     double totalClientsNousDevons,
     double totalShopsNousDoivent,
     double totalShopsNousDevons,
-    double totalFraisRetires,
-    double companyNetCapital,
+    double totalFraisDuJour,
+    double companySituationNette,
     bool isMobile,
   ) {
     return Card(
       elevation: 4,
-      color: companyNetCapital >= 0 ? Colors.green[50] : Colors.red[50],
+      color: companySituationNette >= 0 ? Colors.green[50] : Colors.red[50],
       child: Padding(
         padding: EdgeInsets.all(isMobile ? 16 : 24),
         child: Column(
           children: [
             Text(
-              'CAPITAL NET DE L\'ENTREPRISE',
+              'SITUATION NETTE DE L\'ENTREPRISE',
               style: TextStyle(
                 fontSize: isMobile ? 16 : 20,
                 fontWeight: FontWeight.bold,
@@ -469,22 +613,35 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
               ),
             ),
             const SizedBox(height: 8),
-            Text(
-              'Formule: Cash Disponible + Créances - Dettes - Frais Retirés',
-              style: TextStyle(
-                fontSize: isMobile ? 10 : 12,
-                fontStyle: FontStyle.italic,
-                color: Colors.grey[600],
+            CalculationTooltip(
+              title: 'Situation Nette Formula',
+              description: 'La situation nette représente la position financière réelle de l\'entreprise',
+              formula: 'Situation Nette = Cash Disponible + Partenaires Servis + Shops qui nous doivent - Dépôts Partenaires - Shops que nous Devons - Frais du Jour',
+              components: [
+                'Cash Disponible: Cash physique disponible',
+                'Partenaires Servis: Montants que les clients nous doivent',
+                'Shops qui nous doivent: Créances inter-shops',
+                'Dépôts Partenaires: Montants que nous devons aux clients',
+                'Shops que nous Devons: Dettes inter-shops',
+                'Frais du Jour: Solde du compte FRAIS (Rapport Clôture)',
+              ],
+              child: Text(
+                'Formule: Cash Disponible + Partenaires Servis + Shops qui nous doivent - Dépôts Partenaires - Shops que nous Devons - Frais du Jour',
+                style: TextStyle(
+                  fontSize: isMobile ? 10 : 12,
+                  fontStyle: FontStyle.italic,
+                  color: Colors.grey[600],
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
             Text(
-              '${_numberFormat.format(companyNetCapital)} USD',
+              '${_numberFormat.format(companySituationNette)} USD',
               style: TextStyle(
                 fontSize: isMobile ? 32 : 48,
                 fontWeight: FontWeight.bold,
-                color: companyNetCapital >= 0 ? Colors.green[700] : Colors.red[700],
+                color: companySituationNette >= 0 ? Colors.green[700] : Colors.red[700],
               ),
             ),
             const Divider(height: 32),
@@ -493,12 +650,30 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
               runSpacing: 16,
               alignment: WrapAlignment.spaceAround,
               children: [
-                _buildSummaryItem('Cash Disponible', totalCashDisponible, Colors.blue, isMobile),
-                _buildSummaryItem('+ Clients Nous Doivent', totalClientsNousDoivent, Colors.green, isMobile),
-                _buildSummaryItem('+ Shops Nous Doivent', totalShopsNousDoivent, Colors.orange, isMobile),
-                _buildSummaryItem('- Clients Nous Devons', totalClientsNousDevons, Colors.red, isMobile),
-                _buildSummaryItem('- Shops Nous Devons', totalShopsNousDevons, Colors.purple, isMobile),
-                _buildSummaryItem('- Frais Retirés', totalFraisRetires, Colors.deepOrange, isMobile),
+                GestureDetector(
+                  onTap: () => _showCashDisponibleDetails(context, totalCashDisponible),
+                  child: _buildSummaryItem('Cash Disponible', totalCashDisponible, Colors.blue, isMobile),
+                ),
+                GestureDetector(
+                  onTap: () => _showClientsNousDoiventDetails(context, totalClientsNousDoivent),
+                  child: _buildSummaryItem('+ Partenaires Servis', totalClientsNousDoivent, Colors.green, isMobile),
+                ),
+                GestureDetector(
+                  onTap: () => _showShopsNousDoiventDetails(context, totalShopsNousDoivent),
+                  child: _buildSummaryItem('+ Shops qui nous doivent', totalShopsNousDoivent, Colors.orange, isMobile),
+                ),
+                GestureDetector(
+                  onTap: () => _showClientsNousDevonsDetails(context, totalClientsNousDevons),
+                  child: _buildSummaryItem('- Dépôts Partenaires', totalClientsNousDevons, Colors.red, isMobile),
+                ),
+                GestureDetector(
+                  onTap: () => _showShopsNousDevonsDetails(context, totalShopsNousDevons),
+                  child: _buildSummaryItem('- Shops que nous Devons', totalShopsNousDevons, Colors.purple, isMobile),
+                ),
+                GestureDetector(
+                  onTap: () => _showFraisRetiresDetails(context, totalFraisDuJour),
+                  child: _buildSummaryItem('- Frais du Jour', totalFraisDuJour, Colors.deepOrange, isMobile),
+                ),
               ],
             ),
           ],
@@ -531,6 +706,9 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
   }
 
   Widget _buildShopCapitals(List<Map<String, dynamic>> shopCapitals, bool isMobile) {
+    // Trier par situation nette décroissante
+    shopCapitals.sort((a, b) => (b['situationNette'] as double).compareTo(a['situationNette'] as double));
+    
     return Card(
       child: Column(
         children: [
@@ -546,7 +724,7 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Capital Net par Shop (${shopCapitals.length} shop(s))',
+                    'Situation Nette par Shop (${shopCapitals.length} shop(s))',
                     style: TextStyle(
                       fontSize: isMobile ? 14 : 16,
                       fontWeight: FontWeight.bold,
@@ -566,19 +744,23 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
             itemBuilder: (context, index) {
               final item = shopCapitals[index];
               final shop = item['shop'] as ShopModel;
-              final capitalNet = item['capitalNet'] as double;
+              final situationNette = item['situationNette'] as double;
               final cashDisponible = item['cashDisponible'] as double;
-              final clientsNousDoivent = item['clientsNousDoivent'] as double;
-              final clientsNousDevons = item['clientsNousDevons'] as double;
-              final shopsNousDoivent = item['shopsNousDoivent'] as double;
-              final shopsNousDevons = item['shopsNousDevons'] as double;
+              final clientsNousDoivent = item['clientsNousDoivent'] as double;  // Partenaires Servis
+              final clientsNousDevons = item['clientsNousDevons'] as double;    // Depots Partenaires
+              final shopsNousDoivent = item['shopsNousDoivent'] as double;      // Shops qui nous doivent
+              final shopsNousDevons = item['shopsNousDevons'] as double;        // Shops que nous devons
+              final fraisDuJour = item['fraisDuJour'] as double;                // Frais du Jour
+              final soldeFraisAnterieur = item['soldeFraisAnterieur'] as double;
+              final commissionsFraisDuJour = item['commissionsFraisDuJour'] as double;
+              final retraitsFraisDuJour = item['retraitsFraisDuJour'] as double;
               
               return ExpansionTile(
                 leading: CircleAvatar(
-                  backgroundColor: capitalNet >= 0 ? Colors.green[100] : Colors.red[100],
+                  backgroundColor: situationNette >= 0 ? Colors.green[100] : Colors.red[100],
                   child: Icon(
                     Icons.store,
-                    color: capitalNet >= 0 ? Colors.green[700] : Colors.red[700],
+                    color: situationNette >= 0 ? Colors.green[700] : Colors.red[700],
                   ),
                 ),
                 title: Text(
@@ -590,11 +772,11 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
                   style: TextStyle(fontSize: isMobile ? 11 : 12, color: Colors.grey[600]),
                 ),
                 trailing: Text(
-                  '${_numberFormat.format(capitalNet)} USD',
+                  '${_numberFormat.format(situationNette)} USD',
                   style: TextStyle(
                     fontSize: isMobile ? 14 : 16,
                     fontWeight: FontWeight.bold,
-                    color: capitalNet >= 0 ? Colors.green[700] : Colors.red[700],
+                    color: situationNette >= 0 ? Colors.green[700] : Colors.red[700],
                   ),
                 ),
                 children: [
@@ -607,7 +789,7 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Détail du Capital Net',
+                          'Détail de la Situation Nette',
                           style: TextStyle(
                             fontSize: isMobile ? 12 : 14,
                             fontWeight: FontWeight.bold,
@@ -615,16 +797,23 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        _buildDetailRow('Cash Disponible', cashDisponible, Colors.blue, isMobile),
-                        _buildDetailRow('+ Clients Nous Doivent', clientsNousDoivent, Colors.green, isMobile),
-                        _buildDetailRow('+ Shops Nous Doivent', shopsNousDoivent, Colors.orange, isMobile),
-                        _buildDetailRow('- Clients Nous Devons', -clientsNousDevons, Colors.red, isMobile),
-                        _buildDetailRow('- Shops Nous Devons', -shopsNousDevons, Colors.purple, isMobile),
+                        _buildDetailRow('Cash Disponible', cashDisponible, Colors.blue, isMobile,
+                            onTap: () => _showCashDisponibleDetails(context, cashDisponible)),
+                        _buildDetailRow('+ Partenaires Servis', clientsNousDoivent, Colors.green, isMobile,
+                            onTap: () => _showClientsNousDoiventDetails(context, clientsNousDoivent)),
+                        _buildDetailRow('+ Shops qui nous doivent', shopsNousDoivent, Colors.orange, isMobile,
+                            onTap: () => _showShopsNousDoiventDetails(context, shopsNousDoivent)),
+                        _buildDetailRow('- Dépôts Partenaires', -clientsNousDevons, Colors.red, isMobile,
+                            onTap: () => _showClientsNousDevonsDetails(context, clientsNousDevons)),
+                        _buildDetailRow('- Shops que nous Devons', -shopsNousDevons, Colors.purple, isMobile,
+                            onTap: () => _showShopsNousDevonsDetails(context, shopsNousDevons)),
+                        _buildDetailRow('- Frais du Jour (Rapport Clôture)', -fraisDuJour, Colors.deepOrange, isMobile,
+                            onTap: () => _showFraisDuJourDetails(context, fraisDuJour, soldeFraisAnterieur, commissionsFraisDuJour, retraitsFraisDuJour)),
                         const Divider(),
                         _buildDetailRow(
-                          '= Capital Net',
-                          capitalNet,
-                          capitalNet >= 0 ? Colors.green[700]! : Colors.red[700]!,
+                          '= SITUATION NETTE',
+                          situationNette,
+                          situationNette >= 0 ? Colors.green[700]! : Colors.red[700]!,
                           isMobile,
                           isBold: true,
                         ),
@@ -640,8 +829,44 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
     );
   }
 
-  Widget _buildDetailRow(String label, double amount, Color color, bool isMobile, {bool isBold = false}) {
-    return Padding(
+  /// Show details for Frais du Jour calculation per shop
+  void _showFraisDuJourDetails(BuildContext context, double fraisDuJour, double soldeFraisAnterieur, double commissionsFraisDuJour, double retraitsFraisDuJour) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return CalculationDetailsDialog(
+          title: 'Frais du Jour (Rapport Clôture)',
+          description: 'Le solde du compte FRAIS du jour, calculé dans le rapport de clôture.',
+          formula: 'Frais du Jour = Solde FRAIS Antérieur + Commissions du Jour - Retraits du Jour',
+          businessLogic: 'Le compte FRAIS accumule les commissions:\n'
+              '- Solde Antérieur: ${_numberFormat.format(soldeFraisAnterieur)} USD\n'
+              '- Commissions du Jour: +${_numberFormat.format(commissionsFraisDuJour)} USD\n'
+              '- Retraits du Jour: -${_numberFormat.format(retraitsFraisDuJour)} USD\n'
+              '- = Frais du Jour: ${_numberFormat.format(fraisDuJour)} USD',
+          components: [
+            CalculationComponent(
+              name: 'Solde FRAIS Antérieur',
+              description: 'Solde du compte FRAIS au début de la journée',
+              isPositive: true,
+            ),
+            CalculationComponent(
+              name: 'Commissions du Jour',
+              description: 'Commissions FRAIS encaissées sur les transferts servis',
+              isPositive: true,
+            ),
+            CalculationComponent(
+              name: 'Retraits du Jour',
+              description: 'Montants retirés du compte FRAIS',
+              isPositive: false,
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDetailRow(String label, double amount, Color color, bool isMobile, {bool isBold = false, VoidCallback? onTap}) {
+    Widget row = Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -664,6 +889,16 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
         ],
       ),
     );
+
+    // Add tap gesture if onTap is provided
+    if (onTap != null) {
+      row = GestureDetector(
+        onTap: onTap,
+        child: row,
+      );
+    }
+
+    return row;
   }
 
   Widget _buildPartnersList(

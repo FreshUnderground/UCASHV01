@@ -17,7 +17,7 @@ class AppConfig {
   static Future<String> getApiBaseUrl() async {
     // Si URL personnalisée existe, l'utiliser
     if (_customApiUrl != null && _customApiUrl!.isNotEmpty) {
-      return _customApiUrl!;
+      return _customApiUrl!.trim();
     }
     
     // Sinon, charger depuis SharedPreferences
@@ -25,8 +25,8 @@ class AppConfig {
     final savedUrl = prefs.getString('custom_api_url');
     
     if (savedUrl != null && savedUrl.isNotEmpty) {
-      _customApiUrl = savedUrl;
-      return savedUrl;
+      _customApiUrl = savedUrl.trim();
+      return _customApiUrl!;
     }
     
     // Sinon, utiliser l'URL par défaut selon l'environnement
@@ -53,10 +53,16 @@ class AppConfig {
   
   /// Sauvegarder l'URL personnalisée
   static Future<void> setCustomApiUrl(String url) async {
+    // Nettoyer l'URL: trim et supprimer le slash final si présent
+    String cleanUrl = url.trim();
+    if (cleanUrl.endsWith('/')) {
+      cleanUrl = cleanUrl.substring(0, cleanUrl.length - 1);
+    }
+    
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('custom_api_url', url);
-    _customApiUrl = url;
-    debugPrint('✅ URL API personnalisée sauvegardée: $url');
+    await prefs.setString('custom_api_url', cleanUrl);
+    _customApiUrl = cleanUrl;
+    debugPrint('✅ URL API personnalisée sauvegardée: $cleanUrl');
   }
   
   /// Réinitialiser à l'URL par défaut

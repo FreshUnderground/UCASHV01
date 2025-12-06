@@ -84,7 +84,9 @@ class AgentDeletionValidationWidget extends StatelessWidget {
               children: [
                 _buildDetailRow('Code opération', request.codeOps),
                 if (request.expediteur != null)
-                  _buildDetailRow('Expéditeur', request.expediteur!),
+                  _buildDetailRow('Expéditeur', request.expediteur!)
+                else
+                  _buildDetailRow('Expéditeur', request.observation!),
                 if (request.clientNom != null)
                   _buildDetailRow('Client', request.clientNom!),
                 if (request.reason != null) ...[

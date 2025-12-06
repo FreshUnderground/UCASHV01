@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../services/operation_service.dart';
 import '../services/sim_service.dart';
 import '../services/auth_service.dart';
+import '../services/shop_service.dart';
 import '../models/operation_model.dart';
 import '../models/sim_model.dart';
 import 'create_retrait_dialog.dart';
@@ -648,7 +649,7 @@ class _MobileMoneyRetraitsWidgetState extends State<MobileMoneyRetraitsWidget> w
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 4),
-            Text('${sim.operateur} • ${sim.shopDesignation ?? "Shop ${sim.shopId}"}'),
+            Text('${sim.operateur} • ${ShopService.instance.getShopDesignation(sim.shopId, existingDesignation: sim.shopDesignation)}'),
             const SizedBox(height: 4),
             Text(
               'Solde: ${sim.soldeActuel.toStringAsFixed(2)} USD',
@@ -668,7 +669,7 @@ class _MobileMoneyRetraitsWidgetState extends State<MobileMoneyRetraitsWidget> w
               children: [
                 _buildSimDetailRow('Numéro', sim.numero),
                 _buildSimDetailRow('Opérateur', sim.operateur),
-                _buildSimDetailRow('Shop', sim.shopDesignation ?? 'Shop ${sim.shopId}'),
+                _buildSimDetailRow('Shop', ShopService.instance.getShopDesignation(sim.shopId, existingDesignation: sim.shopDesignation)),
                 _buildSimDetailRow('Solde Initial', '${sim.soldeInitial.toStringAsFixed(2)} USD'),
                 _buildSimDetailRow('Solde Actuel', '${sim.soldeActuel.toStringAsFixed(2)} USD'),
                 _buildSimDetailRow('Créé le', DateFormat('dd/MM/yyyy HH:mm').format(sim.dateCreation)),

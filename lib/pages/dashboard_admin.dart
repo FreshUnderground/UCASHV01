@@ -33,6 +33,7 @@ import '../theme/ucash_typography.dart';
 import '../theme/ucash_containers.dart';
 import '../services/transfer_sync_service.dart';
 import '../widgets/admin_deletion_widget.dart';
+import '../widgets/admin_deletion_validation_widget.dart';
 import '../widgets/trash_bin_widget.dart';
 import '../services/deletion_service.dart';
 import '../widgets/partner_net_position_widget.dart';
@@ -64,6 +65,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
     'Dettes Intershop',
     l10n.configuration,
     'Suppressions',
+    'Validations Admin',  // ✅ NOUVEAU: Pour valider les demandes de suppression
     'Corbeille',
   ];
 
@@ -79,6 +81,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
     Icons.swap_horiz,
     Icons.settings,
     Icons.delete_outline,
+    Icons.how_to_reg,  // ✅ NOUVEAU: Icône pour Validations Admin
     Icons.restore_from_trash,
   ];
 
@@ -367,13 +370,20 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
                       ),
                     ),
                     onTap: () async {
-                      if (index == 4) {
+                      if (index == 5) {
+                        // Partenaires (index 5)
                         Navigator.pop(context);
                         await _handlePartenairesSelection();
-                      } else if (index == 8) {
+                      } else if (index == 10) {
+                        // Suppressions (index 10)
                         Navigator.pop(context);
                         await _handleSuppressionsSelection();
-                      } else if (index == 9) {
+                      } else if (index == 11) {
+                        // Validations Admin (index 11)
+                        Navigator.pop(context);
+                        await _handleValidationsAdminSelection();
+                      } else if (index == 12) {
+                        // Corbeille (index 12)
                         Navigator.pop(context);
                         await _handleCorbeilleSelection();
                       } else {
@@ -484,10 +494,16 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
                     ),
                     onTap: () async {
                       if (index == 5) {
+                        // Partenaires (index 5)
                         await _handlePartenairesSelection();
-                      } else if (index == 9) {
-                        await _handleSuppressionsSelection();
                       } else if (index == 10) {
+                        // Suppressions (index 10)
+                        await _handleSuppressionsSelection();
+                      } else if (index == 11) {
+                        // Validations Admin (index 11)
+                        await _handleValidationsAdminSelection();
+                      } else if (index == 12) {
+                        // Corbeille (index 12)
                         await _handleCorbeilleSelection();
                       } else {
                         setState(() {
@@ -530,6 +546,8 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
       case 10:
         return _isSyncingDeletions ? _buildSyncingIndicator('Synchronisation des opérations...') : const AdminDeletionPage();
       case 11:
+        return const AdminDeletionValidationWidget();  // ✅ NOUVEAU: Validations Admin
+      case 12:
         return _isSyncingTrash ? _buildSyncingIndicator('Chargement de la corbeille...') : const TrashBinWidget(showAll: true);
       default:
         return _buildDashboardContent();
@@ -783,7 +801,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
   Future<void> _handlePartenairesSelection() async {
     setState(() {
       _isSyncingClients = true;
-      _selectedIndex = 4;
+      _selectedIndex = 5;  // Partenaires (index 5)
     });
 
     try {
@@ -847,7 +865,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
   Future<void> _handleSuppressionsSelection() async {
     setState(() {
       _isSyncingDeletions = true;  // ✅ Activer le loader
-      _selectedIndex = 8;
+      _selectedIndex = 10;  // Suppressions (index 10)
     });
 
     try {
@@ -898,10 +916,26 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
     }
   }
 
+  /// ✅ NOUVEAU: Handler pour Validations Admin
+  Future<void> _handleValidationsAdminSelection() async {
+    setState(() {
+      _selectedIndex = 11;  // Validations Admin (index 11)
+    });
+
+    try {
+      // Recharger les demandes de suppression
+      final deletionService = Provider.of<DeletionService>(context, listen: false);
+      await deletionService.loadDeletionRequests();
+      debugPrint('✅ Demandes de suppression chargées pour validation admin');
+    } catch (e) {
+      debugPrint('⚠️ Erreur lors du chargement des demandes: $e');
+    }
+  }
+
   Future<void> _handleCorbeilleSelection() async {
     setState(() {
       _isSyncingTrash = true;  // ✅ Activer le loader
-      _selectedIndex = 9;
+      _selectedIndex = 12;  // Corbeille (index 12)
     });
 
     try {
@@ -1318,32 +1352,40 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
     );
   }
 
-  // Mapper l'index desktop (8 items) vers l'index mobile (6 items)
+  // Mapper l'index desktop (13 items) vers l'index mobile (6 items)
   int _getMobileNavIndex(int desktopIndex) {
-    // Desktop: 0=Dashboard, 1=Dépenses, 2=Shops, 3=Agents, 4=Partenaires, 5=Taux, 6=Rapports, 7=Config
+    // Desktop: 0=Dashboard, 1=Dépenses, 2=Shops, 3=Agents, 4=Administrateurs, 5=Partenaires,
+    //          6=Taux, 7=Rapports, 8=Dettes, 9=Config, 10=Suppressions, 11=Validations Admin, 12=Corbeille
     // Mobile:  0=Dashboard, 1=Frais, 2=Shops, 3=Partenaires, 4=Rapports, 5=Config
-    if (desktopIndex == 0) return 0; // Dashboard
-    if (desktopIndex == 1) return 1; // Dépenses → Frais
-    if (desktopIndex == 2) return 2; // Shops
-    if (desktopIndex == 3) return 3; // Agents → Partenaires (regroupé avec clients)
-    if (desktopIndex == 4) return 3; // Partenaires
-    if (desktopIndex == 5) return 4; // Taux → Rapports (regroupé)
-    if (desktopIndex == 6) return 4; // Rapports
-    if (desktopIndex == 7) return 5; // Config
-    return 0;
+    switch (desktopIndex) {
+      case 0: return 0;  // Dashboard
+      case 1: return 1;  // Dépenses → Frais
+      case 2: return 2;  // Shops
+      case 3: return 0;  // Agents → Dashboard (non disponible en mobile)
+      case 4: return 0;  // Administrateurs → Dashboard (non disponible en mobile)
+      case 5: return 3;  // Partenaires
+      case 6: return 4;  // Taux → Rapports (regroupé)
+      case 7: return 4;  // Rapports
+      case 8: return 4;  // Dettes Intershop → Rapports (regroupé)
+      case 9: return 5;  // Config
+      case 10: return 5; // Suppressions → Config (regroupé)
+      case 11: return 5; // Validations Admin → Config (regroupé)
+      case 12: return 5; // Corbeille → Config (regroupé)
+      default: return 0;
+    }
   }
 
   // Mapper l'index mobile vers l'index desktop
   int _getDesktopIndexFromMobile(int mobileIndex) {
     // Mobile:  0=Dashboard, 1=Frais, 2=Shops, 3=Partenaires, 4=Rapports, 5=Config
-    // Desktop: 0=Dashboard, 1=Dépenses, 2=Shops, 3=Agents, 4=Partenaires, 5=Taux, 6=Rapports, 7=Config
+    // Desktop: 0=Dashboard, 1=Dépenses, 2=Shops, 5=Partenaires, 7=Rapports, 9=Config
     switch (mobileIndex) {
-      case 0: return 0; // Dashboard
-      case 1: return 1; // Frais → Dépenses
-      case 2: return 2; // Shops
-      case 3: return 4; // Partenaires
-      case 4: return 6; // Rapports
-      case 5: return 7; // Config
+      case 0: return 0;  // Dashboard
+      case 1: return 1;  // Frais → Dépenses
+      case 2: return 2;  // Shops
+      case 3: return 5;  // Partenaires (index 5)
+      case 4: return 7;  // Rapports (index 7)
+      case 5: return 9;  // Config (index 9)
       default: return 0;
     }
   }
@@ -1369,7 +1411,8 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
         currentIndex: validMobileIndex,
         onTap: (mobileIndex) async {
           final desktopIndex = _getDesktopIndexFromMobile(mobileIndex);
-          if (desktopIndex == 4) {
+          if (desktopIndex == 5) {
+            // Partenaires (index 5)
             await _handlePartenairesSelection();
           } else {
             setState(() => _selectedIndex = desktopIndex);
@@ -1384,11 +1427,11 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
         unselectedFontSize: 10,
         items: [
           BottomNavigationBarItem(
-            icon: Icon(_menuIcons[0]),
+            icon: Icon(_menuIcons[0]),  // Dashboard (index 0)
             label: 'Dashboard',
           ),
           BottomNavigationBarItem(
-            icon: Icon(_menuIcons[1]),
+            icon: Icon(_menuIcons[1]),  // Dépenses/Frais (index 1)
             label: 'Frais',
           ),
           BottomNavigationBarItem(
@@ -1396,15 +1439,15 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
             label: 'Shops',
           ),
           BottomNavigationBarItem(
-            icon: Icon(_menuIcons[4]),  // Partenaires (index 4)
+            icon: Icon(_menuIcons[5]),  // Partenaires (index 5)
             label: 'Partenaires',
           ),
           BottomNavigationBarItem(
-            icon: Icon(_menuIcons[6]),  // Rapports (index 6)
+            icon: Icon(_menuIcons[7]),  // Rapports (index 7)
             label: 'Rapports',
           ),
           BottomNavigationBarItem(
-            icon: Icon(_menuIcons[7]),  // Config (index 7)
+            icon: Icon(_menuIcons[9]),  // Config (index 9)
             label: 'Config',
           ),
         ],

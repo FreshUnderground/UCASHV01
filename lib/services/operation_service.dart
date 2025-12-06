@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/operation_model.dart';
 import '../models/journal_caisse_model.dart';
 import '../models/shop_model.dart';
@@ -15,22 +16,41 @@ import 'agent_service.dart';
 import 'auth_service.dart';
 import 'compte_special_service.dart';
 import 'sim_service.dart';
+import 'rapport_cloture_service.dart';
 import '../config/app_config.dart';
 
 
 class OperationService extends ChangeNotifier {
   static final OperationService _instance = OperationService._internal();
   factory OperationService() => _instance;
-  OperationService._internal();
+  OperationService._internal() {
+    // Start periodic check for deleted operations
+    startPeriodicDeletedOperationsCheck();
+  }
 
   List<OperationModel> _operations = [];
   final List<JournalCaisseModel> _journalEntries = [];
   bool _isLoading = false;
   String? _errorMessage;
-  
   // Sauvegarder les filtres actifs pour les réutiliser lors du reload
   int? _activeShopFilter;
   int? _activeAgentFilter;
+  
+  /// Periodically check for deleted operations
+  void startPeriodicDeletedOperationsCheck() {
+    // Check every 5 minutes for deleted operations
+    Timer.periodic(const Duration(minutes: 5), (timer) async {
+      await _checkForDeletedOperationsOnServer();
+    });
+    debugPrint('✅ Started periodic deleted operations check (every 5 minutes)');
+  }
+
+  /// Manual refresh to check for deleted operations
+  Future<void> checkForDeletedOperations() async {
+    await _checkForDeletedOperationsOnServer();
+    // Reload operations to reflect changes
+    await loadOperations();
+  }
   
   // Timer pour vérifier les opérations en attente toutes les 30 secondes
   Timer? _pendingOpsTimer;
@@ -68,6 +88,188 @@ class OperationService extends ChangeNotifier {
     debugPrint('🗑️ Filtres réinitialisés');
   }
 
+  /// Check if an operation has been deleted (exists in corbeille)
+  Future<bool> _isOperationDeleted(String codeOps) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'corbeille_$codeOps';
+      return prefs.containsKey(key);
+    } catch (e) {
+      debugPrint('Error checking if operation is deleted: $e');
+      return false;
+    }
+  }
+
+  /// Filter out deleted operations
+  Future<List<OperationModel>> _filterOutDeletedOperations(List<OperationModel> operations) async {
+    final filteredOperations = <OperationModel>[];
+    
+    for (final operation in operations) {
+      if (operation.codeOps != null) {
+        final isDeleted = await _isOperationDeleted(operation.codeOps!);
+        if (!isDeleted) {
+          filteredOperations.add(operation);
+        } else {
+          debugPrint('🗑️ Operation ${operation.codeOps} filtered out (deleted)');
+        }
+      } else {
+        // If codeOps is null, keep the operation (shouldn't happen in practice)
+        filteredOperations.add(operation);
+      }
+    }
+    
+    return filteredOperations;
+  }
+
+  /// Check for deleted operations on the server and remove them from local storage
+  Future<void> _checkForDeletedOperationsOnServer() async {
+    try {
+      // Get all operations with codeOps
+      final allOperations = await LocalDB.instance.getAllOperations();
+      final codeOpsList = allOperations
+          .where((op) => op.codeOps != null && op.codeOps!.isNotEmpty)
+          .map((op) => op.codeOps!)
+          .toList();
+
+      if (codeOpsList.isEmpty) {
+        return;
+      }
+
+      debugPrint('🔍 Checking for deleted operations on server... (${codeOpsList.length} operations)');
+
+      // Call the API to check for deleted operations
+      final baseUrl = await AppConfig.getApiBaseUrl();
+      final cleanUrl = baseUrl.trim();
+      final url = Uri.parse('$cleanUrl/sync/operations/check_deleted.php');
+
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'code_ops_list': codeOpsList,
+        }),
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          throw TimeoutException('Timeout checking for deleted operations');
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          final deletedOperations = List<String>.from(data['deleted_operations']);
+
+          if (deletedOperations.isNotEmpty) {
+            debugPrint('🗑️ Found ${deletedOperations.length} deleted operations on server');
+            
+            // Remove deleted operations from all local storage
+            await _removeDeletedOperationsLocally(deletedOperations);
+          } else {
+            debugPrint('✅ No deleted operations found on server');
+          }
+        } else {
+          debugPrint('⚠️ Error checking for deleted operations: ${data['error']}');
+        }
+      } else {
+        debugPrint('⚠️ HTTP Error ${response.statusCode} checking for deleted operations');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error checking for deleted operations: $e');
+    }
+  }
+
+  /// Remove deleted operations from all local storage sources
+  Future<void> _removeDeletedOperationsLocally(List<String> deletedCodeOpsList) async {
+    try {
+      if (deletedCodeOpsList.isEmpty) {
+        return;
+      }
+
+      debugPrint('🗑️ Removing ${deletedCodeOpsList.length} deleted operations from local storage');
+
+      final prefs = await SharedPreferences.getInstance();
+
+      // 1. Remove from operations list in memory
+      final initialCount = _operations.length;
+      _operations.removeWhere((op) => 
+          op.codeOps != null && deletedCodeOpsList.contains(op.codeOps));
+      final removedFromMemory = initialCount - _operations.length;
+
+      // 2. Remove from LocalDB
+      int removedFromLocalDB = 0;
+      try {
+        await LocalDB.instance.deleteOperationsByCodeOpsList(deletedCodeOpsList);
+        removedFromLocalDB = deletedCodeOpsList.length;
+      } catch (e) {
+        debugPrint('⚠️ Error removing operations from LocalDB: $e');
+      }
+
+      // 3. Remove from pending validations
+      int removedFromValidations = 0;
+      final validationsJson = prefs.getString('pending_validations');
+      if (validationsJson != null) {
+        try {
+          final List<dynamic> validationsList = jsonDecode(validationsJson);
+          final initialValidationsCount = validationsList.length;
+          validationsList.removeWhere((validation) => 
+              deletedCodeOpsList.contains(validation['code_ops']));
+          removedFromValidations = initialValidationsCount - validationsList.length;
+
+          if (removedFromValidations > 0) {
+            await prefs.setString('pending_validations', jsonEncode(validationsList));
+            debugPrint('💾 $removedFromValidations validations removed');
+          }
+        } catch (e) {
+          debugPrint('⚠️ Error removing validations: $e');
+        }
+      }
+
+      // 4. Remove from local transfers
+      int removedFromLocalTransfers = 0;
+      final localTransfersJson = prefs.getString('local_transfers');
+      if (localTransfersJson != null) {
+        try {
+          final List<dynamic> localList = jsonDecode(localTransfersJson);
+          final localTransfers = localList
+              .map((json) => OperationModel.fromJson(json))
+              .toList();
+
+          final initialLocalCount = localTransfers.length;
+          localTransfers.removeWhere((op) => 
+              op.codeOps != null && deletedCodeOpsList.contains(op.codeOps));
+          removedFromLocalTransfers = initialLocalCount - localTransfers.length;
+
+          if (removedFromLocalTransfers > 0) {
+            await prefs.setString(
+              'local_transfers',
+              jsonEncode(localTransfers.map((op) => op.toJson()).toList()),
+            );
+            debugPrint('💾 $removedFromLocalTransfers operations removed from local_transfers');
+          }
+        } catch (e) {
+          debugPrint('⚠️ Error removing from local_transfers: $e');
+        }
+      }
+
+      final totalRemoved = removedFromMemory + removedFromLocalDB + 
+                          removedFromValidations + removedFromLocalTransfers;
+      debugPrint('✅ Local cleanup completed: $totalRemoved operations removed ' +
+                 '($removedFromMemory memory, $removedFromLocalDB LocalDB, ' +
+                 '$removedFromValidations validations, $removedFromLocalTransfers local_transfers)');
+
+      // Notify listeners if operations were removed
+      if (totalRemoved > 0) {
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('❌ Error during local cleanup: $e');
+    }
+  }
+
   // Charger les opérations
   Future<void> loadOperations({int? shopId, int? agentId, bool excludeVirement = true}) async {
     _setLoading(true);
@@ -84,6 +286,10 @@ class OperationService extends ChangeNotifier {
       
       debugPrint('📊 loadOperations: ${_operations.length} opérations totales chargées depuis LocalDB');
       
+      // Filter out deleted operations
+      _operations = await _filterOutDeletedOperations(_operations);
+      debugPrint('📊 Après filtrage des opérations supprimées: ${_operations.length} opérations');
+
       // Exclure les virements (FLOT) par défaut car ils sont visibles dans la section dédiée aux FLOTS
       if (excludeVirement) {
         final beforeExclusion = _operations.length;
@@ -139,7 +345,23 @@ class OperationService extends ChangeNotifier {
 
   Future<OperationModel?> createOperation(OperationModel operation, {AuthService? authService}) async {
     try {
-      // ✅ VÉRIFIER SI LA JOURNÉE EST CLÔTURÉE
+      // ✅ VÉRIFIER SI LES JOURS PRÉCÉDENTS SONT CLÔTURÉS
+      // Un agent ne peut pas effectuer une opération si les jours précédents ne sont pas clôturés
+      if (operation.shopSourceId != null) {
+        final joursNonClotures = await RapportClotureService.instance.verifierAccesMenusAgent(
+          operation.shopSourceId!,
+        );
+        
+        if (joursNonClotures != null && joursNonClotures.isNotEmpty) {
+          final premiereDate = joursNonClotures.first;
+          final dateStr = '${premiereDate.day.toString().padLeft(2, '0')}/${premiereDate.month.toString().padLeft(2, '0')}/${premiereDate.year}';
+          _errorMessage = 'Vous devez d\'abord clôturer les journées précédentes (depuis le $dateStr). ${joursNonClotures.length} jour(s) à clôturer.';
+          debugPrint('❌ $_errorMessage');
+          throw Exception(_errorMessage);
+        }
+      }
+      
+      // ✅ VÉRIFIER SI LA JOURNÉE D'AUJOURD'HUI EST CLÔTURÉE
       // Un agent ne peut plus effectuer une opération si sa journée est clôturée
       if (operation.shopSourceId != null) {
         final today = DateTime.now();
@@ -354,6 +576,8 @@ class OperationService extends ChangeNotifier {
         );
         
         // Commission calculée sur le montantNet (ce que le destinataire reçoit)
+        // BUSINESS LOGIC: Commission is calculated on the net amount because that's what the recipient actually receives
+        // The shop destination keeps this commission as revenue for serving the transfer
         // IMPORTANT: Arrondir à 2 décimales
         commission = double.parse((operation.montantNet * (commissionData.taux / 100)).toStringAsFixed(2));
         debugPrint('💰 Commission calculée: ${commission.toStringAsFixed(2)} ${operation.devise} (${commissionData.taux}% de ${operation.montantNet})');
@@ -466,7 +690,7 @@ class OperationService extends ChangeNotifier {
         final client = await LocalDB.instance.getClientById(operation.clientId!);
         if (client != null) {
           // IMPORTANT: Pas de vérification de solde insuffisant
-          // Le client peut avoir un solde négatif (nous devons de l'argent au client)
+          // Le client peut avoir un solde négatif (Nous que Devons de l'argent au client)
           // ou retirer plus que son solde (le client nous doit de l'argent)
           
           final nouveauSolde = client.solde - operation.montantNet;
@@ -1974,7 +2198,7 @@ class OperationService extends ChangeNotifier {
       throw Exception('Sync failed: $e');
     }
   }
-  
+
   @override
   void dispose() {
     _pendingOpsTimer?.cancel();

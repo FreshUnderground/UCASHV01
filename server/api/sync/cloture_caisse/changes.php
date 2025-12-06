@@ -60,6 +60,8 @@ try {
             'id' => (int)$cloture['id'],
             'shop_id' => (int)$cloture['shop_id'],
             'date_cloture' => $cloture['date_cloture'],
+            // IMPORTANT: Inclure solde_frais_anterieur pour que l'Admin voit les Frais
+            'solde_frais_anterieur' => (float)($cloture['solde_frais_anterieur'] ?? 0),
             'solde_saisi_cash' => (float)$cloture['solde_saisi_cash'],
             'solde_saisi_airtel_money' => (float)$cloture['solde_saisi_airtel_money'],
             'solde_saisi_mpesa' => (float)$cloture['solde_saisi_mpesa'],

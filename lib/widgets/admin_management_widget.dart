@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/local_db.dart';
+import '../services/sync_service.dart';
 import '../models/user_model.dart';
 import '../config/app_theme.dart';
 
@@ -13,6 +14,7 @@ class AdminManagementWidget extends StatefulWidget {
 class _AdminManagementWidgetState extends State<AdminManagementWidget> {
   List<UserModel> _admins = [];
   bool _isLoading = false;
+  bool _isSyncing = false;
 
   @override
   void initState() {
@@ -23,12 +25,47 @@ class _AdminManagementWidgetState extends State<AdminManagementWidget> {
   Future<void> _loadAdmins() async {
     setState(() => _isLoading = true);
     try {
+      // D'abord télécharger les admins depuis le serveur
+      await _downloadAdminsFromServer();
+      
+      // Ensuite charger les admins locaux
       final admins = await LocalDB.instance.getAllAdmins();
       setState(() {
         _admins = admins;
       });
     } finally {
       setState(() => _isLoading = false);
+    }
+  }
+
+  /// Télécharge les admins depuis le serveur
+  Future<void> _downloadAdminsFromServer() async {
+    try {
+      debugPrint('📥 Téléchargement des admins depuis le serveur...');
+      final syncService = SyncService();
+      await syncService.downloadAdmins();
+      debugPrint('✅ Admins téléchargés avec succès');
+    } catch (e) {
+      debugPrint('⚠️ Erreur téléchargement admins (mode hors ligne ?): $e');
+      // Continuer avec les données locales si le serveur n'est pas accessible
+    }
+  }
+
+  /// Synchronise les admins vers le serveur
+  Future<void> _syncAdminsToServer() async {
+    if (_isSyncing) return;
+    
+    setState(() => _isSyncing = true);
+    try {
+      debugPrint('📤 Synchronisation des admins vers le serveur...');
+      final syncService = SyncService();
+      await syncService.syncAdmins();
+      debugPrint('✅ Admins synchronisés avec succès');
+    } catch (e) {
+      debugPrint('⚠️ Erreur sync admins: $e');
+      _showMessage('Sync serveur échouée. Les données seront synchronisées ultérieurement.', isError: true);
+    } finally {
+      setState(() => _isSyncing = false);
     }
   }
 
@@ -400,6 +437,10 @@ class _AdminManagementWidgetState extends State<AdminManagementWidget> {
       if (result['success']) {
         _showMessage(result['message']);
         await _loadAdmins();
+        
+        // Synchroniser vers le serveur après création
+        await _syncAdminsToServer();
+        _showMessage('Admin créé et synchronisé avec le serveur');
       } else {
         _showMessage(result['message'], isError: true);
       }
@@ -522,6 +563,10 @@ class _AdminManagementWidgetState extends State<AdminManagementWidget> {
       if (result['success']) {
         _showMessage(result['message']);
         await _loadAdmins();
+        
+        // Synchroniser vers le serveur après modification
+        await _syncAdminsToServer();
+        _showMessage('Admin modifié et synchronisé avec le serveur');
       } else {
         _showMessage(result['message'], isError: true);
       }
@@ -574,6 +619,10 @@ class _AdminManagementWidgetState extends State<AdminManagementWidget> {
       if (result['success']) {
         _showMessage(result['message']);
         await _loadAdmins();
+        
+        // Synchroniser vers le serveur après suppression
+        await _syncAdminsToServer();
+        _showMessage('Admin supprimé et synchronisé avec le serveur');
       } else {
         _showMessage(result['message'], isError: true);
       }

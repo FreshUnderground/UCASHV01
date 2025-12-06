@@ -245,7 +245,7 @@ class DeletionService extends ChangeNotifier {
         montant: operation.montantNet,
         devise: operation.devise,
         destinataire: operation.destinataire,
-        expediteur: operation.clientNom,
+        expediteur: operation.observation,
         clientNom: operation.clientNom,
         requestedByAdminId: adminId,
         requestedByAdminName: adminName,

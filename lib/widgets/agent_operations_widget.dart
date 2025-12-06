@@ -11,6 +11,7 @@ import '../services/connectivity_service.dart';
 import '../services/rates_service.dart';
 import '../services/client_service.dart';
 import '../services/sync_service.dart';
+import '../services/rapport_cloture_service.dart';
 import '../models/operation_model.dart';
 import '../models/shop_model.dart';
 import '../models/agent_model.dart';
@@ -22,6 +23,7 @@ import 'depot_dialog.dart';
 import 'retrait_dialog.dart';
 import 'operations_help_widget.dart';
 import 'pdf_viewer_dialog.dart';
+import 'cloture_required_dialog.dart';
 
 
 class AgentOperationsWidget extends StatefulWidget {
@@ -1608,7 +1610,75 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
     }
   }
 
+  /// Vérifier si les jours précédents sont clôturés avant d'autoriser l'opération
+  /// Retourne true si l'accès est autorisé, false sinon
+  Future<bool> _verifierClotureAvantOperation() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final shopId = authService.currentUser?.shopId;
+    
+    if (shopId == null || shopId <= 0) {
+      return true; // Pas de shop ID, on laisse passer
+    }
+    
+    // TOUJOURS vérifier depuis LocalDB (pas de cache)
+    debugPrint('🔍 Vérification des clôtures pour shop $shopId...');
+    final joursNonClotures = await RapportClotureService.instance.verifierAccesMenusAgent(shopId);
+    
+    // Si pas de jours non clôturés, accès autorisé
+    if (joursNonClotures == null || joursNonClotures.isEmpty) {
+      debugPrint('✅ Toutes les journées sont clôturées - accès autorisé');
+      return true;
+    }
+    
+    debugPrint('⚠️ ${joursNonClotures.length} jour(s) non clôturé(s) - affichage du dialog');
+    for (var date in joursNonClotures) {
+      debugPrint('   - ${date.toIso8601String().split('T')[0]}');
+    }
+    
+    // Afficher le dialog de clôture
+    if (mounted) {
+      final result = await ClotureRequiredDialog.show(
+        context,
+        shopId: shopId,
+        joursNonClotures: joursNonClotures,
+      );
+      
+      // Si le dialog retourne true, RE-VÉRIFIER que les clôtures ont bien été enregistrées
+      if (result) {
+        debugPrint('🔄 Re-vérification après clôture...');
+        // Attendre un court instant pour que LocalDB soit bien à jour
+        await Future.delayed(const Duration(milliseconds: 300));
+        
+        final joursRestants = await RapportClotureService.instance.verifierAccesMenusAgent(shopId);
+        if (joursRestants == null || joursRestants.isEmpty) {
+          debugPrint('✅ Toutes les clôtures confirmées - accès autorisé');
+          return true;
+        } else {
+          debugPrint('⚠️ Encore ${joursRestants.length} jour(s) non clôturé(s)');
+          // Ne pas afficher le dialog encore - l'utilisateur peut réessayer
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Encore ${joursRestants.length} jour(s) à clôturer. Veuillez réessayer.'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+          return false;
+        }
+      }
+      
+      return false; // Dialog annulé
+    }
+    
+    return false; // Accès refusé
+  }
+
   void _showDepotDialog() async {
+    // Vérifier d'abord si les jours précédents sont clôturés
+    final canProceed = await _verifierClotureAvantOperation();
+    if (!canProceed || !mounted) return;
+    
     // Show loading indicator
     showDialog(
       context: context,
@@ -1684,6 +1754,10 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
   }
 
   void _showRetraitDialog() async {
+    // Vérifier d'abord si les jours précédents sont clôturés
+    final canProceed = await _verifierClotureAvantOperation();
+    if (!canProceed || !mounted) return;
+    
     // Show loading indicator
     showDialog(
       context: context,
@@ -1760,6 +1834,10 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
 
 
   void _showTransfertDestinationDialog() async {
+    // Vérifier d'abord si les jours précédents sont clôturés
+    final canProceed = await _verifierClotureAvantOperation();
+    if (!canProceed || !mounted) return;
+    
     // Show loading indicator
     showDialog(
       context: context,
@@ -1773,7 +1851,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
               children: [
                 CircularProgressIndicator(),
                 SizedBox(height: 16),
-                Text('Vérification des données...'),
+                Text('Synchronisation des shops...'),
               ],
             ),
           ),
@@ -1787,22 +1865,51 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
       final hasConnection = connectivityService.isOnline;
 
       if (hasConnection) {
-        // Sync commissions and shops if online
+        debugPrint('📥 Synchronisation commissions et shops pour transfert...');
+        
+        // NE PAS vider - juste synchroniser depuis le serveur
+        // Le serveur enverra les modifiés, LocalDB les mergera
+        debugPrint('🔄 Téléchargement depuis le serveur...');
+        final syncService = SyncService();
+        await Future.wait([
+          syncService.downloadTableData('commissions', 'admin', 'admin'),
+          syncService.downloadTableData('shops', 'admin', 'admin'),
+        ]);
+        
+        // Recharger en mémoire
         final ratesService = RatesService.instance;
         final shopService = Provider.of<ShopService>(context, listen: false);
-
         await Future.wait([
           ratesService.loadRatesAndCommissions(),
           shopService.loadShops(),
         ]);
 
-        debugPrint('✅ Commissions et shops synchronisés');
+        debugPrint('✅ ${shopService.shops.length} shops chargés depuis le serveur');
       } else {
-        debugPrint('ℹ️ Pas de connexion - utilisation des données locales');
+        debugPrint('ℹ️ Hors ligne - utilisation des données locales');
+        // Charger depuis la base locale
+        final ratesService = RatesService.instance;
+        final shopService = Provider.of<ShopService>(context, listen: false);
+        await Future.wait([
+          ratesService.loadRatesAndCommissions(),
+          shopService.loadShops(),
+        ]);
+        debugPrint('💾 Shops chargés depuis la base locale');
       }
     } catch (e) {
       debugPrint('⚠️ Erreur lors de la synchronisation: $e');
-      // Continue with local data
+      // En cas d'erreur, charger depuis la base locale
+      try {
+        final ratesService = RatesService.instance;
+        final shopService = Provider.of<ShopService>(context, listen: false);
+        await Future.wait([
+          ratesService.loadRatesAndCommissions(),
+          shopService.loadShops(),
+        ]);
+        debugPrint('💾 Shops chargés depuis la base locale après erreur');
+      } catch (localError) {
+        debugPrint('❌ Erreur chargement local: $localError');
+      }
     }
 
     // Close loading dialog

@@ -630,7 +630,7 @@ class _RetraitDialogState extends State<RetraitDialog> {
         shopSourceDesignation: shop?.designation, // Récupérer la designation
         statut: OperationStatus.terminee,
         dateOp: _selectedDate,
-        notes: 'Retrait du compte client',
+        notes: _observationController.text, // Utiliser la vraie observation saisie par l'utilisateur
         observation: _observationController.text, // Now required
       );
 
@@ -675,10 +675,10 @@ class _RetraitDialogState extends State<RetraitDialog> {
       }
     } catch (e) {
       if (mounted) {
-        // Check if it's a day closed error
+        // Check if it's a closure-related error
         final errorMessage = e.toString();
-        if (errorMessage.contains('clôturée')) {
-          // Show a prominent alert dialog for day closed
+        if (errorMessage.contains('clôturer') || errorMessage.contains('clôturée')) {
+          // Show a prominent alert dialog for closure issues
           showDialog(
             context: context,
             builder: (context) => AlertDialog(

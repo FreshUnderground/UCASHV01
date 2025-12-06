@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:badges/badges.dart' as badges;
 import '../services/agent_auth_service.dart';
 import '../services/operation_service.dart';
 import '../services/shop_service.dart';
@@ -7,7 +8,7 @@ import '../services/agent_service.dart';
 import '../services/flot_service.dart';
 import '../services/flot_notification_service.dart';
 import '../services/sync_service.dart';
-import '../models/operation_model.dart';
+import '../services/transfer_sync_service.dart';
 import '../widgets/agent_operations_list.dart';
 import '../widgets/agent_capital_overview.dart';
 import '../widgets/journal_caisse_widget.dart';
@@ -33,7 +34,6 @@ class AgentDashboardPage extends StatefulWidget {
 
 class _AgentDashboardPageState extends State<AgentDashboardPage> {
   int _selectedIndex = 0;
-  bool _isLoadingData = false;
   bool _isDisposed = false; // Track disposal state
   FlotNotificationService? _flotNotificationService;
   
@@ -93,7 +93,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
     
     try {
       if (!_isDisposed && mounted) {
-        setState(() => _isLoadingData = true);
+        setState(() {});
       }
       
       final authService = Provider.of<AgentAuthService>(context, listen: false);
@@ -101,21 +101,44 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
       final shopService = Provider.of<ShopService>(context, listen: false);
       final agentService = Provider.of<AgentService>(context, listen: false);
       final flotService = Provider.of<FlotService>(context, listen: false);
+      final transferSyncService = Provider.of<TransferSyncService>(context, listen: false);
       
       if (authService.currentAgent != null) {
-        // IMPORTANT: Recharger TOUS les services après sync
-        await Future.wait([
+        // Initialize TransferSyncService with the current shop ID (only if not already initialized)
+        final shopId = authService.currentAgent!.shopId;
+        if (shopId != null && shopId > 0) {
+          // Check if already initialized by comparing shop IDs
+          // This is a simple check - in a real app you might want a more robust solution
+          try {
+            await transferSyncService.initialize(shopId);
+            debugPrint('🔄 TransferSyncService initialized for shop: $shopId');
+          } catch (e) {
+            debugPrint('⚠️ TransferSyncService already initialized or error: $e');
+          }
+        }
+        
+        // Build the list of futures to wait for
+        final futures = <Future>[
           shopService.loadShops(),
           agentService.loadAgents(),
           operationService.loadOperations(agentId: authService.currentAgent!.id),
-          flotService.loadFlots(shopId: authService.currentAgent!.shopId, isAdmin: false),
-        ]);
+        ];
+        
+        // Add flotService.loadFlots only if shopId is not null
+        if (shopId != null) {
+          futures.add(flotService.loadFlots(shopId: shopId, isAdmin: false));
+        }
+        
+        // IMPORTANT: Recharger TOUS les services après sync
+        await Future.wait(futures);
         
         debugPrint('🔄 _loadData: Rechargement des données après sync');
         debugPrint('   Agents disponibles: ${agentService.agents.length}');
         debugPrint('   Shops disponibles: ${shopService.shops.length}');
         debugPrint('   Opérations pour agent ${authService.currentAgent!.id}: ${operationService.operations.length}');
-        debugPrint('   FLOTs pour shop ${authService.currentAgent!.shopId}: ${flotService.flots.length}');
+        if (shopId != null) {
+          debugPrint('   FLOTs pour shop $shopId: ${flotService.flots.length} (maintenant gérés comme operations)');
+        }
       }
     } catch (e) {
       debugPrint('❌ [AgentDashboard] Erreur chargement données: $e');
@@ -135,12 +158,13 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
       }
     } finally {
       if (!_isDisposed && mounted) {
-        setState(() => _isLoadingData = false);
+        setState(() {});
       }
     }
   }
 
   /// Configure les notifications pour les flots entrants
+  /// NOTE: Les flots sont maintenant gérés comme des operations avec type=flotShopToShop
   void _setupFlotNotifications() {
     if (_isDisposed || !mounted) return;
     
@@ -153,7 +177,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
       
       _flotNotificationService!.startMonitoring(
         shopId: authService.currentAgent?.shopId ?? 0,
-        getFlots: () => flotService.flots, // Returns List<OperationModel> filtered by flotShopToShop
+        getFlots: () => flotService.flots, // Returns List<OperationModel> filtered by flotShopToShop (flots sont maintenant des operations)
       );
       
       // Définir le callback pour les nouvelles notifications de flots
@@ -503,30 +527,37 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
   Widget _buildMenuIcon(int index, bool isSelected, bool isTablet) {
     // Index 7 = FLOT
     if (index == 7) {
-      return Consumer<FlotService>(builder: (context, flotService, child) {
-        // Compter les flots en route pour le shop de destination
-        final authService = Provider.of<AgentAuthService>(context, listen: false);
-        final currentShopId = authService.currentAgent?.shopId;
-        
-        final pendingFlotsCount = currentShopId != null 
-            ? flotService.flots.where((f) => 
-                f.statut == OperationStatus.enAttente && 
-                f.shopDestinationId == currentShopId
-              ).length 
-            : 0;
-        
-        return Badge(
-          label: Text(pendingFlotsCount.toString()),
-          isLabelVisible: pendingFlotsCount > 0,
-          backgroundColor: isSelected ? Colors.white : const Color(0xFF2563EB),
-          textColor: isSelected ? const Color(0xFF2563EB) : Colors.white,
-          child: Icon(
-            _menuIcons[index],
-            color: isSelected ? Colors.white : Colors.grey[600],
-            size: isTablet ? 20 : 22,
+      // Use the singleton instance directly instead of Provider
+      final transferSync = TransferSyncService();
+      final authService = Provider.of<AgentAuthService>(context, listen: false);
+      final currentShopId = authService.currentAgent?.shopId;
+      
+      // Obtenir le nombre de FLOTs en attente depuis TransferSyncService pour plus de précision
+      final pendingFlotsCount = currentShopId != null 
+          ? transferSync.getPendingFlotsForShop(currentShopId).length
+          : 0;
+      
+      // Debug logging for sidebar comparison
+      debugPrint('🔍 [SIDEBAR-FLOT] Shop ID: $currentShopId, Pending FLOTs count: $pendingFlotsCount');
+      
+      if (pendingFlotsCount > 0) {
+        return badges.Badge(
+          badgeContent: Text(
+            pendingFlotsCount.toString(),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
           ),
+          badgeStyle: const badges.BadgeStyle(
+            badgeColor: Colors.red,
+          ),
+          child: Icon(_menuIcons[7]),
         );
-      });
+      }
+      
+      return Icon(_menuIcons[7]);
     }
     
     // Icône normale pour les autres items
@@ -751,7 +782,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
 
   Widget _buildBottomNavigation() {
     // Map pour convertir entre l'index desktop (13 items) et l'index mobile (6 items)
-    int _getMobileNavIndex(int desktopIndex) {
+    int getMobileNavIndex(int desktopIndex) {
       // Dashboard=0, Rapports=1, FLOT=2, Frais=3, VIRTUEL=4, Config=5
       switch (desktopIndex) {
         case 0: return 0; // Dashboard
@@ -767,7 +798,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
       }
     }
 
-    int _getDesktopIndexFromMobile(int mobileIndex) {
+    int getDesktopIndexFromMobile(int mobileIndex) {
       switch (mobileIndex) {
         case 0: return 0; // Dashboard
         case 1: return 6; // Rapports
@@ -780,7 +811,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
     }
 
     // S'assurer que currentIndex est valide AVANT de construire le widget
-    final mobileIndex = _getMobileNavIndex(_selectedIndex);
+    final mobileIndex = getMobileNavIndex(_selectedIndex);
     // Double sécurité: clamp entre 0 et 5 (6 items)
     final validMobileIndex = mobileIndex.clamp(0, 5);
     
@@ -791,7 +822,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
     return BottomNavigationBar(
       currentIndex: validMobileIndex,
       onTap: (mobileIndex) {
-        final desktopIndex = _getDesktopIndexFromMobile(mobileIndex);
+        final desktopIndex = getDesktopIndexFromMobile(mobileIndex);
         setState(() => _selectedIndex = desktopIndex);
       },
       backgroundColor: Colors.white,
@@ -831,21 +862,39 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
   }
 
   Widget _buildFlotIconWithBadge() {
-    return Consumer<FlotService>(builder: (context, flotService, child) {
+    return Consumer<TransferSyncService>(builder: (context, transferSync, child) {
       final authService = Provider.of<AgentAuthService>(context, listen: false);
       final currentShopId = authService.currentAgent?.shopId;
       
+      // Use TransferSyncService for consistency with sidebar implementation
       final pendingFlotsCount = currentShopId != null 
-          ? flotService.flots.where((f) => 
-              f.statut == OperationStatus.enAttente && 
-              f.shopDestinationId == currentShopId
-            ).length 
+          ? transferSync.getPendingFlotsForShop(currentShopId).length
           : 0;
       
+      // Debug logging to help diagnose the issue
+      debugPrint('🔍 [FLOT-BADGE] Shop ID: $currentShopId, Pending FLOTs count: $pendingFlotsCount');
+      if (currentShopId != null) {
+        final allPendingFlots = transferSync.getPendingFlotsForShop(currentShopId);
+        debugPrint('🔍 [FLOT-BADGE] All pending FLOTs for shop $currentShopId:');
+        for (var i = 0; i < allPendingFlots.length; i++) {
+          final flot = allPendingFlots[i];
+          debugPrint('   #$i: codeOps=${flot.codeOps}, type=${flot.type?.name}, status=${flot.statut?.name}, dest=${flot.shopDestinationId}');
+        }
+      }
+      
       if (pendingFlotsCount > 0) {
-        return Badge(
-          label: Text(pendingFlotsCount.toString()),
-          backgroundColor: const Color(0xFF2563EB),
+        return badges.Badge(
+          badgeContent: Text(
+            pendingFlotsCount.toString(),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          badgeStyle: const badges.BadgeStyle(
+            badgeColor: Color(0xFF2563EB),
+          ),
           child: Icon(_menuIcons[7]),
         );
       }

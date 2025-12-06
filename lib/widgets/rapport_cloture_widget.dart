@@ -437,7 +437,7 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Formule: Cash Disponible + Ceux qui nous doivent - Ceux que nous devons',
+              'Formule: Cash Disponible + Ceux qui Nous qui Doivent - Ceux que Nous que Devons',
               style: TextStyle(
                 fontSize: 12,
                 fontStyle: FontStyle.italic,
@@ -459,9 +459,9 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
             const SizedBox(height: 12),
             _buildCapitalBreakdown('Cash Disponible', rapport.cashDisponibleTotal, Colors.green),
             _buildCapitalBreakdown('+ Partenaires Servis', rapport.totalClientsNousDoivent, Colors.red),
-            _buildCapitalBreakdown('+ Shops Nous Doivent', rapport.totalShopsNousDoivent, Colors.orange),
+            _buildCapitalBreakdown('+ Shops Nous qui Doivent', rapport.totalShopsNousDoivent, Colors.orange),
             _buildCapitalBreakdown('- Dépôts Partenaires', -rapport.totalClientsNousDevons, Colors.green),
-            _buildCapitalBreakdown('- Shops Nous Devons', -rapport.totalShopsNousDevons, Colors.purple),
+            _buildCapitalBreakdown('- Shops Nous que Devons', -rapport.totalShopsNousDevons, Colors.purple),
             const SizedBox(height: 8),
             const Divider(thickness: 2),
             const SizedBox(height: 8),
@@ -555,7 +555,7 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
     return Column(
       children: [
         // Masqué: Opérations Clients
-        // Partenaires Servis (anciennement Clients Nous Doivent)
+        // Partenaires Servis (anciennement Clients Nous qui Doivent)
         _buildSection(
           '5️⃣ Partenaires Servis',
           [
@@ -585,7 +585,7 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
           Colors.red,
         ),
         const SizedBox(height: 16),
-        // Dépôts Partenaires (anciennement Clients Nous Devons)
+        // Dépôts Partenaires (anciennement Clients Nous que Devons)
         _buildSection(
           '6️⃣ Dépôts Partenaires',
           [
@@ -616,7 +616,7 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
         ),
         const SizedBox(height: 16),
         _buildSection(
-          '7️⃣ Shops Nous Doivent',
+          '7️⃣ Shops Nous qui Doivent',
           [
             Text(
               '${rapport.shopsNousDoivent.length} shop(s)',
@@ -648,7 +648,7 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
         ),
         const SizedBox(height: 16),
         _buildSection(
-          '8️⃣ Shops Nous Devons',
+          '8️⃣ Shops Nous que Devons',
           [
             Text(
               '${rapport.shopsNousDevons.length} shop(s)',

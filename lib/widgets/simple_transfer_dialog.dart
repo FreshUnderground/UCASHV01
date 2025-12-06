@@ -699,7 +699,7 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
       final savedOperation = await operationService.createOperation(operation);
       
       if (savedOperation == null) {
-        throw Exception('Erreur lors de la création du transfert');
+        throw Exception(operationService.errorMessage ?? 'Erreur lors de la création du transfert');
       }
 
       if (mounted) {
@@ -735,10 +735,10 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
     } catch (e) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          // Check if it's a day closed error
+          // Check if it's a closure-related error
           final errorMessage = e.toString();
-          if (errorMessage.contains('clôturée')) {
-            // Show a prominent alert dialog for day closed
+          if (errorMessage.contains('clôturer') || errorMessage.contains('clôturée')) {
+            // Show a prominent alert dialog for closure issues
             showDialog(
               context: context,
               builder: (context) => AlertDialog(

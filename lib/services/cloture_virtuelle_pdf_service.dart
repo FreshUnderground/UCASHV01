@@ -184,7 +184,7 @@ Future<pw.Document> genererClotureVirtuellePDF(
                   borderRadius: pw.BorderRadius.circular(4),
                 ),
                 child: pw.Text(
-                  '⚠️ Les flots diminuent le solde virtuel des SIMs',
+                  '⚠️ Les flots (maintenant gérés comme operations) diminuent le solde virtuel des SIMs',
                   style: const pw.TextStyle(fontSize: 7, color: PdfColors.orange900),
                 ),
               ),
@@ -206,7 +206,7 @@ Future<pw.Document> genererClotureVirtuellePDF(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Text(
-                'FLOTS VIRTUELS (DÉPOTS)',
+                'FLOTS VIRTUELS (DÉPOTS) - Maintenant gérés comme operations',
                 style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.purple700),
               ),
               pw.SizedBox(height: 8),
@@ -241,7 +241,7 @@ Future<pw.Document> genererClotureVirtuellePDF(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Text(
-                'FLOTs PHYSIQUES (entre shops)',
+                'FLOTs PHYSIQUES (entre shops) - Maintenant gérés comme operations',
                 style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.blue700),
               ),
               pw.SizedBox(height: 8),
@@ -379,7 +379,7 @@ Future<pw.Document> genererClotureVirtuellePDF(
                       style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold, color: PdfColors.green),
                     ),
                     pw.Text(
-                      '• Flot remboursé: Via FLOT → Nous recevons CASH',
+                      '• Flot remboursé: Via FLOT (maintenant operation) → Nous recevons CASH',
                       style: const pw.TextStyle(fontSize: 6, color: PdfColors.green),
                     ),
                     pw.Text(

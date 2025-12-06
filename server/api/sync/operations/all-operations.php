@@ -17,17 +17,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 require_once __DIR__ . '/../../../config/database.php';
 
 try {
-    // Récupérer le shop_id depuis les paramètres (optionnel pour admin)
+    // Récupérer les paramètres de filtre
     $shop_id = isset($_GET['shop_id']) ? intval($_GET['shop_id']) : null;
     $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 1000; // Limite par défaut
     $days = isset($_GET['days']) ? intval($_GET['days']) : 4; // Nombre de jours (défaut: 4)
+    $type_filter = isset($_GET['type']) ? $_GET['type'] : null; // NOUVEAU: Filtre par type (ex: flotShopToShop)
     
     // Calculer la date limite (4 derniers jours par défaut)
     $date_limit = date('Y-m-d H:i:s', strtotime("-$days days"));
     
     // Construire la requête SQL
     if ($shop_id !== null && $shop_id > 0) {
-        // Mode AGENT: Filtrer par shop (source OU destination) + 4 derniers jours
+        // Mode AGENT: Filtrer par shop (source OU destination) + type optionnel + jours
+        $type_condition = '';
+        if ($type_filter !== null && !empty($type_filter)) {
+            $type_condition = 'AND o.type = :type_filter';
+            error_log("[ALL-OPERATIONS] Filtre type actif: $type_filter");
+        }
+        
         error_log("[ALL-OPERATIONS] Mode AGENT: shop_id=$shop_id, limit=$limit, days=$days (depuis $date_limit)");
         
         $query = "SELECT 
@@ -43,6 +50,7 @@ try {
                   FROM operations o
                   WHERE (o.shop_source_id = :shop_id OR o.shop_destination_id = :shop_id2)
                     AND o.created_at >= :date_limit
+                    $type_condition
                   ORDER BY o.last_modified_at DESC
                   LIMIT :limit";
         
@@ -51,9 +59,17 @@ try {
         $stmt->bindValue(':shop_id2', $shop_id, PDO::PARAM_INT);
         $stmt->bindValue(':date_limit', $date_limit, PDO::PARAM_STR);
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        if ($type_filter !== null && !empty($type_filter)) {
+            $stmt->bindValue(':type_filter', $type_filter, PDO::PARAM_STR);
+        }
     } else {
-        // Mode ADMIN: Récupérer TOUTES les opérations + 4 derniers jours
-        error_log("[ALL-OPERATIONS] Mode ADMIN: toutes les opérations, limit=$limit, days=$days (depuis $date_limit)");
+        // Mode ADMIN: Récupérer TOUTES les opérations + filtre type optionnel + jours
+        $type_condition = '';
+        if ($type_filter !== null && !empty($type_filter)) {
+            $type_condition = 'AND o.type = :type_filter';
+        }
+        
+        error_log("[ALL-OPERATIONS] Mode ADMIN: toutes les opérations, limit=$limit, days=$days (depuis $date_limit)");;
         
         $query = "SELECT 
                     o.id, o.type, o.montant_brut, o.montant_net, o.commission, o.devise,
@@ -67,12 +83,16 @@ try {
                     o.is_synced, o.synced_at
                   FROM operations o
                   WHERE o.created_at >= :date_limit
+                  $type_condition
                   ORDER BY o.last_modified_at DESC
                   LIMIT :limit";
         
         $stmt = $pdo->prepare($query);
         $stmt->bindValue(':date_limit', $date_limit, PDO::PARAM_STR);
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        if ($type_filter !== null && !empty($type_filter)) {
+            $stmt->bindValue(':type_filter', $type_filter, PDO::PARAM_STR);
+        }
     }
     
     $stmt->execute();
