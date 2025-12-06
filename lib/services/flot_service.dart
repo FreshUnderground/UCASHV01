@@ -4,7 +4,7 @@ import '../models/journal_caisse_model.dart';
 import 'local_db.dart';
 import 'operation_service.dart';
 import 'sync_service.dart';
-
+import 'transfer_sync_service.dart';
 /// Service pour gérer les FLOTS (approvisionnement de liquidité entre shops)
 /// UTILISE MAINTENANT OperationModel avec type=flotShopToShop
 class FlotService extends ChangeNotifier {
@@ -209,13 +209,30 @@ class FlotService extends ChangeNotifier {
 
   /// Marquer un flot comme servi (reçu)
   Future<bool> marquerFlotServi({
-    required int flotId,
+    required String flotReference, // Use reference/codeOps instead of ID
     required int agentRecepteurId,
     String? agentRecepteurUsername,
   }) async {
     try {
-      final flot = _flots.firstWhere((f) => f.id == flotId);
+      // First try to find in FlotService _flots list
+      OperationModel? flot;
+      try {
+        flot = _flots.firstWhere((f) => f.codeOps == flotReference);
+      } catch (e) {
+        // Not found in _flots, continue to check LocalDB
+        flot = null;
+      }
       
+      // If not found in FlotService, try to get from LocalDB directly
+      if (flot == null) {
+        flot = await LocalDB.instance.getOperationByCodeOps(flotReference);
+      }
+      
+      // If still not found, throw exception
+      if (flot == null) {
+        throw Exception('Flot avec référence $flotReference non trouvé');
+      }
+
       // PROTECTION: Ne pas permettre de re-servir un flot déjà servi
       if (flot.statut == OperationStatus.validee || flot.statut == OperationStatus.terminee) {
         _errorMessage = 'Ce FLOT a déjà été reçu';
@@ -223,33 +240,21 @@ class FlotService extends ChangeNotifier {
         return false;
       }
       
-      final updatedFlot = flot.copyWith(
-        statut: OperationStatus.validee,  // Au lieu de StatutFlot.servi
-        dateValidation: DateTime.now(), // Définie UNE SEULE FOIS
-        lastModifiedAt: DateTime.now(),
-        lastModifiedBy: 'agent_$agentRecepteurUsername',
-      );
-
-      // Mettre à jour via LocalDB
-      await LocalDB.instance.updateOperation(updatedFlot);
+      // Use TransferSyncService to properly validate the transfer
+      // This ensures the validation is stored in pending_validations and properly synced
+      final transferSyncService = TransferSyncService();
+      final success = await transferSyncService.validateTransfer(flotReference, 'PAYE');
       
-      // SYNC IMMÉDIATE: Uploader le changement de statut immédiatement
-      try {
-        final syncService = SyncService();
-        await syncService.queueOperation(updatedFlot.toJson());
-        await syncService.syncPendingData();
-        debugPrint('✅ FLOT ${updatedFlot.codeOps} (servi) synchronisé immédiatement');
-      } catch (e) {
-        debugPrint('⚠️ Erreur sync immédiate FLOT servi: $e');
+      if (success) {
+        debugPrint('✅ Flot marqué servi: $flotReference');
+        _errorMessage = null;
+        notifyListeners(); // Explicitly notify listeners
+        return true;
+      } else {
+        _errorMessage = transferSyncService.error ?? 'Erreur lors de la validation du FLOT';
+        debugPrint('❌ Erreur validation FLOT: $_errorMessage');
+        return false;
       }
-      
-      // Recharger avec les paramètres actuels APRES la sync
-      debugPrint('🔄 Rechargement des FLOTs...');
-      await loadFlots(shopId: _currentShopId, isAdmin: _currentIsAdmin);
-      
-      debugPrint('✅ Flot marqué servi: ${updatedFlot.codeOps}');
-      _errorMessage = null;
-      return true;
     } catch (e) {
       _errorMessage = 'Erreur lors de la mise à jour du flot: $e';
       debugPrint(_errorMessage);

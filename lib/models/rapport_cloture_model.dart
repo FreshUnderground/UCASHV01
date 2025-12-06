@@ -20,7 +20,7 @@ class RapportClotureModel {
   // Flots USD
   final double flotRecu;
   final double flotEnvoye;
-  
+  final double flotsEnAttente; // NEW: FLOTs en attente  
   // NOUVEAU: Flots DEVISE LOCALE
   final double flotRecuDeviseLocale;
   final double flotEnvoyeDeviseLocale;
@@ -71,6 +71,7 @@ class RapportClotureModel {
   final Map<String, double> flotsRecusGroupes; // Flots reçus groupés par shop expéditeur
   final List<FlotResume> flotsEnvoyes;
   final Map<String, double> flotsEnvoyesGroupes; // Flots envoyés groupés par shop destination
+  final Map<String, double> flotsEnAttenteGroupes; // NEW: FLOTs en attente groupés par shop expéditeur
   
   // NOUVEAU: Listes détaillées des opérations clients (dépôts et retraits)
   final List<OperationResume> depotsClientsDetails;
@@ -121,6 +122,7 @@ class RapportClotureModel {
     this.soldeAnterieurOrangeMoneyDeviseLocale = 0.0,
     required this.flotRecu,
     required this.flotEnvoye,
+    this.flotsEnAttente = 0.0, // NEW: FLOTs en attente
     this.flotRecuDeviseLocale = 0.0,
     this.flotEnvoyeDeviseLocale = 0.0,
     required this.transfertsRecus,
@@ -152,6 +154,7 @@ class RapportClotureModel {
     required this.flotsRecusGroupes,
     this.flotsEnvoyes = const [],
     required this.flotsEnvoyesGroupes,
+    required this.flotsEnAttenteGroupes, // NEW: FLOTs en attente groupés
     this.depotsClientsDetails = const [],
     this.retraitsClientsDetails = const [],
     this.transfertsEnAttenteDetails = const [],
@@ -236,6 +239,7 @@ class RapportClotureModel {
       'flots_recus_groupes': flotsRecusGroupes, // Map<String, double> - Maintenant gérés comme operations
       'flots_envoyes': flotsEnvoyes.map((f) => f.toJson()).toList(), // Maintenant gérés comme operations
       'flots_envoyes_groupes': flotsEnvoyesGroupes, // Map<String, double> - Maintenant gérés comme operations
+      'flots_en_attente_groupes': flotsEnAttenteGroupes, // NEW: FLOTs en attente groupés
       'depots_clients_details': depotsClientsDetails.map((d) => d.toJson()).toList(),
       'retraits_clients_details': retraitsClientsDetails.map((r) => r.toJson()).toList(),
       'transferts_en_attente_details': transfertsEnAttenteDetails.map((t) => t.toJson()).toList(),

@@ -118,8 +118,10 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                     pw.SizedBox(height: 8),
                     
                     _buildSection('2. Flots', [
-                      _buildRow('Recus', rapport.flotRecu, color: PdfColors.green700),
-                      _buildRow('Envoyes', rapport.flotEnvoye, color: PdfColors.red700, prefix: '-'),
+                      _buildRow('FLOTs Reçus', rapport.flotRecu, color: PdfColors.green700),
+                     _buildRow('FLOTs Envoyés', rapport.flotEnvoye, color: PdfColors.red700, prefix: '-'),
+                      pw.SizedBox(height: 4),
+                      _buildRow('= TOTAL FLOTs', rapport.flotRecu + rapport.flotsEnAttente - rapport.flotEnvoye, color: PdfColors.purple700, bold: true),
                       
                       // FLOTs Reçus Groupés par Shop Source
                       if (rapport.flotsRecusGroupes.isNotEmpty) ...[
@@ -128,7 +130,7 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                         pw.Divider(),
                         ...rapport.flotsRecusGroupes.entries.map((entry) => _buildDetailRow(entry.key, 'Total du jour', entry.value, PdfColors.green700)),
                       ],
-                      
+                     
                       // FLOTs Envoyés Groupés par Shop Destination
                       if (rapport.flotsEnvoyesGroupes.isNotEmpty) ...[
                         pw.SizedBox(height: 4),
@@ -139,7 +141,7 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                     ], PdfColors.purple700),
                     pw.SizedBox(height: 8),
                     
-                    _buildSection('3. Transferts', [
+                    _buildSection('4. Transferts', [
                       _buildRow('Recus', rapport.transfertsRecus, color: PdfColors.green700),
                       _buildRow('Servis', rapport.transfertsServis, color: PdfColors.red700, prefix: '-'),
                       _buildRow('En attente', rapport.transfertsEnAttente, color: PdfColors.orange700),
@@ -171,9 +173,11 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                     pw.SizedBox(height: 8),
                     
                     // NOUVEAU: Compte FRAIS
-                    _buildSection('4. Compte FRAIS', [
+                    _buildSection('5. Compte FRAIS', [
                       _buildRow('Frais Antérieur', rapport.soldeFraisAnterieur, color: PdfColors.grey700),
                       _buildRow('+ Frais encaissés', rapport.commissionsFraisDuJour, color: PdfColors.green700),
+                       pw.SizedBox(height: 4),
+                      _buildRow('- Sortie Frais du jour', rapport.retraitsFraisDuJour, color: PdfColors.red700, prefix: '-'),
                       // Détail des frais par shop
                       if (rapport.fraisGroupesParShop.isNotEmpty) ...[
                         pw.SizedBox(height: 4),
@@ -186,9 +190,7 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                           PdfColors.green700,
                         )),
                       ],
-                      pw.SizedBox(height: 4),
-                      _buildRow('- Sortie Frais du jour', rapport.retraitsFraisDuJour, color: PdfColors.red700, prefix: '-'),
-                      pw.Divider(),
+                     pw.Divider(),
                       _buildRow('= Solde Frais du jour', rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour, color: PdfColors.green700, bold: true),
                     ], PdfColors.green700),
 
@@ -201,7 +203,7 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
               pw.Expanded(
                 child: pw.Column(
                   children: [
-                    _buildSection('5. Partenaires Servis', [
+                    _buildSection('6. Partenaires Servis', [
                       pw.Text('${rapport.clientsNousDoivent.length} client(s)', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
                       pw.Divider(),
                       ...rapport.clientsNousDoivent.map((c) => _buildDetailRow(c.nom, '', c.solde, PdfColors.red700)),
@@ -210,7 +212,7 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                     ], PdfColors.red700),
                     pw.SizedBox(height: 8),
                     
-                    _buildSection('6. Dépôts Partenaires', [
+                    _buildSection('7. Dépôts Partenaires', [
                       pw.Text('${rapport.clientsNousDevons.length} client(s)', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
                       pw.Divider(),
                       ...rapport.clientsNousDevons.map((c) => _buildDetailRow(c.nom, '', c.solde, PdfColors.green700)),
@@ -219,7 +221,7 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                     ], PdfColors.green700),
                     pw.SizedBox(height: 8),
                     
-                    _buildSection('7. Shops Qui Nous qui Doivent (DIFF. DETTES)', [
+                    _buildSection('8. Shops Qui Nous qui Doivent (DIFF. DETTES)', [
                       pw.Text('${rapport.shopsNousDoivent.length} shop(s)', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
                       pw.Divider(),
                       ...rapport.shopsNousDoivent.map((s) => _buildDetailRow(s.designation, s.localisation, s.montant, PdfColors.orange700)),
@@ -228,7 +230,7 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                     ], PdfColors.orange700),
                     pw.SizedBox(height: 8),
                     
-                    _buildSection('8. Shop Que Nous que Devons', [
+                    _buildSection('9. Shop Que Nous que Devons', [
                       pw.Text('${rapport.shopsNousDevons.length} shop(s)', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
                       pw.Divider(),
                       ...rapport.shopsNousDevons.map((s) => _buildDetailRow(s.designation, s.localisation, s.montant, PdfColors.purple700)),
@@ -257,7 +259,23 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                 pw.SizedBox(height: 4),
                 pw.Text('Formule: Cash Disponible (incluant -Retraits FRAIS) + Créances - Dettes', style: pw.TextStyle(fontSize: 6, fontStyle: pw.FontStyle.italic)),
                 pw.SizedBox(height: 6),
-                pw.Text('${(rapport.capitalNet - (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour)).toStringAsFixed(2)} USD', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: (rapport.capitalNet - (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour)) >= 0 ? PdfColors.blue900 : PdfColors.red900)),
+                (() {
+                  final capitalNetValue = rapport.cashDisponibleTotal + 
+                                      rapport.totalClientsNousDoivent + 
+                                      rapport.totalShopsNousDoivent - 
+                                      rapport.totalClientsNousDevons - 
+                                      rapport.totalShopsNousDevons - 
+                                      (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour) - 
+                                      rapport.transfertsEnAttente;
+                  return pw.Text(
+                    '${capitalNetValue.toStringAsFixed(2)} USD', 
+                    style: pw.TextStyle(
+                      fontSize: 20, 
+                      fontWeight: pw.FontWeight.bold, 
+                      color: capitalNetValue >= 0 ? PdfColors.blue900 : PdfColors.red900
+                    )
+                  );
+                }()) as pw.Widget,
                 pw.Divider(),
                 _buildRow('Cash Disponible', rapport.cashDisponibleTotal, color: PdfColors.green700),
                 _buildRow('+ Partenaires Servis', rapport.totalClientsNousDoivent, color: PdfColors.red700),
@@ -265,8 +283,26 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                 _buildRow('- Dépôts Partenaires', rapport.totalClientsNousDevons, color: PdfColors.green700),
                 _buildRow('- Shops Que Nous que Devons', rapport.totalShopsNousDevons, color: PdfColors.purple700),
                 _buildRow('- Solde Frais du jour', rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour, color: PdfColors.grey700),
+                _buildRow('- Transfert En attente', rapport.transfertsEnAttente, color: PdfColors.orange700),
                 pw.Divider(thickness: 2, color: PdfColors.blue700),
-                _buildRow('= CAPITAL NET', rapport.capitalNet - (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour), color: (rapport.capitalNet - (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour)) >= 0 ? PdfColors.blue700 : PdfColors.red700, bold: true),
+                _buildRow('= CAPITAL NET', 
+                  rapport.cashDisponibleTotal + 
+                  rapport.totalClientsNousDoivent + 
+                  rapport.totalShopsNousDoivent - 
+                  rapport.totalClientsNousDevons - 
+                  rapport.totalShopsNousDevons - 
+                  (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour) - 
+                  rapport.transfertsEnAttente, 
+                  color: (
+                    rapport.cashDisponibleTotal + 
+                    rapport.totalClientsNousDoivent + 
+                    rapport.totalShopsNousDoivent - 
+                    rapport.totalClientsNousDevons - 
+                    rapport.totalShopsNousDevons - 
+                    (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour) - 
+                    rapport.transfertsEnAttente
+                  ) >= 0 ? PdfColors.blue700 : PdfColors.red700, 
+                  bold: true),
               ],
             ),
           ),

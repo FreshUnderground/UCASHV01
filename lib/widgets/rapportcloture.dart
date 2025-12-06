@@ -737,13 +737,19 @@ class _RapportClotureState extends State<RapportCloture> {
         ),
         const SizedBox(height: 16),
 
-        // FLOT
+        // FLOT - COMBINED SECTION
         _buildSection(
           '2️⃣ Flots',
           [
-            _buildMovementRow('Reçus', rapport.flotRecu, true),
-            _buildMovementRow('Envoyés', rapport.flotEnvoye, false),
-            
+            _buildMovementRow('FLOTs Reçus', rapport.flotRecu, true),
+            _buildMovementRow('FLOTs Envoyés', rapport.flotEnvoye, false),
+            const SizedBox(height: 8),
+            _buildTotalRow(
+              '= TOTAL FLOTs',
+              rapport.flotRecu + rapport.flotsEnAttente - rapport.flotEnvoye,
+              bold: true,
+              color: Colors.purple,
+            ),
             
             // Détails des FLOTs reçus GROUPÉS PAR SHOP EXPÉDITEUR
             if (rapport.flotsRecusGroupes.isNotEmpty) ...[
@@ -758,14 +764,14 @@ class _RapportClotureState extends State<RapportCloture> {
               )).toList(),
             ],
             
-            // Détails des FLOTS envoyés GROUPÉS PAR SHOP DESTINATION
+            // Détails des FLOTs envoyés GROUPÉS PAR SHOP DESTINATION
             if (rapport.flotsEnvoyesGroupes.isNotEmpty) ...[
               const SizedBox(height: 8),
-              const Text('FLOTs Envoyés Détails :', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              const Text('FLOTs Envoyés Détails:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
               const Divider(),
               ...rapport.flotsEnvoyesGroupes.entries.map((entry) => _buildFlotDetailRow(
                 entry.key, // Nom du shop destination
-                'Total du jour',
+                '',
                 entry.value, // Somme des montants
                 Colors.red,
               )).toList(),
@@ -777,11 +783,11 @@ class _RapportClotureState extends State<RapportCloture> {
 
         // Transferts
         _buildSection(
-          '3️⃣ Transferts',
+          '4️⃣ Transferts',
           [
             _buildMovementRow('Transferts', rapport.transfertsRecus, true),
             _buildMovementRow('Servis', rapport.transfertsServis, false),
-            _buildMovementRow('En attente (Non Servie)', rapport.transfertsEnAttente, false),
+            _buildMovementRow('Non Servis', rapport.transfertsEnAttente, false),
             
             // Détails des TRANSFERTS REÇUS GROUPÉS PAR SHOP DESTINATION
             if (rapport.transfertsRecusGroupes.isNotEmpty) ...[
@@ -813,7 +819,7 @@ class _RapportClotureState extends State<RapportCloture> {
             // DÉTAILS DES TRANSFERTS EN ATTENTE GROUPÉS PAR SHOP SOURCE
             if (rapport.transfertsEnAttenteGroupes.isNotEmpty) ...[
               const SizedBox(height: 8),
-              const Text('Transferts En Attente :', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              const Text('Non Servis:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
               const Divider(),
               ...rapport.transfertsEnAttenteGroupes.entries.map((entry) => _buildFlotDetailRow(
                 entry.key, // Nom du shop source
@@ -824,15 +830,17 @@ class _RapportClotureState extends State<RapportCloture> {
             ],
           ],
           Colors.blue,
-        ),
-        const SizedBox(height: 16),
+        ),        const SizedBox(height: 16),
 
         // NOUVEAU: Comptes Spéciaux (FRAIS uniquement)
         _buildSection(
-          '4️⃣ Compte FRAIS',
+          '5️⃣ Compte FRAIS',
           [
             _buildCashRow('Frais Antérieur', rapport.soldeFraisAnterieur),
             _buildCashRow('+ Frais encaissés', rapport.commissionsFraisDuJour),
+            const SizedBox(height: 8),
+            _buildCashRow('- Sortie Frais du jour', -rapport.retraitsFraisDuJour),  // Négatif car c'est une sortie
+            
             // Détail des frais par shop
             if (rapport.fraisGroupesParShop.isNotEmpty) ...[
               const SizedBox(height: 8),
@@ -845,8 +853,6 @@ class _RapportClotureState extends State<RapportCloture> {
                 Colors.green,
               )).toList(),
             ],
-            const SizedBox(height: 8),
-            _buildCashRow('- Sortie Frais du jour', -rapport.retraitsFraisDuJour),  // Négatif car c'est une sortie
             const Divider(),
             _buildTotalRow('= Solde Frais du jour', rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour, color: Colors.green, bold: true),
           ],
@@ -862,7 +868,7 @@ class _RapportClotureState extends State<RapportCloture> {
       children: [
         // Partenaires Servis (anciennement Clients Nous qui Doivent)
         _buildSection(
-          '5️⃣ Partenaires Servis',
+          '6️⃣ Partenaires Servis',
           [
             Text('${rapport.clientsNousDoivent.length} partenaire(s)', style: const TextStyle(fontWeight: FontWeight.bold)),
             const Divider(),
@@ -881,7 +887,7 @@ class _RapportClotureState extends State<RapportCloture> {
 
         // Dépôts Partenaires (anciennement Clients Nous que Devons)
         _buildSection(
-          '6️⃣ Dépôts Partenaires',
+          '7️⃣ Dépôts Partenaires',
           [
             Text('${rapport.clientsNousDevons.length} partenaire(s)', style: const TextStyle(fontWeight: FontWeight.bold)),
             const Divider(),
@@ -900,7 +906,7 @@ class _RapportClotureState extends State<RapportCloture> {
 
         // Shops Qui Nous qui Doivent
         _buildSection(
-          '7️⃣ Shops Qui Nous qui Doivent (DIFF. DETTES)',
+          '8️⃣ Shops Qui Nous qui Doivent (DIFF. DETTES)',
           [
             Text('${rapport.shopsNousDoivent.length} shop(s)', style: const TextStyle(fontWeight: FontWeight.bold)),
             const Divider(),
@@ -919,7 +925,7 @@ class _RapportClotureState extends State<RapportCloture> {
 
         // Shops Nous que Devons
         _buildSection(
-          '8️⃣ Shop Que Nous que Devons',
+          '9️⃣ Shop Que Nous que Devons',
           [
             Text('${rapport.shopsNousDevons.length} shop(s)', style: const TextStyle(fontWeight: FontWeight.bold)),
             const Divider(),
@@ -962,11 +968,29 @@ class _RapportClotureState extends State<RapportCloture> {
             ),
             const SizedBox(height: 12),
                         Text(
-              '${(rapport.capitalNet - (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour)).toStringAsFixed(2)} USD',
+              '${(() {
+                final capitalNetValue = rapport.cashDisponibleTotal + 
+                                    rapport.totalClientsNousDoivent + 
+                                    rapport.totalShopsNousDoivent - 
+                                    rapport.totalClientsNousDevons - 
+                                    rapport.totalShopsNousDevons - 
+                                    (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour) - 
+                                    rapport.transfertsEnAttente;
+                return capitalNetValue;
+              }()).toStringAsFixed(2)} USD',
               style: TextStyle(
                 fontSize: 32,
                 fontWeight: FontWeight.bold,
-                color: (rapport.capitalNet - (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour)) >= 0 ? Colors.blue : Colors.red,
+                color: (() {
+                  final capitalNetValue = rapport.cashDisponibleTotal + 
+                                      rapport.totalClientsNousDoivent + 
+                                      rapport.totalShopsNousDoivent - 
+                                      rapport.totalClientsNousDevons - 
+                                      rapport.totalShopsNousDevons - 
+                                      (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour) - 
+                                      rapport.transfertsEnAttente;
+                  return capitalNetValue >= 0 ? Colors.blue : Colors.red;
+                }()),
               ),
             ),
                         const Divider(color: Colors.blue),
@@ -977,8 +1001,26 @@ class _RapportClotureState extends State<RapportCloture> {
             _buildCashRow('- Dépôts Partenaires', rapport.totalClientsNousDevons),
             _buildCashRow('- Shops Que Nous que Devons', rapport.totalShopsNousDevons),
             _buildCashRow('- Solde Frais du jour', rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour),
+            _buildCashRow('- Transfert En attente', rapport.transfertsEnAttente),
             const Divider(thickness: 2, color: Colors.blue),
-            _buildTotalRow('= CAPITAL NET', rapport.capitalNet - (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour), bold: true, color: (rapport.capitalNet - (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour)) >= 0 ? Colors.blue : Colors.red),
+            _buildTotalRow('= CAPITAL NET', 
+              rapport.cashDisponibleTotal + 
+              rapport.totalClientsNousDoivent + 
+              rapport.totalShopsNousDoivent - 
+              rapport.totalClientsNousDevons - 
+              rapport.totalShopsNousDevons - 
+              (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour) - 
+              rapport.transfertsEnAttente, 
+              bold: true, 
+              color: (
+                rapport.cashDisponibleTotal + 
+                rapport.totalClientsNousDoivent + 
+                rapport.totalShopsNousDoivent - 
+                rapport.totalClientsNousDevons - 
+                rapport.totalShopsNousDevons - 
+                (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour) - 
+                rapport.transfertsEnAttente
+              ) >= 0 ? Colors.blue : Colors.red),
           ],
         ),
       ),

@@ -968,7 +968,8 @@ class ReportService extends ChangeNotifier {
     ).toList();
 
     final flots = _operations.where((op) => 
-      op.type == OperationType.flotShopToShop
+      op.type == OperationType.flotShopToShop &&
+      op.statut == OperationStatus.validee // Only include validated FLOT transactions
     ).toList();
 
     // Préparer les structures de données

@@ -2442,7 +2442,11 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
     if (shopId != null) {
       for (final flot in flots) {
         // CAS 1: On a REÇU un FLOT (on est destination) → L'autre shop nous a payé
-        if (flot.shopDestinationId == shopId && (flot.statut == OperationStatus.validee || flot.statut == OperationStatus.terminee)) {
+        // Inclure à la fois les FLOTs validés et en attente
+        if (flot.shopDestinationId == shopId && 
+            (flot.statut == OperationStatus.validee || 
+             flot.statut == OperationStatus.terminee || 
+             flot.statut == OperationStatus.enAttente)) {
           final autreShopId = flot.shopSourceId ?? 0;
           
           if (!soldesParShop.containsKey(autreShopId)) {
@@ -6651,8 +6655,8 @@ const SizedBox(height: 16),
                 pw.Divider(),
                 _buildPdfRow('Cash Disponible', cashDisponible),
                 _buildPdfRow('+ Virtuel Disponible', virtuelDisponible),
-                _buildPdfRow('+ Shop qui Nous qui Doivent (DIFF. DETTES)', shopsNousDoivent),
-                _buildPdfRow('- Shop que Nous que Devons', shopsNousDevons),
+                _buildPdfRow('+ Shop qui Nous Doivent (DIFF. DETTES)', shopsNousDoivent),
+                _buildPdfRow('- Shop que Nous Devons', shopsNousDevons),
                 _buildPdfRow('- Non Servi (Virtuel)', nonServi),
                 _buildPdfRow('- Solde FRAIS Total', soldeFraisTotal),
                 pw.Divider(),

@@ -1,0 +1,4 @@
+@echo off
+powershell -Command "(Get-Content 'c:\laragon1\www\UCASHV01\lib\services\rapport_cloture_service.dart') -replace 'debugPrint\(''   FRAIS: Solde total = \$\{soldeFraisTotal\.toStringAsFixed\(2\)\} USD''\);    debugPrint\(''   DÉPENSE: Dépôts du jour = \$\{depotsDepense\.toStringAsFixed\(2\)\} USD''\);', 'debugPrint\(''   FRAIS: Solde total = \$\{soldeFraisTotal.toStringAsFixed\(2\)\} USD''\)`ndebugPrint\(''   DÉPENSE: Dépôts du jour = \$\{depotsDepense.toStringAsFixed\(2\)\} USD''\);' | Set-Content 'c:\laragon1\www\UCASHV01\lib\services\rapport_cloture_service.dart'"
+echo File fixed successfully!
+pause

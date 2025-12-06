@@ -1031,148 +1031,247 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
       );
     }
 
-    return ListView.separated(
-      padding: const EdgeInsets.all(8),
-      itemCount: transactions.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 8),
-      itemBuilder: (context, index) {
-        final transaction = transactions[index];
-        final isPositive = transaction.montant >= 0;
+    // Calculate statistics for expense transactions
+    final depots = transactions
+        .where((t) => t.type == TypeCompteSpecial.DEPENSE && t.typeTransaction == TypeTransactionCompte.DEPOT)
+        .toList();
+    
+    final sorties = transactions
+        .where((t) => t.type == TypeCompteSpecial.DEPENSE && t.typeTransaction == TypeTransactionCompte.SORTIE)
+        .toList();
+    
+    final totalEntrees = depots.fold(0.0, (sum, t) => sum + t.montant);
+    final totalSorties = sorties.fold(0.0, (sum, t) => sum + t.montant.abs());
+    final solde = totalEntrees - totalSorties;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Statistics section
+        Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade200),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Statistiques',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildExpenseStatCard('Total Entrées', totalEntrees, Colors.green),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildExpenseStatCard('Total Sorties', totalSorties, Colors.red),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildExpenseStatCard('Solde', solde, solde >= 0 ? Colors.green : Colors.red),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
         
-        return InkWell(
-          onTap: widget.isAdmin ? () => _showTransactionDetails(context, transaction) : null,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
+        // Transaction list
+        ListView.separated(
+          padding: const EdgeInsets.all(8),
+          itemCount: transactions.length,
+          separatorBuilder: (context, index) => const SizedBox(height: 8),
+          itemBuilder: (context, index) {
+            final transaction = transactions[index];
+            final isPositive = transaction.montant >= 0;
+            
+            return InkWell(
+              onTap: widget.isAdmin ? () => _showTransactionDetails(context, transaction) : null,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade200),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.02),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                // Icon avec gradient
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: transaction.type == TypeCompteSpecial.FRAIS
-                          ? [const Color(0xFF10B981), const Color(0xFF059669)]
-                          : [const Color(0xFF3B82F6), const Color(0xFF2563EB)],
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade200),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.02),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
                     ),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    transaction.typeTransaction.icon,
-                    style: const TextStyle(fontSize: 20),
-                  ),
+                  ],
                 ),
-                const SizedBox(width: 16),
-                
-                // Description et détails
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        transaction.description,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 3, // Afficher jusqu'à 3 lignes
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.access_time,
-                            size: 12,
-                            color: Colors.grey.shade600,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            DateFormat('dd/MM/yyyy HH:mm').format(transaction.dateTransaction),
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (transaction.agentUsername != null) ...[
-                        const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.person_outline,
-                              size: 12,
-                              color: Colors.grey.shade600,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              transaction.agentUsername!,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey.shade600,
-                                fontStyle: FontStyle.italic,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                
-                // Montant et badge
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                child: Row(
                   children: [
-                    Text(
-                      '${isPositive ? '+' : ''}\$${_numberFormat.format(transaction.montant.abs())}',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: isPositive ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    // Badge du type de compte
+                    // Icon avec gradient
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: transaction.type == TypeCompteSpecial.FRAIS
-                            ? const Color(0xFF10B981).withOpacity(0.1)
-                            : const Color(0xFF3B82F6).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
+                        gradient: LinearGradient(
+                          colors: transaction.type == TypeCompteSpecial.FRAIS
+                              ? [const Color(0xFF10B981), const Color(0xFF059669)]
+                              : [const Color(0xFF3B82F6), const Color(0xFF2563EB)],
+                        ),
+                        borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
-                        transaction.type == TypeCompteSpecial.FRAIS ? 'FRAIS' : 'DÉPENSE',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: transaction.type == TypeCompteSpecial.FRAIS
-                              ? const Color(0xFF10B981)
-                              : const Color(0xFF3B82F6),
-                        ),
+                        transaction.typeTransaction.icon,
+                        style: const TextStyle(fontSize: 20),
                       ),
                     ),
-                   ],
+                    const SizedBox(width: 16),
+                    
+                    // Description et détails
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            transaction.description,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 3, // Afficher jusqu'à 3 lignes
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.access_time,
+                                size: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                DateFormat('dd/MM/yyyy HH:mm').format(transaction.dateTransaction),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (transaction.agentUsername != null) ...[
+                            const SizedBox(height: 2),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.person_outline,
+                                  size: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  transaction.agentUsername!,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade600,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    
+                    // Montant et badge
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          '${isPositive ? '+' : ''}\$${_numberFormat.format(transaction.montant.abs())}',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: isPositive ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        // Badge du type de compte
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: transaction.type == TypeCompteSpecial.FRAIS
+                                ? const Color(0xFF10B981).withOpacity(0.1)
+                                : const Color(0xFF3B82F6).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            transaction.type == TypeCompteSpecial.FRAIS ? 'FRAIS' : 'DÉPENSE',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: transaction.type == TypeCompteSpecial.FRAIS
+                                  ? const Color(0xFF10B981)
+                                  : const Color(0xFF3B82F6),
+                            ),
+                          ),
+                        ),
+                       ],
+                    ),
+                  ],
                 ),
-              ],
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  /// Build a statistics card for displaying financial metrics for expense transactions
+  Widget _buildExpenseStatCard(String label, double value, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: color,
             ),
           ),
-        );
-      },
+          const SizedBox(height: 4),
+          Text(
+            '\$${_numberFormat.format(value)}',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -2658,7 +2757,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
             pw.Row(
               children: [
                 pw.Expanded(
-                  child: _buildStatCard(
+                  child: _buildPdfStatCard(
                     'ENTRÉES',
                     '\$${_numberFormat.format(totalEntrees)}',
                     const PdfColor.fromInt(0xFF10B981),
@@ -2666,7 +2765,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                 ),
                 pw.SizedBox(width: 12),
                 pw.Expanded(
-                  child: _buildStatCard(
+                  child: _buildPdfStatCard(
                     'SORTIES',
                     '\$${_numberFormat.format(totalSorties)}',
                     const PdfColor.fromInt(0xFFEF4444),
@@ -2674,7 +2773,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                 ),
                 pw.SizedBox(width: 12),
                 pw.Expanded(
-                  child: _buildStatCard(
+                  child: _buildPdfStatCard(
                     'SOLDE',
                     '\$${_numberFormat.format(soldeFinal)}',
                     const PdfColor.fromInt(0xFF3B82F6),
@@ -2873,7 +2972,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
     );
   }
   
-  pw.Widget _buildStatCard(String label, String value, PdfColor color) {
+  pw.Widget _buildPdfStatCard(String label, String value, PdfColor color) {
     return pw.Container(
       padding: const pw.EdgeInsets.all(12),
       decoration: pw.BoxDecoration(

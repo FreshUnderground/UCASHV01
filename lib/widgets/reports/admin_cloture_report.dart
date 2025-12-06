@@ -610,6 +610,9 @@ class _AdminClotureReportState extends State<AdminClotureReport> {
           [
             _buildCashRow('Frais Antérieur', rapport.soldeFraisAnterieur),
             _buildCashRow('+ Frais encaissés', rapport.commissionsFraisDuJour),
+             const SizedBox(height: 8),
+            _buildCashRow('- Sortie Frais du jour', -rapport.retraitsFraisDuJour),
+            
             // Détail des frais par shop
             if (rapport.fraisGroupesParShop.isNotEmpty) ...[
               const SizedBox(height: 8),
@@ -628,9 +631,7 @@ class _AdminClotureReportState extends State<AdminClotureReport> {
                 ],
               )).toList(),
             ],
-            const SizedBox(height: 8),
-            _buildCashRow('- Sortie Frais du jour', -rapport.retraitsFraisDuJour),
-            const Divider(),
+           const Divider(),
             Row(
               children: [
                 const Expanded(

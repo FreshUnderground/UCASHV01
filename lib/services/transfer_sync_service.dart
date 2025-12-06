@@ -383,6 +383,15 @@ class TransferSyncService extends ChangeNotifier {
     }
   }
 
+  /// Marquer un FLOT comme servi localement et le retirer immédiatement de la liste des FLOTs en attente
+  /// Cette méthode fournit une mise à jour optimiste immédiate de l'interface utilisateur
+  void markFlotAsServedLocally(String codeOps) {
+    debugPrint('💾 [FLOT-SERVED] Retrait immédiat du FLOT $codeOps de la liste locale...');
+    _pendingTransfers.removeWhere((op) => op.codeOps == codeOps && op.type == OperationType.flotShopToShop);
+    notifyListeners();
+    debugPrint('✅ [FLOT-SERVED] FLOT $codeOps retiré de la liste locale');
+  }
+
   /// Synchronisation bidirectionnelle des opérations
   /// TÂCHE 1: Télécharger TOUTES les opérations (serveur → local)
   /// TÂCHE 2: Uploader nos validations locales (local → serveur)

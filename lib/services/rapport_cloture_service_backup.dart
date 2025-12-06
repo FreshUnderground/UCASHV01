@@ -269,12 +269,11 @@ class RapportClotureService {
         _isSameDay(f.dateValidation ?? f.createdAt ?? f.dateOp, dateRapport)
     ).toList();
     
-    // FLOT EN ATTENTE = FLOTs vers nous (en attente de réception) - utilisent created_at
+    // FLOT EN ATTENTE = FLOTs vers nous (en attente de réception)
     final flotsEnAttente = operations.where((f) =>
         f.type == OperationType.flotShopToShop &&
         f.shopDestinationId == shopId &&
-        f.statut == OperationStatus.enAttente &&
-        _isSameDay(f.createdAt ?? f.dateOp, dateRapport)
+        f.statut == OperationStatus.enAttente
     ).toList();
     
     final flotsRecus = [...flotsRecusServis, ...flotsEnAttente];
@@ -371,13 +370,13 @@ class RapportClotureService {
         _isSameDay(op.createdAt ?? op.dateOp, dateRapport)
     ).toList();
 
-    // Transferts SERVIS = nous servons le client (SORTIE d'argent) - utilisent uniquement created_at
+    // Transferts SERVIS = nous servons le client (SORTIE d'argent) - utilisent date_validation, fallback sur created_at si null
     final transfertsServis = operations.where((op) =>
         op.shopDestinationId == shopId &&
         (op.type == OperationType.transfertNational ||
          op.type == OperationType.transfertInternationalEntrant) &&
         op.statut == OperationStatus.validee &&
-        _isSameDay(op.createdAt ?? op.dateOp, dateRapport)  // CHANGEMENT: Utiliser uniquement createdAt ?? dateOp
+        _isSameDay(op.dateValidation ?? op.createdAt ?? op.dateOp, dateRapport)
     ).toList();
     
     // Transferts EN ATTENTE = transferts à servir (shop destination, statut enAttente)
@@ -764,24 +763,13 @@ class RapportClotureService {
     final shopsMap = {for (var shop in shops) shop.id: shop.designation};
     
     // Transferts SERVIS par le shop (où le shop est DESTINATION) - frais gagnés
-    // MODIFICATION: Utiliser uniquement createdAt pour tous les transferts où le shop est destination
     final transfertsServis = operations.where((op) =>
         op.shopDestinationId == shopId && // Nous sommes le shop destination
         (op.type == OperationType.transfertNational ||
          op.type == OperationType.transfertInternationalEntrant ||
          op.type == OperationType.transfertInternationalSortant) &&
         op.statut == OperationStatus.validee &&
-        _isSameDay(op.createdAt ?? op.dateOp, dateRapport)  // CHANGEMENT: Utiliser uniquement createdAt ?? dateOp
-    ).toList();
-    
-    // Transferts EN ATTENTE pour le shop (où le shop est DESTINATION) - frais potentiels
-    final transfertsEnAttente = operations.where((op) =>
-        op.shopDestinationId == shopId && // Nous sommes le shop destination
-        (op.type == OperationType.transfertNational ||
-         op.type == OperationType.transfertInternationalEntrant ||
-         op.type == OperationType.transfertInternationalSortant) &&
-        op.statut == OperationStatus.enAttente &&
-        _isSameDay(op.createdAt ?? op.dateOp, dateRapport)  // CHANGEMENT: Utiliser uniquement createdAt ?? dateOp
+        _isSameDay(op.dateValidation ?? op.createdAt ?? op.dateOp, dateRapport)
     ).toList();
     
     // Transferts INITIÉS par le shop (où le shop est SOURCE) - frais payés mais comptabilisés
@@ -790,33 +778,33 @@ class RapportClotureService {
         (op.type == OperationType.transfertNational ||
          op.type == OperationType.transfertInternationalSortant) &&
         op.statut == OperationStatus.validee &&
-        _isSameDay(op.createdAt ?? op.dateOp, dateRapport)  // CHANGEMENT: Utiliser uniquement createdAt ?? dateOp
+        _isSameDay(op.dateValidation ?? op.createdAt ?? op.dateOp, dateRapport)
     ).toList();
     
-    // Total des frais encaissés = somme des commissions sur les transferts SERVIS et EN ATTENTE
+    // Total des frais encaissés = somme des commissions sur tous les transferts liés au shop
     final fraisEncaissesServis = transfertsServis.fold(0.0, (sum, op) => sum + op.commission);
-    final fraisEncaissesEnAttente = transfertsEnAttente.fold(0.0, (sum, op) => sum + op.commission);
     final fraisEncaissesInities = transfertsInities.fold(0.0, (sum, op) => sum + op.commission);
-    final fraisEncaisses = fraisEncaissesServis + fraisEncaissesEnAttente; // Inclure les transferts en attente
+    final fraisEncaisses = fraisEncaissesServis + fraisEncaissesInities;
     
     // Grouper les frais par shop source (qui a envoyé le transfert)
-    // Selon la règle métier, seuls les transferts SERVIS sont comptabilisés
     final Map<String, double> fraisGroupesParShop = {};
     
-    // Ajouter les frais des transferts servis (commission gagnée par ce shop)
+    // Ajouter les frais des transferts servis
     for (final op in transfertsServis) {
       final shopSource = shopsMap[op.shopSourceId] ?? 'Shop ${op.shopSourceId}';
       fraisGroupesParShop[shopSource] = (fraisGroupesParShop[shopSource] ?? 0.0) + op.commission;
     }
     
-    // Ne pas ajouter les frais des transferts initiés (selon règle métier)
-    // Les frais initiés par ce shop sont comptabilisés dans le rapport du shop destination
+    // Ajouter les frais des transferts initiés (le shop lui-même est la source)
+    for (final op in transfertsInities) {
+      final shopDest = shopsMap[op.shopDestinationId] ?? 'Shop ${op.shopDestinationId}';
+      fraisGroupesParShop[shopDest] = (fraisGroupesParShop[shopDest] ?? 0.0) + op.commission;
+    }
     
-    debugPrint('📊 FRAIS ENCAISSÉS SUR LES TRANSFERTS (Servis et en attente):');
+    debugPrint('📊 FRAIS ENCAISSÉS SUR TOUS LES TRANSFERTS LIÉS AU SHOP:');
     debugPrint('   Nombre de transferts servis: ${transfertsServis.length} (frais gagnés: ${fraisEncaissesServis.toStringAsFixed(2)} USD)');
-    debugPrint('   Nombre de transferts en attente: ${transfertsEnAttente.length} (frais potentiels: ${fraisEncaissesEnAttente.toStringAsFixed(2)} USD)');
-    debugPrint('   Nombre de transferts initiés: ${transfertsInities.length} (frais payés: ${fraisEncaissesInities.toStringAsFixed(2)} USD) - NON COMPTABILISÉS');
-    debugPrint('   Total frais encaissés: ${fraisEncaisses.toStringAsFixed(2)} USD (frais servis + frais en attente)');
+    debugPrint('   Nombre de transferts initiés: ${transfertsInities.length} (frais payés: ${fraisEncaissesInities.toStringAsFixed(2)} USD)');
+    debugPrint('   Total frais encaissés: ${fraisEncaisses.toStringAsFixed(2)} USD');
     debugPrint('   Frais groupés par shop:');
     fraisGroupesParShop.forEach((shop, montant) {
       debugPrint('     - $shop : ${montant.toStringAsFixed(2)} USD');
@@ -826,23 +814,14 @@ class RapportClotureService {
       final shopSource = shopsMap[op.shopSourceId] ?? 'Shop ${op.shopSourceId}';
       final shopDest = shopsMap[op.shopDestinationId] ?? 'Shop ${op.shopDestinationId}';
       final destinataire = op.destinataire ?? 'N/A';
-      debugPrint('     - SERVI: $shopSource → $shopDest, $destinataire : ${op.montantNet.toStringAsFixed(2)} USD (Frais GAGNÉS: ${op.commission.toStringAsFixed(2)} USD)');
+      debugPrint('     - SERVI: $shopSource → $shopDest, $destinataire : ${op.montantNet.toStringAsFixed(2)} USD (Frais: ${op.commission.toStringAsFixed(2)} USD)');
     });
     
-    // Ajouter les transferts en attente
-    transfertsEnAttente.forEach((op) {
-      final shopSource = shopsMap[op.shopSourceId] ?? 'Shop ${op.shopSourceId}';
-      final shopDest = shopsMap[op.shopDestinationId] ?? 'Shop ${op.shopDestinationId}';
-      final destinataire = op.destinataire ?? 'N/A';
-      debugPrint('     - EN ATTENTE: $shopSource → $shopDest, $destinataire : ${op.montantNet.toStringAsFixed(2)} USD (Frais POTENTIELS: ${op.commission.toStringAsFixed(2)} USD)');
-    });
-    
-    // Selon la règle métier, les transferts initiés ne sont pas comptabilisés dans ce rapport
     transfertsInities.forEach((op) {
       final shopSource = shopsMap[op.shopSourceId] ?? 'Shop ${op.shopSourceId}';
       final shopDest = shopsMap[op.shopDestinationId] ?? 'Shop ${op.shopDestinationId}';
       final destinataire = op.destinataire ?? 'N/A';
-      debugPrint('     - INITIÉ: $shopSource → $shopDest, $destinataire : ${op.montantNet.toStringAsFixed(2)} USD (Frais PAYÉS: ${op.commission.toStringAsFixed(2)} USD) - NON COMPTABILISÉ');
+      debugPrint('     - INITIÉ: $shopSource → $shopDest, $destinataire : ${op.montantNet.toStringAsFixed(2)} USD (Frais: ${op.commission.toStringAsFixed(2)} USD)');
     });    
     debugPrint('📊 RETRAITS SUR FRAIS DU JOUR:');
     debugPrint('   Nombre de retraits: ${retraitsFraisList.length}');
@@ -866,7 +845,7 @@ class RapportClotureService {
     final soldeDepenseTotal = service.getSoldeDepense(shopId: shopId);
     
     debugPrint('📊 COMPTES SPÉCIAUX - ${dateRapport.toIso8601String().split('T')[0]}:');
-    debugPrint('   FRAIS: Frais encaissés (transferts SERVIS et EN ATTENTE) = ${fraisEncaisses.toStringAsFixed(2)} USD');
+    debugPrint('   FRAIS: Frais encaissés (tous transferts) = ${fraisEncaisses.toStringAsFixed(2)} USD');
     debugPrint('   FRAIS: Retraits du jour = ${retraitsFrais.toStringAsFixed(2)} USD');
     debugPrint('   FRAIS: Solde total = ${soldeFraisTotal.toStringAsFixed(2)} USD');    debugPrint('   DÉPENSE: Dépôts du jour = ${depotsDepense.toStringAsFixed(2)} USD');
     debugPrint('   DÉPENSE: Sorties du jour = ${sortiesDepense.toStringAsFixed(2)} USD');
@@ -874,7 +853,7 @@ class RapportClotureService {
     
     return {
       'retraits_frais': retraitsFrais,
-      'commissions_frais': fraisEncaisses, // MODIFIÉ: Inclure les frais encaissés des transferts servis et en attente
+      'commissions_frais': fraisEncaisses, // MODIFIÉ: Utiliser les frais encaissés calculés
       'frais_groupes_par_shop': fraisGroupesParShop, // NOUVEAU: Frais groupés par shop
       'solde_frais_total': soldeFraisTotal,
       'sorties_depense': sortiesDepense,
@@ -891,24 +870,24 @@ class RapportClotureService {
     // Récupérer tous les shops pour obtenir leurs désignations
     final allShops = await LocalDB.instance.getAllShops();
     
-    // Filtrer les transferts reçus (validees) pour le shop courant - utilise uniquement createdAt
+    // Filtrer les transferts reçus (validees) pour le shop courant - utilise dateValidation si disponible, sinon createdAt
     final transfertsRecus = operations.where((op) =>
         op.shopDestinationId == shopId &&
         (op.type == OperationType.transfertNational ||
          op.type == OperationType.transfertInternationalEntrant ||
          op.type == OperationType.transfertInternationalSortant) &&
         op.statut == OperationStatus.validee &&
-        _isSameDay(op.createdAt ?? op.dateOp, dateRapport)  // CHANGEMENT: Utiliser uniquement createdAt ?? dateOp
+        _isSameDay(op.dateValidation ?? op.createdAt ?? op.dateOp, dateRapport)
     ).toList();
 
-    // Filtrer les transferts servis (validees) par le shop courant - utilise uniquement createdAt
+    // Filtrer les transferts servis (validees) par le shop courant - utilise dateValidation si disponible, sinon createdAt
     final transfertsServis = operations.where((op) =>
         op.shopSourceId == shopId &&
         (op.type == OperationType.transfertNational ||
          op.type == OperationType.transfertInternationalSortant ||
          op.type == OperationType.transfertInternationalEntrant) &&
         op.statut == OperationStatus.validee &&
-        _isSameDay(op.createdAt ?? op.dateOp, dateRapport)  // CHANGEMENT: Utiliser uniquement createdAt ?? dateOp
+        _isSameDay(op.dateValidation ?? op.createdAt ?? op.dateOp, dateRapport)
     ).toList();
 
     // Filtrer les transferts en attente pour le shop courant

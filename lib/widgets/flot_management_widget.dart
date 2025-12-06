@@ -1164,7 +1164,7 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
     // Valider le FLOT via FlotService
     final flotService = Provider.of<FlotService>(context, listen: false);
     final success = await flotService.marquerFlotServi(
-      flotId: flot.id!,
+      flotReference: flot.codeOps!, // Use reference/codeOps instead of ID
       agentRecepteurId: agentId,
       agentRecepteurUsername: agentUsername,
     );
@@ -1180,7 +1180,14 @@ class _FlotManagementWidgetState extends State<FlotManagementWidget> {
         
         // Rafraîchir les données
         final transferSync = Provider.of<TransferSyncService>(context, listen: false);
-        transferSync.forceRefreshFromAPI();
+        final operationService = Provider.of<OperationService>(context, listen: false);
+        
+        // Optimistic update: Remove the FLOT from pending list immediately
+        transferSync.markFlotAsServedLocally(flot.codeOps!);
+        // Refresh both services to ensure UI consistency
+        await transferSync.forceRefreshFromAPI(); // Wait for refresh to complete
+        await operationService.loadOperations(); // Also refresh OperationService data
+        
         setState(() {});
       }
     } else {

@@ -682,10 +682,82 @@ class OperationService extends ChangeNotifier {
     }
   }
 
+  // Gérer les soldes pour un FLOT shop-to-shop
+  Future<void> _handleFlotBalances(OperationModel operation) async {
+    try {
+      // LOGIQUE MÉTIER FLOT :
+      // 1. À la création : Shop source ENVOIE l'argent (diminution de capital)
+      // 2. À la validation : Shop destination REÇOIT l'argent (augmentation de capital)
+      
+      if (operation.statut == OperationStatus.enAttente) {
+        // CRÉATION DU FLOT : Shop source envoie l'argent
+        if (operation.shopSourceId != null) {
+          final shopSource = await LocalDB.instance.getShopById(operation.shopSourceId!);
+          if (shopSource != null) {
+            // Le shop source PERD le montant net (envoie l'argent)
+            final updatedShopSource = _updateShopCapital(shopSource, operation.modePaiement, operation.montantNet, false, devise: operation.devise);
+            await LocalDB.instance.saveShop(updatedShopSource);
+            debugPrint('🏪 Shop source ${shopSource.designation}: -${operation.montantNet} ${operation.devise} (FLOT envoyé)');
+            
+            // CRÉER ENTRÉE JOURNAL DE CAISSE : SORTIE pour le shop source
+            final journalEntryEnvoi = JournalCaisseModel(
+              shopId: operation.shopSourceId!,
+              agentId: operation.agentId,
+              libelle: 'FLOT ENVOYÉ - Vers ${operation.shopDestinationDesignation ?? "Shop"}',
+              montant: operation.montantNet, // Montant envoyé
+              type: TypeMouvement.sortie, // SORTIE de caisse
+              mode: operation.modePaiement,
+              dateAction: DateTime.now(), // Date d'envoi
+              operationId: operation.id,
+              notes: 'FLOT shop-to-shop envoyé depuis ${shopSource.designation}',
+              lastModifiedAt: DateTime.now(),
+              lastModifiedBy: 'agent_${operation.agentId}',
+            );
+            
+            await LocalDB.instance.saveJournalEntry(journalEntryEnvoi);
+            debugPrint('📝 Journal caisse: SORTIE de ${operation.montantNet} ${operation.devise} pour shop source (FLOT)');
+          }
+        }
+      } else if (operation.statut == OperationStatus.validee) {
+        // VALIDATION DU FLOT : Shop destination reçoit l'argent
+        
+        if (operation.shopDestinationId != null) {
+          final shopDestination = await LocalDB.instance.getShopById(operation.shopDestinationId!);
+          if (shopDestination != null) {
+            // Le shop destination GAGNE le montant net (reçoit l'argent)
+            final updatedShopDestination = _updateShopCapital(shopDestination, operation.modePaiement, operation.montantNet, true, devise: operation.devise);
+            await LocalDB.instance.saveShop(updatedShopDestination);
+            debugPrint('🏪 Shop destination ${shopDestination.designation}: +${operation.montantNet} ${operation.devise} (FLOT reçu)');
+            
+            // CRÉER ENTRÉE JOURNAL DE CAISSE : ENTRÉE pour le shop destination
+            final journalEntryRecu = JournalCaisseModel(
+              shopId: operation.shopDestinationId!,
+              agentId: operation.agentId,
+              libelle: 'FLOT REÇU - De ${operation.shopSourceDesignation ?? "Shop"}',
+              montant: operation.montantNet, // Montant reçu
+              type: TypeMouvement.entree, // ENTRÉE de caisse
+              mode: operation.modePaiement,
+              dateAction: DateTime.now(), // Date de réception/validation
+              operationId: operation.id,
+              notes: 'FLOT shop-to-shop reçu par ${shopDestination.designation}',
+              lastModifiedAt: DateTime.now(),
+              lastModifiedBy: 'agent_${operation.agentId}',
+            );
+            
+            await LocalDB.instance.saveJournalEntry(journalEntryRecu);
+            debugPrint('📝 Journal caisse: ENTRÉE de ${operation.montantNet} ${operation.devise} pour shop destination (FLOT)');
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ Erreur mise à jour soldes FLOT: $e');
+      rethrow;
+    }
+  }
+
   // Gérer les soldes pour un retrait
   Future<void> _handleRetraitBalances(OperationModel operation) async {
-    try {
-      // 1. Diminuer le solde du client (DÉCOUVERT AUTORISÉ - solde peut devenir négatif)
+    try {      // 1. Diminuer le solde du client (DÉCOUVERT AUTORISÉ - solde peut devenir négatif)
       if (operation.clientId != null) {
         final client = await LocalDB.instance.getClientById(operation.clientId!);
         if (client != null) {
@@ -1213,8 +1285,17 @@ class OperationService extends ChangeNotifier {
         
         debugPrint('🔄 Validation du transfert ${operation.id} - Mise à jour des soldes et journal...');
         await _handleTransfertBalances(operation);
-      } else if (oldOperation == null && operation.statut == OperationStatus.validee) {
-        // Cas: Opération reçue du serveur déjà VALIDEE (Shop source découvre que Shop destination a servi)
+      } 
+      // Si c'est un FLOT qui passe de "enAttente" à "validee", gérer les soldes ET le journal
+      else if (oldOperation != null &&
+          oldOperation.statut == OperationStatus.enAttente && 
+          operation.statut == OperationStatus.validee &&
+          operation.type == OperationType.flotShopToShop) {
+        
+        debugPrint('🔄 Validation du FLOT ${operation.id} - Mise à jour des soldes et journal...');
+        await _handleFlotBalances(operation);
+      } 
+      else if (oldOperation == null && operation.statut == OperationStatus.validee) {        // Cas: Opération reçue du serveur déjà VALIDEE (Shop source découvre que Shop destination a servi)
         debugPrint('📥 Transfert ${operation.id} reçu du serveur avec statut VALIDEE (déjà servi)');
         debugPrint('   ✅ Pas de mise à jour des soldes (déjà effectuée par Shop destination)');
       }
