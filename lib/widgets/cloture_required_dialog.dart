@@ -337,7 +337,61 @@ class _ClotureRequiredDialogState extends State<ClotureRequiredDialog> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 5),
+                      const SizedBox(height: 12),
+                      
+                      // Compte FRAIS du jour
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.green.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.attach_money, color: Colors.green.shade700),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Compte FRAIS',
+                                  style: TextStyle(
+                                    color: Colors.green.shade900,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const Divider(height: 16),
+                            _buildCashDispoRow('Frais Antérieur', _rapportPremierJour!.soldeFraisAnterieur, Colors.grey),
+                            _buildCashDispoRow('+ Frais encaissés', _rapportPremierJour!.commissionsFraisDuJour, Colors.green),
+                            _buildCashDispoRow('- Sortie Frais', _rapportPremierJour!.retraitsFraisDuJour, Colors.red),
+                            const Divider(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  '= Solde Frais du jour',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.green.shade900,
+                                  ),
+                                ),
+                                Text(
+                                  '${(_rapportPremierJour!.soldeFraisAnterieur + _rapportPremierJour!.commissionsFraisDuJour - _rapportPremierJour!.retraitsFraisDuJour).toStringAsFixed(2)} USD',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    color: Colors.green.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
                     ],
 
                     // Dernière clôture (Solde Antérieur)

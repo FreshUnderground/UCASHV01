@@ -604,6 +604,55 @@ class _AdminClotureReportState extends State<AdminClotureReport> {
         ),
         const SizedBox(height: 24),
 
+        // Compte FRAIS section
+        _buildSection(
+          'Compte FRAIS',
+          [
+            _buildCashRow('Frais Antérieur', rapport.soldeFraisAnterieur),
+            _buildCashRow('+ Frais encaissés', rapport.commissionsFraisDuJour),
+            // Détail des frais par shop
+            if (rapport.fraisGroupesParShop.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Text('  Détail par Shop :', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              const Divider(),
+              ...rapport.fraisGroupesParShop.entries.map((entry) => Row(
+                children: [
+                  const SizedBox(width: 16),
+                  Icon(Icons.store, size: 14, color: Colors.green[600]),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(entry.key, style: const TextStyle(fontSize: 12))),
+                  Text(
+                    '${entry.value.toStringAsFixed(2)} USD',
+                    style: TextStyle(fontWeight: FontWeight.w500, color: Colors.green[700]),
+                  ),
+                ],
+              )).toList(),
+            ],
+            const SizedBox(height: 8),
+            _buildCashRow('- Sortie Frais du jour', -rapport.retraitsFraisDuJour),
+            const Divider(),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    '= Solde Frais du jour',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                Text(
+                  '${(rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour).toStringAsFixed(2)} USD',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: Colors.green[700],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+
         // Clients
         _buildSection(
           'Partenaires',

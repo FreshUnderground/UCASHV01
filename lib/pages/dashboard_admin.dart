@@ -51,6 +51,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
   bool _isSyncingClients = false;
   bool _isSyncingDeletions = false;  // ✅ NOUVEAU pour Suppressions
   bool _isSyncingTrash = false;      // ✅ NOUVEAU pour Corbeille
+  bool _isSyncingRapports = false;   // ✅ NOUVEAU pour Rapports
 
   // Les clés de menu qui seront traduites dynamiquement
   List<String> _getMenuItems(AppLocalizations l10n) => [
@@ -374,6 +375,10 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
                         // Partenaires (index 5)
                         Navigator.pop(context);
                         await _handlePartenairesSelection();
+                      } else if (index == 7) {
+                        // Rapports (index 7) - Sync d'abord si online
+                        Navigator.pop(context);
+                        await _handleRapportsSelection();
                       } else if (index == 10) {
                         // Suppressions (index 10)
                         Navigator.pop(context);
@@ -496,6 +501,9 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
                       if (index == 5) {
                         // Partenaires (index 5)
                         await _handlePartenairesSelection();
+                      } else if (index == 7) {
+                        // Rapports (index 7) - Sync d'abord si online
+                        await _handleRapportsSelection();
                       } else if (index == 10) {
                         // Suppressions (index 10)
                         await _handleSuppressionsSelection();
@@ -538,7 +546,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
       case 6:
         return _buildTauxCommissionsContent();
       case 7:
-        return _buildReportsContent();
+        return _isSyncingRapports ? _buildSyncingIndicator('Synchronisation des opérations...') : _buildReportsContent();
       case 8:
         return _buildDettesIntershopContent();
       case 9:
@@ -796,6 +804,89 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
         ),
       ),
     );
+  }
+
+  /// Handler pour Rapports - Sync operations d'abord si online
+  Future<void> _handleRapportsSelection() async {
+    final connectivityService = ConnectivityService.instance;
+    final hasConnection = connectivityService.isOnline;
+
+    if (hasConnection) {
+      setState(() {
+        _isSyncingRapports = true;
+        _selectedIndex = 7;  // Rapports (index 7)
+      });
+
+      try {
+        debugPrint('🔄 [ADMIN RAPPORTS] Synchronisation des opérations...');
+        
+        // Synchroniser UNIQUEMENT la table operations via TransferSyncService
+        final transferSyncService = Provider.of<TransferSyncService>(context, listen: false);
+        await transferSyncService.forceRefreshFromAPI();
+        
+        debugPrint('✅ [ADMIN RAPPORTS] Opérations synchronisées');
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.white),
+                  SizedBox(width: 12),
+                  Text('Opérations synchronisées'),
+                ],
+              ),
+              backgroundColor: Color(0xFFDC2626),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } catch (e) {
+        debugPrint('⚠️ [ADMIN RAPPORTS] Erreur sync: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.warning_amber, color: Colors.white),
+                  SizedBox(width: 12),
+                  Expanded(child: Text('Synchronisation partielle - données locales')),
+                ],
+              ),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isSyncingRapports = false;
+          });
+        }
+      }
+    } else {
+      // Pas de connexion - afficher directement avec les données locales
+      debugPrint('📡 [ADMIN RAPPORTS] Hors ligne - données locales');
+      setState(() {
+        _selectedIndex = 7;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.wifi_off, color: Colors.white),
+                SizedBox(width: 12),
+                Text('Mode hors-ligne - données locales'),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _handlePartenairesSelection() async {
@@ -1414,6 +1505,9 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
           if (desktopIndex == 5) {
             // Partenaires (index 5)
             await _handlePartenairesSelection();
+          } else if (desktopIndex == 7) {
+            // Rapports (index 7) - Sync d'abord si online
+            await _handleRapportsSelection();
           } else {
             setState(() => _selectedIndex = desktopIndex);
           }
