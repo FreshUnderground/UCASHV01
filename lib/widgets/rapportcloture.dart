@@ -1001,7 +1001,7 @@ class _RapportClotureState extends State<RapportCloture> {
             _buildCashRow('- Dépôts Partenaires', rapport.totalClientsNousDevons),
             _buildCashRow('- Shops Que Nous que Devons', rapport.totalShopsNousDevons),
             _buildCashRow('- Solde Frais du jour', rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour),
-            _buildCashRow('- Transfert En attente', rapport.transfertsEnAttente),
+            _buildCashRow('- Non Servis', rapport.transfertsEnAttente),
             const Divider(thickness: 2, color: Colors.blue),
             _buildTotalRow('= CAPITAL NET', 
               rapport.cashDisponibleTotal + 

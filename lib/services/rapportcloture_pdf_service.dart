@@ -90,9 +90,6 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                 pw.Text('${rapport.cashDisponibleTotal.toStringAsFixed(2)} USD', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.green900)),
                 pw.Divider(color: PdfColors.green700),
                 _buildRow('Cash', rapport.cashDisponibleCash),
-                _buildRow('Airtel Money', rapport.cashDisponibleAirtelMoney),
-                _buildRow('MPESA/VODACASH', rapport.cashDisponibleMPesa),
-                _buildRow('Orange Money', rapport.cashDisponibleOrangeMoney),
               ],
             ),
           ),
@@ -109,9 +106,6 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                   children: [
                     _buildSection('1. Solde Anterieur', [
                       _buildRow('Cash', rapport.soldeAnterieurCash),
-                      _buildRow('Airtel Money', rapport.soldeAnterieurAirtelMoney),
-                      _buildRow('MPESA/VODACASH', rapport.soldeAnterieurMPesa),
-                      _buildRow('Orange Money', rapport.soldeAnterieurOrangeMoney),
                       pw.Divider(),
                       _buildRow('TOTAL', rapport.soldeAnterieurTotal, bold: true),
                     ], PdfColors.grey700),
@@ -126,7 +120,15 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                       // FLOTs Reçus Groupés par Shop Source
                       if (rapport.flotsRecusGroupes.isNotEmpty) ...[
                         pw.SizedBox(height: 4),
-                        pw.Text('FLOTs Reçus Détails (Groupé par Shop):', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                        pw.Text('FLOTs Reçus:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                        pw.Divider(),
+                        ...rapport.flotsRecusGroupes.entries.map((entry) => _buildDetailRow(entry.key, 'Total du jour', entry.value, PdfColors.green700)),
+                      ],
+
+                      // FLOTs Reçus Groupés par Shop Source
+                      if (rapport.flotsEnAttenteGroupes.isNotEmpty) ...[
+                        pw.SizedBox(height: 4),
+                        pw.Text('FLOTs En Attente:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
                         pw.Divider(),
                         ...rapport.flotsRecusGroupes.entries.map((entry) => _buildDetailRow(entry.key, 'Total du jour', entry.value, PdfColors.green700)),
                       ],
@@ -221,7 +223,7 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                     ], PdfColors.green700),
                     pw.SizedBox(height: 8),
                     
-                    _buildSection('8. Shops Qui Nous qui Doivent (DIFF. DETTES)', [
+                    _buildSection('8. Shops Qui Nous Doivent (DIFF. DETTES)', [
                       pw.Text('${rapport.shopsNousDoivent.length} shop(s)', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
                       pw.Divider(),
                       ...rapport.shopsNousDoivent.map((s) => _buildDetailRow(s.designation, s.localisation, s.montant, PdfColors.orange700)),
@@ -230,7 +232,7 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                     ], PdfColors.orange700),
                     pw.SizedBox(height: 8),
                     
-                    _buildSection('9. Shop Que Nous que Devons', [
+                    _buildSection('9. Shop Que Nous Devons', [
                       pw.Text('${rapport.shopsNousDevons.length} shop(s)', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
                       pw.Divider(),
                       ...rapport.shopsNousDevons.map((s) => _buildDetailRow(s.designation, s.localisation, s.montant, PdfColors.purple700)),
@@ -281,9 +283,9 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                 _buildRow('+ Partenaires Servis', rapport.totalClientsNousDoivent, color: PdfColors.red700),
                 _buildRow('+ DIFF. DETTES', rapport.totalShopsNousDoivent, color: PdfColors.orange700),
                 _buildRow('- Dépôts Partenaires', rapport.totalClientsNousDevons, color: PdfColors.green700),
-                _buildRow('- Shops Que Nous que Devons', rapport.totalShopsNousDevons, color: PdfColors.purple700),
+                _buildRow('- Shops Que Nous Devons', rapport.totalShopsNousDevons, color: PdfColors.purple700),
                 _buildRow('- Solde Frais du jour', rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour, color: PdfColors.grey700),
-                _buildRow('- Transfert En attente', rapport.transfertsEnAttente, color: PdfColors.orange700),
+                _buildRow('- Non Servis', rapport.transfertsEnAttente, color: PdfColors.orange700),
                 pw.Divider(thickness: 2, color: PdfColors.blue700),
                 _buildRow('= CAPITAL NET', 
                   rapport.cashDisponibleTotal + 

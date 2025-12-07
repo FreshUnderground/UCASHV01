@@ -3942,25 +3942,6 @@ const SizedBox(height: 16),
                                             ),
                                           ),
                                         const SizedBox(height: 8),
-                                        _buildFinanceRow('- FLOTs envoyés', flotsEnvoyes, Colors.red),
-                                        // Détails FLOTs envoyés
-                                        if (flotsEnvoyesListe.isNotEmpty)
-                                          Padding(
-                                            padding: const EdgeInsets.only(left: 16, top: 4),
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: flotsEnvoyesListe.map((flot) => 
-                                                Text(
-                                                  '• Vers ${ShopService.instance.getShopDesignation(flot.shopDestinationId, existingDesignation: flot.shopDestinationDesignation)}: \$${flot.montantNet.toStringAsFixed(2)} (${flot.statut == OperationStatus.validee ? "Validé" : "En attente"})',
-                                                  style: TextStyle(
-                                                    fontSize: 11, 
-                                                    color: flot.statut == OperationStatus.validee ? Colors.orange[700] : Colors.orange[900],
-                                                  ),
-                                                )
-                                              ).toList(),
-                                            ),
-                                          ),
-                                        const SizedBox(height: 8),
                                         _buildFinanceRow('+ Dépôts Clients', depotsClients, Colors.green),
                                         // Détails Dépôts Clients (groupés par SIM)
                                         if (depotsListe.isNotEmpty)
@@ -4128,7 +4109,7 @@ const SizedBox(height: 16),
                                               },
                                             ),
                                             const SizedBox(height: 8),
-                                            _buildFinanceRow('- Flot Virtuel', retraitsDuJour, Colors.red),
+                                            _buildFinanceRow('- Flot Envoyé Virtuel', retraitsDuJour, Colors.red),
                                             // Détails Flots Virtuels (Retraits)
                                             if (retraits.isNotEmpty)
                                               Padding(

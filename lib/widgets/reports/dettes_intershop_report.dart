@@ -1442,13 +1442,12 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
           frais += commission;
         }
         
-        // Calculate new balance using user formula:
-        // Solde Antérieur + Flot Envoyé - Flot Reçu + Transfert Initiés - Servis + Frais
-        final soldeFin = soldeAnterieur + flotEnvoye - flotRecu + transfertInitie - servis + frais;
-        
+        // Calculate new balance using the correct formula matching daily closure report:
+        // The balance is now calculated correctly in the service, so we just use the cumulative balance
+        final soldeFin = shopCumulativeBalances[shopName] ?? 0.0;        
         // Update cumulative balance for next day
-        shopCumulativeBalances[shopName] = soldeFin;
-        
+        // The balance is already calculated in the service, so we just store it
+        shopCumulativeBalances[shopName] = soldeFin;        
         shopsData.add({
           'shop': shopName,
           'soldeAnterieur': soldeAnterieur,
@@ -1689,23 +1688,21 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
             padding: EdgeInsets.all(isMobile ? 10 : 12),
             child: Column(
               children: [
-                // Solde Antérieur
+                // Solde Antérieur (subtracted in formula)
                 _buildFormulaRow(
                   'Solde Antérieur',
                   soldeAnterieur,
-                  '',
+                  '-',
                   Colors.grey[700]!,
                   isMobile,
                   isBold: true,
-                ),
-                const Divider(height: 8),
-                // + Flot Envoyé
-                if (flotEnvoye > 0)
-                  _buildFormulaRow('+ Flot Envoyé', flotEnvoye, '+', Colors.blue, isMobile),
-                // - Flot Reçu
+                ),                const Divider(height: 8),
+                // + Flot Reçu
                 if (flotRecu > 0)
-                  _buildFormulaRow('- Flot Reçu', flotRecu, '-', Colors.purple, isMobile),
-                // + Transfert Initié (we initiate, they owe us)
+                  _buildFormulaRow('+ Flot Reçu', flotRecu, '+', Colors.purple, isMobile),
+                // - Flot Envoyé
+                if (flotEnvoye > 0)
+                  _buildFormulaRow('- Flot Envoyé', flotEnvoye, '-', Colors.blue, isMobile),                // + Transfert Initié (we initiate, they owe us)
                 if (transfertInitie > 0)
                   _buildFormulaRow('+ Transfert Initié', transfertInitie, '+', Colors.orange, isMobile),
                 // - Servis (we serve for them, we owe them)
@@ -1713,8 +1710,7 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                   _buildFormulaRow('- Servis', servis, '-', Colors.teal, isMobile),
                 // + Frais
                 if (frais > 0)
-                  _buildFormulaRow('+ Frais du Jour', frais, '+', Colors.amber[700]!, isMobile),
-                const Divider(height: 8),
+                  _buildFormulaRow('- Frais du Jour', frais, '-', Colors.amber[700]!, isMobile),                const Divider(height: 8),
                 // = Solde Fin
                 Container(
                   padding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 10, vertical: isMobile ? 6 : 8),
@@ -1744,7 +1740,23 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                     ],
                   ),
                 ),
-              ],
+                const SizedBox(height: 4),
+                // Formula explanation
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    'Calcul: Solde basé sur les flux réels entre shops (comme dans le rapport de clôture)',
+                    style: TextStyle(
+                      fontSize: isMobile ? 9 : 10,
+                      color: Colors.grey[700],
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),              ],
             ),
           ),
         ],

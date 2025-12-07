@@ -247,7 +247,7 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
 
   /// Calculer le capital net d'un shop selon la formule de clôture
   /// SITUATION NETTE = Cash Disponible + Partenaires Servis + Shops qui nous doivent 
-  ///                   - Depots Partenaires - Shops que nous Devons - Frais du Jour
+  ///                   - Depots Partenaires - Shops que nous Devons - Frais du Jour - Transferts En Attente
   /// UTILISE LA MÊME FORMULE QUE LE RAPPORT DE CLÔTURE JOURNALIÈRE
   Future<Map<String, dynamic>> _calculateShopNetCapitalDetails(
     ShopModel shop,
@@ -284,9 +284,9 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
     
     // 5. Calculer la SITUATION NETTE selon la formule demandée:
     // SITUATION NETTE = Cash Disponible + Partenaires Servis + Shops qui nous doivent 
-    //                   - Depots Partenaires - Shops que nous Devons - Frais du Jour
+    //                   - Depots Partenaires - Shops que nous Devons - Frais du Jour - Transferts En Attente
     final situationNette = cashDisponible + clientsNousDoivent + shopsNousDoivent 
-                          - clientsNousDevons - shopsNousDevons - fraisDuJour;
+                          - clientsNousDevons - shopsNousDevons - fraisDuJour - rapport.transfertsEnAttente;
     
     return {
       'shop': shop,
@@ -296,11 +296,12 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
       'shopsNousDoivent': shopsNousDoivent,      // Shops qui nous doivent
       'shopsNousDevons': shopsNousDevons,        // Shops que nous devons
       'fraisDuJour': fraisDuJour,                // Frais du Jour (Rapport Cloture)
+      'transfertsEnAttente': rapport.transfertsEnAttente, // Transferts En Attente
       'soldeFraisAnterieur': rapport.soldeFraisAnterieur,
       'commissionsFraisDuJour': rapport.commissionsFraisDuJour,
       'retraitsFraisDuJour': rapport.retraitsFraisDuJour,
       'situationNette': situationNette,          // Nouvelle formule Situation Nette
-      'capitalNet': rapport.capitalNet,          // Capital Net original (pour référence)
+      'capitalNet': rapport.capitalNet,          // Capital Net original (pour référence
     };
   }
 
@@ -616,7 +617,7 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
             CalculationTooltip(
               title: 'Situation Nette Formula',
               description: 'La situation nette représente la position financière réelle de l\'entreprise',
-              formula: 'Situation Nette = Cash Disponible + Partenaires Servis + Shops qui nous doivent - Dépôts Partenaires - Shops que nous Devons - Frais du Jour',
+              formula: 'Situation Nette = Cash Disponible + Partenaires Servis + Shops qui nous doivent - Dépôts Partenaires - Shops que nous Devons - Frais du Jour - Transferts En Attente',
               components: [
                 'Cash Disponible: Cash physique disponible',
                 'Partenaires Servis: Montants que les clients nous doivent',
@@ -626,7 +627,7 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
                 'Frais du Jour: Solde du compte FRAIS (Rapport Clôture)',
               ],
               child: Text(
-                'Formule: Cash Disponible + Partenaires Servis + Shops qui nous doivent - Dépôts Partenaires - Shops que nous Devons - Frais du Jour',
+                'Formule: Cash Disponible + Partenaires Servis + Shops qui nous doivent - Dépôts Partenaires - Shops que nous Devons - Frais du Jour - Transferts En Attente',
                 style: TextStyle(
                   fontSize: isMobile ? 10 : 12,
                   fontStyle: FontStyle.italic,
@@ -750,6 +751,8 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
               final clientsNousDevons = item['clientsNousDevons'] as double;    // Depots Partenaires
               final shopsNousDoivent = item['shopsNousDoivent'] as double;      // Shops qui nous doivent
               final shopsNousDevons = item['shopsNousDevons'] as double;        // Shops que nous devons
+              final transfertsEnAttente = item['transfertsEnAttente'] as double;   // Transferts En Attente
+              final shopsNousDevonsSansTransferts = shopsNousDevons - transfertsEnAttente; // Shops que nous devons sans transferts
               final fraisDuJour = item['fraisDuJour'] as double;                // Frais du Jour
               final soldeFraisAnterieur = item['soldeFraisAnterieur'] as double;
               final commissionsFraisDuJour = item['commissionsFraisDuJour'] as double;
@@ -805,8 +808,10 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
                             onTap: () => _showShopsNousDoiventDetails(context, shopsNousDoivent)),
                         _buildDetailRow('- Dépôts Partenaires', -clientsNousDevons, Colors.red, isMobile,
                             onTap: () => _showClientsNousDevonsDetails(context, clientsNousDevons)),
-                        _buildDetailRow('- Shops que nous Devons', -shopsNousDevons, Colors.purple, isMobile,
-                            onTap: () => _showShopsNousDevonsDetails(context, shopsNousDevons)),
+                        _buildDetailRow('- Shops que nous Devons', -shopsNousDevonsSansTransferts, Colors.purple, isMobile,
+                            onTap: () => _showShopsNousDevonsDetails(context, shopsNousDevonsSansTransferts)),
+                        _buildDetailRow('- Transferts En Attente (Rapport Clôture)', -transfertsEnAttente, Colors.orange, isMobile,
+                            onTap: () => _showTransfertsEnAttenteDetails(context, transfertsEnAttente)),
                         _buildDetailRow('- Frais du Jour (Rapport Clôture)', -fraisDuJour, Colors.deepOrange, isMobile,
                             onTap: () => _showFraisDuJourDetails(context, fraisDuJour, soldeFraisAnterieur, commissionsFraisDuJour, retraitsFraisDuJour)),
                         const Divider(),
@@ -826,6 +831,29 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
           ),
         ],
       ),
+    );
+  }
+
+  /// Show details for Transferts En Attente
+  void _showTransfertsEnAttenteDetails(BuildContext context, double transfertsEnAttente) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return CalculationDetailsDialog(
+          title: 'Transferts En Attente (Rapport Clôture)',
+          description: 'Le montant total des transferts en attente de service pour ce shop.',
+          formula: 'Transferts En Attente = Σ(Montants des transferts en attente)',
+          businessLogic: 'Les transferts en attente représentent les transferts qui ont été initiés mais pas encore servis par le shop.\n'
+              '- Montant: ${_numberFormat.format(transfertsEnAttente)} USD',
+          components: [
+            CalculationComponent(
+              name: 'Transferts En Attente',
+              description: 'Somme des montants des transferts en attente de service',
+              isPositive: false,
+            ),
+          ],
+        );
+      },
     );
   }
 

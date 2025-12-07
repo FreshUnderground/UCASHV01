@@ -90,11 +90,15 @@ class RapportClotureService {
           .fold(0.0, (sum, shop) => sum + shop.montant);
       
       // Le cash disponible a déjà les retraits FRAIS soustraits, donc on ne les soustrait PAS ici
+      // Formule complète pour la Situation Nette: Cash Disponible + Créances - Dettes - Frais du Jour - Transferts En Attente
+      final fraisDuJour = soldeFraisAnterieur + (comptesSpeciaux['commissions_frais'] as double) - (comptesSpeciaux['retraits_frais'] as double);
       final capitalNet = cashDisponible['total']! 
           + totalClientsNousDoivent 
           + totalShopsNousDoivent 
           - totalClientsNousDevons 
-          - totalShopsNousDevons;
+          - totalShopsNousDevons
+          - fraisDuJour
+          - transferts['enAttente']!;
 
       return RapportClotureModel(
         shopId: shopId,
@@ -209,10 +213,7 @@ class RapportClotureService {
     if (cloturePrecedente != null) {
       debugPrint('📋 Solde antérieur trouvé (clôture du ${jourPrecedent.toIso8601String().split('T')[0]}):');
       debugPrint('   Cash SAISI: ${cloturePrecedente.soldeSaisiCash} USD (Calculé: ${cloturePrecedente.soldeCalculeCash})');
-      debugPrint('   Airtel Money SAISI: ${cloturePrecedente.soldeSaisiAirtelMoney} USD (Calculé: ${cloturePrecedente.soldeCalculeAirtelMoney})');
-      debugPrint('   M-Pesa SAISI: ${cloturePrecedente.soldeSaisiMPesa} USD (Calculé: ${cloturePrecedente.soldeCalculeMPesa})');
-      debugPrint('   Orange Money SAISI: ${cloturePrecedente.soldeSaisiOrangeMoney} USD (Calculé: ${cloturePrecedente.soldeCalculeOrangeMoney})');
-      debugPrint('   TOTAL SAISI: ${cloturePrecedente.soldeSaisiTotal} USD (Calculé: ${cloturePrecedente.soldeCalculeTotal})');
+     debugPrint('   TOTAL SAISI: ${cloturePrecedente.soldeSaisiTotal} USD (Calculé: ${cloturePrecedente.soldeCalculeTotal})');
       debugPrint('   ÉCART TOTAL: ${cloturePrecedente.ecartTotal} USD');
       debugPrint('   FRAIS ANTÉRIEUR: ${cloturePrecedente.soldeFraisAnterieur} USD');
       debugPrint('   + SOLDE VIRTUEL (SIMs): ${soldeTotalSimsHier.toStringAsFixed(2)} USD');
@@ -221,9 +222,6 @@ class RapportClotureService {
       // Le solde virtuel est ajouté au Cash car c'est de l'argent mobile
       return {
         'cash': cloturePrecedente.soldeSaisiCash + soldeTotalSimsHier,  // Cash + Virtuel
-        'airtelMoney': cloturePrecedente.soldeSaisiAirtelMoney,
-        'mPesa': cloturePrecedente.soldeSaisiMPesa,
-        'orangeMoney': cloturePrecedente.soldeSaisiOrangeMoney,
         'soldeFraisAnterieur': cloturePrecedente.soldeFraisAnterieur ?? 0.0,
       };
     }
@@ -1055,16 +1053,10 @@ class RapportClotureService {
     debugPrint('   ');
     debugPrint('   Répartition par mode (proportionnelle):');
     debugPrint('   Cash: ${cashDisponible.toStringAsFixed(2)} USD');
-    debugPrint('   Airtel Money: ${airtelMoneyDisponible.toStringAsFixed(2)} USD');
-    debugPrint('   M-Pesa: ${mPesaDisponible.toStringAsFixed(2)} USD');
-    debugPrint('   Orange Money: ${orangeMoneyDisponible.toStringAsFixed(2)} USD');
     debugPrint('   TOTAL: ${(cashDisponible + airtelMoneyDisponible + mPesaDisponible + orangeMoneyDisponible).toStringAsFixed(2)} USD');
 
     return {
       'cash': cashDisponible,
-      'airtelMoney': airtelMoneyDisponible,
-      'mPesa': mPesaDisponible,
-      'orangeMoney': orangeMoneyDisponible,
       'total': totalDisponible,
     };
   }
