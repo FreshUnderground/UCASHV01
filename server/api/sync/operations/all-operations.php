@@ -44,7 +44,7 @@ try {
                     o.shop_source_id, o.shop_source_designation,
                     o.shop_destination_id, o.shop_destination_designation,
                     o.destinataire, o.telephone_destinataire, o.reference,
-                    o.mode_paiement, o.statut, o.notes,
+                    o.mode_paiement, o.statut, o.notes, o.observation, o.billetage,
                     o.created_at, o.last_modified_at, o.last_modified_by,
                     o.is_synced, o.synced_at
                   FROM operations o
@@ -78,7 +78,7 @@ try {
                     o.shop_source_id, o.shop_source_designation,
                     o.shop_destination_id, o.shop_destination_designation,
                     o.destinataire, o.telephone_destinataire, o.reference,
-                    o.mode_paiement, o.statut, o.notes,
+                    o.mode_paiement, o.statut, o.notes, o.observation, o.billetage,
                     o.created_at, o.last_modified_at, o.last_modified_by,
                     o.is_synced, o.synced_at
                   FROM operations o
@@ -124,6 +124,8 @@ try {
             'destinataire' => $row['destinataire'],
             'telephone_destinataire' => $row['telephone_destinataire'],
             'notes' => $row['notes'],
+            'observation' => $row['observation'],
+            'billetage' => $row['billetage'],
             'created_at' => $row['created_at'],
             'last_modified_at' => $row['last_modified_at'],
             'last_modified_by' => $row['last_modified_by'],

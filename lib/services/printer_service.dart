@@ -8,6 +8,7 @@ import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
+import 'dart:convert';
 import '../models/operation_model.dart';
 import '../models/shop_model.dart';
 import '../models/agent_model.dart';
@@ -477,7 +478,7 @@ class PrinterService {
                     ),
                     if (operation.commission > 0)
                       pw.Text(
-                        'Commission: ${operation.commission.toStringAsFixed(2)} ${operation.devise}',
+                        'Frais : ${operation.commission.toStringAsFixed(2)} ${operation.devise}',
                         style: pw.TextStyle(fontSize: 7),
                       ),
                   ],
@@ -833,6 +834,54 @@ class PrinterService {
       linefeed: 1,
     ));
 
+    // Billetage information for withdrawal and transfer receipts
+    final shouldShowBilletage = (operation.type == OperationType.retrait || 
+                                 operation.type == OperationType.transfertNational ||
+                                 operation.type == OperationType.transfertInternationalEntrant ||
+                                 operation.type == OperationType.transfertInternationalSortant) &&
+                                operation.billetage != null && 
+                                operation.billetage!.isNotEmpty;
+    
+    if (shouldShowBilletage) {
+      try {
+        final Map<String, dynamic> billetageData = jsonDecode(operation.billetage!);
+        final Map<String, dynamic> denominations = billetageData['denominations'];
+        
+        if (denominations.isNotEmpty) {
+          lines.add(LineText(
+            type: LineText.TYPE_TEXT,
+            content: '--------------------------------',
+            linefeed: 1,
+          ));
+          
+          lines.add(LineText(
+            type: LineText.TYPE_TEXT,
+            content: 'BILLETAGE:',
+            weight: 1,
+            linefeed: 1,
+          ));
+          
+          // Sort denominations in descending order
+          final sortedKeys = denominations.keys.toList()
+            ..sort((a, b) => double.parse(b).compareTo(double.parse(a)));
+          
+          for (var key in sortedKeys) {
+            final denom = double.parse(key);
+            final quantity = denominations[key] as int;
+            if (quantity > 0) {
+              lines.add(LineText(
+                type: LineText.TYPE_TEXT,
+                content: '${denom.toStringAsFixed(denom < 1 ? 2 : 0)} x $quantity = ${(denom * quantity).toStringAsFixed(2)} \$',
+                linefeed: 1,
+              ));
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('Error parsing billetage for thermal receipt: $e');
+      }
+    }
+
     // Message de remerciement
     lines.add(LineText(
       type: LineText.TYPE_TEXT,
@@ -1079,6 +1128,50 @@ class PrinterService {
     bytes += generator.text('Mode: $modePaiement', styles: const PosStyles());
     
     bytes += generator.emptyLines(1);
+    
+    // Billetage information for withdrawal and transfer receipts (ESC/POS version)
+    final shouldShowBilletage = (operation.type == OperationType.retrait || 
+                                 operation.type == OperationType.transfertNational ||
+                                 operation.type == OperationType.transfertInternationalEntrant ||
+                                 operation.type == OperationType.transfertInternationalSortant) &&
+                                operation.billetage != null && 
+                                operation.billetage!.isNotEmpty;
+    
+    if (shouldShowBilletage) {
+      try {
+        final Map<String, dynamic> billetageData = jsonDecode(operation.billetage!);
+        final Map<String, dynamic> denominations = billetageData['denominations'];
+        
+        if (denominations.isNotEmpty) {
+          bytes += generator.text(
+            '--------------------------------',
+            styles: const PosStyles(align: PosAlign.center),
+          );
+          
+          bytes += generator.text(
+            'BILLETAGE:',
+            styles: const PosStyles(bold: true),
+          );
+          
+          // Sort denominations in descending order
+          final sortedKeys = denominations.keys.toList()
+            ..sort((a, b) => double.parse(b).compareTo(double.parse(a)));
+          
+          for (var key in sortedKeys) {
+            final denom = double.parse(key);
+            final quantity = denominations[key] as int;
+            if (quantity > 0) {
+              bytes += generator.text(
+                '${denom.toStringAsFixed(denom < 1 ? 2 : 0)} x $quantity = ${(denom * quantity).toStringAsFixed(2)} \$',
+                styles: const PosStyles(),
+              );
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('Error parsing billetage for ESC/POS receipt: $e');
+      }
+    }
     
     // Message de remerciement
     bytes += generator.text(

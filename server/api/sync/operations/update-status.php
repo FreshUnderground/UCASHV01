@@ -40,6 +40,7 @@ try {
     
     $code_ops = $data['code_ops'];
     $new_status = $data['statut'];
+    $billetage = $data['billetage'] ?? null;  // Optional billetage data
     
     // Log pour debug
     error_log("[UPDATE-STATUS] Code: $code_ops, Nouveau statut: $new_status");
@@ -80,13 +81,25 @@ try {
     $should_set_date_validation = in_array($new_status, ['validee', 'terminee']);
     
     if ($should_set_date_validation) {
-        $update_query = "UPDATE operations 
-                         SET statut = :statut, 
-                             date_validation = COALESCE(date_validation, NOW()),
-                             last_modified_at = NOW(),
-                             is_synced = 0
-                         WHERE code_ops = :code_ops";
-        error_log("[UPDATE-STATUS] Mise à jour avec date_validation car statut=$new_status");
+        // Include billetage in update if provided
+        if ($billetage !== null) {
+            $update_query = "UPDATE operations 
+                             SET statut = :statut, 
+                                 billetage = :billetage,
+                                 date_validation = COALESCE(date_validation, NOW()),
+                                 last_modified_at = NOW(),
+                                 is_synced = 0
+                             WHERE code_ops = :code_ops";
+            error_log("[UPDATE-STATUS] Mise à jour avec date_validation et billetage car statut=$new_status");
+        } else {
+            $update_query = "UPDATE operations 
+                             SET statut = :statut, 
+                                 date_validation = COALESCE(date_validation, NOW()),
+                                 last_modified_at = NOW(),
+                                 is_synced = 0
+                             WHERE code_ops = :code_ops";
+            error_log("[UPDATE-STATUS] Mise à jour avec date_validation car statut=$new_status");
+        }
     } else {
         $update_query = "UPDATE operations 
                          SET statut = :statut, 
@@ -98,6 +111,9 @@ try {
     $update_stmt = $pdo->prepare($update_query);
     $update_stmt->bindParam(':statut', $new_status);
     $update_stmt->bindParam(':code_ops', $code_ops);
+    if ($billetage !== null && $should_set_date_validation) {
+        $update_stmt->bindParam(':billetage', $billetage);
+    }
     
     if ($update_stmt->execute()) {
         // Vérifier que la mise à jour a bien eu lieu

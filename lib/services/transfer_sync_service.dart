@@ -302,7 +302,7 @@ class TransferSyncService extends ChangeNotifier {
 
   /// Valider un transfert (server-first puis refresh depuis API)
   /// Retourne true si la validation a réussi
-  Future<bool> validateTransfer(String codeOps, String newStatus) async {
+  Future<bool> validateTransfer(String codeOps, String newStatus, {String? billetage}) async {
     try {
       debugPrint('🔄 [VALIDATE] Validation: $codeOps → $newStatus');
       
@@ -324,6 +324,7 @@ class TransferSyncService extends ChangeNotifier {
         body: jsonEncode({
           'code_ops': codeOps,
           'statut': statut,
+          if (billetage != null) 'billetage': billetage,  // Include billetage if provided
         }),
       ).timeout(
         const Duration(seconds: 10),

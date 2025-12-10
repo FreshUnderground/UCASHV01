@@ -222,6 +222,9 @@ class RapportClotureService {
       // Le solde virtuel est ajouté au Cash car c'est de l'argent mobile
       return {
         'cash': cloturePrecedente.soldeSaisiCash + soldeTotalSimsHier,  // Cash + Virtuel
+        'airtelMoney': 0.0,
+        'mPesa': 0.0,
+        'orangeMoney': 0.0,
         'soldeFraisAnterieur': cloturePrecedente.soldeFraisAnterieur ?? 0.0,
       };
     }
@@ -1057,6 +1060,9 @@ class RapportClotureService {
 
     return {
       'cash': cashDisponible,
+      'airtelMoney': airtelMoneyDisponible,
+      'mPesa': mPesaDisponible,
+      'orangeMoney': orangeMoneyDisponible,
       'total': totalDisponible,
     };
   }

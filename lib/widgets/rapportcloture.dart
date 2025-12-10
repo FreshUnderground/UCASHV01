@@ -337,48 +337,6 @@ class _RapportClotureState extends State<RapportCloture> {
                   helperText: _rapport != null ? 'Calculé: ${_rapport!.cashDisponibleCash.toStringAsFixed(2)}' : null,
                 ),
               ),
-              const SizedBox(height: 12),
-              
-              // Airtel Money
-              TextField(
-                controller: airtelController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(
-                  labelText: 'Airtel Money',
-                  prefixIcon: const Icon(Icons.phone_android),
-                  border: const OutlineInputBorder(),
-                  hintText: 'Montant Airtel',
-                  helperText: _rapport != null ? 'Calculé: ${_rapport!.cashDisponibleAirtelMoney.toStringAsFixed(2)}' : null,
-                ),
-              ),
-              const SizedBox(height: 12),
-              
-              // MPESA/VODACASH
-              TextField(
-                controller: mpesaController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(
-                  labelText: 'MPESA/VODACASH',
-                  prefixIcon: const Icon(Icons.phone_android),
-                  border: const OutlineInputBorder(),
-                  hintText: 'Montant MPESA/VODACASH',
-                  helperText: _rapport != null ? 'Calculé: ${_rapport!.cashDisponibleMPesa.toStringAsFixed(2)}' : null,
-                ),
-              ),
-              const SizedBox(height: 12),
-              
-              // Orange Money
-              TextField(
-                controller: orangeController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(
-                  labelText: 'Orange Money',
-                  prefixIcon: const Icon(Icons.phone_android),
-                  border: const OutlineInputBorder(),
-                  hintText: 'Montant Orange',
-                  helperText: _rapport != null ? 'Calculé: ${_rapport!.cashDisponibleOrangeMoney.toStringAsFixed(2)}' : null,
-                ),
-              ),
             ],
           ),
         ),
@@ -685,9 +643,6 @@ class _RapportClotureState extends State<RapportCloture> {
             const Divider(),
             const SizedBox(height: 8),
             _buildCashBreakdown('Cash', rapport.cashDisponibleCash),
-            _buildCashBreakdown('Airtel Money', rapport.cashDisponibleAirtelMoney),
-            _buildCashBreakdown('MPESA/VODACASH', rapport.cashDisponibleMPesa),
-            _buildCashBreakdown('Orange Money', rapport.cashDisponibleOrangeMoney),
           ],
         ),
       ),
@@ -721,9 +676,6 @@ class _RapportClotureState extends State<RapportCloture> {
           '1️⃣ Solde Antérieur',
           [
             _buildCashRow('Cash', rapport.soldeAnterieurCash),
-            _buildCashRow('Airtel Money', rapport.soldeAnterieurAirtelMoney),
-            _buildCashRow('MPESA/VODACASH', rapport.soldeAnterieurMPesa),
-            _buildCashRow('Orange Money', rapport.soldeAnterieurOrangeMoney),
             const Divider(),
             _buildTotalRow(
               'TOTAL',

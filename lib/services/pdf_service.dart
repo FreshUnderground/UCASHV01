@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
+import 'dart:convert';
 import '../models/operation_model.dart';
 import '../models/client_model.dart';
 import '../models/shop_model.dart';
@@ -55,7 +56,7 @@ class PdfService {
     
     // Format ticket thermique 58mm de largeur (Q2I)
     const double mmToPt = 2.83465;  // Conversion mm vers points
-    final ticketFormat = PdfPageFormat(
+    const ticketFormat = PdfPageFormat(
       58 * mmToPt,  // Largeur: 58mm pour Q2I
       double.infinity,  // Hauteur: auto (s'adapte au contenu)
       marginAll: 4 * mmToPt,  // Marges réduites: 4mm
@@ -397,7 +398,7 @@ class PdfService {
                   children: [
                     pw.Text(headerModel.companyName, style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
                     if (headerModel.companySlogan?.isNotEmpty ?? false)
-                      pw.Text(headerModel.companySlogan!, style: pw.TextStyle(fontSize: 10, color: PdfColors.white)),
+                      pw.Text(headerModel.companySlogan!, style: const pw.TextStyle(fontSize: 10, color: PdfColors.white)),
                     pw.Text(shop.designation, style: const pw.TextStyle(fontSize: 12, color: PdfColors.white)),
                   ],
                 ),
@@ -545,7 +546,7 @@ class PdfService {
                   children: [
                     pw.Text(headerModel.companyName, style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
                     if (headerModel.companySlogan?.isNotEmpty ?? false)
-                      pw.Text(headerModel.companySlogan!, style: pw.TextStyle(fontSize: 10, color: PdfColors.white)),
+                      pw.Text(headerModel.companySlogan!, style: const pw.TextStyle(fontSize: 10, color: PdfColors.white)),
                     pw.Text(shop.designation, style: const pw.TextStyle(fontSize: 12, color: PdfColors.white)),
                   ],
                 ),
@@ -905,20 +906,20 @@ class PdfService {
                         if (companyAddress.isNotEmpty)
                           pw.Text(
                             companyAddress,
-                            style: pw.TextStyle(fontSize: 10, color: PdfColors.white),
+                            style: const pw.TextStyle(fontSize: 10, color: PdfColors.white),
                           ),
                         if (companyPhone.isNotEmpty)
                           pw.Text(
                             companyPhone,
-                            style: pw.TextStyle(fontSize: 10, color: PdfColors.white),
+                            style: const pw.TextStyle(fontSize: 10, color: PdfColors.white),
                           ),
                         pw.Text(
                           shop.designation,
-                          style: pw.TextStyle(fontSize: 10, color: PdfColors.white),
+                          style: const pw.TextStyle(fontSize: 10, color: PdfColors.white),
                         ),
                         pw.Text(
                           'Agent: ${agent.username}',
-                          style: pw.TextStyle(fontSize: 10, color: PdfColors.yellow),
+                          style: const pw.TextStyle(fontSize: 10, color: PdfColors.yellow),
                         ),
                       ],
                     ),
@@ -996,7 +997,7 @@ class PdfService {
                       [
                         pw.Text(
                           '(Clients qui Nous qui Doivent)',
-                          style: pw.TextStyle(
+                          style: const pw.TextStyle(
                             fontSize: 7,
                             color: PdfColors.grey700,
                           ),
@@ -1005,7 +1006,7 @@ class PdfService {
                         if (partenairesServis.isEmpty)
                           pw.Text(
                             'Aucun',
-                            style: pw.TextStyle(
+                            style: const pw.TextStyle(
                               fontSize: 8,
                               color: PdfColors.grey600,
                             ),
@@ -1050,7 +1051,7 @@ class PdfService {
                       [
                         pw.Text(
                           '(Clients que Nous que Devons)',
-                          style: pw.TextStyle(
+                          style: const pw.TextStyle(
                             fontSize: 7,
                             color: PdfColors.grey700,
                           ),
@@ -1059,7 +1060,7 @@ class PdfService {
                         if (partenairesRecus.isEmpty)
                           pw.Text(
                             'Aucun',
-                            style: pw.TextStyle(
+                            style: const pw.TextStyle(
                               fontSize: 8,
                               color: PdfColors.grey600,
                             ),
@@ -1176,7 +1177,7 @@ class PdfService {
           if (reference.isNotEmpty)
             pw.Text(
               'Réf: $reference',
-              style: pw.TextStyle(
+              style: const pw.TextStyle(
                 fontSize: 7,
                 color: PdfColors.grey600,
               ),
@@ -1252,7 +1253,7 @@ class PdfService {
     
     // Format ticket thermique 58mm
     const double mmToPt = 2.83465;
-    final ticketFormat = PdfPageFormat(
+    const ticketFormat = PdfPageFormat(
       58 * mmToPt,
       double.infinity,
       marginAll: 4 * mmToPt,
@@ -1349,16 +1350,27 @@ class PdfService {
                     _buildTicketRow(
                       'MONTANT:',
                       '${operation.montantNet.toStringAsFixed(2)} ${operation.devise}',
-                      fontSize: 12,
+                      fontSize: 10,
                       bold: true,
                     ),
                   ],
                 ),
               ),
               
-              pw.SizedBox(height: 12),
+              pw.SizedBox(height: 10),
               pw.Container(width: double.infinity, height: 1, color: PdfColors.black),
               pw.SizedBox(height: 10),
+              
+              // Billetage information if available
+              if (operation.billetage != null && operation.billetage!.isNotEmpty) ...[
+                pw.Text(
+                  'BILLETAGE:',
+                  style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+                ),
+                pw.SizedBox(height: 4),
+                ..._buildBilletageRows(operation.billetage!),
+                pw.SizedBox(height: 8),
+              ],
               
               // Signatures
               pw.Row(
@@ -1427,5 +1439,37 @@ class PdfService {
     );
     
     return pdf;
+  }
+  
+  /// Build billetage rows for PDF receipt
+  List<pw.Widget> _buildBilletageRows(String billetageJson) {
+    try {
+      final billetageMap = jsonDecode(billetageJson) as Map<String, dynamic>;
+      final denominations = billetageMap['denominations'] as Map<String, dynamic>;
+      
+      final widgets = <pw.Widget>[];
+      
+      // Sort denominations in descending order
+      final sortedKeys = denominations.keys.toList()
+        ..sort((a, b) => double.parse(b).compareTo(double.parse(a)));
+      
+      for (var key in sortedKeys) {
+        final denom = double.parse(key);
+        final quantity = denominations[key] as int;
+        if (quantity > 0) {
+          widgets.add(
+            pw.Text(
+              '${denom.toStringAsFixed(denom < 1 ? 2 : 0)} x $quantity = ${(denom * quantity).toStringAsFixed(2)} \$',
+              style: const pw.TextStyle(fontSize: 7),
+            ),
+          );
+        }
+      }
+      
+      return widgets;
+    } catch (e) {
+      // Return empty list if there's an error parsing billetage
+      return [];
+    }
   }
 }

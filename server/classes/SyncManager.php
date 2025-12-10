@@ -352,8 +352,9 @@ class SyncManager {
         $sql = "INSERT INTO operations (
             type, montant_brut, montant_net, commission, client_id, shop_source_id, 
             shop_destination_id, agent_id, mode_paiement, statut, reference, notes,
+            observation, billetage,  /* Added billetage column */
             last_modified_at, last_modified_by, created_at, is_synced, synced_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         
         $stmt = $this->pdo->prepare($sql);
         $result = $stmt->execute([
@@ -369,6 +370,8 @@ class SyncManager {
             $data['statut'] ?? 'terminee',
             $data['reference'] ?? 'OP' . time(),
             $data['notes'] ?? '',
+            $data['observation'] ?? '',  /* Added observation */
+            $data['billetage'] ?? null,  /* Added billetage */
             $data['last_modified_at'] ?? date('c'),
             $data['last_modified_by'] ?? 'system',
             $data['created_at'] ?? date('c'),
@@ -390,7 +393,8 @@ class SyncManager {
         $sql = "UPDATE operations SET 
             type = ?, montant_brut = ?, montant_net = ?, commission = ?, client_id = ?,
             shop_source_id = ?, shop_destination_id = ?, agent_id = ?, mode_paiement = ?,
-            statut = ?, notes = ?, last_modified_at = ?, last_modified_by = ?,
+            statut = ?, notes = ?, observation = ?, billetage = ?,  /* Added observation and billetage */
+            last_modified_at = ?, last_modified_by = ?,
             is_synced = ?, synced_at = ?
             WHERE reference = ?";
         
@@ -407,6 +411,8 @@ class SyncManager {
             $data['mode_paiement'] ?? 'cash',
             $data['statut'] ?? 'terminee',
             $data['notes'] ?? '',
+            $data['observation'] ?? '',  /* Added observation */
+            $data['billetage'] ?? null,  /* Added billetage */
             $data['last_modified_at'] ?? date('c'),
             $data['last_modified_by'] ?? 'system',
             $data['is_synced'] ?? 1,

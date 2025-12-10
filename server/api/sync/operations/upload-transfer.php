@@ -59,6 +59,7 @@ try {
                          destinataire = :destinataire,
                          telephone_destinataire = :telephone_destinataire,
                          observation = :observation,
+                         billetage = :billetage,  /* Added billetage */
                          updated_at = NOW()
                          WHERE code_ops = :code_ops";
         
@@ -79,6 +80,7 @@ try {
         $stmt->bindParam(':destinataire', $data['destinataire']);
         $stmt->bindParam(':telephone_destinataire', $data['telephone_destinataire']);
         $stmt->bindParam(':observation', $data['observation']);
+        $stmt->bindParam(':billetage', $data['billetage']);  /* Added billetage */
         $stmt->bindParam(':code_ops', $code_ops);
         
         if ($stmt->execute()) {
@@ -99,14 +101,14 @@ try {
                          shop_id, shop_source_id, shop_destination_id,
                          client_id, agent_id,
                          montant_brut, montant_net, commission, devise,
-                         statut, destinataire, telephone_destinataire, observation,
+                         statut, destinataire, telephone_destinataire, observation, billetage,  /* Added billetage */
                          created_at, updated_at
                          ) VALUES (
                          :type, :code_ops, :reference, :date_op,
                          :shop_id, :shop_source_id, :shop_destination_id,
                          :client_id, :agent_id,
                          :montant_brut, :montant_net, :commission, :devise,
-                         :statut, :destinataire, :telephone_destinataire, :observation,
+                         :statut, :destinataire, :telephone_destinataire, :observation, :billetage,  /* Added billetage */
                          NOW(), NOW()
                          )";
         
@@ -128,6 +130,7 @@ try {
         $stmt->bindParam(':destinataire', $data['destinataire']);
         $stmt->bindParam(':telephone_destinataire', $data['telephone_destinataire']);
         $stmt->bindParam(':observation', $data['observation']);
+        $stmt->bindParam(':billetage', $data['billetage']);  /* Added billetage */
         
         if ($stmt->execute()) {
             echo json_encode([

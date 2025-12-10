@@ -5,6 +5,9 @@ import '../models/sim_model.dart';
 import '../services/operation_service.dart';
 import '../services/sim_service.dart';
 import '../services/agent_auth_service.dart';
+import '../widgets/billetage_input_dialog.dart';
+import '../models/billetage_model.dart';
+import 'dart:convert';
 
 /// Widget pour gérer les retraits Mobile Money (Cash-Out)
 /// Flux: Agent reçoit message → Enregistre (EN_ATTENTE) → Client arrive → Valide → Cash sort + SIM augmente
@@ -585,7 +588,19 @@ class _RetraitMobileMoneyWidgetState extends State<RetraitMobileMoneyWidget> {
   /// ACTION: Valider un retrait (passer de EN_ATTENTE à VALIDEE)
   /// Cette action déclenche: +SIM virtuel, -Cash agent
   Future<void> _validerRetrait(OperationModel retrait) async {
-    // Confirmation dialog
+    // 1. BILLETAGE: Collect currency denominations
+    final billetage = await showDialog<BilletageModel?> (
+      context: context,
+      builder: (context) => BilletageInputDialog(
+        amount: retrait.montantNet,
+        currency: retrait.devise,
+      ),
+    );
+    
+    // If user cancelled the billetage dialog, stop the process
+    if (billetage == null) return;
+    
+    // 2. Confirmation dialog with billetage summary
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -640,6 +655,14 @@ class _RetraitMobileMoneyWidgetState extends State<RetraitMobileMoneyWidget> {
                   Text('  • Solde SIM +${retrait.montantBrut.toStringAsFixed(2)} (virtuel)'),
                   Text('  • Capital CASH -${retrait.montantNet.toStringAsFixed(2)}'),
                   Text('  • Frais +${retrait.commission.toStringAsFixed(2)} pour l\'agent'),
+                  const SizedBox(height: 12),
+                  const Divider(),
+                  const Text(
+                    'Billetage:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  ..._buildBilletageSummary(billetage),
                 ],
               ),
             ),
@@ -677,10 +700,11 @@ class _RetraitMobileMoneyWidgetState extends State<RetraitMobileMoneyWidget> {
         return;
       }
       
-      // Update status to VALIDEE
+      // Update status to VALIDEE and add billetage information
       final updatedRetrait = retrait.copyWith(
         statut: OperationStatus.validee,
         dateValidation: DateTime.now(), // Définie UNE SEULE FOIS
+        billetage: billetage!.toJson(), // Store billetage as JSON string
       );
       
       // Save and trigger balance updates
@@ -704,6 +728,38 @@ class _RetraitMobileMoneyWidgetState extends State<RetraitMobileMoneyWidget> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+  
+  /// Build a summary of the billetage for display in the confirmation dialog
+  List<Widget> _buildBilletageSummary(BilletageModel billetage) {
+    final widgets = <Widget>[];
+    
+    // Sort denominations in descending order
+    final sortedDenominations = billetage.denominations.keys.toList()
+      ..sort((a, b) => b.compareTo(a));
+    
+    for (var denom in sortedDenominations) {
+      final quantity = billetage.denominations[denom]!;
+      if (quantity > 0) {
+        widgets.add(
+          Text(
+            '${denom.toStringAsFixed(denom < 1 ? 2 : 0)} x $quantity = ${(denom * quantity).toStringAsFixed(2)} \$',
+            style: const TextStyle(fontSize: 12),
+          ),
+        );
+      }
+    }
+    
+    if (widgets.isEmpty) {
+      widgets.add(
+        const Text(
+          'Aucune denomination saisie',
+          style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+        ),
+      );
+    }
+    
+    return widgets;
   }
   
   @override

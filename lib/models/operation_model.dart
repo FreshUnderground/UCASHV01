@@ -1,3 +1,5 @@
+import '../models/billetage_model.dart';
+
 enum OperationType {
   transfertNational,
   transfertInternationalSortant,
@@ -57,7 +59,21 @@ class OperationModel {
   final OperationStatus statut;
   final String? notes;
   final String? observation; // New field for agent observations
+  final String? billetage; // JSON string representation of BilletageModel
   
+  // Getter to access billetage as a BilletageModel object
+  BilletageModel? get billetageModel {
+    if (billetage == null || billetage!.isEmpty) {
+      return null;
+    }
+    try {
+      return BilletageModel.fromJson(billetage!);
+    } catch (e) {
+      // Return null if parsing fails
+      return null;
+    }
+  }
+
   // Dates et tracking
   final DateTime dateOp;
   final DateTime? dateValidation; // Date de validation du transfert
@@ -101,6 +117,7 @@ class OperationModel {
     this.statut = OperationStatus.terminee,
     this.notes,
     this.observation,
+    this.billetage,
     
     // Dates
     required this.dateOp,
@@ -145,6 +162,7 @@ class OperationModel {
       statut: _parseOperationStatus(json['statut']),
       notes: json['notes'],
       observation: json['observation'],
+      billetage: json['billetage'],
       
       // Dates
       dateOp: json['date_op'] != null ? DateTime.parse(json['date_op']) : (json['created_at'] != null ? DateTime.parse(json['created_at']) : DateTime.now()),
@@ -309,6 +327,7 @@ class OperationModel {
       'statut': statut.index,
       'notes': notes,
       'observation': observation,
+      'billetage': billetage,
       
       // Dates
       'date_op': dateOp.toIso8601String(),
@@ -446,6 +465,7 @@ class OperationModel {
     OperationStatus? statut,
     String? notes,
     String? observation,
+    String? billetage,
     
     // Dates
     DateTime? dateOp,
@@ -488,6 +508,7 @@ class OperationModel {
       statut: statut ?? this.statut,
       notes: notes ?? this.notes,
       observation: observation ?? this.observation,
+      billetage: billetage ?? this.billetage,
       
       // Dates
       dateOp: dateOp ?? this.dateOp,

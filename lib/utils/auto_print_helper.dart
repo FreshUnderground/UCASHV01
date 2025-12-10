@@ -61,7 +61,7 @@ class AutoPrintHelper {
               operation: operation,
               shop: shop,
               agent: agent,
-              destinataireName: clientName ?? operation.observation ?? operation.destinataire,
+              destinataireName: clientName ?? operation.destinataire ?? operation.observation,
             )
           : await pdfService.generateReceiptPdf(
               operation: operation,
@@ -230,7 +230,7 @@ class AutoPrintHelper {
                           operation: operation,
                           shop: shop,
                           agent: agent,
-                          destinataireName: clientName ?? operation.observation ?? operation.destinataire,
+                          destinataireName: clientName ?? operation.destinataire ?? operation.observation,
                         )
                       : await pdfService.generateReceiptPdf(
                           operation: operation,

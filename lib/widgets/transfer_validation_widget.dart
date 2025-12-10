@@ -9,6 +9,8 @@ import '../services/shop_service.dart';
 import '../models/operation_model.dart';
 import '../models/agent_model.dart';
 import '../utils/auto_print_helper.dart';
+import '../widgets/billetage_input_dialog.dart';
+import '../models/billetage_model.dart';
 
 /// Widget de validation des transferts en attente
 class TransferValidationWidget extends StatefulWidget {
@@ -832,6 +834,16 @@ class _TransferValidationWidgetState extends State<TransferValidationWidget> {
   }
 
   void _showTransferDetails(OperationModel transfer, TransferSyncService transferSync) {
+    // Parse billetage if available
+    BilletageModel? billetage;
+    if (transfer.billetage != null && transfer.billetage!.isNotEmpty) {
+      try {
+        billetage = BilletageModel.fromJson(transfer.billetage!);
+      } catch (e) {
+        debugPrint('Erreur parsing billetage: $e');
+      }
+    }
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -845,6 +857,7 @@ class _TransferValidationWidgetState extends State<TransferValidationWidget> {
               _buildDetailRow('Type', transfer.typeLabel),
               _buildDetailRow('Date', DateFormat('dd/MM/yyyy HH:mm').format(transfer.dateOp)),
               const Divider(),
+              _buildDetailRow('Expéditeur', transfer.observation ?? 'Non spécifié'),
               _buildDetailRow('Destinataire', transfer.destinataire ?? 'N/A'),
               _buildDetailRow('Téléphone', transfer.telephoneDestinataire ?? 'N/A'),
               const Divider(),
@@ -854,10 +867,9 @@ class _TransferValidationWidgetState extends State<TransferValidationWidget> {
               _buildDetailRow('Montant', '${transfer.montantNet.toStringAsFixed(2)} ${transfer.devise}'),
               _buildDetailRow('Commission', '${transfer.commission.toStringAsFixed(2)} ${transfer.devise}'),
               _buildDetailRow('Total', '${transfer.montantBrut.toStringAsFixed(2)} ${transfer.devise}'),
-              if (transfer.observation != null && transfer.observation!.isNotEmpty) ...[
-                const Divider(),
-                _buildDetailRow('Observation', transfer.observation!),
-              ],
+              
+              // Afficher le billetage s'il existe
+              if (billetage != null) ..._buildBilletageDetailsSection(billetage),
             ],
           ),
         ),
@@ -893,11 +905,48 @@ class _TransferValidationWidgetState extends State<TransferValidationWidget> {
   }
 
   Future<void> _validateTransfer(OperationModel transfer, TransferSyncService transferSync) async {
+    // 1. BILLETAGE: Collect currency denominations
+    final billetage = await showDialog<BilletageModel?>(
+      context: context,
+      builder: (context) => BilletageInputDialog(
+        amount: transfer.montantNet,
+        currency: transfer.devise,
+      ),
+    );
+    
+    // If user cancelled the billetage dialog, stop the process
+    if (billetage == null) return;
+    
+    // 2. Confirmation dialog with billetage summary
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Valider le transfert'),
-        content: Text('Confirmez-vous la réception de ce transfert ?\n\nMontant: ${transfer.montantNet.toStringAsFixed(2)} ${transfer.devise}'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Confirmez-vous la réception de ce transfert ?',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              Text('Code: ${transfer.codeOps ?? "N/A"}'),
+              Text('Expéditeur: ${transfer.observation ?? "Non spécifié"}'),
+              Text('Destinataire: ${transfer.destinataire ?? "N/A"}'),
+              Text('Montant: ${transfer.montantNet.toStringAsFixed(2)} ${transfer.devise}'),
+              const SizedBox(height: 12),
+              const Divider(),
+              const Text(
+                'Billetage:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              ..._buildBilletageSummary(billetage),
+            ],
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -913,7 +962,7 @@ class _TransferValidationWidgetState extends State<TransferValidationWidget> {
     );
 
     if (confirmed == true && mounted) {
-      await _updateTransferStatus(transfer, 'PAYE', transferSync);
+      await _updateTransferStatus(transfer, 'PAYE', transferSync, billetage: billetage);
     }
   }
 
@@ -942,20 +991,24 @@ class _TransferValidationWidgetState extends State<TransferValidationWidget> {
     }
   }
 
-  Future<void> _updateTransferStatus(OperationModel transfer, String newStatus, TransferSyncService transferSync) async {
+  Future<void> _updateTransferStatus(OperationModel transfer, String newStatus, TransferSyncService transferSync, {BilletageModel? billetage}) async {
     try {
       debugPrint('🔄 [VALIDATION] Début validation: ${transfer.codeOps} → $newStatus');
       
       // Utiliser le service pour valider (server-first)
       // Si validateTransfer lance une exception, elle sera attrapée par le bloc catch
-      final success = await transferSync.validateTransfer(transfer.codeOps ?? '', newStatus);
+      final success = await transferSync.validateTransfer(
+        transfer.codeOps ?? '', 
+        newStatus,
+        billetage: billetage != null ? billetage.toJson() : null,
+      );
       
       if (success) {
         debugPrint('✅ [VALIDATION] Validation réussie');
         
         // Si validation réussie, imprimer automatiquement le reçu
         if (newStatus == 'PAYE' && mounted) {
-          await _printValidatedTransferReceipt(transfer);
+          await _printValidatedTransferReceipt(transfer, billetage: billetage);
         }
         
         // Afficher le succès
@@ -1054,7 +1107,7 @@ class _TransferValidationWidgetState extends State<TransferValidationWidget> {
   }
 
   // Méthode pour imprimer automatiquement le reçu de transfert validé
-  Future<void> _printValidatedTransferReceipt(OperationModel transfer) async {
+  Future<void> _printValidatedTransferReceipt(OperationModel transfer, {BilletageModel? billetage}) async {
     try {
       debugPrint('🖨️ Impression automatique du reçu de transfert validé...');
       
@@ -1108,6 +1161,7 @@ class _TransferValidationWidgetState extends State<TransferValidationWidget> {
         statut: OperationStatus.validee,  // Statut validé
         notes: transfer.notes,
         observation: transfer.observation,
+        billetage: billetage?.toJson(),  // Include billetage for printing
         dateOp: transfer.dateOp,
         createdAt: transfer.createdAt,
         lastModifiedAt: DateTime.now(),
@@ -1122,7 +1176,7 @@ class _TransferValidationWidgetState extends State<TransferValidationWidget> {
         operation: receiptOperation,
         shop: shop,
         agent: agent,
-        clientName: transfer.observation ?? transfer.destinataire,  // Nom du destinataire
+        clientName: transfer.destinataire ?? transfer.observation,  // Nom du destinataire (priorité au champ destinataire)
         isWithdrawalReceipt: true,  // BON DE RETRAIT pour validation de transfert
       );
       
@@ -1131,5 +1185,107 @@ class _TransferValidationWidgetState extends State<TransferValidationWidget> {
       debugPrint('❌ Erreur lors de l\'impression du reçu: $e');
       // Ne pas bloquer si l'impression échoue
     }
+  }
+  
+  /// Build a summary of the billetage for display in the confirmation dialog
+  List<Widget> _buildBilletageSummary(BilletageModel billetage) {
+    final widgets = <Widget>[];
+    
+    // Sort denominations in descending order
+    final sortedDenominations = billetage.denominations.keys.toList()
+      ..sort((a, b) => b.compareTo(a));
+    
+    for (var denom in sortedDenominations) {
+      final quantity = billetage.denominations[denom]!;
+      if (quantity > 0) {
+        widgets.add(
+          Text(
+            '${denom.toStringAsFixed(denom < 1 ? 2 : 0)} x $quantity = ${(denom * quantity).toStringAsFixed(2)} \$',
+            style: const TextStyle(fontSize: 12),
+          ),
+        );
+      }
+    }
+    
+    if (widgets.isEmpty) {
+      widgets.add(
+        const Text(
+          'Aucune denomination saisie',
+          style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+        ),
+      );
+    }
+    
+    return widgets;
+  }
+  
+  /// Build billetage section for the details dialog
+  List<Widget> _buildBilletageDetailsSection(BilletageModel billetage) {
+    final widgets = <Widget>[
+      const Divider(),
+      const Padding(
+        padding: EdgeInsets.only(top: 8, bottom: 4),
+        child: Text(
+          'Billetage:',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+        ),
+      ),
+    ];
+    
+    // Sort denominations in descending order
+    final sortedDenominations = billetage.denominations.keys.toList()
+      ..sort((a, b) => b.compareTo(a));
+    
+    double total = 0;
+    for (var denom in sortedDenominations) {
+      final quantity = billetage.denominations[denom]!;
+      if (quantity > 0) {
+        final subtotal = denom * quantity;
+        total += subtotal;
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '${denom.toStringAsFixed(denom < 1 ? 2 : 0)} \$ x $quantity',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                Text(
+                  '${subtotal.toStringAsFixed(2)} \$',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+    }
+    
+    // Add total
+    widgets.add(
+      const Divider(height: 12),
+    );
+    widgets.add(
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Total:',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            Text(
+              '${total.toStringAsFixed(2)} \$',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.green),
+            ),
+          ],
+        ),
+      ),
+    );
+    
+    return widgets;
   }
 }
