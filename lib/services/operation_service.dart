@@ -345,37 +345,44 @@ class OperationService extends ChangeNotifier {
 
   Future<OperationModel?> createOperation(OperationModel operation, {AuthService? authService}) async {
     try {
-      // ✅ VÉRIFIER SI LES JOURS PRÉCÉDENTS SONT CLÔTURÉS
-      // Un agent ne peut pas effectuer une opération si les jours précédents ne sont pas clôturés
-      if (operation.shopSourceId != null) {
-        final joursNonClotures = await RapportClotureService.instance.verifierAccesMenusAgent(
-          operation.shopSourceId!,
-        );
-        
-        if (joursNonClotures != null && joursNonClotures.isNotEmpty) {
-          final premiereDate = joursNonClotures.first;
-          final dateStr = '${premiereDate.day.toString().padLeft(2, '0')}/${premiereDate.month.toString().padLeft(2, '0')}/${premiereDate.year}';
-          _errorMessage = 'Vous devez d\'abord clôturer les journées précédentes (depuis le $dateStr). ${joursNonClotures.length} jour(s) à clôturer.';
-          debugPrint('❌ $_errorMessage');
-          throw Exception(_errorMessage);
-        }
-      }
+      // ✅ VÉRIFIER SI L'UTILISATEUR EST ADMIN - Les admins sont exemptés de la clôture
+      final isAdmin = authService?.currentUser?.role == 'ADMIN';
       
-      // ✅ VÉRIFIER SI LA JOURNÉE D'AUJOURD'HUI EST CLÔTURÉE
-      // Un agent ne peut plus effectuer une opération si sa journée est clôturée
-      if (operation.shopSourceId != null) {
-        final today = DateTime.now();
-        final isClosedToday = await LocalDB.instance.clotureExistsPourDate(
-          operation.shopSourceId!,
-          today,
-        );
-        
-        if (isClosedToday) {
-          final dateStr = '${today.day.toString().padLeft(2, '0')}/${today.month.toString().padLeft(2, '0')}/${today.year}';
-          _errorMessage = 'La journée du $dateStr est déjà clôturée. Aucune opération ne peut être effectuée.';
-          debugPrint('❌ $_errorMessage');
-          throw Exception(_errorMessage);
+      if (!isAdmin) {
+        // ✅ VÉRIFIER SI LES JOURS PRÉCÉDENTS SONT CLÔTURÉS (uniquement pour les agents)
+        // Un agent ne peut pas effectuer une opération si les jours précédents ne sont pas clôturés
+        if (operation.shopSourceId != null) {
+          final joursNonClotures = await RapportClotureService.instance.verifierAccesMenusAgent(
+            operation.shopSourceId!,
+          );
+          
+          if (joursNonClotures != null && joursNonClotures.isNotEmpty) {
+            final premiereDate = joursNonClotures.first;
+            final dateStr = '${premiereDate.day.toString().padLeft(2, '0')}/${premiereDate.month.toString().padLeft(2, '0')}/${premiereDate.year}';
+            _errorMessage = 'Vous devez d\'abord clôturer les journées précédentes (depuis le $dateStr). ${joursNonClotures.length} jour(s) à clôturer.';
+            debugPrint('❌ $_errorMessage');
+            throw Exception(_errorMessage);
+          }
         }
+        
+        // ✅ VÉRIFIER SI LA JOURNÉE D'AUJOURD'HUI EST CLÔTURÉE (uniquement pour les agents)
+        // Un agent ne peut plus effectuer une opération si sa journée est clôturée
+        if (operation.shopSourceId != null) {
+          final today = DateTime.now();
+          final isClosedToday = await LocalDB.instance.clotureExistsPourDate(
+            operation.shopSourceId!,
+            today,
+          );
+          
+          if (isClosedToday) {
+            final dateStr = '${today.day.toString().padLeft(2, '0')}/${today.month.toString().padLeft(2, '0')}/${today.year}';
+            _errorMessage = 'La journée du $dateStr est déjà clôturée. Aucune opération ne peut être effectuée.';
+            debugPrint('❌ $_errorMessage');
+            throw Exception(_errorMessage);
+          }
+        }
+      } else {
+        debugPrint('✅ Utilisateur ADMIN - Exemption de clôture accordée pour l\'opération');
       }
       
       // RÉSOUDRE et ENRICHIR l'opération avec l'USERNAME de l'agent AVANT sauvegarde

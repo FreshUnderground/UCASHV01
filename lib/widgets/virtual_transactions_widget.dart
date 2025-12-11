@@ -101,9 +101,19 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
   Future<void> _loadData() async {
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentUser = authService.currentUser;
+    final isAdmin = currentUser?.role == 'ADMIN';
     
-    if (currentUser?.shopId != null) {
-      // 🧹 Nettoyer les doublons au démarrage (une seule fois)
+    if (isAdmin) {
+      // Admin: charger TOUTES les transactions (sans filtre shop)
+      await VirtualTransactionService.instance.loadTransactions(
+        cleanDuplicates: true, // Activer le nettoyage au premier chargement
+      );
+      // Charger toutes les SIMs
+      await SimService.instance.loadSims();
+      // Charger tous les shops pour le filtre
+      await ShopService.instance.loadShops();
+    } else if (currentUser?.shopId != null) {
+      // Agent: charger uniquement les transactions de son shop
       await VirtualTransactionService.instance.loadTransactions(
         shopId: currentUser!.shopId,
         cleanDuplicates: true, // Activer le nettoyage au premier chargement
@@ -515,6 +525,8 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
 
   @override
   Widget build(BuildContext context) {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final isAdmin = authService.currentUser?.role == 'ADMIN';
     final size = MediaQuery.of(context).size;
     final isMobile = size.width < 600;
     final isTablet = size.width >= 600 && size.width < 900;
@@ -531,6 +543,68 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
           ),
         ),
         actions: [
+          // 🏪 FILTRE SHOP GLOBAL (Admin uniquement)
+          if (isAdmin)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Consumer<ShopService>(
+                builder: (BuildContext context, shopService, child) {
+                  return PopupMenuButton<int>(
+                    tooltip: 'Filtrer par Shop',
+                    icon: Icon(
+                      _selectedShopFilter == null ? Icons.store : Icons.store_mall_directory,
+                      color: _selectedShopFilter == null ? Colors.white : Colors.yellow,
+                      size: 28,
+                    ),
+                    onSelected: (int? value) {
+                      setState(() {
+                        _selectedShopFilter = value;
+                        _selectedSimFilter = null;
+                      });
+                    },
+                    itemBuilder: (BuildContext context) => [
+                      PopupMenuItem<int>(
+                        value: null,
+                        child: Row(
+                          children: [
+                            Icon(
+                              _selectedShopFilter == null ? Icons.check_circle : Icons.radio_button_unchecked,
+                              color: _selectedShopFilter == null ? const Color(0xFF48bb78) : Colors.grey,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            const Text(
+                              'Tous les shops',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuDivider(),
+                      ...shopService.shops.map((shop) => PopupMenuItem<int>(
+                        value: shop.id,
+                        child: Row(
+                          children: [
+                            Icon(
+                              _selectedShopFilter == shop.id ? Icons.check_circle : Icons.radio_button_unchecked,
+                              color: _selectedShopFilter == shop.id ? const Color(0xFF48bb78) : Colors.grey,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                shop.designation,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )),
+                    ],
+                  );
+                },
+              ),
+            ),
           // TODO: Bouton pour vérifier les clôtures manquantes (désactivé temporairement)
           // Cause: setState() during build même avec bouton manuel
           // IconButton(
@@ -576,13 +650,157 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
           ),
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: Column(
         children: [
-          _buildTransactionsTab(),
-          _buildFlotTab(),
-          _buildDepotTab(),
-          _buildRapportTab(),
+          // 🏪 BARRE DE FILTRE SHOP (Admin uniquement) - COMPACTE ET MASQUABLE
+          Consumer<AuthService>(
+            builder: (context, authService, child) {
+              final isAdmin = authService.currentUser?.role == 'ADMIN';
+              if (!isAdmin) return const SizedBox.shrink();
+              
+              return Column(
+                children: [
+                  // Bouton pour afficher/masquer le filtre shop
+                  Container(
+                    color: const Color(0xFF48bb78),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.store, color: Colors.white, size: 16),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Filtre Shop',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const Spacer(),
+                        // Indicateur si un filtre est actif
+                        if (_selectedShopFilter != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.yellow,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Text(
+                              'Actif',
+                              style: TextStyle(
+                                color: Colors.black,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: Icon(
+                            _showFilters ? Icons.expand_less : Icons.expand_more,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _showFilters = !_showFilters;
+                            });
+                          },
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Dropdown du filtre (masquable)
+                  if (_showFilters)
+                    Container(
+                      color: Colors.grey[100],
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      child: Consumer<ShopService>(
+                        builder: (BuildContext context, shopService, child) {
+                          return Row(
+                            children: [
+                              Expanded(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: const Color(0xFF48bb78)),
+                                  ),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<int>(
+                                      value: _selectedShopFilter,
+                                      isExpanded: true,
+                                      hint: const Text(
+                                        'Tous les shops',
+                                        style: TextStyle(fontSize: 13),
+                                      ),
+                                      icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF48bb78), size: 20),
+                                      style: const TextStyle(fontSize: 13, color: Colors.black),
+                                      items: [
+                                        const DropdownMenuItem<int>(
+                                          value: null,
+                                          child: Text(
+                                            'Tous les shops',
+                                            style: TextStyle(fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                        ...shopService.shops.map((shop) => DropdownMenuItem<int>(
+                                          value: shop.id,
+                                          child: Text(shop.designation),
+                                        )),
+                                      ],
+                                      onChanged: (int? value) {
+                                        setState(() {
+                                          _selectedShopFilter = value;
+                                          _selectedSimFilter = null;
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              // Bouton pour effacer le filtre
+                              if (_selectedShopFilter != null)
+                                const SizedBox(width: 8),
+                              if (_selectedShopFilter != null)
+                                IconButton(
+                                  icon: const Icon(Icons.close, color: Colors.red, size: 18),
+                                  tooltip: 'Effacer le filtre',
+                                  onPressed: () {
+                                    setState(() {
+                                      _selectedShopFilter = null;
+                                      _selectedSimFilter = null;
+                                    });
+                                  },
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 32,
+                                    minHeight: 32,
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildTransactionsTab(),
+                _buildFlotTab(),
+                _buildDepotTab(),
+                _buildRapportTab(),
+              ],
+            ),
+          ),
         ],
       ),
 
@@ -662,6 +880,48 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
             padding: const EdgeInsets.all(8),
             child: Column(
               children: [
+                // FILTRE PAR SHOP (Admin uniquement) - EN PREMIER
+                Consumer<AuthService>(
+                  builder: (context, authService, child) {
+                    final isAdmin = authService.currentUser?.role == 'ADMIN';
+                    if (!isAdmin) return const SizedBox.shrink();
+                    
+                    return Column(
+                      children: [
+                        Consumer<ShopService>(
+                          builder: (BuildContext context, shopService, child) {
+                            return DropdownButtonFormField<int>(
+                              value: _selectedShopFilter,
+                              decoration: const InputDecoration(
+                                labelText: 'Filtrer par Shop',
+                                border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                prefixIcon: Icon(Icons.store, color: Color(0xFF48bb78)),
+                                filled: true,
+                                fillColor: Colors.white,
+                              ),
+                              items: [
+                                const DropdownMenuItem(value: null, child: Text('Tous les shops')),
+                                ...shopService.shops.map((shop) => DropdownMenuItem(
+                                  value: shop.id,
+                                  child: Text(shop.designation),
+                                )),
+                              ],
+                              onChanged: (value) {
+                                setState(() {
+                                  _selectedShopFilter = value;
+                                  // Réinitialiser le filtre SIM quand on change de shop
+                                  _selectedSimFilter = null;
+                                });
+                              },
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                    );
+                  },
+                ),
                 // Barre de recherche
                 TextField(
                   controller: _searchController,
@@ -766,15 +1026,27 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
       builder: (BuildContext context, service, child) {
         final authService = Provider.of<AuthService>(context, listen: false);
         final currentShopId = authService.currentUser?.shopId;
+        final isAdmin = authService.currentUser?.role == 'ADMIN';
         
-        if (currentShopId == null) {
+        if (currentShopId == null && !isAdmin) {
           return const Center(child: Text('Shop ID non disponible'));
         }
 
         // Filtrer par shop
-        var transactions = service.transactions
-            .where((t) => t.shopId == currentShopId)
-            .toList();
+        var transactions = service.transactions;
+        
+        // Si admin avec filtre shop sélectionné, filtrer par ce shop
+        if (isAdmin && _selectedShopFilter != null) {
+          transactions = transactions.where((t) => t.shopId == _selectedShopFilter).toList();
+        } 
+        // Si admin sans filtre, afficher tous les shops
+        else if (isAdmin) {
+          transactions = transactions.toList();
+        }
+        // Si agent, filtrer par son shop
+        else {
+          transactions = transactions.where((t) => t.shopId == currentShopId).toList();
+        }
 
         // Filtrer par statut si sélectionné
         if (_statusFilter != null) {
@@ -865,14 +1137,30 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
       builder: (BuildContext context, service, child) {
         final authService = Provider.of<AuthService>(context, listen: false);
         final currentShopId = authService.currentUser?.shopId;
+        final isAdmin = authService.currentUser?.role == 'ADMIN';
         
-        if (currentShopId == null) {
+        if (currentShopId == null && !isAdmin) {
           return const Center(child: Text('Shop ID non disponible'));
         }
 
-        final transactions = service.transactions
-            .where((t) => t.statut == VirtualTransactionStatus.enAttente && t.shopId == currentShopId)
+        // Filtrer par statut: enAttente
+        var transactions = service.transactions
+            .where((t) => t.statut == VirtualTransactionStatus.enAttente)
             .toList();
+
+        // Filtrer par shop
+        // Si admin avec filtre shop sélectionné, filtrer par ce shop
+        if (isAdmin && _selectedShopFilter != null) {
+          transactions = transactions.where((t) => t.shopId == _selectedShopFilter).toList();
+        } 
+        // Si admin sans filtre, afficher tous les shops
+        else if (isAdmin) {
+          // Garder tous les shops
+        }
+        // Si agent, filtrer par son shop
+        else {
+          transactions = transactions.where((t) => t.shopId == currentShopId).toList();
+        }
 
         // Appliquer les filtres
         var filteredTransactions = transactions;
@@ -981,14 +1269,30 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
       builder: (BuildContext context, service, child) {
         final authService = Provider.of<AuthService>(context, listen: false);
         final currentShopId = authService.currentUser?.shopId;
+        final isAdmin = authService.currentUser?.role == 'ADMIN';
         
-        if (currentShopId == null) {
+        if (currentShopId == null && !isAdmin) {
           return const Center(child: Text('Shop ID non disponible'));
         }
 
+        // Filtrer par statut: validee
         var transactions = service.transactions
-            .where((t) => t.statut == VirtualTransactionStatus.validee && t.shopId == currentShopId)
+            .where((t) => t.statut == VirtualTransactionStatus.validee)
             .toList();
+
+        // Filtrer par shop
+        // Si admin avec filtre shop sélectionné, filtrer par ce shop
+        if (isAdmin && _selectedShopFilter != null) {
+          transactions = transactions.where((t) => t.shopId == _selectedShopFilter).toList();
+        } 
+        // Si admin sans filtre, afficher tous les shops
+        else if (isAdmin) {
+          // Garder tous les shops
+        }
+        // Si agent, filtrer par son shop
+        else {
+          transactions = transactions.where((t) => t.shopId == currentShopId).toList();
+        }
 
         // Appliquer les filtres
         if (_selectedSimFilter != null) {

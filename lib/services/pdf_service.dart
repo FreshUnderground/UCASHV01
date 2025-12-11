@@ -581,7 +581,7 @@ class PdfService {
                     pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
-                        pw.Text('N° Compte: ${client.numeroCompte}', style: const pw.TextStyle(fontSize: 11)),
+                        pw.Text('N° Compte: ${client.numeroCompteFormate}', style: const pw.TextStyle(fontSize: 11)),
                         pw.SizedBox(height: 4),
                         pw.Text('Téléphone: ${client.telephone}', style: const pw.TextStyle(fontSize: 11)),
                       ],

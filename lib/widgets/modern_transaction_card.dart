@@ -174,6 +174,28 @@ class ModernTransactionCard extends StatelessWidget {
                     ],
                   ),
                   
+                  // Shop designation (seulement si disponible)
+                  if (transaction.shopDesignation != null && transaction.shopDesignation!.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(Icons.store, size: 12, color: Colors.grey[600]),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            transaction.shopDesignation!,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey[700],
+                              fontWeight: FontWeight.w500,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  
                   // Client (seulement si disponible)
                   if (transaction.clientNom != null && transaction.clientNom!.isNotEmpty) ...[
                     const SizedBox(height: 8),

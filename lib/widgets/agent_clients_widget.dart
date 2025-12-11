@@ -34,12 +34,24 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
     });
   }
 
-  void _loadClients() {
+  void _loadClients() async {
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentUser = authService.currentUser;
     if (currentUser?.shopId != null) {
-      // Charger TOUS les clients (globaux - accessible depuis tous les shops)
-      Provider.of<ClientService>(context, listen: false).loadClients();
+      final clientService = Provider.of<ClientService>(context, listen: false);
+      
+      // Charger d'abord les clients locaux (affichage immédiat)
+      await clientService.loadClients();
+      debugPrint('✅ Clients locaux chargés: ${clientService.clients.length}');
+      
+      // PUIS synchroniser depuis le serveur (AVEC AWAIT pour attendre la fin)
+      debugPrint('🔄 Synchronisation depuis le serveur...');
+      final success = await clientService.syncFromServer();
+      if (success) {
+        debugPrint('✅ Synchronisation serveur terminée: ${clientService.clients.length} clients');
+      } else {
+        debugPrint('⚠️ Synchronisation serveur échouée - données locales affichées');
+      }
     }
   }
 
@@ -509,29 +521,34 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
     final isMobile = size.width <= 768;
     final padding = isMobile ? 16.0 : (size.width <= 1024 ? 20.0 : 24.0);
     
-    return Padding(
-      padding: EdgeInsets.all(padding),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header avec recherche et filtres
-          _buildHeader(),
-          const SizedBox(height: 16),
-          
-          // Balance Filter Tabs
-          _buildBalanceFilterTabs(),
-          const SizedBox(height: 16),
-          
-          // Statistiques
-          _buildStats(),
-          const SizedBox(height: 16),
-          
-          // Liste des clients - Expanded pour remplir tout l'espace disponible et permettre le scroll
-          Expanded(
-            child: _buildClientsList(),
+    // Wrapper avec Consumer pour écouter les changements du ClientService
+    return Consumer<ClientService>(
+      builder: (context, clientService, child) {
+        return Padding(
+          padding: EdgeInsets.all(padding),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header avec recherche et filtres
+              _buildHeader(),
+              const SizedBox(height: 16),
+              
+              // Balance Filter Tabs
+              _buildBalanceFilterTabs(),
+              const SizedBox(height: 16),
+              
+              // Statistiques
+              _buildStats(),
+              const SizedBox(height: 16),
+              
+              // Liste des clients - Expanded pour remplir tout l'espace disponible et permettre le scroll
+              Expanded(
+                child: _buildClientsList(),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -1523,10 +1540,55 @@ class _CreateClientDialogState extends State<_CreateClientDialog> {
 
       if (success && mounted) {
         Navigator.of(context).pop(true);
+        
+        // Le client est déjà dans la liste grâce à loadClients() dans le service
+        // Essayer de récupérer le client nouvellement créé
+        ClientModel? newClient;
+        try {
+          newClient = clientService.clients.firstWhere(
+            (c) => c.telephone == _telephoneController.text.trim(),
+          );
+        } catch (e) {
+          // Client pas encore dans la liste
+          newClient = null;
+        }
+        
+        // Afficher un message avec le numéro de compte si disponible
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Partenaire créé avec succès !'),
+          SnackBar(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _createAccount
+                    ? '✅ Partenaire créé avec succès avec compte de connexion !'
+                    : '✅ Partenaire créé avec succès !',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '👤 ${_nomController.text.trim()}',
+                  style: const TextStyle(fontSize: 14),
+                ),
+                if (newClient != null && newClient.id != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    '💳 No Compte: ${newClient.numeroCompteFormate}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ],
+            ),
             backgroundColor: Colors.green,
+            duration: const Duration(seconds: 5),
+            behavior: SnackBarBehavior.floating,
           ),
         );
       } else if (mounted) {
@@ -1629,6 +1691,25 @@ class _ClientStatementView extends StatelessWidget {
                         Text(
                           client.telephone,
                           style: TextStyle(color: Colors.grey[600]),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.credit_card,
+                              size: 14,
+                              color: Colors.purple[700],
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'No Compte: ${client.numeroCompteFormate}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.purple[700],
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),

@@ -635,7 +635,7 @@ class _RetraitDialogState extends State<RetraitDialog> {
       );
 
       // Créer l'opération (cela mettra à jour automatiquement les soldes)
-      final savedOperation = await operationService.createOperation(operation);
+      final savedOperation = await operationService.createOperation(operation, authService: authService);
       
       if (savedOperation != null && mounted) {
         // Fermer le dialog de retrait

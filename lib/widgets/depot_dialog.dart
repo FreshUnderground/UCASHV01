@@ -659,7 +659,7 @@ class _DepotDialogState extends State<DepotDialog> {
       debugPrint('   Montant: ${operation.montantBrut}, Client: ${operation.clientNom}');
 
       // Créer l'opération (cela mettra à jour automatiquement les soldes)
-      final savedOperation = await operationService.createOperation(operation);
+      final savedOperation = await operationService.createOperation(operation, authService: authService);
       
       if (savedOperation != null && mounted) {
         // Fermer le dialog de dépôt

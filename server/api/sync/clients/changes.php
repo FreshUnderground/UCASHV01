@@ -45,11 +45,16 @@ try {
     
     $params = [];
     
+    // TEMPORAIRE: DÉSACTIVER le filtre de date pour debug
     // Filtre par date de modification
-    if ($since && !empty($since)) {
-        $sql .= " AND c.last_modified_at > :since";
-        $params[':since'] = $since;
-    }
+    // if ($since && !empty($since)) {
+    //     $sql .= " AND c.last_modified_at > :since";
+    //     $params[':since'] = $since;
+    // }
+    
+    // LOG pour debug
+    error_log("[CLIENTS/CHANGES] Since param: " . ($since ?? 'null'));
+    error_log("[CLIENTS/CHANGES] Requête SQL: " . $sql);
     
     // Ordonner par date de modification (les plus récents en premier)
     $sql .= " ORDER BY c.last_modified_at DESC";

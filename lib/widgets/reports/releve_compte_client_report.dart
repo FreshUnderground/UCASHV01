@@ -137,8 +137,6 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildClientInfo(),
-        const SizedBox(height: 8),
         _buildSoldeActuel(),
         const SizedBox(height: 8),
         _buildStatistiques(),
@@ -158,93 +156,173 @@ class _ReleveCompteClientReportState extends State<ReleveCompteClientReport> {
     );
   }
 
-  Widget _buildClientInfo() {
-    final client = _reportData!['client'] as Map<String, dynamic>;
-    final periode = _reportData!['periode'] as Map<String, dynamic>;
-    
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (periode['debut'] != null && periode['fin'] != null) ...[
-              const SizedBox(height: 16),
-              Text(
-                'Période: Du ${_formatDate(DateTime.parse(periode['debut']))} au ${_formatDate(DateTime.parse(periode['fin']))}',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[600],
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildSoldeActuel() {
     final soldeActuel = _reportData!['soldeActuel'] as double;
     final client = _reportData!['client'] as Map<String, dynamic>;
+    final periode = _reportData!['periode'] as Map<String, dynamic>;
     
     return Column(
       children: [
         Card(
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              borderRadius: const BorderRadius.all(Radius.circular(12)),
-              gradient: LinearGradient(
-                colors: soldeActuel >= 0 
-                    ? [Colors.green[400]!, Colors.green[600]!]
-                    : [Colors.red[400]!, Colors.red[600]!],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-            child: Row(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  Icons.account_balance_wallet,
-                  color: Colors.white,
-                  size: 38,
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Solde Actuel',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Text(
-                        '${soldeActuel.toStringAsFixed(2)} USD',
+                // Nom du partenaire
+                Row(
+                  children: [
+                    Icon(
+                      Icons.person,
+                      color: Colors.grey[700],
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        client['nom'] ?? 'N/A',
                         style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
+                          fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // Informations de contact sur une ligne
+                Row(
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.phone,
+                            color: Colors.grey[600],
+                            size: 16,
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              client['telephone'] ?? 'N/A',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.credit_card,
+                            color: Colors.blue[700],
+                            size: 16,
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              client['id'] != null 
+                                ? 'CL${client['id'].toString().padLeft(6, '0')}'
+                                : 'N/A',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue[900],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                if (periode['debut'] != null && periode['fin'] != null) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.calendar_today,
+                        color: Colors.grey[600],
+                        size: 14,
+                      ),
+                      const SizedBox(width: 6),
                       Text(
-                        soldeActuel >= 0 ? 'Compte Créditeur' : 'Compte Débiteur',
+                        'Période: Du ${_formatDate(DateTime.parse(periode['debut']))} au ${_formatDate(DateTime.parse(periode['fin']))}',
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.9),
-                          fontSize: 14,
+                          fontSize: 12,
+                          color: Colors.grey[600],
                         ),
                       ),
                     ],
                   ),
-                ),
-                Icon(
-                  soldeActuel >= 0 ? Icons.trending_up : Icons.trending_down,
-                  color: Colors.white,
-                  size: 32,
+                ],
+                const SizedBox(height: 16),
+                const Divider(),
+                const SizedBox(height: 12),
+                // Solde actuel
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    gradient: LinearGradient(
+                      colors: soldeActuel >= 0 
+                          ? [Colors.green[400]!, Colors.green[600]!]
+                          : [Colors.red[400]!, Colors.red[600]!],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.account_balance_wallet,
+                        color: Colors.white,
+                        size: 32,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Solde Actuel',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              '${soldeActuel.toStringAsFixed(2)} USD',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              soldeActuel >= 0 ? 'Compte Créditeur' : 'Compte Débiteur',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.9),
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(
+                        soldeActuel >= 0 ? Icons.trending_up : Icons.trending_down,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),

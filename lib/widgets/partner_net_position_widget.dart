@@ -91,7 +91,7 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
           if (_searchQuery.isNotEmpty) {
             return client.nom.toLowerCase().contains(_searchQuery.toLowerCase()) ||
                    client.telephone.contains(_searchQuery) ||
-                   (client.numeroCompte?.contains(_searchQuery) ?? false);
+                   client.numeroCompteFormate.contains(_searchQuery);
           }
           return true;
         }).toList();
@@ -650,31 +650,29 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
                         ],
                       ),
                       // Numéro de compte
-                      if (client.numeroCompte != null) ...[
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.credit_card,
-                              size: isMobile ? 14 : 16,
-                              color: Colors.grey[500],
-                            ),
-                            const SizedBox(width: 6),
-                            Flexible(
-                              child: Text(
-                                client.numeroCompte!,
-                                style: TextStyle(
-                                  fontSize: isMobile ? 12 : 13,
-                                  color: Colors.grey[600],
-                                  fontWeight: FontWeight.w500,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.credit_card,
+                            size: isMobile ? 14 : 16,
+                            color: Colors.grey[500],
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              client.numeroCompteFormate,
+                              style: TextStyle(
+                                fontSize: isMobile ? 12 : 13,
+                                color: Colors.grey[600],
+                                fontWeight: FontWeight.w500,
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                          ],
-                        ),
-                      ],
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),

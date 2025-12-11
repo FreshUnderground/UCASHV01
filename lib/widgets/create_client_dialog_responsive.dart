@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/client_service.dart';
+import '../models/client_model.dart';
 import 'responsive_form_dialog.dart';
 import 'responsive_card.dart';
 
@@ -237,10 +238,19 @@ class _CreateClientDialogResponsiveState extends State<CreateClientDialogRespons
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Un numéro de compte unique sera généré automatiquement à la création du client.',
+                    'Le numéro de compte sera généré automatiquement au format: CL000XXX',
                     style: TextStyle(
                       color: Colors.blue[600],
                       fontSize: context.isMobile ? 12 : 13,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Exemple: CL000001, CL000042, etc.',
+                    style: TextStyle(
+                      color: Colors.blue[700],
+                      fontSize: context.isMobile ? 11 : 12,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
@@ -283,14 +293,55 @@ class _CreateClientDialogResponsiveState extends State<CreateClientDialogRespons
 
       if (success && mounted) {
         Navigator.of(context).pop(true);
+        
+        // Le client est déjà dans la liste grâce à loadClients() dans le service
+        // Essayer de récupérer le client nouvellement créé
+        ClientModel? newClient;
+        try {
+          newClient = clientService.clients.firstWhere(
+            (c) => c.telephone == _telephoneController.text.trim(),
+          );
+        } catch (e) {
+          // Client pas encore dans la liste
+          newClient = null;
+        }
+        
+        // Afficher un message avec le numéro de compte si disponible
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              _createAccount 
-                ? 'Client créé avec succès avec compte de connexion !'
-                : 'Client créé avec succès !',
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _createAccount 
+                    ? '✅ Client créé avec succès avec compte de connexion !'
+                    : '✅ Client créé avec succès !',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '👤 ${_nomController.text.trim()}',
+                  style: const TextStyle(fontSize: 14),
+                ),
+                if (newClient != null && newClient.id != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    '💳 No Compte: ${newClient.numeroCompteFormate}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ],
             ),
             backgroundColor: Colors.green,
+            duration: const Duration(seconds: 5),
+            behavior: SnackBarBehavior.floating,
           ),
         );
       } else if (mounted) {

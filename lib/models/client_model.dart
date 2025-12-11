@@ -5,7 +5,7 @@ class ClientModel {
   final String? adresse;
   final String? username;
   final String? password;
-  final String? numeroCompte; // Nouveau champ
+  final String? numeroCompte; // Champ legacy - utilisé pour compatibilité DB
   final int? shopId;  // Changé de int à int? pour permettre null
   final double solde; // Solde du compte client (devise principale USD)
   final double? soldeDevise2; // Solde en devise secondaire (CDF/UGX)
@@ -15,6 +15,12 @@ class ClientModel {
   final String? lastModifiedBy;
   final bool? isSynced;
   final DateTime? syncedAt;
+
+  // Getter pour formater l'ID comme numéro de compte
+  String get numeroCompteFormate {
+    if (id == null) return 'N/A';
+    return 'CL${id.toString().padLeft(6, '0')}';
+  }
 
   ClientModel({
     this.id,

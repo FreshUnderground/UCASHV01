@@ -10,6 +10,7 @@ import '../models/operation_model.dart';
 import 'create_client_dialog_responsive.dart';
 import 'depot_dialog.dart';
 import 'retrait_dialog.dart';
+import 'edit_client_dialog.dart';
 
 /// Widget pour que l'admin puisse voir tous les clients et leurs relevés
 class AdminClientsWidget extends StatefulWidget {
@@ -305,7 +306,7 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
           if (_searchQuery.isNotEmpty) {
             return client.nom.toLowerCase().contains(_searchQuery) ||
                    client.telephone.toLowerCase().contains(_searchQuery) ||
-                   client.numeroCompte?.toLowerCase().contains(_searchQuery) == true;
+                   client.numeroCompteFormate.toLowerCase().contains(_searchQuery);
           }
           return true;
         }).toList();
@@ -380,9 +381,8 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 4),
-                    Text('📞 ${client.telephone}'),
-                    if (client.numeroCompte != null)
-                      Text('💳 ${client.numeroCompte}'),
+                    Text('📱 ${client.telephone}'),
+                    Text('💳 ${client.numeroCompteFormate}'),
                     // ❌ NE PAS afficher le shop pour l'admin
                     // Text('🏪 ${shop.designation}'),
                     const SizedBox(height: 4),
@@ -437,10 +437,28 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
                     ),
                   ],
                 ),
-                trailing: IconButton(
-                  icon: const Icon(Icons.receipt_long, color: Colors.purple),
-                  tooltip: 'Voir le relevé',
-                  onPressed: () => _showClientStatement(client, shop.designation),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Bouton Modifier
+                    IconButton(
+                      icon: const Icon(Icons.edit, color: Colors.blue),
+                      tooltip: 'Modifier',
+                      onPressed: () => _editClient(client),
+                    ),
+                    // Bouton Supprimer
+                    IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.red),
+                      tooltip: 'Supprimer',
+                      onPressed: () => _deleteClient(client),
+                    ),
+                    // Bouton Relevé
+                    IconButton(
+                      icon: const Icon(Icons.receipt_long, color: Colors.purple),
+                      tooltip: 'Voir le relevé',
+                      onPressed: () => _showClientStatement(client, shop.designation),
+                    ),
+                  ],
                 ),
               ),
             );
@@ -871,6 +889,65 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
         }
       }
     });
+  }
+
+  void _editClient(ClientModel client) {
+    showDialog(
+      context: context,
+      builder: (context) => EditClientDialog(client: client),
+    ).then((result) {
+      if (result == true) {
+        // Recharger les données après modification
+        _loadData();
+      }
+    });
+  }
+
+  Future<void> _deleteClient(ClientModel client) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirmer la suppression'),
+        content: Text(
+          'Êtes-vous sûr de vouloir supprimer le partenaire "${client.nom}" ?\n\n'
+          'Cette action est irréversible.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && client.id != null) {
+      final clientService = Provider.of<ClientService>(context, listen: false);
+      final success = await clientService.deleteClient(client.id!, client.shopId ?? 0);
+      
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Partenaire supprimé avec succès'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        // Recharger les données après suppression
+        _loadData();
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur: ${clientService.errorMessage ?? "Erreur inconnue"}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
 }

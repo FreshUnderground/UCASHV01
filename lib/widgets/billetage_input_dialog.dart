@@ -51,142 +51,144 @@ class _BilletageInputDialogState extends State<BilletageInputDialog> {
       ),
       content: SizedBox(
         width: MediaQuery.of(context).size.width * 0.8,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Montant à donner: ${widget.amount.toStringAsFixed(2)} ${widget.currency}',
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            // Denomination table
-            Container(
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade300),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                children: [
-                  // Table header
-                  Container(
-                    padding: const EdgeInsets.all(7),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF4CAF50),
-                      borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
-                    ),
-                    child: const Row(
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: Text(
-                            'Coupure',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: Text(
-                            'Qté',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: Text(
-                            'Total',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                            ),
-                            textAlign: TextAlign.right,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Denomination rows
-                  ..._denominations.map((denom) {
-                    return _buildDenominationRow(denom);
-                  }),
-                  // Total row
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(8)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Expanded(
-                          flex: 2,
-                          child: Text(
-                            'TOTAL',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ),
-                        const Expanded(
-                          flex: 2,
-                          child: SizedBox(),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: Text(
-                            '${_calculateTotal().toStringAsFixed(2)} ${widget.currency}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.green,
-                              fontSize: 16,
-                            ),
-                            textAlign: TextAlign.right,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            // Validation message
-            if ((_calculateTotal() - widget.amount).abs() > 0.01)
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange.shade200),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Montant à donner: ${widget.amount.toStringAsFixed(2)} ${widget.currency}',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
                 ),
-                child: const Row(
+              ),
+              const SizedBox(height: 16),
+              // Denomination table
+              Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
                   children: [
-                    Icon(Icons.warning, color: Colors.orange),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Montant Incorrect',
-                        style: TextStyle(color: Colors.orange, fontSize: 13),
+                    // Table header
+                    Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF4CAF50),
+                        borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              'Coupure',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              'Qté',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              'Total',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                              textAlign: TextAlign.right,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Denomination rows
+                    ..._denominations.map((denom) {
+                      return _buildDenominationRow(denom);
+                    }),
+                    // Total row
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(8)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Expanded(
+                            flex: 2,
+                            child: Text(
+                              'TOTAL',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                          const Expanded(
+                            flex: 2,
+                            child: SizedBox(),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              '${_calculateTotal().toStringAsFixed(2)} ${widget.currency}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green,
+                                fontSize: 16,
+                              ),
+                              textAlign: TextAlign.right,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
-          ],
+              const SizedBox(height: 16),
+              // Validation message
+              if ((_calculateTotal() - widget.amount).abs() > 0.01)
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.warning, color: Colors.orange),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Montant Incorrect',
+                          style: TextStyle(color: Colors.orange, fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
       actions: [

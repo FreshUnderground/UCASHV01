@@ -1614,7 +1614,15 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
   /// Retourne true si l'accès est autorisé, false sinon
   Future<bool> _verifierClotureAvantOperation() async {
     final authService = Provider.of<AuthService>(context, listen: false);
-    final shopId = authService.currentUser?.shopId;
+    final currentUser = authService.currentUser;
+    
+    // ✅ ADMIN EXEMPTION: Les admins ne sont pas soumis à la clôture obligatoire
+    if (currentUser?.role == 'ADMIN') {
+      debugPrint('✅ Utilisateur ADMIN - Exemption de clôture accordée');
+      return true; // Admin peut opérer sans clôture
+    }
+    
+    final shopId = currentUser?.shopId;
     
     if (shopId == null || shopId <= 0) {
       return true; // Pas de shop ID, on laisse passer
