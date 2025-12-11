@@ -206,9 +206,11 @@ class _MouvementsCaisseReportState extends State<MouvementsCaisseReport> {
       // 6. Transferts Servis (on sert le bénéficiaire - SORTIE)
       // - Transfer National: Shop DESTINATION sert le montant net au bénéficiaire
       // - Transfer International Entrant: Shop DESTINATION sert le montant net au bénéficiaire
+      // IMPORTANT: On ne comptabilise que les opérations SERVIES (statut = validee)
       final transfertServi = filteredOps
           .where((op) => ((op.type == OperationType.transfertNational || op.type == OperationType.transfertInternationalEntrant) && 
-                          op.shopDestinationId == widget.shopId) && op.devise == 'USD')
+                          op.shopDestinationId == widget.shopId && 
+                          op.statut == OperationStatus.validee) && op.devise == 'USD')
           .fold<double>(0.0, (sum, op) => sum + op.montantNet);
       
       // FORMULE FINALE
@@ -220,12 +222,39 @@ class _MouvementsCaisseReportState extends State<MouvementsCaisseReport> {
       cashDisponibleJour = shop.capitalCash + shop.capitalAirtelMoney + shop.capitalMPesa + shop.capitalOrangeMoney;
     }
     
+    // Calculer les commissions
+    double totalCommissions = 0.0;
+    int operationsAvecCommission = 0;
+    
     for (final operation in filteredOps) {
+      // IMPORTANT: Pour les transferts où ce shop est DESTINATION,
+      // on ne comptabilise QUE les opérations SERVIES (statut = validee) pour les SORTIES
+      // MAIS on comptabilise les COMMISSIONS même pour les transferts EN ATTENTE
+      // car la commission est encaissée dès la création du transfert
+      final isTransfertDestinationNonServi = 
+          (operation.type == OperationType.transfertNational || 
+           operation.type == OperationType.transfertInternationalEntrant) &&
+          operation.shopDestinationId == widget.shopId &&
+          operation.statut != OperationStatus.validee;
+      
+      // Compter les commissions AVANT de filtrer (même pour les transferts en attente)
+      final commission = operation.commission;
+      if (commission > 0) {
+        totalCommissions += commission;
+        operationsAvecCommission++;
+      }
+      
+      // Les transferts en attente (destination) ne doivent PAS apparaître dans le tableau
+      // mais leurs commissions sont déjà comptées ci-dessus
+      if (isTransfertDestinationNonServi) {
+        // Ignorer ce transfert pour le tableau - il n'est pas encore servi
+        continue;
+      }
+      
       // Determine if it's an entry or exit for this shop
       final isEntree = _isEntreeForShop(operation, widget.shopId!);
       final montantBrut = operation.montantBrut;
       final montantNet = operation.montantNet;
-      final commission = operation.commission;
       
       // Calculate amount for totals
       double montant;
@@ -285,6 +314,9 @@ class _MouvementsCaisseReportState extends State<MouvementsCaisseReport> {
       'statistiques': {
         'nombreOperations': mouvements.length,
         'moyenneParOperation': mouvements.isNotEmpty ? (totalEntrees + totalSorties) / mouvements.length : 0,
+        'totalCommissions': totalCommissions,
+        'operationsAvecCommission': operationsAvecCommission,
+        'commissionMoyenne': operationsAvecCommission > 0 ? totalCommissions / operationsAvecCommission : 0,
       },
     };
   }
@@ -294,8 +326,8 @@ class _MouvementsCaisseReportState extends State<MouvementsCaisseReport> {
   // - Dépôt: CLIENT donne argent → ENTRÉE
   // - Retrait: CLIENT prend argent → SORTIE
   // - Transfert National/International Sortant: CLIENT PAIE (shop source) → ENTRÉE (montantBrut)
-  // - Transfert National: Shop destination SERT → SORTIE (montantNet)
-  // - Transfert International Entrant: Shop destination SERT → SORTIE (montantNet)
+  // - Transfert National: Shop destination SERT → SORTIE (montantNet) - Les en attente sont déjà filtrés
+  // - Transfert International Entrant: Shop destination SERT → SORTIE (montantNet) - Les en attente sont déjà filtrés
   // - FLOT: Shop destination REÇOIT → ENTRÉE, Shop source ENVOIE → SORTIE
   bool _isEntreeForShop(OperationModel operation, int shopId) {
     switch (operation.type) {
@@ -306,14 +338,14 @@ class _MouvementsCaisseReportState extends State<MouvementsCaisseReport> {
       case OperationType.transfertNational:
         // Shop source: entry (client pays), Shop destination: exit (serves beneficiary)
         if (operation.shopSourceId == shopId) return true; // Client pays us
-        if (operation.shopDestinationId == shopId) return false; // We serve beneficiary
+        if (operation.shopDestinationId == shopId) return false; // We serve beneficiary (already filtered for validee)
         return false;
       case OperationType.transfertInternationalSortant:
         // Transfer outgoing: shop source receives money from client = entry
         return operation.shopSourceId == shopId;
       case OperationType.transfertInternationalEntrant:
-        // Transfer incoming: shop destination serves money to beneficiary = exit
-        return false; // Always exit for the shop that serves
+        // Transfer incoming: shop destination serves money to beneficiary = exit (already filtered for validee)
+        return false;
       case OperationType.virement:
       case OperationType.retraitMobileMoney:
         return false; // Mobile money withdrawal is exit (cash out)
@@ -573,7 +605,7 @@ class _MouvementsCaisseReportState extends State<MouvementsCaisseReport> {
 
     return Column(
       children: [
-        // Cartes principales
+        // Cartes principales: Entrées / Sorties / Solde Net / Commissions
         if (context.isSmallScreen)
           Column(
             children: [
@@ -612,10 +644,10 @@ class _MouvementsCaisseReportState extends State<MouvementsCaisseReport> {
                   SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 8, tablet: 10, desktop: 12)),
                   Expanded(
                     child: _buildSummaryCard(
-                      'Opérations',
-                      '${statistiques['nombreOperations']}',
-                      Icons.receipt_long,
-                      Colors.blue,
+                      'Commissions',
+                      '${statistiques['totalCommissions'].toStringAsFixed(2)} USD',
+                      Icons.monetization_on,
+                      Colors.orange,
                     ),
                   ),
                 ],
@@ -654,10 +686,10 @@ class _MouvementsCaisseReportState extends State<MouvementsCaisseReport> {
               SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
               Expanded(
                 child: _buildSummaryCard(
-                  'Opérations',
-                  '${statistiques['nombreOperations']}',
-                  Icons.receipt_long,
-                  Colors.blue,
+                  'Commissions',
+                  '${statistiques['totalCommissions'].toStringAsFixed(2)} USD',
+                  Icons.monetization_on,
+                  Colors.orange,
                 ),
               ),
             ],
@@ -1527,7 +1559,7 @@ class _MouvementsCaisseReportState extends State<MouvementsCaisseReport> {
           
           pw.SizedBox(height: 20),
           
-          // Summary cards
+          // Summary cards - Main metrics
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
             children: [
@@ -1535,7 +1567,29 @@ class _MouvementsCaisseReportState extends State<MouvementsCaisseReport> {
               _buildPdfSummaryCard('Sorties', '${totaux['sorties'].toStringAsFixed(2)} USD', PdfColors.red),
               _buildPdfSummaryCard('Solde Net', '${totaux['solde'].toStringAsFixed(2)} USD', 
                 totaux['solde'] >= 0 ? PdfColors.green : PdfColors.red),
+              _buildPdfSummaryCard('Commissions', '${(_reportData!['statistiques'] as Map<String, dynamic>)['totalCommissions'].toStringAsFixed(2)} USD', PdfColors.orange),
             ],
+          ),
+          
+          pw.SizedBox(height: 15),
+          
+          // Commission statistics section
+          pw.Container(
+            padding: const pw.EdgeInsets.all(12),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.orange50,
+              borderRadius: pw.BorderRadius.circular(8),
+              border: pw.Border.all(color: PdfColors.orange, width: 1),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+              children: [
+                _buildPdfStatItem('Opérations Totales', '${(_reportData!['statistiques'] as Map<String, dynamic>)['nombreOperations']}'),
+                _buildPdfStatItem('Ops avec Commission', '${(_reportData!['statistiques'] as Map<String, dynamic>)['operationsAvecCommission']}'),
+                _buildPdfStatItem('Commission Moyenne', '${(_reportData!['statistiques'] as Map<String, dynamic>)['commissionMoyenne'].toStringAsFixed(2)} USD'),
+                _buildPdfStatItem('Taux de Commission', '${((_reportData!['statistiques'] as Map<String, dynamic>)['operationsAvecCommission'] / (_reportData!['statistiques'] as Map<String, dynamic>)['nombreOperations'] * 100).toStringAsFixed(1)}%'),
+              ],
+            ),
           ),
           
           pw.SizedBox(height: 20),
@@ -1643,6 +1697,26 @@ class _MouvementsCaisseReportState extends State<MouvementsCaisseReport> {
           ),
         ],
       ),
+    );
+  }
+
+  pw.Widget _buildPdfStatItem(String label, String value) {
+    return pw.Column(
+      children: [
+        pw.Text(
+          value,
+          style: pw.TextStyle(
+            fontSize: 14,
+            fontWeight: pw.FontWeight.bold,
+            color: PdfColors.orange800,
+          ),
+        ),
+        pw.SizedBox(height: 4),
+        pw.Text(
+          label,
+          style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+        ),
+      ],
     );
   }
 

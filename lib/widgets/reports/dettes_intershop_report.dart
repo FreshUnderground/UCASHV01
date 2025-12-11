@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:intl/intl.dart';
 import '../../services/report_service.dart';
 import '../../services/shop_service.dart';
+import '../../services/document_header_service.dart';
 import '../../utils/responsive_utils.dart';
 
 /// Rapport des Mouvements des Dettes Intershop Journalier
@@ -225,6 +230,9 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
             ],
             // Bouton pour afficher/masquer les filtres
             _buildFilterToggle(isMobile),
+            // Boutons PDF
+            const SizedBox(height: 12),
+            _buildPdfButtons(isMobile),
             // Sélecteurs de période (conditionnels)
             if (_showFilters) ...[  
               const SizedBox(height: 12),
@@ -1044,7 +1052,7 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                         isCredit: true,
                       ),
                       _buildMovementTypeCard(
-                        'Transfert Initié',
+                        'Transfert',
                         'Vers shop',
                         transfertInitie,
                         transfertInitieCount,
@@ -1054,7 +1062,7 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                         isCredit: false,
                       ),
                       _buildMovementTypeCard(
-                        'Transfert Servi',
+                        'Servi',
                         'Pour shop',
                         transfertServi,
                         transfertServiCount,
@@ -3540,5 +3548,606 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
 
   String _formatDateTime(DateTime date) {
     return '${_formatDate(date)} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  /// Build PDF action buttons
+  Widget _buildPdfButtons(bool isMobile) {
+    return Wrap(
+      spacing: isMobile ? 8 : 12,
+      runSpacing: 8,
+      children: [
+        ElevatedButton.icon(
+          onPressed: _partagerPDF,
+          icon: const Icon(Icons.share, size: 18),
+          label: Text(isMobile ? 'Partager' : 'Partager PDF'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.blue,
+            foregroundColor: Colors.white,
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 12 : 16,
+              vertical: isMobile ? 8 : 12,
+            ),
+          ),
+        ),
+        OutlinedButton.icon(
+          onPressed: _imprimerPDF,
+          icon: const Icon(Icons.print, size: 18),
+          label: Text(isMobile ? 'Imprimer' : 'Imprimer PDF'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: const Color(0xFFDC2626),
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 12 : 16,
+              vertical: isMobile ? 8 : 12,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Share PDF
+  Future<void> _partagerPDF() async {
+    if (_reportData == null) return;
+
+    try {
+      final pdf = await _generatePdf();
+      final pdfBytes = await pdf.save();
+      final fileName = 'dettes_intershop_${DateFormat('yyyy-MM-dd').format(DateTime.now())}.pdf';
+      
+      await Printing.sharePdf(bytes: pdfBytes, filename: fileName);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ PDF partagé avec succès')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('❌ Erreur partage: $e')),
+        );
+      }
+    }
+  }
+
+  /// Print PDF
+  Future<void> _imprimerPDF() async {
+    if (_reportData == null) return;
+
+    try {
+      final pdf = await _generatePdf();
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('❌ Erreur impression: $e')),
+        );
+      }
+    }
+  }
+
+  /// Generate PDF document
+  Future<pw.Document> _generatePdf() async {
+    final pdf = pw.Document();
+    final summary = _reportData!['summary'] as Map<String, dynamic>;
+    final shopName = _reportData!['shopName'] as String?;
+    final shopsNousDoivent = _reportData!['shopsNousDoivent'] as List<Map<String, dynamic>>? ?? [];
+    final shopsNousDevons = _reportData!['shopsNousDevons'] as List<Map<String, dynamic>>? ?? [];
+    final mouvements = _reportData!['mouvements'] as List<Map<String, dynamic>>;
+    final mouvementsParJour = _reportData!['mouvementsParJour'] as List<Map<String, dynamic>>;
+    
+    // Load header from DocumentHeaderService
+    final headerService = DocumentHeaderService();
+    await headerService.initialize();
+    final header = headerService.getHeaderOrDefault();
+    
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(20),
+        build: (context) => [
+          // Header
+          pw.Container(
+            padding: const pw.EdgeInsets.all(16),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.red700,
+              borderRadius: pw.BorderRadius.circular(8),
+            ),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          header.companyName,
+                          style: pw.TextStyle(
+                            color: PdfColors.white,
+                            fontSize: 20,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        ),
+                        pw.SizedBox(height: 4),
+                        if (header.address != null)
+                          pw.Text(
+                            header.address!,
+                            style: const pw.TextStyle(
+                              color: PdfColors.white,
+                              fontSize: 10,
+                            ),
+                          ),
+                      ],
+                    ),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        if (header.phone != null)
+                          pw.Text(
+                            'Tél: ${header.phone!}',
+                            style: const pw.TextStyle(
+                              color: PdfColors.white,
+                              fontSize: 10,
+                            ),
+                          ),
+                        if (header.email != null)
+                          pw.Text(
+                            'Email: ${header.email!}',
+                          style: const pw.TextStyle(
+                            color: PdfColors.white,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                pw.SizedBox(height: 8),
+                pw.Text(
+                  'RAPPORT DES DETTES INTERSHOP',
+                  style: pw.TextStyle(
+                    color: PdfColors.white,
+                    fontSize: 16,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+                if (shopName != null) ...[
+                  pw.SizedBox(height: 4),
+                  pw.Text(
+                    'Shop: $shopName',
+                    style: const pw.TextStyle(
+                      color: PdfColors.white,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+                pw.SizedBox(height: 4),
+                pw.Text(
+                  'Période: ${_formatDate(_startDate)} - ${_formatDate(_endDate)}',
+                  style: const pw.TextStyle(
+                    color: PdfColors.white,
+                    fontSize: 10,
+                  ),
+                ),
+                pw.Text(
+                  'Généré le: ${DateFormat('dd/MM/yyyy à HH:mm').format(DateTime.now())}',
+                  style: const pw.TextStyle(
+                    color: PdfColors.white,
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          pw.SizedBox(height: 20),
+          
+          // Summary
+          pw.Text(
+            'RÉSUMÉ',
+            style: pw.TextStyle(
+              fontSize: 14,
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColors.red700,
+            ),
+          ),
+          pw.SizedBox(height: 10),
+          pw.Row(
+            children: [
+              pw.Expanded(
+                child: pw.Container(
+                  padding: const pw.EdgeInsets.all(12),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.green50,
+                    border: pw.Border.all(color: PdfColors.green),
+                    borderRadius: pw.BorderRadius.circular(8),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        'Créances',
+                        style: const pw.TextStyle(fontSize: 10),
+                      ),
+                      pw.SizedBox(height: 4),
+                      pw.Text(
+                        '${(summary['totalCreances'] as double).toStringAsFixed(2)} USD',
+                        style: pw.TextStyle(
+                          fontSize: 16,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.green700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              pw.SizedBox(width: 10),
+              pw.Expanded(
+                child: pw.Container(
+                  padding: const pw.EdgeInsets.all(12),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.red50,
+                    border: pw.Border.all(color: PdfColors.red),
+                    borderRadius: pw.BorderRadius.circular(8),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        'Dettes',
+                        style: const pw.TextStyle(fontSize: 10),
+                      ),
+                      pw.SizedBox(height: 4),
+                      pw.Text(
+                        '${(summary['totalDettes'] as double).toStringAsFixed(2)} USD',
+                        style: pw.TextStyle(
+                          fontSize: 16,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.red700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              pw.SizedBox(width: 10),
+              pw.Expanded(
+                child: pw.Container(
+                  padding: const pw.EdgeInsets.all(12),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.blue50,
+                    border: pw.Border.all(color: PdfColors.blue),
+                    borderRadius: pw.BorderRadius.circular(8),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        'Solde Net',
+                        style: const pw.TextStyle(fontSize: 10),
+                      ),
+                      pw.SizedBox(height: 4),
+                      pw.Text(
+                        '${(summary['soldeNet'] as double).toStringAsFixed(2)} USD',
+                        style: pw.TextStyle(
+                          fontSize: 16,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.blue700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          
+          // Shops breakdown
+          if (shopsNousDoivent.isNotEmpty || shopsNousDevons.isNotEmpty) ...[
+            pw.SizedBox(height: 20),
+            pw.Text(
+              'DÉTAIL PAR SHOP',
+              style: pw.TextStyle(
+                fontSize: 14,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.red700,
+              ),
+            ),
+            pw.SizedBox(height: 10),
+            
+            if (shopsNousDoivent.isNotEmpty) ...[
+              pw.Text(
+                'Shops qui nous doivent:',
+                style: pw.TextStyle(
+                  fontSize: 12,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.green700,
+                ),
+              ),
+              pw.SizedBox(height: 5),
+              ...shopsNousDoivent.map((shop) => pw.Container(
+                margin: const pw.EdgeInsets.only(bottom: 4),
+                padding: const pw.EdgeInsets.all(8),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.green50,
+                  borderRadius: pw.BorderRadius.circular(4),
+                ),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text(
+                      shop['shopName'] as String,
+                      style: const pw.TextStyle(fontSize: 10),
+                    ),
+                    pw.Text(
+                      '${(shop['solde'] as double).toStringAsFixed(2)} USD',
+                      style: pw.TextStyle(
+                        fontSize: 10,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.green700,
+                      ),
+                    ),
+                  ],
+                ),
+              )),
+            ],
+            
+            if (shopsNousDevons.isNotEmpty) ...[
+              pw.SizedBox(height: 10),
+              pw.Text(
+                'Shops que nous devons:',
+                style: pw.TextStyle(
+                  fontSize: 12,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.red700,
+                ),
+              ),
+              pw.SizedBox(height: 5),
+              ...shopsNousDevons.map((shop) => pw.Container(
+                margin: const pw.EdgeInsets.only(bottom: 4),
+                padding: const pw.EdgeInsets.all(8),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.red50,
+                  borderRadius: pw.BorderRadius.circular(4),
+                ),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text(
+                      shop['shopName'] as String,
+                      style: const pw.TextStyle(fontSize: 10),
+                    ),
+                    pw.Text(
+                      '${(shop['solde'] as double).abs().toStringAsFixed(2)} USD',
+                      style: pw.TextStyle(
+                        fontSize: 10,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.red700,
+                      ),
+                    ),
+                  ],
+                ),
+              )),
+            ],
+          ],
+          
+          // Daily movements
+          if (mouvementsParJour.isNotEmpty) ...[
+            pw.SizedBox(height: 20),
+            pw.Text(
+              'ÉVOLUTION QUOTIDIENNE',
+              style: pw.TextStyle(
+                fontSize: 14,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.red700,
+              ),
+            ),
+            pw.SizedBox(height: 10),
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey300),
+              children: [
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                  children: [
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('Date', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('Créances', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('Dettes', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('Solde', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('Nb Ops', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                    ),
+                  ],
+                ),
+                ...mouvementsParJour.take(30).map((jour) => pw.TableRow(
+                  children: [
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text(jour['date'] as String, style: const pw.TextStyle(fontSize: 7)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('${(jour['creances'] as double).toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 7)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('${(jour['dettes'] as double).toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 7)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('${(jour['solde'] as double).toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 7)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('${jour['nombreOperations']}', style: const pw.TextStyle(fontSize: 7)),
+                    ),
+                  ],
+                )),
+              ],
+            ),
+          ],
+          
+          // Movements details (limited to first 20)
+          if (mouvements.isNotEmpty) ...[
+            pw.SizedBox(height: 20),
+            pw.Text(
+              'DÉTAILS DES MOUVEMENTS (20 premiers)',
+              style: pw.TextStyle(
+                fontSize: 14,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.red700,
+              ),
+            ),
+            pw.SizedBox(height: 10),
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey300),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(1.5),
+                1: const pw.FlexColumnWidth(2),
+                2: const pw.FlexColumnWidth(2),
+                3: const pw.FlexColumnWidth(1.2),
+                4: const pw.FlexColumnWidth(1.5),
+              },
+              children: [
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                  children: [
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('Date', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('De', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('Vers', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('Type', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text('Montant', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7)),
+                    ),
+                  ],
+                ),
+                ...mouvements.take(20).map((mouvement) => pw.TableRow(
+                  children: [
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text(
+                        _formatDateTime(mouvement['date'] as DateTime),
+                        style: const pw.TextStyle(fontSize: 6),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text(
+                        mouvement['shopSource'] as String,
+                        style: const pw.TextStyle(fontSize: 6),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text(
+                        mouvement['shopDestination'] as String,
+                        style: const pw.TextStyle(fontSize: 6),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text(
+                        _getTypeLabel(mouvement['typeMouvement'] as String),
+                        style: const pw.TextStyle(fontSize: 6),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text(
+                        '${(mouvement['montant'] as double).toStringAsFixed(2)}',
+                        style: const pw.TextStyle(fontSize: 6),
+                      ),
+                    ),
+                  ],
+                )),
+              ],
+            ),
+            if (mouvements.length > 20)
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(top: 8),
+                child: pw.Text(
+                  '... et ${mouvements.length - 20} autres mouvements',
+                  style: pw.TextStyle(
+                    fontSize: 8,
+                    fontStyle: pw.FontStyle.italic,
+                    color: PdfColors.grey600,
+                  ),
+                ),
+              ),
+          ],
+          
+          // Footer
+          pw.SizedBox(height: 20),
+          pw.Divider(),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text(
+                'UCASH - Système de Gestion Financière',
+                style: pw.TextStyle(
+                  fontSize: 8,
+                  color: PdfColors.grey600,
+                  fontStyle: pw.FontStyle.italic,
+                ),
+              ),
+              pw.Text(
+                'Page 1',
+                style: pw.TextStyle(
+                  fontSize: 8,
+                  color: PdfColors.grey600,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+    
+    return pdf;
+  }
+  
+  String _getTypeLabel(String type) {
+    switch (type) {
+      case 'transfert_servi':
+        return 'Transfert Servi';
+      case 'transfert_initie':
+        return 'Transfert Initié';
+      case 'flot_envoye':
+        return 'Flot Envoyé';
+      case 'flot_recu':
+        return 'Flot Reçu';
+      default:
+        return type;
+    }
   }
 }

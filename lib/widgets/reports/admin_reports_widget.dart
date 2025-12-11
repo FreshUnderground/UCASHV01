@@ -1,22 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../services/report_service.dart';
 import '../../services/shop_service.dart';
 import 'report_filters_widget.dart';
 import 'mouvements_caisse_report.dart';
-import '../rapport_cloture_widget.dart';
 import '../rapportcloture.dart';
 import 'historique_clotures_report.dart';
 import 'credits_inter_shops_report.dart';
 import 'commissions_report.dart';
-import '../cloture_agent_widget.dart';
 import 'dettes_intershop_report.dart';
 
 import 'admin_flot_report.dart';
 import 'company_net_position_report.dart';
 import '../../utils/responsive_utils.dart';
-import '../../theme/ucash_typography.dart';
 import '../../theme/ucash_containers.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 class AdminReportsWidget extends StatefulWidget {
   const AdminReportsWidget({super.key});
@@ -26,46 +23,55 @@ class AdminReportsWidget extends StatefulWidget {
 }
 
 class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+  TabController? _tabController;
   
   DateTime? _startDate;
   DateTime? _endDate;
   int? _selectedShopId;
 
-  final List<Tab> _tabs = [
-    const Tab(icon: Icon(Icons.business), text: 'Situation Nette Entreprise'),
-    const Tab(icon: Icon(Icons.account_balance), text: 'Mouvements de Caisse'),
-    const Tab(icon: Icon(Icons.receipt_long), text: 'Clôture Journalière'),
-    const Tab(icon: Icon(Icons.list_alt), text: 'Historique Clôtures'),
-    const Tab(icon: Icon(Icons.monetization_on), text: 'Commissions'),
-    const Tab(icon: Icon(Icons.swap_horiz), text: 'Crédits Inter-Shops'),
-    const Tab(icon: Icon(Icons.account_balance_wallet), text: 'Dettes Intershop'),
-    const Tab(icon: Icon(Icons.local_shipping), text: 'Mouvements FLOT'),
-  ];
-
-  final List<Tab> _mobileTabs = [
-    const Tab(icon: Icon(Icons.business), text: 'Entreprise'),
-    const Tab(icon: Icon(Icons.account_balance), text: 'Caisse'),
-    const Tab(icon: Icon(Icons.receipt_long), text: 'Clôture'),
-    const Tab(icon: Icon(Icons.list_alt), text: 'Clôtures'),
-    const Tab(icon: Icon(Icons.monetization_on), text: 'Commissions'),
-    const Tab(icon: Icon(Icons.swap_horiz), text: 'Crédits'),
-    const Tab(icon: Icon(Icons.account_balance_wallet), text: 'Dettes'),
-    const Tab(icon: Icon(Icons.local_shipping), text: 'FLOT'),
-  ];
+  List<Tab> _buildTabs(BuildContext context, bool isMobile) {
+    final l10n = AppLocalizations.of(context)!;
+    
+    if (isMobile) {
+      return [
+        Tab(icon: const Icon(Icons.business), text: l10n.enterprise),
+        Tab(icon: const Icon(Icons.account_balance), text: l10n.cashRegister),
+        Tab(icon: const Icon(Icons.receipt_long), text: l10n.closure),
+        Tab(icon: const Icon(Icons.list_alt), text: l10n.closures),
+        Tab(icon: const Icon(Icons.monetization_on), text: l10n.commissionsReport),
+        Tab(icon: const Icon(Icons.swap_horiz), text: l10n.credits),
+        Tab(icon: const Icon(Icons.account_balance_wallet), text: l10n.debts),
+        Tab(icon: const Icon(Icons.local_shipping), text: l10n.flot),
+      ];
+    } else {
+      return [
+        Tab(icon: const Icon(Icons.business), text: l10n.companyNetPosition),
+        Tab(icon: const Icon(Icons.account_balance), text: l10n.cashMovements),
+        Tab(icon: const Icon(Icons.receipt_long), text: l10n.dailyClosure),
+        Tab(icon: const Icon(Icons.list_alt), text: l10n.closureHistory),
+        Tab(icon: const Icon(Icons.monetization_on), text: l10n.commissionsReport),
+        Tab(icon: const Icon(Icons.swap_horiz), text: l10n.interShopCredits),
+        Tab(icon: const Icon(Icons.account_balance_wallet), text: l10n.interShopDebts),
+        Tab(icon: const Icon(Icons.local_shipping), text: l10n.flotMovements),
+      ];
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _tabs.length, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadInitialData();
+      // Initialize TabController after first frame when we can access l10n
+      final tabs = _buildTabs(context, false);
+      _tabController = TabController(length: tabs.length, vsync: this);
+      setState(() {});
     });
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _tabController?.dispose();
     super.dispose();
   }
 
@@ -78,6 +84,14 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
   Widget build(BuildContext context) {
     final isMobile = context.isSmallScreen;
     final isTablet = context.screenType == ScreenType.tablet;
+    final l10n = AppLocalizations.of(context)!;
+    
+    // Return loading indicator if TabController not initialized
+    if (_tabController == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    
+    final tabs = _buildTabs(context, isMobile);
     
     return Container(
       decoration: BoxDecoration(
@@ -136,7 +150,7 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
                         topRight: Radius.circular(ResponsiveUtils.getFluidBorderRadius(context, mobile: 12, tablet: 16, desktop: 20)),
                       ),
                     ),
-                    child: _buildModernHeader(isMobile, isTablet),
+                    child: _buildModernHeader(isMobile, isTablet, l10n),
                   ),
                   
                   // Filtres avec padding réduit sur mobile
@@ -202,7 +216,7 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
                 ),
                 child: TabBar(
                   controller: _tabController,
-                  tabs: _buildModernTabs(isMobile),
+                  tabs: tabs,
                   labelColor: Colors.white,
                   unselectedLabelColor: Colors.grey[700],
                   indicator: BoxDecoration(
@@ -274,7 +288,7 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
                           shopId: _selectedShopId!,
                           isAdminView: true, // Admin ne peut pas clôturer
                         )
-                      : _buildSelectShopMessage(),
+                      : _buildSelectShopMessage(l10n),
                     
                     // Historique des clôtures
                     HistoriqueCloturesReport(
@@ -328,7 +342,7 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
     setState(() {});
   }
 
-  Widget _buildModernHeader(bool isMobile, bool isTablet) {
+  Widget _buildModernHeader(bool isMobile, bool isTablet, AppLocalizations l10n) {
     if (isMobile) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -353,7 +367,7 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Rapports Admin',
+                      l10n.adminReports,
                       style: TextStyle(
                         fontSize: context.fluidFont(mobile: 15, tablet: 18, desktop: 20),
                         fontWeight: FontWeight.bold,
@@ -362,7 +376,7 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Tableaux de bord avancés',
+                      l10n.advancedDashboards,
                       style: TextStyle(
                         fontSize: context.fluidFont(mobile: 10, tablet: 12, desktop: 13),
                         color: Colors.white.withOpacity(0.9),
@@ -387,7 +401,7 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
                 Icon(Icons.store, color: Colors.white, size: 12),
                 const SizedBox(width: 4),
                 Text(
-                  _selectedShopId == null ? 'Tous les shops' : 'Shop sélectionné',
+                  _selectedShopId == null ? l10n.allShops : l10n.shopSelected,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 10,
@@ -427,7 +441,7 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                isTablet ? 'Rapports Admin' : 'Rapports Administrateur',
+                isTablet ? l10n.adminReports : l10n.adminReportsLong,
                 style: TextStyle(
                   fontSize: context.fluidFont(mobile: 20, tablet: 22, desktop: 26),
                   fontWeight: FontWeight.bold,
@@ -437,7 +451,7 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
               ),
               const SizedBox(height: 2),
               Text(
-                'Analyse et suivi des performances',
+                l10n.analysisAndPerformanceTracking,
                 style: TextStyle(
                   fontSize: context.fluidFont(mobile: 12, tablet: 13, desktop: 14),
                   color: Colors.white.withOpacity(0.9),
@@ -469,8 +483,8 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
               context.horizontalSpace(mobile: 4, tablet: 6, desktop: 7),
               Text(
                 _selectedShopId == null 
-                    ? (isTablet ? 'Tous shops' : 'Tous les shops')
-                    : 'Shop filtré',
+                    ? (isTablet ? l10n.allShops : l10n.allShops)
+                    : l10n.shopSelected,
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: context.fluidFont(mobile: 11, tablet: 12, desktop: 13),
@@ -484,22 +498,7 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
     );
   }
 
-  List<Tab> _buildModernTabs(bool isMobile) {
-    final tabs = isMobile ? _mobileTabs : _tabs;
-    return tabs.map((tab) {
-      return Tab(
-        icon: tab.icon,
-        child: Text(
-          tab.text!,
-          style: TextStyle(
-            fontSize: context.fluidFont(mobile: 10, tablet: 11, desktop: 12),
-          ),
-        ),
-      );
-    }).toList();
-  }
-
-  Widget _buildSelectShopMessage() {
+  Widget _buildSelectShopMessage(AppLocalizations l10n) {
     return Container(
       padding: const EdgeInsets.all(40),
       child: Center(
@@ -529,7 +528,7 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
             ),
             const SizedBox(height: 24),
             Text(
-              'Sélectionnez un Shop',
+              l10n.selectShop,
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -538,7 +537,7 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
             ),
             const SizedBox(height: 12),
             Text(
-              'Utilisez le filtre ci-dessus pour sélectionner un shop spécifique',
+              l10n.useFilterAbove,
               style: TextStyle(
                 fontSize: 16,
                 color: Colors.grey[700],
@@ -547,7 +546,7 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
             ),
             const SizedBox(height: 8),
             Text(
-              'La clôture journalière nécessite un shop spécifique',
+              l10n.dailyClosureRequiresShop,
               style: TextStyle(
                 fontSize: 14,
                 color: Colors.grey[600],

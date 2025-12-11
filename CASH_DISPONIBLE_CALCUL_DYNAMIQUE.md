@@ -51,7 +51,9 @@ Cash Disponible = (Solde Antérieur + Dépôts + FLOT Reçu + Transfert Reçu)
 3. **Transferts Servis**
    - Opérations où `shopDestinationId` = notre shop
    - Types: `transfertNational`, `transfertInternationalEntrant`
+   - Statut: **UNIQUEMENT `validee`** (opérations servies)
    - Montant: `montantNet` (on sert le bénéficiaire)
+   - ⚠️ **IMPORTANT**: Les transferts en attente ne sont PAS comptabilisés dans les mouvements de caisse
 
 4. **Retraits FRAIS**
    - Compte spécial FRAIS

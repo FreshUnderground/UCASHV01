@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import '../services/agent_service.dart';
 import '../services/shop_service.dart';
 
@@ -8,6 +9,7 @@ class AgentsStatsWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 600;
     final isTablet = size.width > 600 && size.width <= 900;
@@ -56,7 +58,7 @@ class AgentsStatsWidget extends StatelessWidget {
                     ),
                     const SizedBox(width: 12),
                     Text(
-                      'Statistiques des Agents',
+                      l10n.agentsStatistics,
                       style: TextStyle(
                         fontSize: isMobile ? 16 : 18,
                         fontWeight: FontWeight.bold,
@@ -81,6 +83,7 @@ class AgentsStatsWidget extends StatelessWidget {
                           ? '0%' 
                           : '${((shopsWithAgents / shopService.shops.length) * 100).toStringAsFixed(0)}%',
                       constraints.maxWidth,
+                      context,
                     );
                   },
                 ),
@@ -102,14 +105,16 @@ class AgentsStatsWidget extends StatelessWidget {
     int shopsWithoutAgents,
     String occupationRate,
     double availableWidth,
+    BuildContext context,
   ) {
+    final l10n = AppLocalizations.of(context)!;
     final stats = [
-      {'title': 'Total', 'value': '$totalAgents', 'icon': Icons.people, 'color': const Color(0xFF2563EB)},
-      {'title': 'Actifs', 'value': '$activeAgents', 'icon': Icons.check_circle, 'color': const Color(0xFF059669)},
-      {'title': 'Inactifs', 'value': '$inactiveAgents', 'icon': Icons.pause_circle, 'color': const Color(0xFFEA580C)},
-      {'title': 'Avec Agents', 'value': '$shopsWithAgents', 'icon': Icons.store, 'color': const Color(0xFF7C3AED)},
-      {'title': 'Sans Agents', 'value': '$shopsWithoutAgents', 'icon': Icons.store_outlined, 'color': const Color(0xFF9CA3AF)},
-      {'title': 'Taux', 'value': occupationRate, 'icon': Icons.pie_chart, 'color': const Color(0xFFDC2626)},
+      {'title': l10n.total, 'value': '$totalAgents', 'icon': Icons.people, 'color': const Color(0xFF2563EB)},
+      {'title': l10n.active, 'value': '$activeAgents', 'icon': Icons.check_circle, 'color': const Color(0xFF059669)},
+      {'title': l10n.inactive, 'value': '$inactiveAgents', 'icon': Icons.pause_circle, 'color': const Color(0xFFEA580C)},
+      {'title': l10n.withAgents, 'value': '$shopsWithAgents', 'icon': Icons.store, 'color': const Color(0xFF7C3AED)},
+      {'title': l10n.withoutAgents, 'value': '$shopsWithoutAgents', 'icon': Icons.store_outlined, 'color': const Color(0xFF9CA3AF)},
+      {'title': l10n.rate, 'value': occupationRate, 'icon': Icons.pie_chart, 'color': const Color(0xFFDC2626)},
     ];
 
     if (isMobile) {

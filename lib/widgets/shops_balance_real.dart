@@ -203,24 +203,25 @@ class _ShopsBalanceRealState extends State<ShopsBalanceReal> {
                           style: TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ),
-                      DataColumn(
-                        label: Text(
-                          'Airtel Money',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      DataColumn(
-                        label: Text(
-                          'M-Pesa',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      DataColumn(
-                        label: Text(
-                          'Orange Money',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
+                      // MASQUÉ: Airtel Money, M-Pesa, Orange Money ne doivent pas être visibles
+                      // DataColumn(
+                      //   label: Text(
+                      //     'Airtel Money',
+                      //     style: TextStyle(fontWeight: FontWeight.bold),
+                      //   ),
+                      // ),
+                      // DataColumn(
+                      //   label: Text(
+                      //     'M-Pesa',
+                      //     style: TextStyle(fontWeight: FontWeight.bold),
+                      //   ),
+                      // ),
+                      // DataColumn(
+                      //   label: Text(
+                      //     'Orange Money',
+                      //     style: TextStyle(fontWeight: FontWeight.bold),
+                      //   ),
+                      // ),
                       DataColumn(
                         label: Text(
                           'Total Capital',
@@ -258,33 +259,34 @@ class _ShopsBalanceRealState extends State<ShopsBalanceReal> {
             ),
           ),
         ),
-        DataCell(
-          Text(
-            '${_formatCurrency(shop.capitalAirtelMoney.round())} USD',
-            style: const TextStyle(
-              color: Color(0xFFE65100),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-        DataCell(
-          Text(
-            '${_formatCurrency(shop.capitalMPesa.round())} USD',
-            style: const TextStyle(
-              color: Color(0xFF1976D2),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-        DataCell(
-          Text(
-            '${_formatCurrency(shop.capitalOrangeMoney.round())} USD',
-            style: const TextStyle(
-              color: Color(0xFFFF9800),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
+        // MASQUÉ: Airtel Money, M-Pesa, Orange Money ne doivent pas être visibles
+        // DataCell(
+        //   Text(
+        //     '${_formatCurrency(shop.capitalAirtelMoney.round())} USD',
+        //     style: const TextStyle(
+        //       color: Color(0xFFE65100),
+        //       fontWeight: FontWeight.w500,
+        //     ),
+        //   ),
+        // ),
+        // DataCell(
+        //   Text(
+        //     '${_formatCurrency(shop.capitalMPesa.round())} USD',
+        //     style: const TextStyle(
+        //       color: Color(0xFF1976D2),
+        //       fontWeight: FontWeight.w500,
+        //     ),
+        //   ),
+        // ),
+        // DataCell(
+        //   Text(
+        //     '${_formatCurrency(shop.capitalOrangeMoney.round())} USD',
+        //     style: const TextStyle(
+        //       color: Color(0xFFFF9800),
+        //       fontWeight: FontWeight.w500,
+        //     ),
+        //   ),
+        // ),
         DataCell(
           Text(
             '${_formatCurrency(shop.capitalActuel.round())} USD',

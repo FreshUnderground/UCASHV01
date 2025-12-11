@@ -149,7 +149,7 @@ class OperationModel {
       shopDestinationDesignation: json['shop_destination_designation'],
       
       // Agent
-      agentId: json['agent_id'],
+      agentId: json['agent_id'] ?? 0, // Fallback to 0 if null
       agentUsername: json['agent_username'],
       codeOps: json['code_ops'] ?? _generateCodeOps(json['id']),
       

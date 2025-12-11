@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import '../services/agent_service.dart';
 import '../services/shop_service.dart';
 import '../services/local_db.dart';
@@ -34,6 +35,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return LayoutBuilder(
       builder: (context, constraints) {
         return SingleChildScrollView(
@@ -66,7 +68,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            'Gestion des Agents',
+                            l10n.agentsManagement,
                             style: TextStyle(
                               fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 16, tablet: 17, desktop: 18),
                               fontWeight: FontWeight.bold,
@@ -99,6 +101,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
   }
 
   Widget _buildActionButtons() {
+    final l10n = AppLocalizations.of(context)!;
     if (context.isSmallScreen) {
       return Wrap(
         spacing: ResponsiveUtils.getFluidSpacing(context, mobile: 6, tablet: 7, desktop: 8),
@@ -110,7 +113,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
             icon: Icon(Icons.refresh,
               size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
             ),
-            tooltip: 'Actualiser',
+            tooltip: l10n.refresh,
             color: const Color(0xFFDC2626),
           ),
           
@@ -120,7 +123,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
             icon: Icon(Icons.admin_panel_settings,
               size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
             ),
-            tooltip: 'Vérifier Admin',
+            tooltip: l10n.verifyAdmin,
             color: Colors.green,
           ),
           
@@ -130,7 +133,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
             icon: Icon(Icons.bug_report,
               size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
             ),
-            tooltip: 'Debug Info',
+            tooltip: l10n.debugInfo,
             color: Colors.purple,
           ),
           
@@ -140,7 +143,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
             icon: Icon(Icons.science,
               size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
             ),
-            tooltip: 'Créer Agents de Test',
+            tooltip: l10n.createTestAgents,
             color: Colors.cyan,
           ),
           
@@ -150,7 +153,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
             icon: Icon(Icons.person_add,
               size: ResponsiveUtils.getFluidIconSize(context, mobile: 14, tablet: 15, desktop: 16),
             ),
-            label: Text('Nouveau',
+            label: Text(l10n.add,
               style: TextStyle(
                 fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 12, tablet: 13, desktop: 14),
               ),
@@ -183,7 +186,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
           icon: Icon(Icons.refresh,
             size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
           ),
-          tooltip: 'Actualiser',
+          tooltip: l10n.refresh,
           color: const Color(0xFFDC2626),
         ),
         
@@ -193,7 +196,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
           icon: Icon(Icons.admin_panel_settings,
             size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
           ),
-          tooltip: 'Vérifier Admin',
+          tooltip: l10n.verifyAdmin,
           color: Colors.green,
         ),
         
@@ -203,7 +206,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
           icon: Icon(Icons.bug_report,
             size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
           ),
-          tooltip: 'Debug Info',
+          tooltip: l10n.debugInfo,
           color: Colors.purple,
         ),
         
@@ -213,7 +216,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
           icon: Icon(Icons.science,
             size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
           ),
-          tooltip: 'Créer Agents de Test',
+          tooltip: l10n.createTestAgents,
           color: Colors.cyan,
         ),
         
@@ -225,7 +228,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
           icon: Icon(Icons.person_add,
             size: ResponsiveUtils.getFluidIconSize(context, mobile: 14, tablet: 15, desktop: 16),
           ),
-          label: Text('Nouveau Agent',
+          label: Text(l10n.newAgent,
             style: TextStyle(
               fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 12, tablet: 13, desktop: 14),
             ),
@@ -251,6 +254,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
   }
 
   Widget _buildAgentStats() {
+    final l10n = AppLocalizations.of(context)!;
     return Consumer<AgentService>(
       builder: (context, agentService, child) {
         final agents = agentService.agents;
@@ -270,7 +274,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
                   children: [
                     Expanded(
                       child: _buildStatCard(
-                        'Total Agents',
+                        l10n.totalAgents,
                         '${agents.length}',
                         Icons.people,
                         Colors.blue,
@@ -279,7 +283,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
                     SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
                     Expanded(
                       child: _buildStatCard(
-                        'Agents Actifs',
+                        l10n.activeAgents,
                         '$activeAgents',
                         Icons.check_circle,
                         Colors.green,
@@ -289,7 +293,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
                 ),
                 SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
                 _buildStatCard(
-                  'Agents Inactifs',
+                  l10n.inactiveAgents,
                   '${agents.length - activeAgents}',
                   Icons.person_off,
                   Colors.orange,
@@ -309,21 +313,21 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
           child: Row(
             children: [
               _buildStatCard(
-                'Total Agents',
+                l10n.totalAgents,
                 '${agents.length}',
                 Icons.people,
                 Colors.blue,
               ),
               SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
               _buildStatCard(
-                'Agents Actifs',
+                l10n.activeAgents,
                 '$activeAgents',
                 Icons.check_circle,
                 Colors.green,
               ),
               SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
               _buildStatCard(
-                'Agents Inactifs',
+                l10n.inactiveAgents,
                 '${agents.length - activeAgents}',
                 Icons.person_off,
                 Colors.orange,
@@ -380,11 +384,12 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
   }
 
   Widget _buildAgentsList() {
+    final l10n = AppLocalizations.of(context)!;
     return Consumer2<AgentService, ShopService>(
       builder: (context, agentService, shopService, child) {
         if (agentService.isLoading) {
-          return const Padding(
-            padding: EdgeInsets.all(40),
+          return Padding(
+            padding: const EdgeInsets.all(40),
             child: Center(child: CircularProgressIndicator()),
           );
         }
@@ -398,14 +403,14 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
                 Icon(Icons.error, color: Colors.red, size: 48),
                 const SizedBox(height: 16),
                 Text(
-                  'Erreur: ${agentService.errorMessage}',
+                  '${l10n.error}: ${agentService.errorMessage}',
                   style: const TextStyle(color: Colors.red),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
                 ElevatedButton(
                   onPressed: _loadData,
-                  child: const Text('Réessayer'),
+                  child: Text(l10n.retry),
                 ),
               ],
             ),
@@ -421,8 +426,8 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
               children: [
                 Icon(Icons.people_outline, color: Colors.grey, size: 64),
                 const SizedBox(height: 16),
-                const Text(
-                  'Aucun agent créé',
+                Text(
+                  l10n.noAgentsFound,
                   style: TextStyle(
                     fontSize: 16,
                     color: Colors.grey,
@@ -430,8 +435,8 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'Cliquez sur "Nouveau Agent" pour créer votre premier agent',
+                Text(
+                  l10n.createFirstAgent,
                   style: TextStyle(color: Colors.grey),
                   textAlign: TextAlign.center,
                 ),
@@ -439,7 +444,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
                 ElevatedButton.icon(
                   onPressed: _showCreateAgentDialog,
                   icon: const Icon(Icons.person_add),
-                  label: const Text('Créer un Agent'),
+                  label: Text(l10n.newAgent),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFDC2626),
                     foregroundColor: Colors.white,
@@ -460,8 +465,8 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
                   (s) => s.id == agents[i].shopId,
                   orElse: () => ShopModel(
                     id: 0,
-                    designation: 'Shop Inconnu',
-                    localisation: 'Localisation inconnue',
+                    designation: l10n.notSpecified,
+                    localisation: l10n.notSpecified,
                     capitalInitial: 0,
                   ),
                 ),
@@ -475,6 +480,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
   }
 
   Widget _buildAgentItem(AgentModel agent, ShopModel shop) {
+    final l10n = AppLocalizations.of(context)!;
     return ListTile(
       contentPadding: ResponsiveUtils.getFluidPadding(
         context,
@@ -515,7 +521,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
             ),
             const SizedBox(height: 4),
             Text(
-              agent.isActive ? "✓ Actif" : "✗ Inactif",
+              agent.isActive ? "✓ ${l10n.active}" : "✗ ${l10n.inactive}",
               style: TextStyle(
                 color: agent.isActive ? Colors.green : Colors.orange,
                 fontWeight: FontWeight.w500,
@@ -539,7 +545,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
                   color: Colors.blue,
                 ),
                 SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 6, tablet: 7, desktop: 8)),
-                Text('Modifier',
+                Text(l10n.edit,
                   style: TextStyle(
                     fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 12, tablet: 13, desktop: 14),
                   ),
@@ -557,7 +563,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
                   color: agent.isActive ? Colors.orange : Colors.green,
                 ),
                 SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 6, tablet: 7, desktop: 8)),
-                Text(agent.isActive ? 'Désactiver' : 'Activer',
+                Text(agent.isActive ? l10n.deactivate : l10n.activate,
                   style: TextStyle(
                     fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 12, tablet: 13, desktop: 14),
                   ),
@@ -574,7 +580,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
                   color: Colors.red,
                 ),
                 SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 5, tablet: 7, desktop: 8)),
-                Text('Suppr.', 
+                Text(l10n.delete, 
                   style: TextStyle(
                     color: Colors.red,
                     fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 8, tablet: 13, desktop: 14),
@@ -616,30 +622,43 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
   }
 
   Future<void> _toggleAgentStatus(AgentModel agent) async {
+    final l10n = AppLocalizations.of(context)!;
     final agentService = Provider.of<AgentService>(context, listen: false);
     final updatedAgent = agent.copyWith(isActive: !agent.isActive);
     
     final success = await agentService.updateAgent(updatedAgent);
-    if (success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Agent ${updatedAgent.isActive ? "activé" : "désactivé"} avec succès',
+    if (mounted) {
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              updatedAgent.isActive ? l10n.agentActivated : l10n.agentDeactivated,
+            ),
+            backgroundColor: Colors.green,
           ),
-          backgroundColor: Colors.green,
-        ),
-      );
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${l10n.error}: ${agentService.errorMessage ?? l10n.errorUpdatingAgent}',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
   Future<void> _deleteAgent(AgentModel agent) async {
+    final l10n = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Confirmer la suppression'),
+        title: Text(l10n.confirmDelete),
         content: Text(
-          'Êtes-vous sûr de vouloir supprimer l\'agent "${agent.username}" ?\n\n'
-          'Cette action est irréversible.',
+          '${l10n.confirmDeleteAgent}\n\n'
+          '${l10n.thisActionCannotBeUndone}',
         ),
         actions: [
           TextButton(
@@ -649,7 +668,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Suppr.'),
+            child: Text(l10n.delete),
           ),
         ],
       ),
@@ -659,13 +678,25 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
       final agentService = Provider.of<AgentService>(context, listen: false);
       final success = await agentService.deleteAgent(agent.id!);
       
-      if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Agent supprimé avec succès'),
-            backgroundColor: Colors.green,
-          ),
-        );
+      if (mounted) {
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(l10n.agentDeletedSuccessfully),
+              backgroundColor: Colors.green,
+            ),
+          );
+          _loadData(); // Reload data after successful deletion
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '${l10n.error}: ${agentService.errorMessage ?? l10n.errorDeletingAgent}',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }
@@ -678,6 +709,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
   }
 
   Future<void> _verifyAdminExists() async {
+    final l10n = AppLocalizations.of(context)!;
     await LocalDB.instance.ensureAdminExists();
     final admin = await LocalDB.instance.getDefaultAdmin();
     
@@ -685,11 +717,11 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Row(
+          title: Row(
             children: [
-              Icon(Icons.admin_panel_settings, color: Colors.green),
-              SizedBox(width: 8),
-              Text('Vérification Admin'),
+              const Icon(Icons.admin_panel_settings, color: Colors.green),
+              const SizedBox(width: 8),
+              Text(l10n.verifyAdmin),
             ],
           ),
           content: Column(
@@ -699,10 +731,10 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
               if (admin != null) ...[
                 const Icon(Icons.check_circle, color: Colors.green, size: 48),
                 const SizedBox(height: 16),
-                const Text('✅ Admin par défaut présent et protégé'),
+                Text(l10n.adminExists),
                 const SizedBox(height: 8),
-                Text('Username: ${admin.username}'),
-                Text('Role: ${admin.role}'),
+                Text('${l10n.username}: ${admin.username}'),
+                Text('${l10n.role}: ${admin.role}'),
                 Text('ID: ${admin.id}'),
                 const SizedBox(height: 8),
                 const Text(
@@ -712,16 +744,16 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
               ] else ...[
                 const Icon(Icons.error, color: Colors.red, size: 48),
                 const SizedBox(height: 16),
-                const Text('❌ Admin par défaut manquant !'),
+                Text(l10n.adminNotFound),
                 const SizedBox(height: 8),
-                const Text('L\'admin sera recréé automatiquement.'),
+                Text(l10n.adminWillBeRecreated),
               ],
             ],
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Fermer'),
+              child: Text(l10n.close),
             ),
           ],
         ),
@@ -730,22 +762,23 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
   }
 
   Future<void> _createTestAgents() async {
+    final l10n = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.science, color: Colors.cyan),
-            SizedBox(width: 8),
-            Text('Créer Agents de Test'),
+            const Icon(Icons.science, color: Colors.cyan),
+            const SizedBox(width: 8),
+            Text(l10n.createTestAgents),
           ],
         ),
-        content: const Column(
+        content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Voulez-vous créer 2 agents de test pour vérifier le système ?'),
-            SizedBox(height: 16),
-            Text('Agents qui seront créés:'),
+            Text(l10n.createTestAgentsConfirm),
+            const SizedBox(height: 16),
+            Text(l10n.agentsToBeCreated),
             Text('• agent_test1 / test123'),
             Text('• agent_test2 / test123'),
           ],
@@ -753,12 +786,12 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Annuler'),
+            child: Text(l10n.cancel),
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan),
-            child: const Text('Créer'),
+            child: Text(l10n.save),
           ),
         ],
       ),
@@ -770,8 +803,8 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Agents de test créés avec succès !'),
+          SnackBar(
+            content: Text(l10n.testAgentsCreatedSuccess),
             backgroundColor: Colors.green,
           ),
         );
@@ -780,28 +813,29 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
   }
 
   Future<void> _showDebugInfo() async {
+    final l10n = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.bug_report, color: Colors.purple),
-            SizedBox(width: 8),
-            Text('Debug Info'),
+            const Icon(Icons.bug_report, color: Colors.purple),
+            const SizedBox(width: 8),
+            Text(l10n.debugInfo),
           ],
         ),
-        content: const Column(
+        content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Informations de debug affichées dans la console...'),
-            SizedBox(height: 16),
-            Text('Ouvrez la console (F12) pour voir les détails.'),
+            Text(l10n.debugInfoInConsole),
+            const SizedBox(height: 16),
+            Text(l10n.openConsoleF12),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Fermer'),
+            child: Text(l10n.cancel),
           ),
         ],
       ),

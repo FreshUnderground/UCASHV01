@@ -401,36 +401,37 @@ class _RetraitDialogState extends State<RetraitDialog> {
                     ],
                   ),
                 ),
-                DropdownMenuItem(
-                  value: ModePaiement.airtelMoney,
-                  child: Row(
-                    children: [
-                      Icon(Icons.phone_android, color: Colors.orange),
-                      SizedBox(width: 8),
-                      Text('Airtel Money'),
-                    ],
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: ModePaiement.mPesa,
-                  child: Row(
-                    children: [
-                      Icon(Icons.account_balance_wallet, color: Colors.blue),
-                      SizedBox(width: 8),
-                      Text('M-Pesa'),
-                    ],
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: ModePaiement.orangeMoney,
-                  child: Row(
-                    children: [
-                      Icon(Icons.payment, color: Colors.orange),
-                      SizedBox(width: 8),
-                      Text('Orange Money'),
-                    ],
-                  ),
-                ),
+                // MASQUÉ: Airtel Money, M-Pesa, Orange Money ne doivent pas être visibles
+                // DropdownMenuItem(
+                //   value: ModePaiement.airtelMoney,
+                //   child: Row(
+                //     children: [
+                //       Icon(Icons.phone_android, color: Colors.orange),
+                //       SizedBox(width: 8),
+                //       Text('Airtel Money'),
+                //     ],
+                //   ),
+                // ),
+                // DropdownMenuItem(
+                //   value: ModePaiement.mPesa,
+                //   child: Row(
+                //     children: [
+                //       Icon(Icons.account_balance_wallet, color: Colors.blue),
+                //       SizedBox(width: 8),
+                //       Text('M-Pesa'),
+                //     ],
+                //   ),
+                // ),
+                // DropdownMenuItem(
+                //   value: ModePaiement.orangeMoney,
+                //   child: Row(
+                //     children: [
+                //       Icon(Icons.payment, color: Colors.orange),
+                //       SizedBox(width: 8),
+                //       Text('Orange Money'),
+                //     ],
+                //   ),
+                // ),
               ],
               onChanged: (value) {
                 setState(() {

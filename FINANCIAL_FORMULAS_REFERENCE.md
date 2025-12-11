@@ -29,8 +29,10 @@ Cash Disponible = (Solde Antérieur + Dépôts + FLOT Reçu + Transfert Reçu)
 **Sorties (Decrease cash):**
 - Retraits: Client withdrawals (OperationType.retrait, OperationType.retraitMobileMoney) using montantNet
 - FLOT Envoyé: FLOTs where shopSourceId = our shop
-- Transfert Servi: Operations where shopDestinationId = our shop (transfertNational, transfertInternationalEntrant) using montantNet
+- Transfert Servi: Operations where shopDestinationId = our shop (transfertNational, transfertInternationalEntrant) using montantNet - **ONLY with status `validee` (served operations)**
 - Retraits FRAIS: Special account withdrawals (TypeTransactionCompte.RETRAIT)
+
+**⚠️ IMPORTANT**: Transfers with status `enAttente` (pending) are NOT counted in cash movements. Only served transfers (status = `validee`) impact cash flow.
 
 ## Client Balance Calculation
 

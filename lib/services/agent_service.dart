@@ -1,9 +1,12 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:http/http.dart' as http;
 import '../models/agent_model.dart';
 import 'local_db.dart';
 import 'sync_service.dart';
 import 'shop_service.dart';
+import '../config/app_config.dart';
 
 class AgentService extends ChangeNotifier {
   static final AgentService _instance = AgentService._internal();
@@ -46,6 +49,9 @@ class AgentService extends ChangeNotifier {
       
       // Nettoyer les données corrompues avant le chargement
       await LocalDB.instance.cleanCorruptedAgentData();
+      
+      // Vérifier les agents supprimés sur le serveur
+      await _checkForDeletedAgents();
       
       _agents = await LocalDB.instance.getAllAgents();
       _errorMessage = null;
@@ -261,6 +267,99 @@ class AgentService extends ChangeNotifier {
       debugPrint('✅ Agents de test créés avec succès');
     } catch (e) {
       debugPrint('❌ Erreur lors de la création des agents de test: $e');
+    }
+  }
+
+  // Vérifier les agents supprimés sur le serveur
+  Future<void> _checkForDeletedAgents() async {
+    try {
+      if (_agents.isEmpty) {
+        return;
+      }
+      
+      debugPrint('🔍 Vérification des agents supprimés sur le serveur...');
+      
+      // Extraire les IDs des agents locaux
+      final agentIds = _agents
+          .where((agent) => agent.id != null && agent.id! > 0)
+          .map((agent) => agent.id!)
+          .toList();
+      
+      if (agentIds.isEmpty) {
+        return;
+      }
+      
+      // Appeler l'API pour vérifier les agents supprimés
+      final baseUrl = await AppConfig.getApiBaseUrl();
+      final cleanUrl = baseUrl.trim();
+      final url = Uri.parse('$cleanUrl/sync/agents/check_deleted.php');
+      
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'agent_ids': agentIds,
+        }),
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          throw Exception('Timeout lors de la vérification des agents supprimés');
+        },
+      );
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          final deletedAgents = List<int>.from(data['deleted_agents'] ?? []);
+          
+          if (deletedAgents.isNotEmpty) {
+            debugPrint('🗑️ ${deletedAgents.length} agent(s) supprimé(s) détecté(s) sur le serveur');
+            
+            // Supprimer les agents de toutes les sources locales
+            await _removeDeletedAgentsLocally(deletedAgents);
+          } else {
+            debugPrint('✅ Aucun agent supprimé trouvé sur le serveur');
+          }
+        } else {
+          debugPrint('⚠️ Erreur lors de la vérification des agents supprimés: ${data['error']}');
+        }
+      } else {
+        debugPrint('⚠️ HTTP Error ${response.statusCode} lors de la vérification des agents supprimés');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Erreur lors de la vérification des agents supprimés: $e');
+      // Ne pas propager l'erreur pour ne pas bloquer le chargement
+    }
+  }
+  
+  // Supprimer localement les agents qui ont été supprimés sur le serveur
+  Future<void> _removeDeletedAgentsLocally(List<int> deletedAgentIds) async {
+    try {
+      debugPrint('🗑️ Suppression locale de ${deletedAgentIds.length} agent(s)...');
+      
+      int removedCount = 0;
+      
+      for (final agentId in deletedAgentIds) {
+        // Supprimer de LocalDB
+        await LocalDB.instance.deleteAgent(agentId);
+        
+        // Supprimer du cache en mémoire
+        _agents.removeWhere((agent) => agent.id == agentId);
+        
+        removedCount++;
+        debugPrint('   ✅ Agent ID $agentId supprimé localement');
+      }
+      
+      if (removedCount > 0) {
+        notifyListeners();
+      }
+      
+      debugPrint('✅ Nettoyage local terminé: $removedCount agent(s) supprimé(s)');
+    } catch (e) {
+      debugPrint('❌ Erreur lors du nettoyage local des agents: $e');
     }
   }
 

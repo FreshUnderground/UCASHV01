@@ -259,7 +259,9 @@ class _FlotDialogState extends State<FlotDialog> {
                     border: InputBorder.none,
                     isDense: true,
                   ),
-                  items: ModePaiement.values.map((mode) {
+                  items: ModePaiement.values
+                    .where((mode) => mode == ModePaiement.cash) // MASQUÉ: Seul Cash doit être visible
+                    .map((mode) {
                     String label;
                     IconData icon;
                     switch (mode) {

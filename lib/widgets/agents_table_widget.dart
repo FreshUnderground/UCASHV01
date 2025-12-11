@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import '../services/agent_service.dart';
 import '../services/shop_service.dart';
 import '../models/agent_model.dart';
@@ -49,6 +50,7 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 768;
     
@@ -70,6 +72,7 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
   }
 
   Widget _buildResponsiveHeader(bool isMobile) {
+    final l10n = AppLocalizations.of(context)!;
     return Container(
       padding: EdgeInsets.all(isMobile ? 12 : 16),
       child: Column(
@@ -81,8 +84,8 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Liste des Agents',
+                Text(
+                  l10n.agents,
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -95,7 +98,7 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
                   child: ElevatedButton.icon(
                     onPressed: _showCreateAgentDialog,
                     icon: const Icon(Icons.person_add, size: 16),
-                    label: const Text('Nouvel Agent'),
+                    label: Text(l10n.newAgent),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFDC2626),
                       foregroundColor: Colors.white,
@@ -109,9 +112,9 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
             // Layout desktop horizontal
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'Liste des Agents',
+                    l10n.agents,
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -122,7 +125,7 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
                 ElevatedButton.icon(
                   onPressed: _showCreateAgentDialog,
                   icon: const Icon(Icons.person_add, size: 18),
-                  label: const Text('Nouvel Agent'),
+                  label: Text(l10n.newAgent),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFDC2626),
                     foregroundColor: Colors.white,
@@ -142,16 +145,17 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
   }
 
   Widget _buildResponsiveFilters(bool isMobile) {
+    final l10n = AppLocalizations.of(context)!;
     if (isMobile) {
       return Column(
         children: [
           // Barre de recherche mobile
           TextField(
-            decoration: const InputDecoration(
-              hintText: 'Rechercher un agent...',
-              prefixIcon: Icon(Icons.search),
-              border: OutlineInputBorder(),
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: InputDecoration(
+              hintText: l10n.searchAgent,
+              prefixIcon: const Icon(Icons.search),
+              border: const OutlineInputBorder(),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             ),
             onChanged: (value) {
               setState(() {
@@ -163,23 +167,23 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
           // Filtre statut mobile
           DropdownButtonFormField<String>(
             value: _statusFilter,
-            decoration: const InputDecoration(
-              labelText: 'Filtrer par statut',
-              border: OutlineInputBorder(),
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: InputDecoration(
+              labelText: l10n.filterByStatus,
+              border: const OutlineInputBorder(),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             ),
-            items: const [
+            items: [
               DropdownMenuItem(
                 value: 'all',
-                child: Text('Tous les agents'),
+                child: Text(l10n.allAgents),
               ),
               DropdownMenuItem(
                 value: 'active',
-                child: Text('Agents actifs'),
+                child: Text(l10n.activeAgents),
               ),
               DropdownMenuItem(
                 value: 'inactive',
-                child: Text('Agents inactifs'),
+                child: Text(l10n.inactiveAgents),
               ),
             ],
             onChanged: (value) {
@@ -198,11 +202,11 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
         Expanded(
           flex: 2,
           child: TextField(
-            decoration: const InputDecoration(
-              hintText: 'Rechercher un agent...',
-              prefixIcon: Icon(Icons.search, size: 18),
-              border: OutlineInputBorder(),
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: InputDecoration(
+              hintText: l10n.searchAgent,
+              prefixIcon: const Icon(Icons.search, size: 18),
+              border: const OutlineInputBorder(),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             ),
             onChanged: (value) {
               setState(() {
@@ -217,23 +221,23 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
           flex: 1,
           child: DropdownButtonFormField<String>(
             value: _statusFilter,
-            decoration: const InputDecoration(
-              labelText: 'Statut',
-              border: OutlineInputBorder(),
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: InputDecoration(
+              labelText: l10n.status,
+              border: const OutlineInputBorder(),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             ),
-            items: const [
+            items: [
               DropdownMenuItem(
                 value: 'all',
-                child: Text('Tous'),
+                child: Text(l10n.all),
               ),
               DropdownMenuItem(
                 value: 'active',
-                child: Text('Actifs'),
+                child: Text(l10n.active),
               ),
               DropdownMenuItem(
                 value: 'inactive',
-                child: Text('Inactifs'),
+                child: Text(l10n.inactive),
               ),
             ],
             onChanged: (value) {
@@ -248,6 +252,7 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
   }
 
   Widget _buildAgentsTable(bool isMobile) {
+    final l10n = AppLocalizations.of(context)!;
     return Consumer2<AgentService, ShopService>(
       builder: (context, agentService, shopService, child) {
         if (agentService.isLoading) {
@@ -264,14 +269,14 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
                 const Icon(Icons.error, color: Colors.red, size: 48),
                 const SizedBox(height: 16),
                 Text(
-                  'Erreur: ${agentService.errorMessage}',
+                  '${l10n.error}: ${agentService.errorMessage}',
                   style: const TextStyle(color: Colors.red),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
                 ElevatedButton(
                   onPressed: _loadData,
-                  child: const Text('Réessayer'),
+                  child: Text(l10n.retry),
                 ),
               ],
             ),
@@ -291,8 +296,8 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
                 const SizedBox(height: 16),
                 Text(
                   agentService.agents.isEmpty 
-                      ? 'Aucun agent créé'
-                      : 'Aucun agent trouvé avec ces critères',
+                      ? l10n.noAgentsFound
+                      : l10n.noAgentFound,
                   style: const TextStyle(
                     fontSize: 16,
                     color: Colors.grey,
@@ -300,15 +305,15 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'Cliquez sur "Nouvel Agent" pour créer un agent',
-                  style: TextStyle(color: Colors.grey),
+                Text(
+                  l10n.clickNewAgentToCreate,
+                  style: const TextStyle(color: Colors.grey),
                 ),
                 const SizedBox(height: 16),
                 ElevatedButton.icon(
                   onPressed: _showCreateAgentDialog,
                   icon: const Icon(Icons.person_add),
-                  label: const Text('Créer un Agent'),
+                  label: Text(l10n.createAnAgent),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFDC2626),
                     foregroundColor: Colors.white,
@@ -334,13 +339,12 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
                   dataRowMinHeight: 56,
                   dataRowMaxHeight: 56,
                   headingRowHeight: 48,
-                  columns: const [
-                    DataColumn(label: Text('Agent', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
-                    DataColumn(label: Text('Shop', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
-                    DataColumn(label: Text('Contact', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
-                    DataColumn(label: Text('Statut', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
-                    DataColumn(label: Text('Créé le', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
-                    DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+                  columns: [
+                    DataColumn(label: Text(l10n.agent, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+                    DataColumn(label: Text(l10n.shop, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+                    DataColumn(label: Text(l10n.contact, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+                    DataColumn(label: Text(l10n.status, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+                    DataColumn(label: Text(l10n.actions, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
                   ],
                   rows: filteredAgents.map((agent) {
                     final shop = shopService.shops.firstWhere(
@@ -436,20 +440,6 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
                           ),
                         ),
                         
-                        // Date de création
-                        DataCell(
-                          Text(
-                            agent.createdAt != null
-                                ? '${agent.createdAt!.day}/${agent.createdAt!.month}/${agent.createdAt!.year}'
-                                : 'Non renseigné',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.grey[600],
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        
                         // Actions
                         DataCell(
                           Row(
@@ -528,15 +518,27 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
     final updatedAgent = agent.copyWith(isActive: !agent.isActive);
     
     final success = await agentService.updateAgent(updatedAgent);
-    if (success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Agent ${updatedAgent.isActive ? "activé" : "désactivé"} avec succès',
+    if (mounted) {
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Agent ${updatedAgent.isActive ? "activé" : "désactivé"} avec succès',
+            ),
+            backgroundColor: Colors.green,
           ),
-          backgroundColor: Colors.green,
-        ),
-      );
+        );
+        _loadData(); // Reload data after successful update
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Erreur: ${agentService.errorMessage ?? "Impossible de modifier l\'agent"}',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -580,13 +582,25 @@ class _AgentsTableWidgetState extends State<AgentsTableWidget> {
       final agentService = Provider.of<AgentService>(context, listen: false);
       final success = await agentService.deleteAgent(agent.id!);
       
-      if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Agent supprimé avec succès'),
-            backgroundColor: Colors.green,
-          ),
-        );
+      if (mounted) {
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Agent supprimé avec succès'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          _loadData(); // Reload data after successful deletion
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Erreur: ${agentService.errorMessage ?? "Impossible de supprimer l\'agent"}',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }

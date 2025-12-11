@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import '../services/agent_service.dart';
 import '../services/shop_service.dart';
 import '../models/agent_model.dart';
@@ -35,6 +36,7 @@ class _EditAgentDialogState extends State<EditAgentDialog> {
   }
 
   void _initializeFields() {
+    final l10n = AppLocalizations.of(context)!;
     _usernameController.text = widget.agent.username;
     _passwordController.text = widget.agent.password;
     _nomController.text = widget.agent.nom ?? '';
@@ -48,7 +50,7 @@ class _EditAgentDialogState extends State<EditAgentDialog> {
         (shop) => shop.id == widget.agent.shopId,
         orElse: () => shopService.shops.isNotEmpty ? shopService.shops.first : ShopModel(
           id: 0,
-          designation: 'Aucun shop',
+          designation: l10n.noShopAssigned,
           localisation: '',
           capitalInitial: 0,
         ),
@@ -68,6 +70,7 @@ class _EditAgentDialogState extends State<EditAgentDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Dialog(
       child: Container(
         width: 500,
@@ -89,9 +92,9 @@ class _EditAgentDialogState extends State<EditAgentDialog> {
                 children: [
                   const Icon(Icons.edit, color: Colors.white),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Modifier l\'Agent',
+                      l10n.editAgent,
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 18,
@@ -119,17 +122,17 @@ class _EditAgentDialogState extends State<EditAgentDialog> {
                       // Username
                       TextFormField(
                         controller: _usernameController,
-                        decoration: const InputDecoration(
-                          labelText: 'Nom d\'utilisateur *',
+                        decoration: InputDecoration(
+                          labelText: '${l10n.username} *',
                           border: OutlineInputBorder(),
                           prefixIcon: Icon(Icons.person),
                         ),
                         validator: (value) {
                           if (value == null || value.isEmpty) {
-                            return 'Le nom d\'utilisateur est requis';
+                            return l10n.usernameRequired;
                           }
                           if (value.length < 3) {
-                            return 'Le nom d\'utilisateur doit contenir au moins 3 caractères';
+                            return l10n.usernameMinLength;
                           }
                           return null;
                         },
@@ -139,18 +142,18 @@ class _EditAgentDialogState extends State<EditAgentDialog> {
                       // Password
                       TextFormField(
                         controller: _passwordController,
-                        decoration: const InputDecoration(
-                          labelText: 'Mot de passe *',
+                        decoration: InputDecoration(
+                          labelText: '${l10n.password} *',
                           border: OutlineInputBorder(),
                           prefixIcon: Icon(Icons.lock),
                         ),
                         obscureText: true,
                         validator: (value) {
                           if (value == null || value.isEmpty) {
-                            return 'Le mot de passe est requis';
+                            return l10n.passwordRequired;
                           }
                           if (value.length < 6) {
-                            return 'Le mot de passe doit contenir au moins 6 caractères';
+                            return l10n.passwordMinLength;
                           }
                           return null;
                         },
@@ -161,17 +164,17 @@ class _EditAgentDialogState extends State<EditAgentDialog> {
                       Consumer<ShopService>(
                         builder: (context, shopService, child) {
                           if (shopService.shops.isEmpty) {
-                            return const Card(
+                            return Card(
                               color: Colors.orange,
                               child: Padding(
-                                padding: EdgeInsets.all(12),
+                                padding: const EdgeInsets.all(12),
                                 child: Row(
                                   children: [
-                                    Icon(Icons.warning, color: Colors.white),
-                                    SizedBox(width: 8),
+                                    const Icon(Icons.warning, color: Colors.white),
+                                    const SizedBox(width: 8),
                                     Text(
-                                      'Aucun shop disponible',
-                                      style: TextStyle(color: Colors.white),
+                                      l10n.noShopsAvailable,
+                                      style: const TextStyle(color: Colors.white),
                                     ),
                                   ],
                                 ),
@@ -181,8 +184,8 @@ class _EditAgentDialogState extends State<EditAgentDialog> {
                           
                           return DropdownButtonFormField<ShopModel>(
                             value: _selectedShop,
-                            decoration: const InputDecoration(
-                              labelText: 'Shop assigné *',
+                            decoration: InputDecoration(
+                              labelText: '${l10n.assignedShop} *',
                               border: OutlineInputBorder(),
                               prefixIcon: Icon(Icons.store),
                             ),
@@ -199,7 +202,7 @@ class _EditAgentDialogState extends State<EditAgentDialog> {
                             },
                             validator: (value) {
                               if (value == null) {
-                                return 'Veuillez sélectionner un shop';
+                                return l10n.shopRequired;
                               }
                               return null;
                             },
@@ -211,8 +214,8 @@ class _EditAgentDialogState extends State<EditAgentDialog> {
                       // Nom complet (optionnel)
                       TextFormField(
                         controller: _nomController,
-                        decoration: const InputDecoration(
-                          labelText: 'Nom complet (optionnel)',
+                        decoration: InputDecoration(
+                          labelText: l10n.fullNameOptional,
                           border: OutlineInputBorder(),
                           prefixIcon: Icon(Icons.badge),
                         ),
@@ -222,8 +225,8 @@ class _EditAgentDialogState extends State<EditAgentDialog> {
                       // Téléphone (optionnel)
                       TextFormField(
                         controller: _telephoneController,
-                        decoration: const InputDecoration(
-                          labelText: 'Téléphone (optionnel)',
+                        decoration: InputDecoration(
+                          labelText: l10n.phoneOptional,
                           border: OutlineInputBorder(),
                           prefixIcon: Icon(Icons.phone),
                         ),
@@ -247,14 +250,14 @@ class _EditAgentDialogState extends State<EditAgentDialog> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'Statut de l\'agent',
+                                      l10n.status,
                                       style: TextStyle(
                                         fontWeight: FontWeight.w600,
                                         color: Colors.grey[800],
                                       ),
                                     ),
                                     Text(
-                                      _isActive ? 'Agent actif' : 'Agent inactif',
+                                      _isActive ? l10n.active : l10n.inactive,
                                       style: TextStyle(
                                         color: _isActive ? Colors.green : Colors.red,
                                         fontWeight: FontWeight.w500,
@@ -297,7 +300,7 @@ class _EditAgentDialogState extends State<EditAgentDialog> {
                 children: [
                   TextButton(
                     onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
-                    child: const Text('Annuler'),
+                    child: Text(l10n.cancel),
                   ),
                   const SizedBox(width: 12),
                   ElevatedButton(
@@ -315,7 +318,7 @@ class _EditAgentDialogState extends State<EditAgentDialog> {
                               valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                             ),
                           )
-                        : const Text('Modifier'),
+                        : Text(l10n.edit),
                   ),
                 ],
               ),
@@ -327,12 +330,13 @@ class _EditAgentDialogState extends State<EditAgentDialog> {
   }
 
   Future<void> _handleSubmit() async {
+    final l10n = AppLocalizations.of(context)!;
     if (!_formKey.currentState!.validate()) return;
     
     if (_selectedShop == null || _selectedShop!.id == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Veuillez sélectionner un shop valide'),
+        SnackBar(
+          content: Text(l10n.shopRequired),
           backgroundColor: Colors.red,
         ),
       );
@@ -363,15 +367,15 @@ class _EditAgentDialogState extends State<EditAgentDialog> {
       if (success && mounted) {
         Navigator.of(context).pop(true);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Agent modifié avec succès !'),
+          SnackBar(
+            content: Text(l10n.agentUpdatedSuccessfully),
             backgroundColor: Colors.green,
           ),
         );
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erreur: ${agentService.errorMessage ?? "Erreur inconnue"}'),
+            content: Text('${l10n.error}: ${agentService.errorMessage ?? l10n.errorUpdatingAgent}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -380,7 +384,7 @@ class _EditAgentDialogState extends State<EditAgentDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erreur: $e'),
+            content: Text('${l10n.error}: $e'),
             backgroundColor: Colors.red,
           ),
         );

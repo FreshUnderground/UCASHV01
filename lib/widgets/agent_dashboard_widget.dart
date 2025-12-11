@@ -873,13 +873,18 @@ class _AgentDashboardWidgetState extends State<AgentDashboardWidget> {
         .fold<double>(0.0, (sum, op) => sum + op.montantBrut);
     
     // 6. Transferts Servis (on sert le client - SORTIE)
+    // IMPORTANT: On ne comptabilise que les opérations SERVIES (statut = validee)
     final transfertServiUSD = todayOperations
         .where((op) => (op.type == OperationType.transfertNational || op.type == OperationType.transfertInternationalEntrant) && 
-                       op.shopDestinationId == shopId && op.devise == 'USD')
+                       op.shopDestinationId == shopId && 
+                       op.statut == OperationStatus.validee && 
+                       op.devise == 'USD')
         .fold<double>(0.0, (sum, op) => sum + op.montantNet);
     final transfertServiDeviseLocale = todayOperations
         .where((op) => (op.type == OperationType.transfertNational || op.type == OperationType.transfertInternationalEntrant) && 
-                       op.shopDestinationId == shopId && (op.devise == 'CDF' || op.devise == 'UGX'))
+                       op.shopDestinationId == shopId && 
+                       op.statut == OperationStatus.validee && 
+                       (op.devise == 'CDF' || op.devise == 'UGX'))
         .fold<double>(0.0, (sum, op) => sum + op.montantNet);
     
     // 7. Retraits du jour (clients qui retirent)

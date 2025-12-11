@@ -866,13 +866,14 @@ class CompteSpecialService extends ChangeNotifier {
   }
 
   /// Obtenir les frais groupés par SHOP DESTINATION (qui encaisse les frais)
+  /// LOGIQUE DE CLÔTURE: Les frais appartiennent au shop DESTINATION (qui sert le transfert)
   Future<Map<String, Map<String, dynamic>>> getFraisParShopDestination({
     int? shopId,
     DateTime? startDate,
     DateTime? endDate,
   }) async {
     try {
-      debugPrint('📊 getFraisParShopDestination: DEBUT');
+      debugPrint('📊 getFraisParShopDestination: DEBUT (shopId=$shopId, période=$startDate -> $endDate)');
       final prefs = await SharedPreferences.getInstance();
       final keys = prefs.getKeys();
       final operations = <Map<String, dynamic>>[];
@@ -907,7 +908,7 @@ class CompteSpecialService extends ChangeNotifier {
         }
       }
       
-      debugPrint('📊 getFraisParShopDestination: ${shops.length} shops chargés');
+      debugPrint('📊 getFraisParShopDestination: ${shops.length} shops chargés, ${operations.length} opérations');
       
       final shopsMap = <int, String>{};
       for (final shop in shops) {
@@ -925,31 +926,58 @@ class CompteSpecialService extends ChangeNotifier {
       
       debugPrint('📊 getFraisParShopDestination: shopsMap créé avec ${shopsMap.length} entrées');
       
-      // Grouper par shop destination (qui encaisse les frais)
-      final Map<int, Map<String, dynamic>> parShopDest = {};
+      // Grouper les frais par shop SOURCE (qui a envoyé le transfert au shop DESTINATION)
+      final Map<int, Map<String, dynamic>> parShopSource = {};
+      
+      int totalOperations = 0;
+      int filteredByShopDest = 0;
+      int filteredByType = 0;
+      int filteredByStatut = 0;
+      int filteredByDate = 0;
+      int validOperations = 0;
       
       for (final opData in operations) {
         try {
+          totalOperations++;
+          
+          // LOGIQUE DE CLÔTURE: Le shop DESTINATION encaisse les frais
+          // Filtrer les opérations où shopId est la DESTINATION
           // Handle shop_destination_id - peut être int ou String depuis SharedPreferences
           final shopDestIdRaw = opData['shop_destination_id'];
           final shopDestId = shopDestIdRaw is int ? shopDestIdRaw : (shopDestIdRaw is String ? int.tryParse(shopDestIdRaw) : null);
+          
+          if (shopDestId == null) {
+            filteredByShopDest++;
+            continue;
+          }
+          
+          // Si un shopId est spécifié (admin sélectionne un shop), filtrer par ce shop DESTINATION
+          if (shopId != null && shopDestId != shopId) {
+            filteredByShopDest++;
+            continue;
+          }
           
           // Handle shop_source_id - peut être int ou String depuis SharedPreferences
           final shopSrcIdRaw = opData['shop_source_id'];
           final shopSrcId = shopSrcIdRaw is int ? shopSrcIdRaw : (shopSrcIdRaw is String ? int.tryParse(shopSrcIdRaw) : null);
           
-          if (shopDestId == null || shopSrcId == null) continue;
+          if (shopSrcId == null) continue;
           
-          // Filtrer par shop si spécifié (on veut voir les frais encaissés par CE shop)
-          if (shopId != null && shopDestId != shopId) continue;
-          
+          // Vérifier le type d'opération (transferts uniquement)
           final type = opData['type']?.toString();
           if (!(type == 'transfertNational' ||
                type == 'transfertInternationalEntrant' ||
-               type == 'transfertInternationalSortant')) continue;
+               type == 'transfertInternationalSortant')) {
+            filteredByType++;
+            continue;
+          }
           
+          // Vérifier le statut (validée uniquement)
           final statut = opData['statut']?.toString();
-          if (statut != 'validee') continue;
+          if (statut != 'validee') {
+            filteredByStatut++;
+            continue;
+          }
         
         // Parse date de manière robuste (peut être String, int timestamp, ou DateTime)
         DateTime dateValidation;
@@ -989,28 +1017,36 @@ class CompteSpecialService extends ChangeNotifier {
         
         if (startDate != null) {
           final startOfDay = DateTime(startDate.year, startDate.month, startDate.day);
-          if (dateValidation.isBefore(startOfDay)) continue;
+          if (dateValidation.isBefore(startOfDay)) {
+            filteredByDate++;
+            continue;
+          }
         }
         if (endDate != null) {
           final endOfDay = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
-          if (dateValidation.isAfter(endOfDay)) continue;
+          if (dateValidation.isAfter(endOfDay)) {
+            filteredByDate++;
+            continue;
+          }
         }
         
         final commission = (opData['commission'] as num?)?.toDouble() ?? 0.0;
         if (commission <= 0) continue;
         
+        validOperations++;
+        
         // Grouper par shop source (qui a envoyé le transfert)
-        if (!parShopDest.containsKey(shopSrcId)) {
-          parShopDest[shopSrcId] = {
+        if (!parShopSource.containsKey(shopSrcId)) {
+          parShopSource[shopSrcId] = {
             'montant': 0.0,
             'count': 0,
             'details': <Map<String, dynamic>>[],
           };
         }
         
-        parShopDest[shopSrcId]!['montant'] = (parShopDest[shopSrcId]!['montant'] as double) + commission;
-        parShopDest[shopSrcId]!['count'] = (parShopDest[shopSrcId]!['count'] as int) + 1;
-        (parShopDest[shopSrcId]!['details'] as List<Map<String, dynamic>>).add({
+        parShopSource[shopSrcId]!['montant'] = (parShopSource[shopSrcId]!['montant'] as double) + commission;
+        parShopSource[shopSrcId]!['count'] = (parShopSource[shopSrcId]!['count'] as int) + 1;
+        (parShopSource[shopSrcId]!['details'] as List<Map<String, dynamic>>).add({
           'destinataire': opData['destinataire']?.toString() ?? 'N/A',  // Peut être String ou int
             'montantNet': (opData['montant_net'] as num?)?.toDouble() ?? 0.0,
             'commission': commission,
@@ -1022,10 +1058,18 @@ class CompteSpecialService extends ChangeNotifier {
         }
       }
       
+      debugPrint('📊 Filtrage terminé:');
+      debugPrint('   Total opérations: $totalOperations');
+      debugPrint('   Filtrées par shop destination: $filteredByShopDest');
+      debugPrint('   Filtrées par type: $filteredByType');
+      debugPrint('   Filtrées par statut: $filteredByStatut');
+      debugPrint('   Filtrées par date: $filteredByDate');
+      debugPrint('   ✅ Opérations valides: $validOperations');
+      
       // Créer le résultat final avec noms de shops
       final Map<String, Map<String, dynamic>> result = {};
       
-      for (final entry in parShopDest.entries) {
+      for (final entry in parShopSource.entries) {
         final shopSrcId = entry.key;
         final data = entry.value;
         
@@ -1038,6 +1082,8 @@ class CompteSpecialService extends ChangeNotifier {
           'shopSourceId': shopSrcId,
         };
       }
+      
+      debugPrint('📊 Résultat final: ${result.length} shops sources avec frais');
       
       return result;
     } catch (e) {

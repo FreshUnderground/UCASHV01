@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../services/operation_service.dart';
+import '../services/shop_service.dart';
 import '../widgets/client_account_summary.dart';
 import '../widgets/client_transaction_history.dart';
 import '../widgets/client_profile_widget.dart';
+import '../widgets/client_shop_info_widget.dart';
 import '../widgets/connectivity_indicator.dart';
 
 class ClientDashboardPage extends StatefulWidget {
@@ -40,6 +42,9 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
     final currentClient = authService.currentClient;
     
     if (currentClient != null) {
+      // Charger les shops pour afficher les infos du shop du client
+      Provider.of<ShopService>(context, listen: false).loadShops();
+      
       // Charger les opérations du client
       Provider.of<OperationService>(context, listen: false)
           .loadClientOperations(currentClient.id!);
@@ -458,6 +463,10 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ⭐ NOUVEAU: Informations du shop
+          const ClientShopInfoWidget(),
+          SizedBox(height: isMobile ? 20 : 24),
+          
           // Résumé du compte
           const ClientAccountSummary(),
           SizedBox(height: isMobile ? 20 : 24),

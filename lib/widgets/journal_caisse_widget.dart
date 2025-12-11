@@ -524,14 +524,15 @@ class _JournalCaisseWidgetState extends State<JournalCaisseWidget> {
                         DropdownMenuItem(value: null, child: Text('Tous')),
                         DropdownMenuItem(
                             value: ModePaiement.cash, child: Text('Cash')),
-                        DropdownMenuItem(
-                            value: ModePaiement.airtelMoney,
-                            child: Text('Airtel Money')),
-                        DropdownMenuItem(
-                            value: ModePaiement.mPesa, child: Text('M-Pesa')),
-                        DropdownMenuItem(
-                            value: ModePaiement.orangeMoney,
-                            child: Text('Orange Money')),
+                        // MASQUÉ: Airtel Money, M-Pesa, Orange Money ne doivent pas être visibles
+                        // DropdownMenuItem(
+                        //     value: ModePaiement.airtelMoney,
+                        //     child: Text('Airtel Money')),
+                        // DropdownMenuItem(
+                        //     value: ModePaiement.mPesa, child: Text('M-Pesa')),
+                        // DropdownMenuItem(
+                        //     value: ModePaiement.orangeMoney,
+                        //     child: Text('Orange Money')),
                       ],
                       onChanged: (value) {
                         setState(() => _selectedMode = value);

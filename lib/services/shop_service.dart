@@ -1,9 +1,12 @@
+import 'dart:convert';
 import 'package:flutter/widgets.dart';
+import 'package:http/http.dart' as http;
 import '../models/shop_model.dart';
 import '../models/caisse_model.dart';
 import '../models/operation_model.dart';
 import '../models/journal_caisse_model.dart';
 import '../models/cloture_caisse_model.dart';
+import '../config/app_config.dart';
 import 'local_db.dart';
 import 'sync_service.dart';
 import '../utils/sync_diagnostics.dart';
@@ -53,6 +56,9 @@ class ShopService extends ChangeNotifier {
       } else if (forceRefresh) {
         _shops.clear();
       }
+      
+      // Vérifier les shops supprimés sur le serveur
+      await _checkForDeletedShops();
       
       // Charger depuis la base locale
       final allShops = await LocalDB.instance.getAllShops();
@@ -176,8 +182,159 @@ class ShopService extends ChangeNotifier {
       return false;
     }
   }
+  
+  /// Met à jour un shop directement via l'API serveur (nouveau endpoint dédié)
+  /// Utilisé par les admins pour modifier un shop et notifier tous les agents
+  Future<Map<String, dynamic>?> updateShopViaAPI(ShopModel shop, {String userId = 'admin'}) async {
+    try {
+      debugPrint('📤 [ShopService] Mise à jour du shop via API: ${shop.designation}');
+      
+      final baseUrl = await AppConfig.getSyncBaseUrl();
+      final url = Uri.parse('$baseUrl/shops/update.php');
+      
+      final payload = {
+        'shop_id': shop.id,
+        'designation': shop.designation,
+        'localisation': shop.localisation,
+        'capital_initial': shop.capitalInitial,
+        'devise_principale': shop.devisePrincipale,
+        'devise_secondaire': shop.deviseSecondaire,
+        'capital_actuel': shop.capitalActuel,
+        'capital_cash': shop.capitalCash,
+        'capital_airtel_money': shop.capitalAirtelMoney,
+        'capital_mpesa': shop.capitalMPesa,
+        'capital_orange_money': shop.capitalOrangeMoney,
+        'capital_actuel_devise2': shop.capitalActuelDevise2,
+        'capital_cash_devise2': shop.capitalCashDevise2,
+        'capital_airtel_money_devise2': shop.capitalAirtelMoneyDevise2,
+        'capital_mpesa_devise2': shop.capitalMPesaDevise2,
+        'capital_orange_money_devise2': shop.capitalOrangeMoneyDevise2,
+        'creances': shop.creances,
+        'dettes': shop.dettes,
+        'user_id': userId,
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+      
+      debugPrint('📤 Envoi vers: $url');
+      
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode(payload),
+      ).timeout(const Duration(seconds: 15));
+      
+      debugPrint('📊 Réponse HTTP: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        final result = jsonDecode(response.body);
+        
+        if (result['success'] == true) {
+          debugPrint('✅ Shop mis à jour sur le serveur');
+          debugPrint('👥 Agents affectés: ${result['affected_agents']['count']}');
+          
+          // Mettre à jour localement avec le flag is_synced: true
+          final syncedShop = shop.copyWith(
+            isSynced: true,
+            syncedAt: DateTime.now(),
+            lastModifiedAt: DateTime.now(),
+            lastModifiedBy: userId,
+          );
+          
+          await LocalDB.instance.updateShop(syncedShop);
+          
+          // Mettre à jour le cache
+          final index = _shops.indexWhere((s) => s.id == shop.id);
+          if (index != -1) {
+            _shops[index] = syncedShop;
+            notifyListeners();
+          }
+          
+          return result;
+        } else {
+          debugPrint('❌ Erreur serveur: ${result['message']}');
+          return null;
+        }
+      } else {
+        debugPrint('❌ Erreur HTTP: ${response.statusCode}');
+        debugPrint('📄 Réponse: ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('❌ Erreur updateShopViaAPI: $e');
+      return null;
+    }
+  }
 
-  // Supprimer un shop
+  /// Supprime un shop via l'API serveur avec audit trail
+  /// Utilise soft delete par défaut (is_active = 0)
+  Future<Map<String, dynamic>?> deleteShopViaAPI(
+    int shopId, {
+    required String adminId,
+    required String adminUsername,
+    required String reason,
+    String deleteType = 'soft', // 'soft' ou 'hard'
+    bool forceDelete = false,
+  }) async {
+    try {
+      debugPrint('📤 [ShopService] Suppression du shop via API: ID $shopId');
+      
+      final baseUrl = await AppConfig.getSyncBaseUrl();
+      final url = Uri.parse('$baseUrl/shops/delete.php');
+      
+      final payload = {
+        'shop_id': shopId,
+        'admin_id': adminId,
+        'admin_username': adminUsername,
+        'reason': reason,
+        'delete_type': deleteType,
+        'force_delete': forceDelete,
+      };
+      
+      debugPrint('📤 Envoi vers: $url');
+      
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode(payload),
+      ).timeout(const Duration(seconds: 15));
+      
+      debugPrint('📊 Réponse HTTP: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        final result = jsonDecode(response.body);
+        
+        if (result['success'] == true) {
+          debugPrint('✅ Shop supprimé sur le serveur');
+          debugPrint('👥 Agents affectés: ${result['affected_agents']['count']}');
+          
+          // Supprimer localement
+          await LocalDB.instance.deleteShop(shopId);
+          _shops.removeWhere((s) => s.id == shopId);
+          notifyListeners();
+          
+          return result;
+        } else {
+          debugPrint('❌ Erreur serveur: ${result['message']}');
+          return null;
+        }
+      } else {
+        debugPrint('❌ Erreur HTTP: ${response.statusCode}');
+        debugPrint('📄 Réponse: ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      debugPrint('❌ Erreur deleteShopViaAPI: $e');
+      return null;
+    }
+  }
+
+  // Supprimer un shop (ancien code - utilise deleteShopViaAPI pour une suppression complète)
   Future<bool> deleteShop(int shopId) async {
     _setLoading(true);
     try {
@@ -380,12 +537,13 @@ class ShopService extends ChangeNotifier {
   void _syncInBackground() {
     Future.delayed(Duration.zero, () async {
       try {
-        debugPrint('🔄 [ShopService] Synchronisation en arrière-plan...');
+        debugPrint('🔄 [ShopService] Synchronisation des shops en arrière-plan...');
         final syncService = SyncService();
-        await syncService.syncAll();
-        debugPrint('✅ [ShopService] Synchronisation terminée');
+        // Uploader les shops non synchronisés vers le serveur
+        await syncService.uploadTableData('shops', 'admin', 'admin');
+        debugPrint('✅ [ShopService] Shops synchronisés avec succès');
       } catch (e) {
-        debugPrint('⚠️ [ShopService] Erreur sync (non bloquante): $e');
+        debugPrint('⚠️ [ShopService] Erreur sync shops (non bloquante): $e');
       }
     });
   }
@@ -397,5 +555,130 @@ class ShopService extends ChangeNotifier {
     
     // Déclencher une synchronisation
     _syncInBackground();
+  }
+  
+  /// Met à jour un shop directement dans LocalDB et le cache sans déclencher la synchronisation
+  /// Utilisé par SyncService pour marquer les shops comme synchronisés après upload réussi
+  Future<void> updateShopDirectly(ShopModel shop) async {
+    try {
+      // Sauvegarder directement dans LocalDB
+      await LocalDB.instance.updateShop(shop);
+      
+      // Mettre à jour le cache en mémoire
+      final index = _shops.indexWhere((s) => s.id == shop.id);
+      if (index != -1) {
+        _shops[index] = shop;
+        debugPrint('✅ [ShopService] Shop ${shop.designation} mis à jour directement (is_synced: ${shop.isSynced})');
+      }
+    } catch (e) {
+      debugPrint('❌ [ShopService] Erreur updateShopDirectly: $e');
+      rethrow;
+    }
+  }
+  
+  /// Recharge tous les shops depuis LocalDB (utile après une synchronisation)
+  Future<void> reloadShopsFromLocalDB() async {
+    try {
+      debugPrint('🔄 [ShopService] Rechargement des shops depuis LocalDB...');
+      final allShops = await LocalDB.instance.getAllShops();
+      _shops = allShops;
+      notifyListeners();
+      debugPrint('✅ [ShopService] ${_shops.length} shops rechargés');
+    } catch (e) {
+      debugPrint('❌ [ShopService] Erreur reloadShopsFromLocalDB: $e');
+    }
+  }
+  
+  // Vérifier les shops supprimés sur le serveur
+  Future<void> _checkForDeletedShops() async {
+    try {
+      if (_shops.isEmpty) {
+        return;
+      }
+      
+      debugPrint('🔍 Vérification des shops supprimés sur le serveur...');
+      
+      // Extraire les IDs des shops locaux
+      final shopIds = _shops
+          .where((shop) => shop.id != null && shop.id! > 0)
+          .map((shop) => shop.id!)
+          .toList();
+      
+      if (shopIds.isEmpty) {
+        return;
+      }
+      
+      // Appeler l'API pour vérifier les shops supprimés
+      final baseUrl = await AppConfig.getApiBaseUrl();
+      final cleanUrl = baseUrl.trim();
+      final url = Uri.parse('$cleanUrl/sync/shops/check_deleted.php');
+      
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'shop_ids': shopIds,
+        }),
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () {
+          throw Exception('Timeout lors de la vérification des shops supprimés');
+        },
+      );
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          final deletedShops = List<int>.from(data['deleted_shops'] ?? []);
+          
+          if (deletedShops.isNotEmpty) {
+            debugPrint('🗑️ ${deletedShops.length} shop(s) supprimé(s) détecté(s) sur le serveur');
+            
+            // Supprimer les shops de toutes les sources locales
+            await _removeDeletedShopsLocally(deletedShops);
+          } else {
+            debugPrint('✅ Aucun shop supprimé trouvé sur le serveur');
+          }
+        } else {
+          debugPrint('⚠️ Erreur lors de la vérification des shops supprimés: ${data['error']}');
+        }
+      } else {
+        debugPrint('⚠️ HTTP Error ${response.statusCode} lors de la vérification des shops supprimés');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Erreur lors de la vérification des shops supprimés: $e');
+      // Ne pas propager l'erreur pour ne pas bloquer le chargement
+    }
+  }
+  
+  // Supprimer localement les shops qui ont été supprimés sur le serveur
+  Future<void> _removeDeletedShopsLocally(List<int> deletedShopIds) async {
+    try {
+      debugPrint('🗑️ Suppression locale de ${deletedShopIds.length} shop(s)...');
+      
+      int removedCount = 0;
+      
+      for (final shopId in deletedShopIds) {
+        // Supprimer de LocalDB
+        await LocalDB.instance.deleteShop(shopId);
+        
+        // Supprimer du cache en mémoire
+        _shops.removeWhere((shop) => shop.id == shopId);
+        
+        removedCount++;
+        debugPrint('   ✅ Shop ID $shopId supprimé localement');
+      }
+      
+      if (removedCount > 0) {
+        notifyListeners();
+      }
+      
+      debugPrint('✅ Nettoyage local terminé: $removedCount shop(s) supprimé(s)');
+    } catch (e) {
+      debugPrint('❌ Erreur lors du nettoyage local des shops: $e');
+    }
   }
 }

@@ -84,24 +84,25 @@ class ShopsBalanceTable extends StatelessWidget {
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
-                DataColumn(
-                  label: Text(
-                    'Airtel Money',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                DataColumn(
-                  label: Text(
-                    'M-Pesa',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                DataColumn(
-                  label: Text(
-                    'Orange Money',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
+                // MASQUÉ: Airtel Money, M-Pesa, Orange Money ne doivent pas être visibles
+                // DataColumn(
+                //   label: Text(
+                //     'Airtel Money',
+                //     style: TextStyle(fontWeight: FontWeight.bold),
+                //   ),
+                // ),
+                // DataColumn(
+                //   label: Text(
+                //     'M-Pesa',
+                //     style: TextStyle(fontWeight: FontWeight.bold),
+                //   ),
+                // ),
+                // DataColumn(
+                //   label: Text(
+                //     'Orange Money',
+                //     style: TextStyle(fontWeight: FontWeight.bold),
+                //   ),
+                // ),
                 DataColumn(
                   label: Text(
                     'Total Capital',
@@ -133,9 +134,10 @@ class ShopsBalanceTable extends StatelessWidget {
           ),
           DataCell(Text(shop['localisation']!)),
           DataCell(_buildAmountCell(shop['cash']!, Colors.green)),
-          DataCell(_buildAmountCell(shop['airtel']!, const Color(0xFFE65100))),
-          DataCell(_buildAmountCell(shop['mpesa']!, const Color(0xFF388E3C))),
-          DataCell(_buildAmountCell(shop['orange']!, const Color(0xFFFF9800))),
+          // MASQUÉ: Airtel Money, M-Pesa, Orange Money ne doivent pas être visibles
+          // DataCell(_buildAmountCell(shop['airtel']!, const Color(0xFFE65100))),
+          // DataCell(_buildAmountCell(shop['mpesa']!, const Color(0xFF388E3C))),
+          // DataCell(_buildAmountCell(shop['orange']!, const Color(0xFFFF9800))),
           DataCell(
             Text(
               '${shop['total']!} USD',

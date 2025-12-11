@@ -2018,10 +2018,21 @@ class SyncService {
         case 'shops':
           final shops = ShopService.instance.shops;
           // Filtrer uniquement les shops non synchronisés OU tous si c'est la première sync
+          final totalShops = shops.length;
+          debugPrint('🏪 SHOPS: Total shops en mémoire: $totalShops');
+          
           unsyncedData = shops
-              .where((shop) => shop.isSynced != true)
+              .where((shop) {
+                final isNotSynced = shop.isSynced != true;
+                if (isNotSynced) {
+                  debugPrint('📤 Shop "${shop.designation}" (ID ${shop.id}) à synchroniser (is_synced: ${shop.isSynced})');
+                }
+                return isNotSynced;
+              })
               .map((shop) => _addSyncMetadata(shop.toJson(), 'shop'))
               .toList();
+          
+          debugPrint('📤 SHOPS: ${unsyncedData.length}/$totalShops non synchronisés');
           
           // Si aucun shop non synchronisé mais qu'il y a des shops, forcer l'upload du premier
           if (unsyncedData.isEmpty && shops.isNotEmpty && since == null) {
@@ -3001,13 +3012,32 @@ class SyncService {
         
         switch (tableName) {
           case 'shops':
-            final shop = ShopService.instance.getShopById(entityId);
-            if (shop != null) {
-              final updatedShop = shop.copyWith(
-                isSynced: true,
-                syncedAt: now,
-              );
-              await ShopService.instance.updateShop(updatedShop);
+            // ⚠️ IMPORTANT: Ne PAS utiliser ShopService.updateShop() ici car cela redéclenche la sync!
+            // Mettre à jour directement dans LocalDB sans passer par ShopService
+            final prefs = await LocalDB.instance.database;
+            final shopData = prefs.getString('shop_$entityId');
+            if (shopData != null) {
+              final shopJson = jsonDecode(shopData);
+              shopJson['is_synced'] = true;
+              shopJson['synced_at'] = now.toIso8601String();
+              await prefs.setString('shop_$entityId', jsonEncode(shopJson));
+              debugPrint('✅ Shop ID $entityId marqué comme synchronisé dans LocalDB');
+              
+              // Mettre à jour également le cache en mémoire de ShopService
+              final shop = ShopService.instance.getShopById(entityId);
+              if (shop != null) {
+                final index = ShopService.instance.shops.indexWhere((s) => s.id == entityId);
+                if (index != -1) {
+                  final updatedShop = shop.copyWith(
+                    isSynced: true,
+                    syncedAt: now,
+                  );
+                  ShopService.instance.shops[index] = updatedShop;
+                  debugPrint('✅ Shop ID $entityId mis à jour dans le cache mémoire');
+                }
+              }
+            } else {
+              debugPrint('⚠️ Shop ID $entityId non trouvé dans LocalDB pour marquage sync');
             }
             break;
             

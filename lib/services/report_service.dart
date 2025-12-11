@@ -90,7 +90,10 @@ class ReportService extends ChangeNotifier {
   }) async {
     await loadReportData(shopId: shopId, startDate: startDate, endDate: endDate);
 
-    final shop = _shops.firstWhere((s) => s.id == shopId);
+    final shop = _shops.firstWhere(
+      (s) => s.id == shopId,
+      orElse: () => throw Exception('Shop avec ID $shopId non trouvé'),
+    );
     
     // IMPORTANT: Inclure les opérations où ce shop est SOURCE OU DESTINATION
     // - SOURCE: dépôts, retraits, transferts créés par ce shop
@@ -317,8 +320,14 @@ class ReportService extends ChangeNotifier {
     // Calculer les dettes et créances avec compensation automatique
     for (final transfert in transferts) {
       if (transfert.shopDestinationId != null) {
-        final shopSource = _shops.firstWhere((s) => s.id == transfert.shopSourceId);
-        final shopDestination = _shops.firstWhere((s) => s.id == transfert.shopDestinationId);
+        final shopSource = _shops.firstWhere(
+          (s) => s.id == transfert.shopSourceId,
+          orElse: () => ShopModel(id: transfert.shopSourceId ?? 0, designation: 'Shop ${transfert.shopSourceId}', localisation: ''),
+        );
+        final shopDestination = _shops.firstWhere(
+          (s) => s.id == transfert.shopDestinationId,
+          orElse: () => ShopModel(id: transfert.shopDestinationId ?? 0, designation: 'Shop ${transfert.shopDestinationId}', localisation: ''),
+        );
         
         // LOGIQUE CORRECTE UCASH : Shop émetteur (SOURCE) qui reçoit le cash DOIT au shop récepteur (DESTINATION) qui servira
         // Le shop source DOIT le MONTANT BRUT (total payé par le client incluant commission)
@@ -372,9 +381,15 @@ class ReportService extends ChangeNotifier {
       'soldesNets': soldesNets,
       'transferts': transferts.map((t) => {
         'date': t.dateOp,
-        'shopSource': _shops.firstWhere((s) => s.id == t.shopSourceId).designation,
+        'shopSource': _shops.firstWhere(
+          (s) => s.id == t.shopSourceId,
+          orElse: () => ShopModel(id: t.shopSourceId ?? 0, designation: 'Shop ${t.shopSourceId}', localisation: ''),
+        ).designation,
         'shopDestination': t.shopDestinationId != null 
-          ? _shops.firstWhere((s) => s.id == t.shopDestinationId).designation 
+          ? _shops.firstWhere(
+              (s) => s.id == t.shopDestinationId,
+              orElse: () => ShopModel(id: t.shopDestinationId ?? 0, designation: 'Shop ${t.shopDestinationId}', localisation: ''),
+            ).designation 
           : 'Externe',
         'montant': t.montantNet,
         'type': t.type.name,
@@ -449,7 +464,10 @@ class ReportService extends ChangeNotifier {
       'totalCommissions': totalCommissions,
       'commissionsParType': commissionsParType,
       'commissionsParShop': commissionsParShop.map((shopId, montant) => MapEntry(
-        _shops.firstWhere((s) => s.id == shopId).designation,
+        _shops.firstWhere(
+          (s) => s.id == shopId,
+          orElse: () => ShopModel(id: shopId, designation: 'Shop $shopId', localisation: ''),
+        ).designation,
         montant,
       )),
       'commissionsParAgent': commissionsParAgent,
@@ -458,7 +476,10 @@ class ReportService extends ChangeNotifier {
         'type': op.type.name,
         'montant': op.montantNet,
         'commission': op.commission,
-        'shop': _shops.firstWhere((s) => s.id == op.shopSourceId).designation,
+        'shop': _shops.firstWhere(
+          (s) => s.id == op.shopSourceId,
+          orElse: () => ShopModel(id: op.shopSourceId ?? 0, designation: 'Shop ${op.shopSourceId}', localisation: ''),
+        ).designation,
         'agent': agentService.getAgentById(op.agentId)?.nom ?? agentService.getAgentById(op.agentId)?.username ?? op.lastModifiedBy ?? 'Inconnu',
       }).toList(),
     };
@@ -472,7 +493,10 @@ class ReportService extends ChangeNotifier {
   }) async {
     await loadReportData(shopId: shopId, startDate: startDate, endDate: endDate);
 
-    final shop = _shops.firstWhere((s) => s.id == shopId);
+    final shop = _shops.firstWhere(
+      (s) => s.id == shopId,
+      orElse: () => throw Exception('Shop avec ID $shopId non trouvé'),
+    );
     
     // Calculer le capital selon la logique métier UCASH :
     // Capital de base = Cash + E-Money (saisis à la création)
@@ -991,8 +1015,14 @@ class ReportService extends ChangeNotifier {
     for (final transfert in transferts) {
       if (transfert.shopDestinationId == null || transfert.devise != 'USD') continue;
 
-      final shopSource = _shops.firstWhere((s) => s.id == transfert.shopSourceId);
-      final shopDestination = _shops.firstWhere((s) => s.id == transfert.shopDestinationId);
+      final shopSource = _shops.firstWhere(
+        (s) => s.id == transfert.shopSourceId,
+        orElse: () => ShopModel(id: transfert.shopSourceId ?? 0, designation: 'Shop ${transfert.shopSourceId}', localisation: ''),
+      );
+      final shopDestination = _shops.firstWhere(
+        (s) => s.id == transfert.shopDestinationId,
+        orElse: () => ShopModel(id: transfert.shopDestinationId ?? 0, designation: 'Shop ${transfert.shopDestinationId}', localisation: ''),
+      );
       
       // Si un shop spécifique est sélectionné, filtrer les mouvements
       if (shopId != null && 
@@ -1071,8 +1101,14 @@ class ReportService extends ChangeNotifier {
     for (final flot in flots) {
       if (flot.shopDestinationId == null || flot.devise != 'USD') continue;
 
-      final shopSource = _shops.firstWhere((s) => s.id == flot.shopSourceId);
-      final shopDestination = _shops.firstWhere((s) => s.id == flot.shopDestinationId);
+      final shopSource = _shops.firstWhere(
+        (s) => s.id == flot.shopSourceId,
+        orElse: () => ShopModel(id: flot.shopSourceId ?? 0, designation: 'Shop ${flot.shopSourceId}', localisation: ''),
+      );
+      final shopDestination = _shops.firstWhere(
+        (s) => s.id == flot.shopDestinationId,
+        orElse: () => ShopModel(id: flot.shopDestinationId ?? 0, designation: 'Shop ${flot.shopDestinationId}', localisation: ''),
+      );
       
       // Si un shop spécifique est sélectionné, filtrer les mouvements
       if (shopId != null && 

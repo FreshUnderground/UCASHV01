@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import '../services/agent_service.dart';
 import '../services/shop_service.dart';
 import '../models/shop_model.dart';
@@ -36,14 +37,15 @@ class _CreateAgentDialogState extends State<CreateAgentDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Consumer2<AgentService, ShopService>(
       builder: (context, agentService, shopService, child) {
         return AlertDialog(
-          title: const Row(
+          title: Row(
             children: [
-              Icon(Icons.person_add, color: Color(0xFFDC2626)),
-              SizedBox(width: 8),
-              Text('Nouvel Agent'),
+              const Icon(Icons.person_add, color: Color(0xFFDC2626)),
+              const SizedBox(width: 8),
+              Text(l10n.newAgent),
             ],
           ),
           content: SizedBox(
@@ -56,8 +58,8 @@ class _CreateAgentDialogState extends State<CreateAgentDialog> {
                   TextFormField(
                     controller: _usernameController,
                     decoration: InputDecoration(
-                      labelText: 'Nom d\'utilisateur *',
-                      hintText: 'Ex: agent1',
+                      labelText: '${l10n.username} *',
+                      hintText: l10n.exampleUsername,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -77,8 +79,8 @@ class _CreateAgentDialogState extends State<CreateAgentDialog> {
                     controller: _passwordController,
                     obscureText: _obscurePassword,
                     decoration: InputDecoration(
-                      labelText: 'Mot de passe *',
-                      hintText: 'Minimum 6 caractères',
+                      labelText: '${l10n.password} *',
+                      hintText: l10n.passwordMinLength,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -107,7 +109,7 @@ class _CreateAgentDialogState extends State<CreateAgentDialog> {
                   DropdownButtonFormField<ShopModel>(
                     value: _selectedShop,
                     decoration: InputDecoration(
-                      labelText: 'Shop assigné *',
+                      labelText: '${l10n.assignedShop} *',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -126,7 +128,7 @@ class _CreateAgentDialogState extends State<CreateAgentDialog> {
                     },
                     validator: (value) {
                       if (value == null) {
-                        return 'Veuillez sélectionner un shop';
+                        return l10n.shopRequired;
                       }
                       return null;
                     },
@@ -169,10 +171,10 @@ class _CreateAgentDialogState extends State<CreateAgentDialog> {
                         children: [
                           Icon(Icons.warning, color: Colors.orange[700], size: 20),
                           const SizedBox(width: 8),
-                          const Expanded(
+                          Expanded(
                             child: Text(
-                              'Aucun shop disponible. Créez d\'abord un shop.',
-                              style: TextStyle(color: Colors.orange),
+                              l10n.noShopsAvailable,
+                              style: const TextStyle(color: Colors.orange),
                             ),
                           ),
                         ],
@@ -188,7 +190,7 @@ class _CreateAgentDialogState extends State<CreateAgentDialog> {
               onPressed: agentService.isLoading ? null : () {
                 Navigator.of(context).pop();
               },
-              child: const Text('Annuler'),
+              child: Text(l10n.cancel),
             ),
             ElevatedButton(
               onPressed: (agentService.isLoading || shopService.shops.isEmpty) 
@@ -207,7 +209,7 @@ class _CreateAgentDialogState extends State<CreateAgentDialog> {
                         valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                       ),
                     )
-                  : const Text('Créer'),
+                  : Text(l10n.save),
             ),
           ],
         );
@@ -216,13 +218,14 @@ class _CreateAgentDialogState extends State<CreateAgentDialog> {
   }
 
   Future<void> _handleSubmit() async {
+    final l10n = AppLocalizations.of(context)!;
     if (!_formKey.currentState!.validate()) return;
     
     // Vérifier que le shop est sélectionné et a un ID valide
     if (_selectedShop == null || _selectedShop!.id == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Veuillez sélectionner un shop valide'),
+        SnackBar(
+          content: Text(l10n.shopRequired),
           backgroundColor: Colors.red,
         ),
       );
@@ -240,8 +243,8 @@ class _CreateAgentDialogState extends State<CreateAgentDialog> {
     if (success && mounted) {
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Agent créé avec succès!'),
+        SnackBar(
+          content: Text(l10n.agentCreatedSuccessfully),
           backgroundColor: Colors.green,
         ),
       );

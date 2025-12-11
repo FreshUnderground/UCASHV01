@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import '../services/shop_service.dart';
+import '../services/auth_service.dart';
 import '../models/shop_model.dart';
 import 'create_shop_dialog.dart';
 import 'edit_shop_dialog.dart';
@@ -51,12 +53,13 @@ class _ShopsManagementState extends State<ShopsManagement> {
   }
 
   Widget _buildHeader() {
+    final l10n = AppLocalizations.of(context)!;
     return context.adaptiveCard(
       child: Row(
         children: [
           Expanded(
             child: Text(
-              'Gestion des Shops',
+              l10n.shopsManagement,
               style: context.titleAccent,
             ),
           ),
@@ -64,7 +67,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
             ElevatedButton.icon(
               onPressed: _loadData,
               icon: Icon(Icons.refresh, size: context.fluidIcon(mobile: 16, tablet: 18, desktop: 20)),
-              label: const Text('Actualiser'),
+              label: Text(l10n.refresh),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1976D2),
                 foregroundColor: Colors.white,
@@ -78,7 +81,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
           ElevatedButton.icon(
             onPressed: _showCreateDialog,
             icon: Icon(Icons.add, size: context.fluidIcon(mobile: 16, tablet: 18, desktop: 20)),
-            label: Text(context.isSmallScreen ? 'Nouveau' : 'Nouveau Shop'),
+            label: Text(context.isSmallScreen ? l10n.add : l10n.newShop),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFDC2626),
               foregroundColor: Colors.white,
@@ -93,6 +96,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
   }
 
   Widget _buildStats() {
+    final l10n = AppLocalizations.of(context)!;
     return Consumer<ShopService>(
       builder: (context, shopService, child) {
         final stats = shopService.getShopsStats();
@@ -103,25 +107,25 @@ class _ShopsManagementState extends State<ShopsManagement> {
           aspectRatio: context.isSmallScreen ? 1.4 : 1.1,
           children: [
             _buildStatCard(
-              'Total Shops',
+              l10n.totalShops,
               '${stats['totalShops']}',
               Icons.store,
               const Color(0xFF1976D2),
             ),
             _buildStatCard(
-              'Capital Total',
+              l10n.totalCapital,
               '${_formatCurrency(stats['totalCapital'].round())} USD',
               Icons.monetization_on,
               const Color(0xFF388E3C),
             ),
             _buildStatCard(
-              'Capital Moyen',
+              l10n.averageCapital,
               '${_formatCurrency(stats['averageCapital'].round())} USD',
               Icons.trending_up,
               const Color(0xFFFF9800),
             ),
             _buildStatCard(
-              'Shops Actifs',
+              l10n.activeShops,
               '${stats['activeShops']}',
               Icons.check_circle,
               const Color(0xFF4CAF50),
@@ -215,6 +219,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
   }
 
   Widget _buildEmptyState() {
+    final l10n = AppLocalizations.of(context)!;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -226,12 +231,12 @@ class _ShopsManagementState extends State<ShopsManagement> {
           ),
           context.verticalSpace(mobile: 12, tablet: 16, desktop: 20),
           Text(
-            'Aucun shop créé',
+            l10n.noShopsFound,
             style: context.h3.copyWith(color: Colors.grey[600]),
           ),
           context.verticalSpace(mobile: 6, tablet: 8, desktop: 10),
           Text(
-            'Cliquez sur "Nouveau Shop" pour créer votre premier shop',
+            l10n.clickNewShopToCreate,
             style: context.bodySecondary,
             textAlign: TextAlign.center,
           ),
@@ -277,33 +282,33 @@ class _ShopsManagementState extends State<ShopsManagement> {
                     }
                   },
                   itemBuilder: (context) => [
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: 'edit',
                       child: Row(
                         children: [
-                          Icon(Icons.edit, size: 18),
-                          SizedBox(width: 8),
-                          Text('Modifier'),
+                          const Icon(Icons.edit, size: 18),
+                          const SizedBox(width: 8),
+                          Text(AppLocalizations.of(context)!.edit),
                         ],
                       ),
                     ),
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: 'adjust_capital',
                       child: Row(
                         children: [
-                          Icon(Icons.account_balance, size: 18, color: Colors.green),
-                          SizedBox(width: 8),
-                          Text('Ajuster Capital'),
+                          const Icon(Icons.account_balance, size: 18, color: Colors.green),
+                          const SizedBox(width: 8),
+                          Text(AppLocalizations.of(context)!.adjustCapital),
                         ],
                       ),
                     ),
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: 'delete',
                       child: Row(
                         children: [
-                          Icon(Icons.delete, size: 18, color: Colors.red),
-                          SizedBox(width: 8),
-                          Text('Supprimer', style: TextStyle(color: Colors.red)),
+                          const Icon(Icons.delete, size: 18, color: Colors.red),
+                          const SizedBox(width: 8),
+                          Text(AppLocalizations.of(context)!.delete, style: const TextStyle(color: Colors.red)),
                         ],
                       ),
                     ),
@@ -313,7 +318,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
             ),
             const SizedBox(height: 8),
             Text(
-              shop.localisation ?? 'Non spécifié',
+              shop.localisation ?? AppLocalizations.of(context)!.notSpecified,
               style: context.bodySecondary,
             ),
             const SizedBox(height: 12),
@@ -328,15 +333,16 @@ class _ShopsManagementState extends State<ShopsManagement> {
     return GridView.count(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 2,
-      childAspectRatio: 2.8,
+      crossAxisCount: 1,  // Changé de 2 à 1 car on n'affiche que Cash
+      childAspectRatio: 5.0,  // Ajusté pour une seule ligne
       mainAxisSpacing: 8,
       crossAxisSpacing: 8,
       children: [
         _buildCapitalItem('Cash', shop.capitalCash, const Color(0xFF388E3C)),
-        _buildCapitalItem('Airtel', shop.capitalAirtelMoney, const Color(0xFFE65100)),
-        _buildCapitalItem('M-Pesa', shop.capitalMPesa, const Color(0xFF1976D2)),
-        _buildCapitalItem('Orange', shop.capitalOrangeMoney, const Color(0xFFFF9800)),
+        // MASQUÉ: Airtel Money, M-Pesa, Orange Money ne doivent pas être visibles
+        // _buildCapitalItem('Airtel', shop.capitalAirtelMoney, const Color(0xFFE65100)),
+        // _buildCapitalItem('M-Pesa', shop.capitalMPesa, const Color(0xFF1976D2)),
+        // _buildCapitalItem('Orange', shop.capitalOrangeMoney, const Color(0xFFFF9800)),
       ],
     );
   }
@@ -378,59 +384,61 @@ class _ShopsManagementState extends State<ShopsManagement> {
   }
 
   Widget _buildDesktopShopsTable(List<ShopModel> shops) {
+    final l10n = AppLocalizations.of(context)!;
     return ConstrainedBox(
       constraints: BoxConstraints(
         minWidth: MediaQuery.of(context).size.width - 100,
       ),
       child: DataTable(
         headingRowColor: MaterialStateProperty.all(Colors.grey[50]),
-        columns: const [
+        columns: [
             DataColumn(
               label: Text(
-                'Shop',
-                style: TextStyle(fontWeight: FontWeight.bold),
+                l10n.shopName,
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
             DataColumn(
               label: Text(
-                'Localisation',
-                style: TextStyle(fontWeight: FontWeight.bold),
+                l10n.location,
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
             DataColumn(
               label: Text(
-                'Capital Cash',
-                style: TextStyle(fontWeight: FontWeight.bold),
+                l10n.capitalCash,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            // MASQUÉ: Airtel Money, M-Pesa, Orange Money ne doivent pas être visibles
+            // DataColumn(
+            //   label: Text(
+            //     'Airtel Money',
+            //     style: TextStyle(fontWeight: FontWeight.bold),
+            //   ),
+            // ),
+            // DataColumn(
+            //   label: Text(
+            //     'M-Pesa',
+            //     style: TextStyle(fontWeight: FontWeight.bold),
+            //   ),
+            // ),
+            // DataColumn(
+            //   label: Text(
+            //     'Orange Money',
+            //     style: TextStyle(fontWeight: FontWeight.bold),
+            //   ),
+            // ),
+            DataColumn(
+              label: Text(
+                l10n.totalCapital,
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
             DataColumn(
               label: Text(
-                'Airtel Money',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-            DataColumn(
-              label: Text(
-                'M-Pesa',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-            DataColumn(
-              label: Text(
-                'Orange Money',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-            DataColumn(
-              label: Text(
-                'Total Capital',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-            DataColumn(
-              label: Text(
-                'Actions',
-                style: TextStyle(fontWeight: FontWeight.bold),
+                l10n.actions,
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
         ],
@@ -440,6 +448,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
   }
 
   DataRow _buildShopRow(ShopModel shop) {
+    final l10n = AppLocalizations.of(context)!;
     return DataRow(
       cells: [
         DataCell(
@@ -448,7 +457,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
             style: const TextStyle(fontWeight: FontWeight.w600),
           ),
         ),
-        DataCell(Text(shop.localisation ?? 'Non spécifié')),
+        DataCell(Text(shop.localisation ?? l10n.notSpecified)),
         DataCell(
           Text(
             '${_formatCurrency(shop.capitalCash.round())} USD',
@@ -458,33 +467,34 @@ class _ShopsManagementState extends State<ShopsManagement> {
             ),
           ),
         ),
-        DataCell(
-          Text(
-            '${_formatCurrency(shop.capitalAirtelMoney.round())} USD',
-            style: const TextStyle(
-              color: Color(0xFFE65100),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-        DataCell(
-          Text(
-            '${_formatCurrency(shop.capitalMPesa.round())} USD',
-            style: const TextStyle(
-              color: Color(0xFF1976D2),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-        DataCell(
-          Text(
-            '${_formatCurrency(shop.capitalOrangeMoney.round())} USD',
-            style: const TextStyle(
-              color: Color(0xFFFF9800),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
+        // MASQUÉ: Airtel Money, M-Pesa, Orange Money ne doivent pas être visibles
+        // DataCell(
+        //   Text(
+        //     '${_formatCurrency(shop.capitalAirtelMoney.round())} USD',
+        //     style: const TextStyle(
+        //       color: Color(0xFFE65100),
+        //       fontWeight: FontWeight.w500,
+        //     ),
+        //   ),
+        // ),
+        // DataCell(
+        //   Text(
+        //     '${_formatCurrency(shop.capitalMPesa.round())} USD',
+        //     style: const TextStyle(
+        //       color: Color(0xFF1976D2),
+        //       fontWeight: FontWeight.w500,
+        //     ),
+        //   ),
+        // ),
+        // DataCell(
+        //   Text(
+        //     '${_formatCurrency(shop.capitalOrangeMoney.round())} USD',
+        //     style: const TextStyle(
+        //       color: Color(0xFFFF9800),
+        //       fontWeight: FontWeight.w500,
+        //     ),
+        //   ),
+        // ),
         DataCell(
           Text(
             '${_formatCurrency(shop.capitalActuel.round())} USD',
@@ -501,7 +511,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
               IconButton(
                 onPressed: () => _showEditDialog(shop),
                 icon: const Icon(Icons.edit, size: 18),
-                tooltip: 'Modifier',
+                tooltip: AppLocalizations.of(context)!.edit,
                 style: IconButton.styleFrom(
                   backgroundColor: const Color(0xFF1976D2).withOpacity(0.1),
                   foregroundColor: const Color(0xFF1976D2),
@@ -511,7 +521,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
               IconButton(
                 onPressed: () => _showCapitalAdjustmentDialog(shop),
                 icon: const Icon(Icons.account_balance, size: 18),
-                tooltip: 'Ajuster Capital',
+                tooltip: AppLocalizations.of(context)!.adjustCapital,
                 style: IconButton.styleFrom(
                   backgroundColor: Colors.green.withOpacity(0.1),
                   foregroundColor: Colors.green,
@@ -521,7 +531,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
               IconButton(
                 onPressed: () => _showDeleteDialog(shop),
                 icon: const Icon(Icons.delete, size: 18),
-                tooltip: 'Supprimer',
+                tooltip: AppLocalizations.of(context)!.delete,
                 style: IconButton.styleFrom(
                   backgroundColor: Colors.red.withOpacity(0.1),
                   foregroundColor: Colors.red,
@@ -549,36 +559,159 @@ class _ShopsManagementState extends State<ShopsManagement> {
   }
 
   void _showDeleteDialog(ShopModel shop) {
+    final l10n = AppLocalizations.of(context)!;
+    final reasonController = TextEditingController();
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Confirmer la suppression'),
-        content: Text('Êtes-vous sûr de vouloir supprimer le shop "${shop.designation}" ?'),
+        title: Row(
+          children: [
+            const Icon(Icons.warning, color: Colors.red),
+            const SizedBox(width: 12),
+            Text(l10n.confirmDelete),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              l10n.confirmDeleteShop,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              shop.designation,
+              style: const TextStyle(
+                fontSize: 16,
+                color: Colors.red,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              l10n.thisActionCannotBeUndone,
+              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+            ),
+            const SizedBox(height: 16),
+            // Raison de la suppression (obligatoire)
+            Text(
+              '${l10n.reason} *',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: reasonController,
+              maxLines: 3,
+              decoration: InputDecoration(
+                border: const OutlineInputBorder(),
+                hintText: 'Ex: Shop fermé définitivement, fusion avec un autre shop...',
+                hintStyle: TextStyle(fontSize: 12, color: Colors.grey[400]),
+              ),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Annuler'),
+            child: Text(l10n.cancel),
           ),
           ElevatedButton(
             onPressed: () async {
+              final reason = reasonController.text.trim();
+              
+              // Validation de la raison
+              if (reason.isEmpty || reason.length < 10) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(l10n.reasonMinLength),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+                return;
+              }
+              
               Navigator.of(context).pop();
+              
+              // Afficher un indicateur de chargement
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => const Center(
+                  child: CircularProgressIndicator(),
+                ),
+              );
+              
               try {
                 final shopService = Provider.of<ShopService>(context, listen: false);
-                await shopService.deleteShop(shop.id!);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Shop supprimé avec succès'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
+                final authService = Provider.of<AuthService>(context, listen: false);
+                final user = authService.currentUser;
+                
+                if (user == null) {
+                  throw Exception(l10n.userNotConnected);
                 }
-                _loadData();
+                
+                // Utiliser la nouvelle API avec audit trail
+                final result = await shopService.deleteShopViaAPI(
+                  shop.id!,
+                  adminId: user.id.toString(),
+                  adminUsername: user.username,
+                  reason: reason,
+                  deleteType: 'soft', // Soft delete par défaut
+                  forceDelete: false,
+                );
+                
+                // Fermer le loader
+                if (mounted) Navigator.of(context).pop();
+                
+                if (result != null && result['success'] == true) {
+                  if (mounted) {
+                    final affectedAgents = result['affected_agents']['count'] ?? 0;
+                    
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('✅ ${l10n.shopDeletedSuccessfully}'),
+                            if (affectedAgents > 0) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                '👥 $affectedAgents ${affectedAgents > 1 ? "agents désassignés" : "agent désassigné"}',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ],
+                          ],
+                        ),
+                        backgroundColor: Colors.green,
+                        duration: const Duration(seconds: 5),
+                      ),
+                    );
+                    _loadData();
+                  }
+                } else {
+                  // Fermer le loader si erreur
+                  if (mounted) Navigator.of(context).pop();
+                  
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('${l10n.error}: ${result?['message'] ?? 'Erreur inconnue'}'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
               } catch (e) {
+                // Fermer le loader si exception
+                if (mounted) Navigator.of(context).pop();
+                
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Erreur: $e'),
+                      content: Text('${l10n.error}: $e'),
                       backgroundColor: Colors.red,
                     ),
                   );
@@ -586,7 +719,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Supprimer', style: TextStyle(color: Colors.white)),
+            child: Text(l10n.delete, style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),

@@ -14,18 +14,20 @@ class _CreateShopDialogState extends State<CreateShopDialog> {
   final _designationController = TextEditingController();
   final _localisationController = TextEditingController();
   final _capitalCashController = TextEditingController();
-  final _capitalAirtelController = TextEditingController();
-  final _capitalMPesaController = TextEditingController();
-  final _capitalOrangeController = TextEditingController();
+  // MASQUÉ: Airtel Money, M-Pesa, Orange Money ne doivent pas être visibles
+  // final _capitalAirtelController = TextEditingController();
+  // final _capitalMPesaController = TextEditingController();
+  // final _capitalOrangeController = TextEditingController();
 
   @override
   void dispose() {
     _designationController.dispose();
     _localisationController.dispose();
     _capitalCashController.dispose();
-    _capitalAirtelController.dispose();
-    _capitalMPesaController.dispose();
-    _capitalOrangeController.dispose();
+    // MASQUÉ: Controllers pour mobile money
+    // _capitalAirtelController.dispose();
+    // _capitalMPesaController.dispose();
+    // _capitalOrangeController.dispose();
     super.dispose();
   }
 
@@ -126,79 +128,80 @@ class _CreateShopDialogState extends State<CreateShopDialog> {
                   ),
                   const SizedBox(height: 12),
                   
-                  // Capital Airtel Money
-                  TextFormField(
-                    controller: _capitalAirtelController,
-                    decoration: InputDecoration(
-                      labelText: 'Capital Airtel Money *',
-                      hintText: 'Ex: 12500',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      prefixIcon: const Icon(Icons.phone_android, color: Color(0xFFE65100)),
-                    ),
-                    keyboardType: TextInputType.number,
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Le capital Airtel Money est requis';
-                      }
-                      final capital = double.tryParse(value);
-                      if (capital == null || capital < 0) {
-                        return 'Le capital doit être un nombre positif ou zéro';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  // Capital M-Pesa
-                  TextFormField(
-                    controller: _capitalMPesaController,
-                    decoration: InputDecoration(
-                      labelText: 'Capital M-Pesa *',
-                      hintText: 'Ex: 10000',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      prefixIcon: const Icon(Icons.account_balance_wallet, color: Color(0xFF1976D2)),
-                    ),
-                    keyboardType: TextInputType.number,
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Le capital MPESA/VODACASH est requis';
-                      }
-                      final capital = double.tryParse(value);
-                      if (capital == null || capital < 0) {
-                        return 'Le capital doit être un nombre positif ou zéro';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  // Capital Orange Money
-                  TextFormField(
-                    controller: _capitalOrangeController,
-                    decoration: InputDecoration(
-                      labelText: 'Capital Orange Money *',
-                      hintText: 'Ex: 7500',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      prefixIcon: const Icon(Icons.payment, color: Color(0xFFFF9800)),
-                    ),
-                    keyboardType: TextInputType.number,
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Le capital Orange Money est requis';
-                      }
-                      final capital = double.tryParse(value);
-                      if (capital == null || capital < 0) {
-                        return 'Le capital doit être un nombre positif ou zéro';
-                      }
-                      return null;
-                    },
-                  ),
+                  // MASQUÉ: Airtel Money, M-Pesa, Orange Money ne doivent pas être visibles
+                  // // Capital Airtel Money
+                  // TextFormField(
+                  //   controller: _capitalAirtelController,
+                  //   decoration: InputDecoration(
+                  //     labelText: 'Capital Airtel Money *',
+                  //     hintText: 'Ex: 12500',
+                  //     border: OutlineInputBorder(
+                  //       borderRadius: BorderRadius.circular(12),
+                  //     ),
+                  //     prefixIcon: const Icon(Icons.phone_android, color: Color(0xFFE65100)),
+                  //   ),
+                  //   keyboardType: TextInputType.number,
+                  //   validator: (value) {
+                  //     if (value == null || value.trim().isEmpty) {
+                  //       return 'Le capital Airtel Money est requis';
+                  //     }
+                  //     final capital = double.tryParse(value);
+                  //     if (capital == null || capital < 0) {
+                  //       return 'Le capital doit être un nombre positif ou zéro';
+                  //     }
+                  //     return null;
+                  //   },
+                  // ),
+                  // const SizedBox(height: 12),
+                  // 
+                  // // Capital M-Pesa
+                  // TextFormField(
+                  //   controller: _capitalMPesaController,
+                  //   decoration: InputDecoration(
+                  //     labelText: 'Capital M-Pesa *',
+                  //     hintText: 'Ex: 10000',
+                  //     border: OutlineInputBorder(
+                  //       borderRadius: BorderRadius.circular(12),
+                  //     ),
+                  //     prefixIcon: const Icon(Icons.account_balance_wallet, color: Color(0xFF1976D2)),
+                  //   ),
+                  //   keyboardType: TextInputType.number,
+                  //   validator: (value) {
+                  //     if (value == null || value.trim().isEmpty) {
+                  //       return 'Le capital MPESA/VODACASH est requis';
+                  //     }
+                  //     final capital = double.tryParse(value);
+                  //     if (capital == null || capital < 0) {
+                  //       return 'Le capital doit être un nombre positif ou zéro';
+                  //     }
+                  //     return null;
+                  //   },
+                  // ),
+                  // const SizedBox(height: 12),
+                  // 
+                  // // Capital Orange Money
+                  // TextFormField(
+                  //   controller: _capitalOrangeController,
+                  //   decoration: InputDecoration(
+                  //     labelText: 'Capital Orange Money *',
+                  //     hintText: 'Ex: 7500',
+                  //     border: OutlineInputBorder(
+                  //       borderRadius: BorderRadius.circular(12),
+                  //     ),
+                  //     prefixIcon: const Icon(Icons.payment, color: Color(0xFFFF9800)),
+                  //   ),
+                  //   keyboardType: TextInputType.number,
+                  //   validator: (value) {
+                  //     if (value == null || value.trim().isEmpty) {
+                  //       return 'Le capital Orange Money est requis';
+                  //     }
+                  //     final capital = double.tryParse(value);
+                  //     if (capital == null || capital < 0) {
+                  //       return 'Le capital doit être un nombre positif ou zéro';
+                  //     }
+                  //     return null;
+                  //   },
+                  // ),
                   
                   if (shopService.errorMessage != null) ...[
                     const SizedBox(height: 16),
@@ -264,9 +267,10 @@ class _CreateShopDialogState extends State<CreateShopDialog> {
     final shopService = Provider.of<ShopService>(context, listen: false);
     
     final capitalCash = double.parse(_capitalCashController.text.trim());
-    final capitalAirtel = double.parse(_capitalAirtelController.text.trim());
-    final capitalMPesa = double.parse(_capitalMPesaController.text.trim());
-    final capitalOrange = double.parse(_capitalOrangeController.text.trim());
+    // MASQUÉ: Mobile money capitaux sont fixés à 0
+    final capitalAirtel = 0.0; // double.parse(_capitalAirtelController.text.trim());
+    final capitalMPesa = 0.0; // double.parse(_capitalMPesaController.text.trim());
+    final capitalOrange = 0.0; // double.parse(_capitalOrangeController.text.trim());
     final totalCapital = capitalCash + capitalAirtel + capitalMPesa + capitalOrange;
     
     final success = await shopService.createShop(
