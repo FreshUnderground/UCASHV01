@@ -6,7 +6,7 @@ header('Content-Type: application/json');
 
 // Paramètres de connexion
 $dbHost = 'localhost';
-$dbName = 'inves2504808_6oor7p';
+$dbName = 'inves2504808_1n6a7b';
 $dbUser = 'inves2504808';
 $dbPass = '31nzzasdnh';
 

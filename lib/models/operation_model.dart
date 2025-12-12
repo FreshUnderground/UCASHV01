@@ -82,6 +82,9 @@ class OperationModel {
   final String? lastModifiedBy;
   final bool isSynced;
   final DateTime? syncedAt;
+  
+  // Flot administratif (n'impacte PAS le cash disponible, crée seulement des dettes)
+  final bool isAdministrative;
 
   OperationModel({
     this.id,
@@ -127,6 +130,9 @@ class OperationModel {
     this.lastModifiedBy,
     this.isSynced = false,
     this.syncedAt,
+    
+    // Flot administratif
+    this.isAdministrative = false,
   });
 
   factory OperationModel.fromJson(Map<String, dynamic> json) {
@@ -172,6 +178,9 @@ class OperationModel {
       lastModifiedBy: json['last_modified_by'],
       isSynced: json['is_synced'] == 1 || json['is_synced'] == true,
       syncedAt: json['synced_at'] != null ? DateTime.parse(json['synced_at']) : null,
+      
+      // Flot administratif
+      isAdministrative: json['is_administrative'] == 1 || json['is_administrative'] == true,
     );
   }
   
@@ -337,6 +346,9 @@ class OperationModel {
       'last_modified_by': lastModifiedBy,
       'is_synced': isSynced ? 1 : 0,
       'synced_at': syncedAt?.toIso8601String(),
+      
+      // Flot administratif
+      'is_administrative': isAdministrative ? 1 : 0,
     };
   }
 
@@ -475,6 +487,9 @@ class OperationModel {
     String? lastModifiedBy,
     bool? isSynced,
     DateTime? syncedAt,
+    
+    // Flot administratif
+    bool? isAdministrative,
   }) {
     return OperationModel(
       id: id ?? this.id,
@@ -518,6 +533,9 @@ class OperationModel {
       lastModifiedBy: lastModifiedBy ?? this.lastModifiedBy,
       isSynced: isSynced ?? this.isSynced,
       syncedAt: syncedAt ?? this.syncedAt,
+      
+      // Flot administratif
+      isAdministrative: isAdministrative ?? this.isAdministrative,
     );
   }
 }

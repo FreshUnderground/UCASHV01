@@ -5,7 +5,7 @@
  * Returns: List of deletion requests
  */
 
-// Disable error display
+// Enable detailed error reporting for debugging
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');
@@ -14,6 +14,7 @@ ini_set('log_errors', '1');
 register_shutdown_function(function() {
     $error = error_get_last();
     if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        error_log("[DELETION_REQUESTS] FATAL ERROR: " . $error['message'] . " in " . $error['file'] . " on line " . $error['line']);
         http_response_code(500);
         echo json_encode([
             'success' => false,
@@ -57,8 +58,20 @@ try {
         'count' => count($requests)
     ]);
     
+} catch (PDOException $e) {
+    error_log("[DELETION_REQUESTS] DATABASE ERROR: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
+    error_log("[DELETION_REQUESTS] Stack trace: " . $e->getTraceAsString());
+    
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'message' => 'Erreur base de données: ' . $e->getMessage(),
+        'error_type' => 'PDOException'
+    ]);
 } catch (Exception $e) {
-    error_log("[DELETION_REQUESTS] ERROR: " . $e->getMessage());
+    error_log("[DELETION_REQUESTS] GENERAL ERROR: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
+    error_log("[DELETION_REQUESTS] Stack trace: " . $e->getTraceAsString());
+    
     http_response_code(500);
     echo json_encode([
         'success' => false,

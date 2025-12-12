@@ -8,7 +8,7 @@ echo ============================================
 echo.
 
 REM Configuration
-set BASE_URL=http://localhost/UCASHV01/server/api/sync
+set BASE_URL=https://mahanaimeservice.investee-group.com/server/api/sync
 
 REM Test 1: Ping serveur
 echo [1/5] Test de connectivite au serveur...
@@ -116,7 +116,7 @@ echo   3. Observer la synchronisation automatique (toutes les 30s)
 echo   4. Verifier l'indicateur de sync dans l'AppBar
 echo.
 echo Pour tester manuellement l'API:
-echo   http://localhost/UCASHV01/server/api/sync/ping.php
+echo   https://mahanaimeservice.investee-group.com/server/api/sync/ping.php
 echo.
 
 pause

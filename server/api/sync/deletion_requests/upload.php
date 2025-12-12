@@ -5,7 +5,7 @@
  * Body: Array of deletion requests JSON
  */
 
-// Disable error display
+// Enable detailed error reporting for debugging
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');
@@ -14,6 +14,7 @@ ini_set('log_errors', '1');
 register_shutdown_function(function() {
     $error = error_get_last();
     if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        error_log("[DELETION_REQUESTS] FATAL ERROR: " . $error['message'] . " in " . $error['file'] . " on line " . $error['line']);
         http_response_code(500);
         echo json_encode([
             'success' => false,
@@ -38,15 +39,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 require_once __DIR__ . '/../../../config/database.php';
 
 try {
-    // Use the $pdo connection from config/database.php
-    $db = $pdo;
-    
+    // Log incoming request for debugging
     $json = file_get_contents('php://input');
     $requests = json_decode($json, true);
     
+    error_log("[DELETION_REQUESTS] Upload request received: " . strlen($json) . " bytes");
+    
     if (!is_array($requests)) {
-        throw new Exception('Invalid data format - expected array');
+        error_log("[DELETION_REQUESTS] Invalid data format - expected array, got: " . gettype($requests));
+        http_response_code(400);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Format de données invalide - tableau attendu'
+        ]);
+        exit();
     }
+    
+    error_log("[DELETION_REQUESTS] Processing " . count($requests) . " requests");
+    
+    // Use the $pdo connection from config/database.php
+    $db = $pdo;
     
     $inserted = 0;
     $updated = 0;
@@ -83,6 +95,9 @@ try {
                     validated_by_agent_id = :validated_by_agent_id,
                     validated_by_agent_name = :validated_by_agent_name,
                     validation_date = :validation_date,
+                    validated_by_admin_id = :validated_by_admin_id,
+                    validated_by_admin_name = :validated_by_admin_name,
+                    validation_admin_date = :validation_admin_date,
                     last_modified_at = :last_modified_at,
                     last_modified_by = :last_modified_by
                 WHERE code_ops = :code_ops
@@ -97,6 +112,7 @@ try {
                     requested_by_admin_id, requested_by_admin_name, request_date,
                     reason, statut,
                     validated_by_agent_id, validated_by_agent_name, validation_date,
+                    validated_by_admin_id, validated_by_admin_name, validation_admin_date,
                     last_modified_at, last_modified_by
                 ) VALUES (
                     :code_ops, :operation_id, :operation_type, :montant, :devise,
@@ -104,45 +120,62 @@ try {
                     :requested_by_admin_id, :requested_by_admin_name, :request_date,
                     :reason, :statut,
                     :validated_by_agent_id, :validated_by_agent_name, :validation_date,
+                    :validated_by_admin_id, :validated_by_admin_name, :validation_admin_date,
                     :last_modified_at, :last_modified_by
                 )
             ");
             $inserted++;
         }
         
+        // Handle different field naming conventions
         $stmt->execute([
             ':code_ops' => $codeOps,
             ':operation_id' => $request['operation_id'] ?? $request['operationId'] ?? null,
-            ':operation_type' => $request['operation_type'] ?? $request['operationType'] ?? null,
+            ':operation_type' => $request['operation_type'] ?? $request['operationType'] ?? '',
             ':montant' => $request['montant'] ?? 0,
             ':devise' => $request['devise'] ?? 'USD',
             ':destinataire' => $request['destinataire'] ?? null,
             ':expediteur' => $request['expediteur'] ?? null,
             ':client_nom' => $request['client_nom'] ?? $request['clientNom'] ?? null,
-            ':requested_by_admin_id' => $request['requested_by_admin_id'] ?? $request['requestedByAdminId'] ?? null,
-            ':requested_by_admin_name' => $request['requested_by_admin_name'] ?? $request['requestedByAdminName'] ?? null,
+            ':requested_by_admin_id' => $request['requested_by_admin_id'] ?? $request['requestedByAdminId'] ?? 0,
+            ':requested_by_admin_name' => $request['requested_by_admin_name'] ?? $request['requestedByAdminName'] ?? '',
             ':request_date' => $request['request_date'] ?? $request['requestDate'] ?? date('Y-m-d H:i:s'),
             ':reason' => $request['reason'] ?? null,
             ':statut' => $request['statut'] ?? 'en_attente',
             ':validated_by_agent_id' => $request['validated_by_agent_id'] ?? $request['validatedByAgentId'] ?? null,
             ':validated_by_agent_name' => $request['validated_by_agent_name'] ?? $request['validatedByAgentName'] ?? null,
             ':validation_date' => $request['validation_date'] ?? $request['validationDate'] ?? null,
+            ':validated_by_admin_id' => $request['validated_by_admin_id'] ?? $request['validatedByAdminId'] ?? null,
+            ':validated_by_admin_name' => $request['validated_by_admin_name'] ?? $request['validatedByAdminName'] ?? null,
+            ':validation_admin_date' => $request['validation_admin_date'] ?? $request['validationAdminDate'] ?? null,
             ':last_modified_at' => $request['last_modified_at'] ?? $request['lastModifiedAt'] ?? date('Y-m-d H:i:s'),
             ':last_modified_by' => $request['last_modified_by'] ?? $request['lastModifiedBy'] ?? 'system'
         ]);
     }
     
-    error_log("[DELETION_REQUESTS] Uploaded: $inserted inserted, $updated updated");
+    error_log("[DELETION_REQUESTS] Upload complete: $inserted inserted, $updated updated");
     
     echo json_encode([
         'success' => true,
-        'message' => "Uploaded successfully",
+        'message' => "Téléchargement réussi",
         'inserted' => $inserted,
         'updated' => $updated
     ]);
     
+} catch (PDOException $e) {
+    error_log("[DELETION_REQUESTS] DATABASE ERROR: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
+    error_log("[DELETION_REQUESTS] Stack trace: " . $e->getTraceAsString());
+    
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'message' => 'Erreur base de données: ' . $e->getMessage(),
+        'error_type' => 'PDOException'
+    ]);
 } catch (Exception $e) {
-    error_log("[DELETION_REQUESTS] ERROR: " . $e->getMessage());
+    error_log("[DELETION_REQUESTS] GENERAL ERROR: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
+    error_log("[DELETION_REQUESTS] Stack trace: " . $e->getTraceAsString());
+    
     http_response_code(500);
     echo json_encode([
         'success' => false,

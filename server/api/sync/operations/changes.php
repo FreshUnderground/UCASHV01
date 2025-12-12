@@ -53,7 +53,7 @@ try {
             o.destinataire, o.telephone_destinataire, o.reference,
             o.mode_paiement, o.statut, o.notes, o.observation,
             o.created_at, o.last_modified_at, o.last_modified_by,
-            o.is_synced, o.synced_at
+            o.is_synced, o.synced_at, o.is_administrative
         FROM operations o
         WHERE 1=1
     ";
@@ -149,6 +149,7 @@ try {
             'last_modified_by' => $op['last_modified_by'],
             'is_synced' => (bool)$op['is_synced'],
             'synced_at' => $op['synced_at'],
+            'is_administrative' => isset($op['is_administrative']) ? (bool)$op['is_administrative'] : false,
         ];
     }
     

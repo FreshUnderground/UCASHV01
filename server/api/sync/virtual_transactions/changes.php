@@ -75,7 +75,8 @@ try {
             'last_modified_at' => $vt['last_modified_at'],
             'last_modified_by' => $vt['last_modified_by'],
             'is_synced' => (bool)$vt['is_synced'],
-            'synced_at' => $vt['synced_at']
+            'synced_at' => $vt['synced_at'],
+            'is_administrative' => isset($vt['is_administrative']) ? (bool)$vt['is_administrative'] : false
         ];
     }
     

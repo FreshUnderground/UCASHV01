@@ -4,7 +4,7 @@ header('Content-Type: text/plain; charset=utf-8');
 
 echo "🚀 Testing all synchronization endpoints...\n\n";
 
-$baseUrl = 'http://localhost/UCASHV01/server/api/sync';
+$baseUrl = 'https://mahanaimeservice.investee-group.com/server/api/sync';
 $endpoints = [
     'ping' => '/ping.php',
     'shops_upload' => '/shops/upload.php',

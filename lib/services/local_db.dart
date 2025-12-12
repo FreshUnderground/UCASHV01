@@ -2650,7 +2650,14 @@ class LocalDB {
     final dateKey = clotureWithId.dateCloture.toIso8601String().split('T')[0];
     final key = 'cloture_sim_${clotureWithId.simNumero}_$dateKey';
     
-    await prefs.setString(key, jsonEncode(clotureWithId.toMap()));
+    final clotureMap = clotureWithId.toMap();
+    
+    debugPrint('💾 Sauvegarde clôture SIM: ${clotureWithId.simNumero} - $dateKey');
+    debugPrint('   Solde Antérieur: ${clotureMap['solde_anterieur']}, Solde Actuel: ${clotureMap['solde_actuel']}');
+    debugPrint('   Cash Disponible: ${clotureMap['cash_disponible']}, Frais Total: ${clotureMap['frais_total']}');
+    debugPrint('   Date clôture dans map: ${clotureMap['date_cloture']}');
+    
+    await prefs.setString(key, jsonEncode(clotureMap));
     debugPrint('✅ Clôture SIM sauvegardée: ${clotureWithId.simNumero} - $dateKey');
   }
 
@@ -2689,26 +2696,42 @@ class LocalDB {
     final prefs = await database;
     final allKeys = prefs.getKeys();
     
+    debugPrint('🔍 Recherche dernière clôture pour SIM $simNumero avant ${avant.toIso8601String()}');
+    
     dynamic derniereCloture;
     DateTime? derniereDateCloture;
+    int cloturesTrouvees = 0;
     
     for (var key in allKeys) {
       if (key.startsWith('cloture_sim_$simNumero')) {
         final clotureData = prefs.getString(key);
         if (clotureData != null) {
+          cloturesTrouvees++;
           final clotureMap = jsonDecode(clotureData);
           final dateCloture = DateTime.parse(clotureMap['date_cloture']);
+          
+          debugPrint('   📋 Clôture trouvée: ${clotureMap['date_cloture']} (Parsed: ${dateCloture.toIso8601String()})');
           
           // Vérifier si cette clôture est avant la date demandée
           if (dateCloture.isBefore(avant)) {
             // Garder la plus récente
             if (derniereDateCloture == null || dateCloture.isAfter(derniereDateCloture)) {
+              debugPrint('   ✅ Clôture retenue: ${dateCloture.toIso8601String()}');
               derniereDateCloture = dateCloture;
               derniereCloture = clotureMap;
             }
+          } else {
+            debugPrint('   ⏭️ Clôture ignorée (pas avant ${avant.toIso8601String()})');
           }
         }
       }
+    }
+    
+    if (derniereCloture != null) {
+      debugPrint('✅ Dernière clôture trouvée: ${derniereDateCloture!.toIso8601String()}');
+      debugPrint('   Solde: ${derniereCloture['solde_actuel']}, Cash: ${derniereCloture['cash_disponible']}, Frais: ${derniereCloture['frais_total']}');
+    } else {
+      debugPrint('⚠️ Aucune clôture trouvée parmi $cloturesTrouvees clôture(s) pour SIM $simNumero');
     }
     
     return derniereCloture;
@@ -2758,4 +2781,30 @@ class LocalDB {
     return clotures;
   }
 
+  /// Supprimer toutes les clôtures par SIM pour une date donnée
+  Future<void> deleteCloturesVirtuellesParDate({
+    required int shopId,
+    required DateTime date,
+  }) async {
+    final prefs = await database;
+    final dateKey = date.toIso8601String().split('T')[0];
+    final allKeys = prefs.getKeys();
+    int deletedCount = 0;
+    
+    for (var key in allKeys) {
+      if (key.startsWith('cloture_sim_') && key.endsWith('_$dateKey')) {
+        final clotureData = prefs.getString(key);
+        if (clotureData != null) {
+          final clotureMap = jsonDecode(clotureData);
+          if (clotureMap['shop_id'] == shopId) {
+            await prefs.remove(key);
+            deletedCount++;
+            debugPrint('🗑️ Clôture supprimée: $key');
+          }
+        }
+      }
+    }
+    
+    debugPrint('✅ $deletedCount clôture(s) supprimée(s) pour le $dateKey');
+  }
 }

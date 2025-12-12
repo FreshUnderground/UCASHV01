@@ -263,18 +263,22 @@ class RapportClotureService {
     final shopsMap = {for (var shop in shops) shop.id: shop.designation};
 
     // FLOT REÇUS = FLOTs vers nous (reçus aujourd'hui - utilisent date_validation, fallback sur created_at si null)
+    // EXCLUSION: Les flots administratifs (isAdministrative=true) ne sont PAS comptabilisés dans le cash
     final flotsRecusServis = operations.where((f) =>
         f.type == OperationType.flotShopToShop &&
         f.shopDestinationId == shopId &&
         f.statut == OperationStatus.validee &&
+        f.isAdministrative == false && // EXCLUSION CRITIQUE
         _isSameDay(f.dateValidation ?? f.createdAt ?? f.dateOp, dateRapport)
     ).toList();
     
     // FLOT EN ATTENTE = FLOTs vers nous (en attente de réception) - utilisent created_at
+    // EXCLUSION: Les flots administratifs (isAdministrative=true) ne sont PAS comptabilisés
     final flotsEnAttente = operations.where((f) =>
         f.type == OperationType.flotShopToShop &&
         f.shopDestinationId == shopId &&
         f.statut == OperationStatus.enAttente &&
+        f.isAdministrative == false && // EXCLUSION CRITIQUE
         _isSameDay(f.createdAt ?? f.dateOp, dateRapport)
     ).toList();
     
@@ -283,9 +287,11 @@ class RapportClotureService {
     debugPrint('📥 FLOTs REÇUS (shopDestinationId=$shopId): ${flotsRecus.length} FLOTs (${flotsRecusServis.length} servis, ${flotsEnAttente.length} en attente)');
     
     // FLOT ENVOYÉS = FLOTs par nous (envoyés aujourd'hui - utilisent created_at)
+    // EXCLUSION: Les flots administratifs (isAdministrative=true) ne sont PAS comptabilisés dans le cash
     final flotsEnvoyes = operations.where((f) =>
         f.type == OperationType.flotShopToShop &&
         f.shopSourceId == shopId &&
+        f.isAdministrative == false && // EXCLUSION CRITIQUE
         _isSameDay(f.createdAt ?? f.dateOp, dateRapport)
     ).toList();
     
@@ -754,6 +760,12 @@ class RapportClotureService {
         .toList();
     final retraitsFrais = retraitsFraisList.fold(0.0, (sum, t) => sum + t.montant.abs());
     
+    // NOUVEAU: Calculer les FRAIS MANUELS du jour (commissions ajoutées manuellement)
+    // Exemple: Frais de flots administratifs
+    final fraisManuels = fraisDuJour
+        .where((t) => t.typeTransaction == TypeTransactionCompte.COMMISSION_AUTO)
+        .fold(0.0, (sum, t) => sum + t.montant);
+    
     // NOUVELLE LOGIQUE: Calculer les FRAIS ENCAISSÉS sur TOUS les transferts qui passent par le shop
     // Les frais peuvent appartenir au shop selon deux cas:
     // 1. Le shop est la DESTINATION (il sert le transfert) - frais gagnés
@@ -794,11 +806,11 @@ class RapportClotureService {
         _isSameDay(op.createdAt ?? op.dateOp, dateRapport)  // CHANGEMENT: Utiliser uniquement createdAt ?? dateOp
     ).toList();
     
-    // Total des frais encaissés = somme des commissions sur les transferts SERVIS et EN ATTENTE
+    // Total des frais encaissés = somme des commissions sur les transferts SERVIS et EN ATTENTE + frais manuels
     final fraisEncaissesServis = transfertsServis.fold(0.0, (sum, op) => sum + op.commission);
     final fraisEncaissesEnAttente = transfertsEnAttente.fold(0.0, (sum, op) => sum + op.commission);
     final fraisEncaissesInities = transfertsInities.fold(0.0, (sum, op) => sum + op.commission);
-    final fraisEncaisses = fraisEncaissesServis + fraisEncaissesEnAttente; // Inclure les transferts en attente
+    final fraisEncaisses = fraisEncaissesServis + fraisEncaissesEnAttente + fraisManuels; // MODIFIÉ: Ajouter frais manuels
     
     // Grouper les frais par shop source (qui a envoyé le transfert)
     // Selon la règle métier, seuls les transferts SERVIS sont comptabilisés
@@ -817,7 +829,8 @@ class RapportClotureService {
     debugPrint('   Nombre de transferts servis: ${transfertsServis.length} (frais gagnés: ${fraisEncaissesServis.toStringAsFixed(2)} USD)');
     debugPrint('   Nombre de transferts en attente: ${transfertsEnAttente.length} (frais potentiels: ${fraisEncaissesEnAttente.toStringAsFixed(2)} USD)');
     debugPrint('   Nombre de transferts initiés: ${transfertsInities.length} (frais payés: ${fraisEncaissesInities.toStringAsFixed(2)} USD) - NON COMPTABILISÉS');
-    debugPrint('   Total frais encaissés: ${fraisEncaisses.toStringAsFixed(2)} USD (frais servis + frais en attente)');
+    debugPrint('   Frais manuels du jour: ${fraisManuels.toStringAsFixed(2)} USD (ex: flots administratifs)');
+    debugPrint('   Total frais encaissés: ${fraisEncaisses.toStringAsFixed(2)} USD (transferts + manuels)');
     debugPrint('   Frais groupés par shop:');
     fraisGroupesParShop.forEach((shop, montant) {
       debugPrint('     - $shop : ${montant.toStringAsFixed(2)} USD');

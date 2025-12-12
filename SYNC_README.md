@@ -153,14 +153,14 @@ private $password = ''; // Votre mot de passe MySQL
 Vérifier `lib/services/api_service.dart`:
 
 ```dart
-static const String baseUrl = 'http://localhost/UCASHV01/server/api';
+static const String baseUrl = 'https://mahanaimeservice.investee-group.com/server/api';
 ```
 
 ### 5. Tester la Configuration
 
 Ouvrez dans votre navigateur:
 ```
-http://localhost/UCASHV01/server/api/sync/ping.php
+https://mahanaimeservice.investee-group.com/server/api/sync/ping.php
 ```
 
 Réponse attendue:
@@ -497,7 +497,7 @@ class SyncResult {
 
 2. Tester l'URL de ping
 ```
-http://localhost/UCASHV01/server/api/sync/ping.php
+https://mahanaimeservice.investee-group.com/server/api/sync/ping.php
 ```
 
 3. Vérifier les credentials MySQL
@@ -532,7 +532,7 @@ SELECT * FROM sync_metadata; -- Vérifier les métadonnées
 3. Tester manuellement l'API
 ```bash
 # Avec curl ou Postman
-curl http://localhost/UCASHV01/server/api/sync/ping.php
+curl https://mahanaimeservice.investee-group.com/server/api/sync/ping.php
 ```
 
 ### Problème 3: "Conflits non résolus"

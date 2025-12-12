@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../models/cloture_virtuelle_par_sim_model.dart';
 import '../models/sim_model.dart';
 import '../models/retrait_virtuel_model.dart';
@@ -433,7 +434,7 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
                     _buildInfoRow('Solde Antérieur', '\$${cloture.soldeAnterieur.toStringAsFixed(2)}', Colors.grey),
                     _buildInfoRow('Solde Actuel', '\$${cloture.soldeActuel.toStringAsFixed(2)}', 
                       cloture.soldeActuel >= 0 ? Colors.green : Colors.red, bold: true),
-                    _buildInfoRow('Cash Disponible', '\$${cloture.cashDisponible.toStringAsFixed(2)}', Colors.blue),
+                    _buildInfoRow('Cash Physique Compté', '\$${cloture.cashDisponible.toStringAsFixed(2)}', Colors.blue),
                   ],
                   isMobile,
                 ),
@@ -1447,13 +1448,131 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
   }
 
   /// Afficher l'historique
-  void _afficherHistorique() {
-    // TODO: Implémenter l'affichage de l'historique
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Historique à venir')),
+  void _afficherHistorique() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final shopId = authService.currentUser?.shopId;
+    
+    if (shopId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Shop ID non disponible')),
+      );
+      return;
+    }
+    
+    try {
+      // Récupérer les clôtures pour la date sélectionnée
+      final clotures = await ClotureVirtuelleParSimService.instance.getCloturesParDate(
+        shopId: shopId,
+        date: _dateCloture,
+      );
+      
+      if (!mounted) return;
+      
+      if (clotures.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Aucune clôture trouvée pour le ${DateFormat('dd/MM/yyyy').format(_dateCloture)}')),
+        );
+        return;
+      }
+      
+      // Afficher les clôtures dans un dialog
+      await showDialog(
+        context: context,
+        builder: (context) => _buildHistoriqueDialog(clotures),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur: $e')),
+        );
+      }
+    }
+  }
+  
+  /// Construire le dialog d'historique
+  Widget _buildHistoriqueDialog(List<ClotureVirtuelleParSimModel> clotures) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        width: MediaQuery.of(context).size.width * 0.9,
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.8,
+        ),
+        child: Column(
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF48bb78), Color(0xFF38a169)],
+                ),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.history, color: Colors.white, size: 24),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Historique Clôtures - ${DateFormat('dd/MM/yyyy').format(_dateCloture)}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  if (Provider.of<AuthService>(context, listen: false).currentUser?.role == 'ADMIN')
+                    IconButton(
+                      icon: const Icon(Icons.delete_forever, color: Colors.white),
+                      onPressed: () => _supprimerToutesLesClotures(clotures),
+                      tooltip: 'Supprimer toutes les clôtures de cette date',
+                    ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+            ),
+            
+            // Liste des clôtures
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: clotures.length,
+                itemBuilder: (context, index) {
+                  final cloture = clotures[index];
+                  return _buildClotureCard(cloture, false);
+                },
+              ),
+            ),
+            
+            // Bouton fermer
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF48bb78),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text('Fermer'),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
+  
 
+  
   /// Afficher une erreur
   void _showError(String message) {
     if (!mounted) return;
@@ -1478,6 +1597,75 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
         return Colors.blue;
       default:
         return Colors.grey;
+    }
+  }
+  
+  /// Supprimer toutes les clôtures de la date sélectionnée
+  Future<void> _supprimerToutesLesClotures(List<ClotureVirtuelleParSimModel> clotures) async {
+    if (clotures.isEmpty) return;
+    
+    final authService = Provider.of<AuthService>(context, listen: false);
+    
+    // Vérifier que l'utilisateur est admin
+    if (authService.currentUser?.role != 'ADMIN') {
+      _showError('Seul un administrateur peut supprimer des clôtures');
+      return;
+    }
+    
+    final shopId = authService.currentUser?.shopId;
+    
+    if (shopId == null) {
+      _showError('Shop ID non disponible');
+      return;
+    }
+    
+    // Confirmation
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('⚠️ Supprimer toutes les clôtures'),
+        content: Text(
+          'Voulez-vous vraiment supprimer les ${clotures.length} clôture(s) du ${DateFormat('dd/MM/yyyy').format(_dateCloture)} ?\n\n'
+          'Cette action est IRRÉVERSIBLE.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Supprimer', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirm != true) return;
+    
+    try {
+      await ClotureVirtuelleParSimService.instance.deleteCloturesParDate(
+        shopId: shopId,
+        date: _dateCloture,
+      );
+      
+      if (mounted) {
+        Navigator.of(context).pop(); // Fermer le dialog historique
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Clôtures supprimées avec succès'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        
+        // Recharger les données
+        setState(() {});
+      }
+    } catch (e) {
+      if (mounted) {
+        _showError('Erreur lors de la suppression: $e');
+      }
     }
   }
 }

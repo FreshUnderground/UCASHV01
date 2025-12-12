@@ -51,8 +51,13 @@ class ClotureVirtuelleService {
       
       // Traiter toutes les transactions en une seule boucle (optimisation mémoire)
       for (var trans in allTransactions) {
+        // EXCLUSION: Les transactions administratives ne sont PAS comptabilisées dans les montants cash
+        final isNormalTransaction = !trans.isAdministrative;
+        
         montantTotalCaptures += trans.montantVirtuel;
-        cashSortiCaptures += trans.montantVirtuel;
+        if (isNormalTransaction) {
+          cashSortiCaptures += trans.montantVirtuel;
+        }
         
         final simKey = trans.simNumero;
         if (!transactionsParSim.containsKey(simKey)) {
@@ -78,12 +83,16 @@ class ClotureVirtuelleService {
           nombreServies++;
           montantVirtuelServies += trans.montantVirtuel;
           fraisPercus += trans.frais;
-          cashServi += trans.montantCash;
+          if (isNormalTransaction) {
+            cashServi += trans.montantCash;
+          }
           
           transactionsParSim[simKey]!['nombreServies'] += 1;
           transactionsParSim[simKey]!['montantServies'] += trans.montantVirtuel;
           transactionsParSim[simKey]!['fraisServies'] += trans.frais;
-          transactionsParSim[simKey]!['cashServi'] += trans.montantCash;
+          if (isNormalTransaction) {
+            transactionsParSim[simKey]!['cashServi'] += trans.montantCash;
+          }
         } else if (trans.statut == VirtualTransactionStatus.enAttente) {
           nombreEnAttente++;
           montantVirtuelEnAttente += trans.montantVirtuel;

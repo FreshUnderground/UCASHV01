@@ -7,7 +7,7 @@ Ajouter les colonnes `shop_source_designation` et `shop_destination_designation`
 
 ### Option 1: Via le navigateur (Recommandé)
 1. Ouvrez votre navigateur
-2. Naviguez vers: `http://localhost/UCASHV01/server/database/migrate_flots_designations.php`
+2. Naviguez vers: `https://mahanaimeservice.investee-group.com/server/database/migrate_flots_designations.php`
 3. Suivez les instructions à l'écran
 
 ### Option 2: Via MySQL Client

@@ -534,8 +534,8 @@ class SyncManager {
                 agent_id, agent_username,
                 client_nom, client_telephone,
                 statut, date_enregistrement, date_validation, notes,
-                last_modified_at, last_modified_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                last_modified_at, last_modified_by, is_administrative
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
             
             $stmt = $this->pdo->prepare($sql);
             $result = $stmt->execute([
@@ -556,7 +556,8 @@ class SyncManager {
                 $data['date_validation'] ?? null,
                 $data['notes'] ?? null,
                 $data['last_modified_at'] ?? date('Y-m-d H:i:s'),
-                $data['last_modified_by'] ?? 'system'
+                $data['last_modified_by'] ?? 'system',
+                isset($data['is_administrative']) ? (int)$data['is_administrative'] : 0
             ]);
             
             if ($result) {
@@ -607,7 +608,8 @@ class SyncManager {
                 date_validation = ?,
                 notes = ?,
                 last_modified_at = ?,
-                last_modified_by = ?
+                last_modified_by = ?,
+                is_administrative = ?
             WHERE reference = ?";
             
             $stmt = $this->pdo->prepare($sql);
@@ -629,6 +631,7 @@ class SyncManager {
                 $data['notes'] ?? null,
                 $data['last_modified_at'] ?? date('Y-m-d H:i:s'),
                 $data['last_modified_by'] ?? 'system',
+                isset($data['is_administrative']) ? (int)$data['is_administrative'] : 0,
                 $data['reference']
             ]);
             

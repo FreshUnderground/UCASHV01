@@ -85,7 +85,7 @@ Quand un admin **supprime** un shop:
 
 ```bash
 # Tester l'endpoint agents
-curl -X POST "http://localhost/UCASHV01/server/api/sync/agents/check_deleted.php" \
+curl -X POST "https://mahanaimeservice.investee-group.com/server/api/sync/agents/check_deleted.php" \
   -H "Content-Type: application/json" \
   -d "{\"agent_ids\": [1, 2, 3, 999]}"
 
@@ -182,7 +182,7 @@ Pour changer:
 2. **Vérifier les endpoints API**
    ```bash
    # Test manuel
-   curl http://localhost/UCASHV01/server/api/sync/agents/check_deleted.php
+   curl https://mahanaimeservice.investee-group.com/server/api/sync/agents/check_deleted.php
    ```
 
 3. **Vérifier les logs**

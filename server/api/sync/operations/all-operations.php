@@ -46,7 +46,7 @@ try {
                     o.destinataire, o.telephone_destinataire, o.reference,
                     o.mode_paiement, o.statut, o.notes, o.observation, o.billetage,
                     o.created_at, o.last_modified_at, o.last_modified_by,
-                    o.is_synced, o.synced_at
+                    o.is_synced, o.synced_at, o.is_administrative
                   FROM operations o
                   WHERE (o.shop_source_id = :shop_id OR o.shop_destination_id = :shop_id2)
                     AND o.created_at >= :date_limit
@@ -80,7 +80,7 @@ try {
                     o.destinataire, o.telephone_destinataire, o.reference,
                     o.mode_paiement, o.statut, o.notes, o.observation, o.billetage,
                     o.created_at, o.last_modified_at, o.last_modified_by,
-                    o.is_synced, o.synced_at
+                    o.is_synced, o.synced_at, o.is_administrative
                   FROM operations o
                   WHERE o.created_at >= :date_limit
                   $type_condition
@@ -131,6 +131,7 @@ try {
             'last_modified_by' => $row['last_modified_by'],
             'is_synced' => (bool)$row['is_synced'],
             'synced_at' => $row['synced_at'],
+            'is_administrative' => isset($row['is_administrative']) ? (bool)$row['is_administrative'] : false,
         ];
     }
     

@@ -32,7 +32,7 @@ echo "Données envoyées:\n";
 echo $jsonData . "\n\n";
 
 // Envoyer la requête POST
-$url = 'http://localhost/UCASHV01/server/api/sync/virtual_transactions/upload.php';
+$url = 'https://mahanaimeservice.investee-group.com/server/api/sync/virtual_transactions/upload.php';
 $ch = curl_init($url);
 curl_setopt($ch, CURLOPT_POST, true);
 curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);

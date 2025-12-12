@@ -38,6 +38,7 @@ import '../widgets/trash_bin_widget.dart';
 import '../services/deletion_service.dart';
 import '../widgets/partner_net_position_widget.dart';
 import '../widgets/reports/dettes_intershop_report.dart';
+import '../widgets/admin_flot_dialog.dart';
 
 class DashboardAdminPage extends StatefulWidget {
   const DashboardAdminPage({super.key});
@@ -1365,6 +1366,8 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
     final isMobile = size.width <= 768;
     final isTablet = size.width > 768 && size.width <= 1024;
     
+    debugPrint('🔧 Building Action Grid - isMobile: $isMobile, isTablet: $isTablet, width: ${size.width}');
+    
     return LayoutBuilder(
       builder: (context, constraints) {
         int columns = isMobile ? 2 : (isTablet ? 3 : 4);
@@ -1406,7 +1409,13 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
               title: 'Configuration',
               icon: Icons.settings,
               color: const Color(0xFF0891B2),
-              onTap: () => setState(() => _selectedIndex = 7),  // Index 7 = Configuration
+              onTap: () => setState(() => _selectedIndex = 9),  // Index 9 = Configuration
+            ),
+            _buildFluidActionCard(
+              title: 'Flot Administratif',
+              icon: Icons.admin_panel_settings,
+              color: const Color(0xFF9333EA),
+              onTap: _showAdminFlotDialog,
             ),
           ],
         );
@@ -1441,6 +1450,18 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
       context: context,
       builder: (context) => const CreateAgentDialog(),
     );
+  }
+
+  void _showAdminFlotDialog() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => const AdminFlotDialog(),
+    );
+    
+    if (result == true && mounted) {
+      // Rafraîchir les données après la création du flot administratif
+      setState(() {});
+    }
   }
 
   // Mapper l'index desktop (13 items) vers l'index mobile (6 items)

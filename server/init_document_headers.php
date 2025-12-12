@@ -67,7 +67,7 @@ try {
     }
     
     echo "\n✅ Initialisation terminée avec succès !\n";
-    echo "🔗 Testez l'endpoint: " . (isset($_SERVER['HTTP_HOST']) ? "http://{$_SERVER['HTTP_HOST']}" : "http://localhost") . "/server/api/document-headers/active\n";
+    echo "🔗 Testez l'endpoint: " . (isset($_SERVER['HTTP_HOST']) ? "http://{$_SERVER['HTTP_HOST']}" : "https://mahanaimeservice.investee-group.com") . "/server/api/document-headers/active\n";
     
 } catch (PDOException $e) {
     echo "❌ Erreur: " . $e->getMessage() . "\n";

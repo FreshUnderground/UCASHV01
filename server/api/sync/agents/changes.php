@@ -34,7 +34,7 @@ try {
     // Construire la requête avec JOIN pour récupérer shop_designation
     $sql = "
         SELECT 
-            a.id, a.username, a.password, a.nom, a.telephone, a.shop_id, a.role, a.is_active,
+            a.id, a.username, a.password, a.nom, a.shop_id, a.role, a.is_active,
             a.last_modified_at, a.last_modified_by, a.created_at,
             a.is_synced, a.synced_at,
             s.designation AS shop_designation
@@ -88,7 +88,6 @@ try {
             'username' => $agent['username'],
             'password' => $agent['password'],
             'nom' => $agent['nom'],
-            'telephone' => $agent['telephone'], // ✅ Téléphone included
             'shop_id' => (int)$agent['shop_id'],
             'shop_designation' => $agent['shop_designation'], // ✅ Ajout du nom du shop
             'role' => $agent['role'],

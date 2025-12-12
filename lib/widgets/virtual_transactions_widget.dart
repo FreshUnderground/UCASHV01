@@ -3726,28 +3726,47 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
 
   /// Récupérer le solde antérieur CASH de la dernière clôture caisse
   /// Utilise la MÊME logique que rapport_cloture_service.dart
-  Future<double> _getSoldeAnterieurCash(int? shopId) async {
+  Future<double> _getSoldeAnterieurCash(int? shopId, {DateTime? dateReference}) async {
     if (shopId == null) return 0.0;
     
     try {
-      // Obtenir la date d'aujourd'hui
-      final aujourdhui = DateTime.now();
+      // Utiliser la date de référence (date sélectionnée) ou aujourd'hui par défaut
+      final dateRef = dateReference ?? DateTime.now();
       // Jour précédent
-      final jourPrecedent = aujourdhui.subtract(const Duration(days: 1));
+      final jourPrecedent = dateRef.subtract(const Duration(days: 1));
       
+      // D'abord essayer de récupérer les clôtures PAR SIM du jour précédent
+      final cloturesParSim = await LocalDB.instance.getCloturesVirtuellesParDate(
+        shopId: shopId,
+        date: jourPrecedent,
+      );
+      
+      if (cloturesParSim.isNotEmpty) {
+        // Calculer le total du cash disponible de toutes les SIMs
+        final cashTotalParSim = cloturesParSim.fold<double>(0.0, (sum, cloture) {
+          final cashDisponible = cloture['cash_disponible'] as num?;
+          return sum + (cashDisponible?.toDouble() ?? 0.0);
+        });
+        
+        debugPrint('📋 Solde antérieur CASH trouvé (${cloturesParSim.length} clôture(s) par SIM du ${jourPrecedent.toIso8601String().split('T')[0]}):');
+        debugPrint('   CASH TOTAL: ${cashTotalParSim.toStringAsFixed(2)} USD');
+        return cashTotalParSim;
+      }
+      
+      // Si pas de clôtures par SIM, essayer la clôture caisse classique
       // Récupérer la clôture caisse du jour précédent
       final cloturePrecedente = await LocalDB.instance.getClotureCaisseByDate(shopId, jourPrecedent);
       
       if (cloturePrecedente != null) {
         // MÊME LOGIQUE QUE rapport_cloture_service.dart:
         // Utiliser le montant SAISI TOTAL comme solde antérieur
-        debugPrint('📋 Solde antérieur CASH trouvé (clôture du ${jourPrecedent.toIso8601String().split('T')[0]}):');
+        debugPrint('📋 Solde antérieur CASH trouvé (clôture caisse du ${jourPrecedent.toIso8601String().split('T')[0]}):');
         debugPrint('   TOTAL SAISI: ${cloturePrecedente.soldeSaisiTotal} USD');
         return cloturePrecedente.soldeSaisiTotal;
       }
       
       // Si aucune clôture précédente, retourner 0
-      debugPrint('ℹ️ Aucun solde antérieur CASH (pas de clôture caisse du jour précédent)');
+      debugPrint('ℹ️ Aucun solde antérieur CASH (pas de clôture du jour précédent)');
       return 0.0;
     } catch (e) {
       debugPrint('❌ Erreur récupération solde antérieur CASH: $e');
@@ -3757,10 +3776,32 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
 
   /// Récupérer le solde antérieur VIRTUEL de la dernière clôture virtuelle
   /// Formule: Virtuel Disponible = Solde Antérieur (Virtuel) + Captures du Jour (Frais inclus) - Retraits du Jour
-  Future<double> _getSoldeAnterieurVirtuel(int? shopId) async {
+  Future<double> _getSoldeAnterieurVirtuel(int? shopId, {DateTime? dateReference}) async {
     if (shopId == null) return 0.0;
     
     try {
+      // Utiliser la date de référence (date sélectionnée) ou aujourd'hui par défaut
+      final dateRef = dateReference ?? DateTime.now();
+      final jourPrecedent = dateRef.subtract(const Duration(days: 1));
+      
+      final cloturesParSim = await LocalDB.instance.getCloturesVirtuellesParDate(
+        shopId: shopId,
+        date: jourPrecedent,
+      );
+      
+      if (cloturesParSim.isNotEmpty) {
+        // Calculer le total des soldes actuels de toutes les SIMs
+        final soldeTotalParSim = cloturesParSim.fold<double>(0.0, (sum, cloture) {
+          final soldeActuel = cloture['solde_actuel'] as num?;
+          return sum + (soldeActuel?.toDouble() ?? 0.0);
+        });
+        
+        debugPrint('📋 Solde antérieur VIRTUEL trouvé (${cloturesParSim.length} clôture(s) par SIM du ${jourPrecedent.toIso8601String().split('T')[0]}):');
+        debugPrint('   SOLDE TOTAL SIMs: ${soldeTotalParSim.toStringAsFixed(2)} USD');
+        return soldeTotalParSim;
+      }
+      
+      // Si pas de clôtures par SIM, essayer la clôture globale
       final clotures = await LocalDB.instance.getAllCloturesVirtuelles(shopId: shopId);
       if (clotures.isEmpty) {
         debugPrint('ℹ️ Aucun solde antérieur VIRTUEL (pas de clôture virtuelle précédente)');
@@ -3772,7 +3813,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
       final derniereCloture = clotures.first;
       
       // Utiliser le solde total des SIMs de la dernière clôture
-      debugPrint('📋 Solde antérieur VIRTUEL trouvé (clôture du ${derniereCloture.dateCloture.toIso8601String().split('T')[0]}):');
+      debugPrint('📋 Solde antérieur VIRTUEL trouvé (clôture globale du ${derniereCloture.dateCloture.toIso8601String().split('T')[0]}):');
       debugPrint('   SOLDE TOTAL SIMs: ${derniereCloture.soldeTotalSims} USD');
       return derniereCloture.soldeTotalSims;
     } catch (e) {
@@ -3783,27 +3824,46 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
 
   /// Récupérer le solde FRAIS antérieur de la clôture du jour précédent
   /// Utilise la MÊME logique que rapport_cloture_service.dart
-  Future<double> _getSoldeFraisAnterieur(int? shopId) async {
+  Future<double> _getSoldeFraisAnterieur(int? shopId, {DateTime? dateReference}) async {
     if (shopId == null) return 0.0;
     
     try {
-      // Obtenir la date d'aujourd'hui
-      final aujourdhui = DateTime.now();
+      // Utiliser la date de référence (date sélectionnée) ou aujourd'hui par défaut
+      final dateRef = dateReference ?? DateTime.now();
       // Jour précédent
-      final jourPrecedent = aujourdhui.subtract(const Duration(days: 1));
+      final jourPrecedent = dateRef.subtract(const Duration(days: 1));
       
+      // D'abord essayer de récupérer les clôtures PAR SIM du jour précédent
+      final cloturesParSim = await LocalDB.instance.getCloturesVirtuellesParDate(
+        shopId: shopId,
+        date: jourPrecedent,
+      );
+      
+      if (cloturesParSim.isNotEmpty) {
+        // Calculer le total des frais de toutes les SIMs
+        final fraisTotalParSim = cloturesParSim.fold<double>(0.0, (sum, cloture) {
+          final fraisTotal = cloture['frais_total'] as num?;
+          return sum + (fraisTotal?.toDouble() ?? 0.0);
+        });
+        
+        debugPrint('📋 Solde FRAIS antérieur trouvé (${cloturesParSim.length} clôture(s) par SIM du ${jourPrecedent.toIso8601String().split('T')[0]}):');
+        debugPrint('   FRAIS TOTAL: ${fraisTotalParSim.toStringAsFixed(2)} USD');
+        return fraisTotalParSim;
+      }
+      
+      // Si pas de clôtures par SIM, essayer la clôture caisse classique
       // Récupérer la clôture caisse du jour précédent
       final cloturePrecedente = await LocalDB.instance.getClotureCaisseByDate(shopId, jourPrecedent);
       
       if (cloturePrecedente != null) {
         // Retourner le solde FRAIS enregistré dans la clôture
-        debugPrint('📋 Solde FRAIS antérieur trouvé (clôture du ${jourPrecedent.toIso8601String().split('T')[0]}):');
+        debugPrint('📋 Solde FRAIS antérieur trouvé (clôture caisse du ${jourPrecedent.toIso8601String().split('T')[0]}):');
         debugPrint('   SOLDE FRAIS: ${cloturePrecedente.soldeFraisAnterieur} USD');
         return cloturePrecedente.soldeFraisAnterieur;
       }
       
       // Si aucune clôture précédente, retourner 0
-      debugPrint('ℹ️ Aucun solde FRAIS antérieur (pas de clôture caisse du jour précédent)');
+      debugPrint('ℹ️ Aucun solde FRAIS antérieur (pas de clôture du jour précédent)');
       return 0.0;
     } catch (e) {
       debugPrint('❌ Erreur récupération solde FRAIS antérieur: $e');
@@ -4045,7 +4105,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                 final flotsEnvoyesListe = flotsEnvoyes; // Garder la liste pour les détails
                 
                 return FutureBuilder<double>(
-                  future: _getSoldeAnterieurCash(shopIdFilter),
+                  future: _getSoldeAnterieurCash(shopIdFilter, dateReference: _selectedDate),
                   builder: (BuildContext context, soldeSnapshot) {
                     final soldeAnterieur = soldeSnapshot.data ?? 0.0;
                     
@@ -4317,7 +4377,7 @@ const SizedBox(height: 16),
                           
                           // SECTION VIRTUEL DISPONIBLE
                           FutureBuilder<double>(
-                            future: _getSoldeAnterieurVirtuel(shopIdFilter),
+                            future: _getSoldeAnterieurVirtuel(shopIdFilter, dateReference: _selectedDate),
                             builder: (context, virtuelSnapshot) {
                               final soldeAnterieurVirtuel = virtuelSnapshot.data ?? 0.0;
                               final capturesDuJour = montantTotalCaptures; // Captures SANS Frais
@@ -4611,7 +4671,7 @@ const SizedBox(height: 16),
                                   ),
                                   // BODY - DETAILS FRAIS
                                   FutureBuilder<double>(
-                                    future: _getSoldeFraisAnterieur(shopIdFilter),
+                                    future: _getSoldeFraisAnterieur(shopIdFilter, dateReference: _selectedDate),
                                     builder: (context, fraisAntSnapshot) {
                                       final fraisAnterieur = fraisAntSnapshot.data ?? 0.0;
                                       
@@ -4654,7 +4714,7 @@ const SizedBox(height: 16),
                           // CARD CAPITAL NET
                           // Calculer les FRAIS puis le Virtuel Disponible et le Capital Net
                           FutureBuilder<double>(
-                            future: _getSoldeFraisAnterieur(shopIdFilter),
+                            future: _getSoldeFraisAnterieur(shopIdFilter, dateReference: _selectedDate),
                             builder: (context, fraisAntSnapshot) {
                               final fraisAnterieur = fraisAntSnapshot.data ?? 0.0;
                               
@@ -4665,7 +4725,7 @@ const SizedBox(height: 16),
                                   final soldeFraisTotal = fraisAnterieur + fraisPercus - sortieFrais;
                                   
                                   return FutureBuilder<double>(
-                                    future: _getSoldeAnterieurVirtuel(shopIdFilter),
+                                    future: _getSoldeAnterieurVirtuel(shopIdFilter, dateReference: _selectedDate),
                                     builder: (context, virtuelSoldeSnapshot) {
                                       final soldeAnterieurVirtuel = virtuelSoldeSnapshot.data ?? 0.0;
                                       final capturesDuJour = montantTotalCaptures;  // SANS frais

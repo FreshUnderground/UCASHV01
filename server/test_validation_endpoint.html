@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Deletion Request Validation</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, select { width: 100%; padding: 8px; box-sizing: border-box; }
+        button { background-color: #4CAF50; color: white; padding: 10px 20px; border: none; cursor: pointer; }
+        button:hover { background-color: #45a049; }
+        .result { margin-top: 20px; padding: 15px; border-radius: 5px; }
+        .success { background-color: #dff0d8; color: #3c763d; }
+        .error { background-color: #f2dede; color: #a94442; }
+        .info { background-color: #d9edf7; color: #31708f; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Test Deletion Request Validation</h1>
+        
+        <div class="form-group">
+            <label for="codeOps">Code Ops:</label>
+            <input type="text" id="codeOps" value="251212115644101">
+        </div>
+        
+        <div class="form-group">
+            <label for="adminId">Admin ID:</label>
+            <input type="number" id="adminId" value="1">
+        </div>
+        
+        <div class="form-group">
+            <label for="adminName">Admin Name:</label>
+            <input type="text" id="adminName" value="Test Admin">
+        </div>
+        
+        <button onclick="testValidation()">Test Admin Validation</button>
+        <button onclick="testAgentValidation()">Test Agent Validation</button>
+        
+        <div id="result"></div>
+    </div>
+
+    <script>
+        function displayResult(message, isSuccess) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<div class="' + (isSuccess ? 'success' : 'error') + '">' + message + '</div>';
+        }
+        
+        function displayInfo(message) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<div class="info">' + message + '</div>';
+        }
+        
+        function testValidation() {
+            const codeOps = document.getElementById('codeOps').value;
+            const adminId = document.getElementById('adminId').value;
+            const adminName = document.getElementById('adminName').value;
+            
+            if (!codeOps || !adminId || !adminName) {
+                displayResult('Please fill all fields', false);
+                return;
+            }
+            
+            displayInfo('Sending validation request...');
+            
+            const data = {
+                code_ops: codeOps,
+                validated_by_admin_id: parseInt(adminId),
+                validated_by_admin_name: adminName
+            };
+            
+            fetch('https://mahanaimeservice.investee-group.com/server/api/sync/deletion_requests/admin_validate.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    displayResult('SUCCESS: ' + result.message, true);
+                } else {
+                    displayResult('ERROR: ' + result.message + '<br>Received data: ' + JSON.stringify(result), false);
+                }
+            })
+            .catch(error => {
+                displayResult('NETWORK ERROR: ' + error.message, false);
+            });
+        }
+        
+        function testAgentValidation() {
+            const codeOps = document.getElementById('codeOps').value;
+            const agentId = document.getElementById('adminId').value; // Using same field for simplicity
+            const agentName = document.getElementById('adminName').value;
+            
+            if (!codeOps || !agentId || !agentName) {
+                displayResult('Please fill all fields', false);
+                return;
+            }
+            
+            displayInfo('Sending agent validation request...');
+            
+            const data = {
+                code_ops: codeOps,
+                validated_by_agent_id: parseInt(agentId),
+                validated_by_agent_name: agentName,
+                action: 'approve'
+            };
+            
+            fetch('https://mahanaimeservice.investee-group.com/server/api/sync/deletion_requests/validate.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    displayResult('SUCCESS: ' + result.message, true);
+                } else {
+                    displayResult('ERROR: ' + result.message + '<br>Received data: ' + JSON.stringify(result), false);
+                }
+            })
+            .catch(error => {
+                displayResult('NETWORK ERROR: ' + error.message, false);
+            });
+        }
+    </script>
+</body>
+</html>

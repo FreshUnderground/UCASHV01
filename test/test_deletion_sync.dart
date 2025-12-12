@@ -14,7 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('Automatic Deletion Sync Tests', () {
-    const String baseUrl = 'http://localhost/UCASHV01/server/api/sync';
+    const String baseUrl = 'https://mahanaimeservice.investee-group.com/server/api/sync';
     
     test('Test check_deleted agents endpoint', () async {
       final url = Uri.parse('$baseUrl/agents/check_deleted.php');
@@ -149,7 +149,7 @@ void main() {
 void manualTest() async {
   print('🧪 === TEST MANUEL DE LA SYNCHRONISATION DES SUPPRESSIONS ===\n');
   
-  const String baseUrl = 'http://localhost/UCASHV01/server/api/sync';
+  const String baseUrl = 'https://mahanaimeservice.investee-group.com/server/api/sync';
   
   // Test 1: Check agents
   print('📋 Test 1: Vérification des agents supprimés');

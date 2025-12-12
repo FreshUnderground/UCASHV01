@@ -35,6 +35,9 @@ class VirtualTransactionModel {
   final String? lastModifiedBy;
   final bool isSynced;
   final DateTime? syncedAt;
+  
+  // Transaction administrative (n'impacte pas le cash disponible)
+  final bool isAdministrative;
 
   VirtualTransactionModel({
     this.id,
@@ -58,6 +61,7 @@ class VirtualTransactionModel {
     this.lastModifiedBy,
     this.isSynced = false,
     this.syncedAt,
+    this.isAdministrative = false, // Par défaut: transaction normale
   }) : reference = reference.trim().toLowerCase();
 
   VirtualTransactionModel copyWith({
@@ -83,6 +87,7 @@ class VirtualTransactionModel {
     String? lastModifiedBy,
     bool? isSynced,
     DateTime? syncedAt,
+    bool? isAdministrative,
   }) {
     return VirtualTransactionModel(
       id: id ?? this.id,
@@ -106,6 +111,7 @@ class VirtualTransactionModel {
       lastModifiedBy: lastModifiedBy ?? this.lastModifiedBy,
       isSynced: isSynced ?? this.isSynced,
       syncedAt: syncedAt ?? this.syncedAt,
+      isAdministrative: isAdministrative ?? this.isAdministrative,
     );
   }
 
@@ -132,6 +138,7 @@ class VirtualTransactionModel {
       'last_modified_by': lastModifiedBy,
       'is_synced': isSynced ? 1 : 0,
       'synced_at': syncedAt?.toIso8601String(),
+      'is_administrative': isAdministrative ? 1 : 0,
     };
   }
 
@@ -179,6 +186,7 @@ class VirtualTransactionModel {
       syncedAt: json['synced_at'] != null
           ? DateTime.parse(json['synced_at'] as String)
           : null,
+      isAdministrative: json['is_administrative'] == 1 || json['is_administrative'] == true,
     );
   }
 

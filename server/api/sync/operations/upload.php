@@ -108,6 +108,7 @@ try {
                 error_log("[SYNC OP] shop_source_id={$entity['shop_source_id']}, shop_source_designation=" . (isset($entity['shop_source_designation']) ? "'{$entity['shop_source_designation']}'" : 'NULL'));
                 error_log("[SYNC OP] client_nom=" . (isset($entity['client_nom']) ? "'{$entity['client_nom']}'" : 'NULL'));
                 error_log("[SYNC OP] montant_brut={$entity['montant_brut']}, montant_net={$entity['montant_net']}");
+                error_log("[SYNC OP] is_administrative=" . (isset($entity['is_administrative']) ? ($entity['is_administrative'] ? 'TRUE' : 'FALSE') : 'NULL'));
                 
                 // Convertir les index d'enum Flutter en valeurs SQL
                 $typeIndex = $entity['type'] ?? null;
@@ -263,7 +264,8 @@ try {
                         destinataire = :destinataire,
                         telephone_destinataire = :telephone_destinataire,
                         code_ops = :code_ops,
-                        billetage = :billetage,  /* Added billetage */
+                        billetage = :billetage,
+                        is_administrative = :is_administrative,
                         last_modified_at = :last_modified_at,
                         last_modified_by = :last_modified_by
                     WHERE id = :id
@@ -290,7 +292,8 @@ try {
                     ':destinataire' => $entity['destinataire'] ?? null,
                     ':telephone_destinataire' => $entity['telephone_destinataire'] ?? null,
                     ':code_ops' => $entity['code_ops'] ?? null,
-                    ':billetage' => $entity['billetage'] ?? null,  /* Added billetage */
+                    ':billetage' => $entity['billetage'] ?? null,
+                    ':is_administrative' => isset($entity['is_administrative']) ? (int)$entity['is_administrative'] : 0,
                     ':last_modified_at' => $entity['last_modified_at'] ?? date('Y-m-d H:i:s'),
                     ':last_modified_by' => $userId
                 ]);
@@ -346,12 +349,12 @@ try {
                     INSERT INTO operations (
                         type, montant_brut, montant_net, commission, devise,
                         client_id, client_nom, shop_source_id, shop_source_designation, shop_destination_id, shop_destination_designation, agent_id, agent_username,
-                        mode_paiement, statut, date_validation, reference, notes, observation, destinataire, telephone_destinataire, code_ops, billetage,  /* Added billetage */
+                        mode_paiement, statut, date_validation, reference, notes, observation, destinataire, telephone_destinataire, code_ops, billetage, is_administrative,
                         last_modified_at, last_modified_by, created_at
                     ) VALUES (
                         :type, :montant_brut, :montant_net, :commission, :devise,
                         :client_id, :client_nom, :shop_source_id, :shop_source_designation, :shop_destination_id, :shop_destination_designation, :agent_id, :agent_username,
-                        :mode_paiement, :statut, :date_validation, :reference, :notes, :observation, :destinataire, :telephone_destinataire, :code_ops, :billetage,  /* Added billetage */
+                        :mode_paiement, :statut, :date_validation, :reference, :notes, :observation, :destinataire, :telephone_destinataire, :code_ops, :billetage, :is_administrative,
                         :last_modified_at, :last_modified_by, :created_at
                     )
                 ");
@@ -380,7 +383,8 @@ try {
                     ':destinataire' => $entity['destinataire'] ?? null,
                     ':telephone_destinataire' => $entity['telephone_destinataire'] ?? null,
                     ':code_ops' => $entity['code_ops'] ?? null,
-                    ':billetage' => $entity['billetage'] ?? null,  /* Added billetage */
+                    ':billetage' => $entity['billetage'] ?? null,
+                    ':is_administrative' => isset($entity['is_administrative']) ? (int)$entity['is_administrative'] : 0,
                     ':last_modified_at' => $entity['last_modified_at'] ?? date('Y-m-d H:i:s'),
                     ':last_modified_by' => $userId,
                     ':created_at' => $entity['date_op'] ?? date('Y-m-d H:i:s')

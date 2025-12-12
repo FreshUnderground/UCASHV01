@@ -158,7 +158,7 @@ flutter build ios --release
 // Dans app_config.dart
 if (!isProduction) {
   if (kIsWeb) {
-    return 'http://localhost/UCASHV01/server/api';
+    return 'https://mahanaimeservice.investee-group.com/server/api';
   }
 }
 ```

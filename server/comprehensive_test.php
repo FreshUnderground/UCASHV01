@@ -25,6 +25,6 @@ $context = stream_context_create([
     ]
 ]);
 
-$response = file_get_contents('http://localhost/UCASHV01/server/api/sync/shops/upload.php', false, $context);
+$response = file_get_contents('https://mahanaimeservice.investee-group.com/server/api/sync/shops/upload.php', false, $context);
 echo $response;
 ?>

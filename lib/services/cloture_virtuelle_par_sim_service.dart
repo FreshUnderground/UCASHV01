@@ -255,4 +255,21 @@ class ClotureVirtuelleParSimService {
       return [];
     }
   }
+
+  /// Supprimer toutes les clôtures par SIM pour une date donnée
+  Future<void> deleteCloturesParDate({
+    required int shopId,
+    required DateTime date,
+  }) async {
+    try {
+      await LocalDB.instance.deleteCloturesVirtuellesParDate(
+        shopId: shopId,
+        date: date,
+      );
+      debugPrint('✅ Clôtures supprimées pour le ${date.toIso8601String()}');
+    } catch (e) {
+      debugPrint('❌ Erreur suppression clôtures: $e');
+      rethrow;
+    }
+  }
 }

@@ -59,14 +59,14 @@ private $password = ''; // Modifiez si vous avez un mot de passe MySQL
 Dans `lib/services/api_service.dart`, l'URL doit être:
 
 ```dart
-static const String baseUrl = 'http://localhost/UCASHV01/server/api';
+static const String baseUrl = 'https://mahanaimeservice.investee-group.com/server/api';
 ```
 
 ### 3. Tester la connectivité
 
 Ouvrez dans votre navigateur:
 ```
-http://localhost/UCASHV01/server/api/sync/ping.php
+https://mahanaimeservice.investee-group.com/server/api/sync/ping.php
 ```
 
 Réponse attendue:
@@ -84,12 +84,12 @@ Réponse attendue:
 
 ### 1. Ping (Test de connectivité)
 ```
-GET http://localhost/UCASHV01/server/api/sync/ping.php
+GET https://mahanaimeservice.investee-group.com/server/api/sync/ping.php
 ```
 
 ### 2. Upload des opérations (App → Serveur)
 ```
-POST http://localhost/UCASHV01/server/api/sync/operations/upload.php
+POST https://mahanaimeservice.investee-group.com/server/api/sync/operations/upload.php
 
 Body (JSON):
 {
@@ -114,7 +114,7 @@ Body (JSON):
 
 ### 3. Récupération des changements (Serveur → App)
 ```
-GET http://localhost/UCASHV01/server/api/sync/operations/changes.php?since=2024-11-08T00:00:00Z&user_id=agent_1
+GET https://mahanaimeservice.investee-group.com/server/api/sync/operations/changes.php?since=2024-11-08T00:00:00Z&user_id=agent_1
 
 Réponse:
 {
