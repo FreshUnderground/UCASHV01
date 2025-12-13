@@ -412,12 +412,19 @@ class CompteSpecialService extends ChangeNotifier {
       final retraits = _transactions.where((t) {
         if (t.type != TypeCompteSpecial.FRAIS) return false;
         if (t.typeTransaction != TypeTransactionCompte.RETRAIT) return false;
-        if (shopId != null && t.shopId != shopId) {
-          // DEBUG: Afficher pourquoi ça ne matche pas
-          if (_transactions.indexOf(t) < 2) {
-            debugPrint('   ❌ RETRAIT Transaction ${t.id}: shopId=${t.shopId} != $shopId (type=${t.shopId.runtimeType} vs ${shopId.runtimeType})');
+        
+        // Comparaison robuste des shopId (supporte int et String)
+        if (shopId != null) {
+          final transactionShopId = t.shopId;
+          final filterShopId = shopId;
+          
+          // Convertir en String pour comparaison sûre
+          final transactionShopIdStr = transactionShopId?.toString();
+          final filterShopIdStr = filterShopId.toString();
+          
+          if (transactionShopIdStr != filterShopIdStr) {
+            return false;
           }
-          return false;
         }
         
         final effectiveDate = _getEffectiveDate(t);
@@ -510,10 +517,6 @@ class CompteSpecialService extends ChangeNotifier {
           
           if (shopIdStr != null && shopDestIdStr != shopIdStr) {
             rejectedByShop++;
-            // DEBUG: Afficher les 2 premières opérations rejetées
-            if (rejectedByShop <= 2) {
-              debugPrint('   ❌ OP ${opData['id']}: shopDestId="$shopDestIdStr" != "$shopIdStr"');
-            }
             continue;
           }
           
@@ -1101,13 +1104,18 @@ class CompteSpecialService extends ChangeNotifier {
       // Filtre par type
       if (t.type != TypeCompteSpecial.FRAIS) return false;
       
-      // Filtre par shop
-      if (shopId != null && t.shopId != shopId) {
-        // DEBUG: Afficher les IDs qui ne matchent pas
-        if (_transactions.indexOf(t) < 3) {
-          debugPrint('   ❌ FRAIS Transaction ${t.id}: shopId=${t.shopId} != $shopId (type=${t.shopId.runtimeType} vs ${shopId.runtimeType})');
+      // Filtre par shop - Comparaison robuste (supporte int et String)
+      if (shopId != null) {
+        final transactionShopId = t.shopId;
+        final filterShopId = shopId;
+        
+        // Convertir en String pour comparaison sûre
+        final transactionShopIdStr = transactionShopId?.toString();
+        final filterShopIdStr = filterShopId.toString();
+        
+        if (transactionShopIdStr != filterShopIdStr) {
+          return false;
         }
-        return false;
       }
       
       // Obtenir la date effective (dateTransaction ou createdAt)
@@ -1147,13 +1155,18 @@ class CompteSpecialService extends ChangeNotifier {
       // Filtre par type
       if (t.type != TypeCompteSpecial.DEPENSE) return false;
       
-      // Filtre par shop
-      if (shopId != null && t.shopId != shopId) {
-        // DEBUG: Afficher les IDs qui ne matchent pas
-        if (_transactions.indexOf(t) < 3) {
-          debugPrint('   ❌ Transaction ${t.id}: shopId=${t.shopId} != $shopId (type=${t.shopId.runtimeType} vs ${shopId.runtimeType})');
+      // Filtre par shop - Comparaison robuste (supporte int et String)
+      if (shopId != null) {
+        final transactionShopId = t.shopId;
+        final filterShopId = shopId;
+        
+        // Convertir en String pour comparaison sûre
+        final transactionShopIdStr = transactionShopId?.toString();
+        final filterShopIdStr = filterShopId.toString();
+        
+        if (transactionShopIdStr != filterShopIdStr) {
+          return false;
         }
-        return false;
       }
       
       // Obtenir la date effective (dateTransaction ou createdAt)
@@ -1218,10 +1231,19 @@ class CompteSpecialService extends ChangeNotifier {
       
       transfertsServis = operations.where((op) {
         try {
-          // Vérifier si c'est un transfert servi par this shop
-          if (shopId != null && op.shopDestinationId != shopId) {
-            rejectedByShop++;
-            return false;
+          // Vérifier si c'est un transfert servi par this shop - Comparaison robuste
+          if (shopId != null) {
+            final operationShopId = op.shopDestinationId;
+            final filterShopId = shopId;
+            
+            // Convertir en String pour comparaison sûre
+            final operationShopIdStr = operationShopId?.toString();
+            final filterShopIdStr = filterShopId.toString();
+            
+            if (operationShopIdStr != filterShopIdStr) {
+              rejectedByShop++;
+              return false;
+            }
           }
           if (!(op.type.name == 'transfertNational' ||
                op.type.name == 'transfertInternationalEntrant' ||

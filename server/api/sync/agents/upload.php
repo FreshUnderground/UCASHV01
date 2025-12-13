@@ -53,7 +53,6 @@ try {
                 $updateStmt = $pdo->prepare("
                     UPDATE agents SET
                         nom = :nom,
-                        telephone = :telephone,
                         username = :username,
                         password = :password,
                         shop_id = :shop_id,
@@ -67,7 +66,6 @@ try {
                 $updateStmt->execute([
                     ':id' => $entity['id'],
                     ':nom' => $entity['nom'] ?? '',
-                    ':telephone' => $entity['telephone'] ?? '',
                     ':username' => $entity['username'] ?? '',
                     ':password' => $entity['password'] ?? '',
                     ':shop_id' => $entity['shop_id'] ?? 1,
@@ -107,17 +105,16 @@ try {
                 
                 $insertStmt = $pdo->prepare("
                     INSERT IGNORE INTO agents (
-                        nom, telephone, username, password, shop_id, role, is_active,
+                        nom,username, password, shop_id, role, is_active,
                         last_modified_at, last_modified_by, created_at
                     ) VALUES (
-                        :nom, :telephone, :username, :password, :shop_id, :role, :is_active,
+                        :nom,:username, :password, :shop_id, :role, :is_active,
                         :last_modified_at, :last_modified_by, :created_at
                     )
                 ");
                 
                 $insertStmt->execute([
                     ':nom' => $entity['nom'] ?? '',
-                    ':telephone' => $entity['telephone'] ?? '',
                     ':username' => $entity['username'] ?? '',
                     ':password' => $entity['password'] ?? '',
                     ':shop_id' => $shopId,

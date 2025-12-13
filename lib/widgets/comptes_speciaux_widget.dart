@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import '../services/compte_special_service.dart';
 import '../services/auth_service.dart';
 import '../services/shop_service.dart';
@@ -31,7 +32,15 @@ class ComptesSpeciauxWidget extends StatefulWidget {
 }
 
 class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
-  final _numberFormat = NumberFormat('#,##0.00', 'fr_FR');
+  late NumberFormat _numberFormat;
+  
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Utiliser la locale de l'application pour le formatage des nombres
+    final locale = Localizations.localeOf(context).languageCode;
+    _numberFormat = NumberFormat('#,##0.00', locale);
+  }
   DateTime? _startDate;
   DateTime? _endDate;
   int? _selectedShopId;
@@ -83,6 +92,9 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
     
     setState(() => _isDownloading = true);
     
+    // Capture context before async operations
+    final l10n = AppLocalizations.of(context)!;
+    
     try {
       final syncService = SyncService();
       final result = await syncService.downloadAllComptesSpeciaux(
@@ -96,13 +108,15 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
         // Recharger les données après le téléchargement
         await _loadData();
         
-        final summary = result['summary'] ?? {};
-        final message = type == 'FRAIS'
-            ? 'Téléchargement réussi: ${summary['nombre_frais'] ?? 0} FRAIS (\$${_numberFormat.format(summary['total_frais'] ?? 0)})'
-            : type == 'DEPENSE'
-                ? 'Téléchargement réussi: ${summary['nombre_depense'] ?? 0} DÉPENSES (\$${_numberFormat.format(summary['total_depense'] ?? 0)})'
-                : 'Téléchargement réussi: ${result['count']} comptes spéciaux';
+        if (!mounted) return;
         
+        final summary = result['summary'] ?? {};
+        final l10n = AppLocalizations.of(context)!;
+    final message = type == 'FRAIS'
+            ? '${l10n.downloadSuccess}: ${summary['nombre_frais'] ?? 0} ${l10n.fees} (\$${_numberFormat.format(summary['total_frais'] ?? 0)})'
+            : type == 'DEPENSE'
+                ? '${l10n.downloadSuccess}: ${summary['nombre_depense'] ?? 0} ${l10n.expenses} (\$${_numberFormat.format(summary['total_depense'] ?? 0)})'
+                : '${l10n.downloadSuccess}: ${result['count']} ${l10n.specialAccounts}';        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
@@ -123,7 +137,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
               children: [
                 const Icon(Icons.error, color: Colors.white),
                 const SizedBox(width: 12),
-                Expanded(child: Text('Erreur: ${result['message']}')),
+                Expanded(child: Text('${l10n.downloadError}: ${result['message']}')),
               ],
             ),
             backgroundColor: Colors.red,
@@ -134,7 +148,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Erreur de téléchargement: $e'),
+          content: Text('${l10n.downloadError}: $e'),
           backgroundColor: Colors.red,
         ),
       );
@@ -160,16 +174,16 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Télécharger depuis le serveur',
-                  style: TextStyle(
+                Text(
+                  AppLocalizations.of(context)!.downloadFromServer,
+                  style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Sélectionnez le type de données à télécharger',
+                  AppLocalizations.of(context)!.selectDataType,
                   style: TextStyle(color: Colors.grey.shade600),
                 ),
                 const SizedBox(height: 24),
@@ -182,8 +196,8 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                     ),
                     child: const Icon(Icons.trending_up, color: Colors.green),
                   ),
-                  title: const Text('Télécharger tous les FRAIS'),
-                  subtitle: const Text('Commissions et frais encaissés'),
+                  title: Text(AppLocalizations.of(context)!.downloadAllFees),
+                  subtitle: Text(AppLocalizations.of(context)!.feesDescription),
                   onTap: () {
                     Navigator.pop(context);
                     _downloadAllFromServer(type: 'FRAIS');
@@ -199,8 +213,8 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                     ),
                     child: const Icon(Icons.receipt_long, color: Colors.blue),
                   ),
-                  title: const Text('Télécharger toutes les DÉPENSES'),
-                  subtitle: const Text('Dépôts et sorties'),
+                  title: Text(AppLocalizations.of(context)!.downloadAllExpenses),
+                  subtitle: Text(AppLocalizations.of(context)!.expensesDescription),
                   onTap: () {
                     Navigator.pop(context);
                     _downloadAllFromServer(type: 'DEPENSE');
@@ -216,8 +230,8 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                     ),
                     child: const Icon(Icons.download, color: Colors.purple),
                   ),
-                  title: const Text('Télécharger TOUT'),
-                  subtitle: const Text('Tous les comptes spéciaux'),
+                  title: Text(AppLocalizations.of(context)!.downloadAll),
+                  subtitle: Text(AppLocalizations.of(context)!.downloadAllDescription),
                   onTap: () {
                     Navigator.pop(context);
                     _downloadAllFromServer();
@@ -316,20 +330,20 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
           ),
         ),
         const SizedBox(width: 16),
-        const Expanded(
+        Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Finance',
-                style: TextStyle(
+                AppLocalizations.of(context)!.specialAccounts,
+                style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               Text(
-                'Comptes FRAIS & DÉPENSE',
-                style: TextStyle(
+                '${AppLocalizations.of(context)!.fees} & ${AppLocalizations.of(context)!.expenses}',
+                style: const TextStyle(
                   fontSize: 14,
                   color: Colors.grey,
                 ),
@@ -357,7 +371,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                   Icons.cloud_download,
                   color: Color(0xFFDC2626),
                 ),
-                tooltip: 'Télécharger depuis le serveur',
+                tooltip: AppLocalizations.of(context)!.downloadFromServer,
               ),
         // Bouton pour afficher/masquer les filtres
         IconButton(
@@ -370,7 +384,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
             _showFilters ? Icons.filter_list_off : Icons.filter_list,
             color: const Color(0xFFDC2626),
           ),
-          tooltip: _showFilters ? 'Masquer les filtres' : 'Afficher les filtres',
+          tooltip: _showFilters ? AppLocalizations.of(context)!.hideFilters : AppLocalizations.of(context)!.showFilters,
         ),
       ],
     );
@@ -393,22 +407,23 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
               children: [
                 Icon(Icons.store, color: Colors.grey.shade600),
                 const SizedBox(width: 12),
-                const Text(
-                  'Shop:',
-                  style: TextStyle(fontWeight: FontWeight.w600),
+                Text(
+                  '${AppLocalizations.of(context)!.selectShop}:',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: DropdownButtonFormField<int?>(
                     value: _selectedShopId,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      hintText: AppLocalizations.of(context)!.selectShop,
                     ),
                     items: [
-                      const DropdownMenuItem<int?>(
+                      DropdownMenuItem<int?>(
                         value: null,
-                        child: Text('Tous les shops'),
+                        child: Text(AppLocalizations.of(context)!.allShops),
                       ),
                       ...shops.map((shop) => DropdownMenuItem<int?>(
                         value: shop.id,
@@ -432,6 +447,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
   }
 
   Widget _buildDateFilters(BuildContext context, bool isWide) {
+    final l10n = AppLocalizations.of(context)!;
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -444,14 +460,14 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
           children: [
             Icon(Icons.date_range, color: Colors.grey.shade600),
             const SizedBox(width: 12),
-            const Text(
-              'Période:',
-              style: TextStyle(fontWeight: FontWeight.w600),
+            Text(
+              '${l10n.period}:',
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(width: 16),
             Expanded(
               child: _buildDatePicker(
-                label: 'Date de début',
+                label: l10n.startDate,
                 date: _startDate,
                 onDateSelected: (date) {
                   setState(() => _startDate = date);
@@ -462,7 +478,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
             const SizedBox(width: 12),
             Expanded(
               child: _buildDatePicker(
-                label: 'Date de fin',
+                label: l10n.endDate,
                 date: _endDate,
                 onDateSelected: (date) {
                   setState(() => _endDate = date);
@@ -480,7 +496,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                 _loadData(); // Recharger les données après réinitialisation
               },
               icon: const Icon(Icons.clear),
-              label: const Text('Réinitialiser'),
+              label: Text(l10n.reset),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.grey.shade200,
                 foregroundColor: Colors.grey.shade800,
@@ -548,6 +564,9 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
     required DateTime? date,
     required Function(DateTime?) onDateSelected,
   }) {
+    final l10n = AppLocalizations.of(context)!;
+    final locale = Localizations.localeOf(context).languageCode;
+    
     return InkWell(
       onTap: () async {
         final picked = await showDatePicker(
@@ -555,6 +574,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
           initialDate: date ?? DateTime.now(),
           firstDate: DateTime(2020),
           lastDate: DateTime.now().add(const Duration(days: 365)),
+          locale: Locale(locale),
         );
         if (picked != null) {
           onDateSelected(picked);
@@ -569,11 +589,14 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
               ? IconButton(
                   icon: const Icon(Icons.clear, size: 20),
                   onPressed: () => onDateSelected(null),
+                  tooltip: l10n.clear,
                 )
               : const Icon(Icons.calendar_today, size: 20),
         ),
         child: Text(
-          date != null ? DateFormat('dd/MM/yyyy').format(date) : 'Sélectionner',
+          date != null 
+              ? DateFormat('dd/MM/yyyy', locale).format(date) 
+              : l10n.select,
           style: TextStyle(
             color: date != null ? Colors.black : Colors.grey,
           ),
@@ -589,15 +612,16 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
     // Détails FRAIS selon le contexte:
     // - Avec filtre de date: Frais Antérieur + Frais encaissés - Sortie
     // - Sans filtre: Total Frais encaissés - Total Sortie (pas de "Frais Antérieur")
+    final l10n = AppLocalizations.of(context)!;
     final List<Map<String, dynamic>> fraisDetails = hasDateFilter
         ? [
-            {'label': 'Frais Antérieur', 'value': stats['frais_anterieur'] ?? 0.0},
-            {'label': '+ Frais encaissés', 'value': stats['frais_encaisses_jour'] ?? stats['commissions_auto']},
-            {'label': '- Sortie Frais', 'value': stats['sortie_frais_jour'] ?? stats['retraits_frais']},
+            {'label': l10n.previousFees, 'value': stats['frais_anterieur'] ?? 0.0},
+            {'label': '+ ${l10n.feesCollected}', 'value': stats['frais_encaisses_jour'] ?? stats['commissions_auto']},
+            {'label': '- ${l10n.feesWithdrawn}', 'value': stats['sortie_frais_jour'] ?? stats['retraits_frais']},
           ]
         : [
-            {'label': 'Total Frais encaissés', 'value': stats['frais_encaisses_jour'] ?? stats['commissions_auto']},
-            {'label': '- Total Sortie Frais', 'value': stats['sortie_frais_jour'] ?? stats['retraits_frais']},
+            {'label': l10n.totalFeesCollected, 'value': stats['frais_encaisses_jour'] ?? stats['commissions_auto']},
+            {'label': '- ${l10n.totalFeesWithdrawn}', 'value': stats['sortie_frais_jour'] ?? stats['retraits_frais']},
           ];
     
     // Détails DÉPENSE selon le contexte:
@@ -605,13 +629,13 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
     // - Sans filtre: Total Dépôts - Total Sorties (pas de "Dépense Antérieur")
     final List<Map<String, dynamic>> depenseDetails = hasDateFilter
         ? [
-            {'label': 'Dépense Antérieur', 'value': stats['depense_anterieur'] ?? 0.0},
-            {'label': '+ Dépôts', 'value': stats['depots_jour'] ?? stats['depots_boss'] ?? 0.0},
-            {'label': '- Sorties', 'value': stats['sorties_jour'] ?? stats['sorties'] ?? 0.0},
+            {'label': l10n.previousExpenses, 'value': stats['depense_anterieur'] ?? 0.0},
+            {'label': '+ ${l10n.deposits}', 'value': stats['depots_jour'] ?? stats['depots_boss'] ?? 0.0},
+            {'label': '- ${l10n.withdrawals}', 'value': stats['sorties_jour'] ?? stats['sorties'] ?? 0.0},
           ]
         : [
-            {'label': 'Total Dépôts', 'value': stats['depots_boss'] ?? 0.0},
-            {'label': '- Total Sorties', 'value': stats['sorties'] ?? 0.0},
+            {'label': l10n.totalDeposits, 'value': stats['depots_boss'] ?? 0.0},
+            {'label': '- ${l10n.totalWithdrawals}', 'value': stats['sorties'] ?? 0.0},
           ];
     
     // Toujours afficher en 3 colonnes sur 1 ligne (sauf mobile)
@@ -624,19 +648,19 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
           return Column(
             children: [
               _buildModernCard(
-                title: 'Compte FRAIS',
-                amount: stats['solde_frais_jour'] ?? stats['solde_frais'], // MODIFIÉ: Utiliser solde du jour
-                count: stats['nombre_commissions'], // MODIFIÉ: Nombre de transferts servis
+                title: l10n.feesAccount,
+                amount: stats['solde_frais_jour'] ?? stats['solde_frais'],
+                count: stats['nombre_commissions'],
                 icon: Icons.trending_up,
                 gradient: const LinearGradient(
                   colors: [Color(0xFF10B981), Color(0xFF059669)],
                 ),
                 details: fraisDetails,
-                onTap: null, // TODO: Ajouter détails plus tard
+                onTap: null,
               ),
               const SizedBox(height: 16),
               _buildModernCard(
-                title: 'Compte DÉPENSE',
+                title: l10n.expenseAccount,
                 amount: stats['solde_depense_jour'] ?? stats['solde_depense'],
                 count: stats['nombre_depenses'],
                 icon: Icons.receipt_long,
@@ -656,21 +680,21 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
           children: [
             Expanded(
               child: _buildModernCard(
-                title: 'Compte FRAIS',
-                amount: stats['solde_frais_jour'] ?? stats['solde_frais'], // MODIFIÉ: Utiliser solde du jour
-                count: stats['nombre_commissions'], // MODIFIÉ: Nombre de transferts servis
+                title: l10n.feesAccount,
+                amount: stats['solde_frais_jour'] ?? stats['solde_frais'],
+                count: stats['nombre_commissions'],
                 icon: Icons.trending_up,
                 gradient: const LinearGradient(
                   colors: [Color(0xFF10B981), Color(0xFF059669)],
                 ),
                 details: fraisDetails,
-                onTap: null, // TODO: Ajouter détails plus tard
+                onTap: null,
               ),
             ),
             const SizedBox(width: 16),
             Expanded(
               child: _buildModernCard(
-                title: 'Compte DÉPENSE',
+                title: l10n.expenseAccount,
                 amount: stats['solde_depense_jour'] ?? stats['solde_depense'],
                 count: stats['nombre_depenses'],
                 icon: Icons.receipt_long,
@@ -685,7 +709,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
             const SizedBox(width: 16),
             Expanded(
               child: _buildModernCard(
-                title: 'Bénéfice Net',
+                title: l10n.netProfit,
                 amount: stats['benefice_net'],
                 count: null,
                 icon: Icons.account_balance,
@@ -2565,7 +2589,12 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
       
       debugPrint('   📊 Nombre de frais récupérés: ${frais.length}');
       
-      if (frais.isEmpty) {
+      // NOUVEAU: Vérifier également les frais encaissés dans les stats
+      final operationsFrais = stats['operations_frais'] as List<dynamic>? ?? [];
+      debugPrint('   📊 Nombre d\'opérations FRAIS dans stats: ${operationsFrais.length}');
+      
+      // Si aucune transaction FRAIS et aucune opération FRAIS, alors afficher le message
+      if (frais.isEmpty && operationsFrais.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -2578,14 +2607,14 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
       }
 
       // Trier par date croissante
-      frais.sort((a, b) => a.dateTransaction.compareTo(b.dateTransaction));
+      final sortedFrais = List<CompteSpecialModel>.from(frais)..sort((a, b) => a.dateTransaction.compareTo(b.dateTransaction));
       debugPrint('   ✅ Tri effectué');
 
       final pdf = pw.Document();
       
       // Calculer le solde cumulatif
       double solde = 0;
-      final transactionsWithSolde = frais.map((t) {
+      final transactionsWithSolde = sortedFrais.map((t) {
         solde += t.montant;
         return {
           'date': DateFormat('dd/MM/yyyy HH:mm').format(t.dateTransaction),
@@ -2695,7 +2724,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                               borderRadius: pw.BorderRadius.circular(8),
                             ),
                             child: pw.Text(
-                              '${frais.length}',
+                              '${sortedFrais.length}',
                               style: pw.TextStyle(
                                 fontSize: 24,
                                 fontWeight: pw.FontWeight.bold,
@@ -2870,7 +2899,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text(
-                    '${frais.length} transaction(s)',
+                    '${sortedFrais.length} transaction(s)',
                     style: pw.TextStyle(
                       fontSize: 9,
                       color: PdfColors.grey700,
@@ -2914,7 +2943,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
         
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ PDF généré avec succès: ${frais.length} transactions'),
+            content: Text('✅ PDF généré avec succès: ${sortedFrais.length} transactions'),
             backgroundColor: Colors.green,
           ),
         );
@@ -2934,7 +2963,6 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
       }
     }
   }
-
   // Méthodes helper pour les PDFs
   pw.Widget _buildTableHeader(String text, {pw.TextAlign align = pw.TextAlign.left}) {
     return pw.Container(
