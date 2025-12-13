@@ -37,7 +37,7 @@ echo.
 echo.
 echo VERIFICATION:
 echo Une fois deploye, testez avec:
-echo   https://mahanaimeservice.investee-group.com/server/api/sync/ping.php
+echo   https://mahanaim.investee-group.com/server/api/sync/ping.php
 echo.
 echo Si CORS fonctionne, vous devriez voir la reponse JSON sans erreur.
 echo.

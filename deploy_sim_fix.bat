@@ -46,10 +46,10 @@ echo   %SERVER_PATH%\diagnose_sim_upload.php
 echo   %SERVER_PATH%\test_sim_upload_direct.php
 echo.
 echo DESTINATION (serveur):
-echo   https://mahanaimeservice.investee-group.com/server/api/sync/sims/upload.php
-echo   https://mahanaimeservice.investee-group.com/server/api/sync/sims/changes.php
-echo   https://mahanaimeservice.investee-group.com/server/diagnose_sim_upload.php
-echo   https://mahanaimeservice.investee-group.com/server/test_sim_upload_direct.php
+echo   https://mahanaim.investee-group.com/server/api/sync/sims/upload.php
+echo   https://mahanaim.investee-group.com/server/api/sync/sims/changes.php
+echo   https://mahanaim.investee-group.com/server/diagnose_sim_upload.php
+echo   https://mahanaim.investee-group.com/server/test_sim_upload_direct.php
 echo.
 
 echo ========================================
@@ -59,10 +59,10 @@ echo.
 echo Après le déploiement, testez avec:
 echo.
 echo 1. Diagnostic:
-echo    https://mahanaimeservice.investee-group.com/server/diagnose_sim_upload.php
+echo    https://mahanaim.investee-group.com/server/diagnose_sim_upload.php
 echo.
 echo 2. Test direct:
-echo    https://mahanaimeservice.investee-group.com/server/test_sim_upload_direct.php
+echo    https://mahanaim.investee-group.com/server/test_sim_upload_direct.php
 echo.
 echo 3. Sync depuis Flutter:
 echo    Lancez l'application et testez la synchronisation

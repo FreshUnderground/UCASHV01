@@ -10,7 +10,7 @@ try {
     echo "1. Tentative de connexion...\n";
     
     $pdo = new PDO(
-        "mysql:host=91.216.107.185;dbname=inves2504808_1n6a7b;charset=utf8mb4",
+        "mysql:host=91.216.107.185;dbname=inves2504808_6oor7p;charset=utf8mb4",
         "inves2504808",
         "31nzzasdnh",
         [

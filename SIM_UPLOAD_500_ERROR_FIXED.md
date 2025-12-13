@@ -52,7 +52,7 @@ $conn = $pdo;  // $pdo is defined in database.php
 ### Option 1: Run Diagnostic Script
 Open in browser:
 ```
-https://mahanaimeservice.investee-group.com/server/diagnose_sim_upload.php
+https://mahanaim.investee-group.com/server/diagnose_sim_upload.php
 ```
 
 This will show:
@@ -63,7 +63,7 @@ This will show:
 ### Option 2: Test Upload Directly
 Open in browser:
 ```
-https://mahanaimeservice.investee-group.com/server/test_sim_upload_direct.php
+https://mahanaim.investee-group.com/server/test_sim_upload_direct.php
 ```
 
 This will:

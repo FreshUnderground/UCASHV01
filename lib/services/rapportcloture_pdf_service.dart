@@ -146,7 +146,7 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                     _buildSection('4. Transferts', [
                       _buildRow('Recus', rapport.transfertsRecus, color: PdfColors.green700),
                       _buildRow('Servis', rapport.transfertsServis, color: PdfColors.red700, prefix: '-'),
-                      _buildRow('En attente', rapport.transfertsEnAttente, color: PdfColors.orange700),
+                      _buildRow('Non Servi', rapport.transfertsEnAttente, color: PdfColors.orange700),
                       
                       // Transferts Reçus Groupés
                       if (rapport.transfertsRecusGroupes.isNotEmpty) ...[
@@ -167,7 +167,7 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                       // Transferts En Attente Groupés par Shop
                       if (rapport.transfertsEnAttenteGroupes.isNotEmpty) ...[
                         pw.SizedBox(height: 4),
-                        pw.Text('Transferts En Attente:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                        pw.Text(':', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
                         pw.Divider(),
                         ...rapport.transfertsEnAttenteGroupes.entries.map((entry) => _buildDetailRow(entry.key, 'Total du jour', entry.value, PdfColors.orange700)),
                       ],
@@ -439,7 +439,7 @@ pw.Widget _buildTransfertRouteRowPDF(TransfertRouteResume route) {
         pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
-            pw.Text('En attente: ${route.enAttenteCount}', style: pw.TextStyle(fontSize: 6, color: PdfColors.orange700)),
+            pw.Text('Non Servis : ${route.enAttenteCount}', style: pw.TextStyle(fontSize: 6, color: PdfColors.orange700)),
             pw.Text('${route.enAttenteTotal.toStringAsFixed(2)} USD', style: pw.TextStyle(fontSize: 6, color: PdfColors.orange700)),
           ],
         ),

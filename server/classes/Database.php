@@ -10,7 +10,7 @@ class Database {
     
     // Configuration de la base de données
     private $host = '91.216.107.185';
-    private $dbname = 'inves2504808_1n6a7b';
+    private $dbname = 'inves2504808_6oor7p';
     private $username = 'inves2504808';
     private $password = '31nzzasdnh';
     private $charset = 'utf8mb4';
