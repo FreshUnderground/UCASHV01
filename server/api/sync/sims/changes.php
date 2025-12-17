@@ -56,6 +56,11 @@ try {
             'shop_designation' => $sim['shop_designation'] ?? null,
             'solde_initial' => (float)($sim['solde_initial'] ?? 0),
             'solde_actuel' => (float)($sim['solde_actuel'] ?? 0),
+            // NOUVEAU: Support double devise
+            'solde_initial_cdf' => (float)($sim['solde_initial_cdf'] ?? 0),
+            'solde_actuel_cdf' => (float)($sim['solde_actuel_cdf'] ?? 0),
+            'solde_initial_usd' => (float)($sim['solde_initial_usd'] ?? 0),
+            'solde_actuel_usd' => (float)($sim['solde_actuel_usd'] ?? 0),
             'statut' => $sim['statut'] ?? 'active',
             'motif_suspension' => $sim['motif_suspension'] ?? null,
             'date_creation' => $sim['date_creation'],

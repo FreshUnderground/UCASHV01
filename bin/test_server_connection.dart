@@ -8,7 +8,7 @@ Future<void> main() async {
   print('🧪 Testing Server Connectivity');
   print('============================');
   
-  final baseUrl = 'https://mahanaim.investee-group.com/server/api/sync';
+  final baseUrl = 'https://mahanaimeservice.investee-group.com/server/api/sync';
   final pingUrl = '$baseUrl/ping.php';
   
   print('🌐 Testing URL: $pingUrl');

@@ -76,7 +76,10 @@ try {
             'last_modified_by' => $vt['last_modified_by'],
             'is_synced' => (bool)$vt['is_synced'],
             'synced_at' => $vt['synced_at'],
-            'is_administrative' => isset($vt['is_administrative']) ? (bool)$vt['is_administrative'] : false
+            'is_administrative' => isset($vt['is_administrative']) ? (bool)$vt['is_administrative'] : false,
+            // NOUVEAU: Support conversion automatique selon la devise
+            'cash_conversion_rate' => null, // Sera calculé côté client selon le taux actuel
+            'original_currency' => $vt['devise'] ?? 'USD'
         ];
     }
     

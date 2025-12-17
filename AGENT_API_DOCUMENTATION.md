@@ -341,7 +341,7 @@ LIMIT :limit
 
 ### Test Upload (cURL)
 ```bash
-curl -X POST https://mahanaim.investee-group.com/server/api/sync/agents/upload.php \
+curl -X POST https://mahanaimeservice.investee-group.com/server/api/sync/agents/upload.php \
   -H "Content-Type: application/json" \
   -d '{
     "entities": [{
@@ -363,13 +363,13 @@ curl -X POST https://mahanaim.investee-group.com/server/api/sync/agents/upload.p
 ### Test Download (cURL)
 ```bash
 # All agents (admin)
-curl "https://mahanaim.investee-group.com/server/api/sync/agents/changes.php?user_role=admin&limit=5"
+curl "https://mahanaimeservice.investee-group.com/server/api/sync/agents/changes.php?user_role=admin&limit=5"
 
 # Filtered by shop (agent)
-curl "https://mahanaim.investee-group.com/server/api/sync/agents/changes.php?shop_id=1&user_role=agent&limit=5"
+curl "https://mahanaimeservice.investee-group.com/server/api/sync/agents/changes.php?shop_id=1&user_role=agent&limit=5"
 
 # Incremental sync
-curl "https://mahanaim.investee-group.com/server/api/sync/agents/changes.php?since=2025-12-10T10:00:00.000&user_role=admin"
+curl "https://mahanaimeservice.investee-group.com/server/api/sync/agents/changes.php?since=2025-12-10T10:00:00.000&user_role=admin"
 ```
 
 ### Test Script (Batch)

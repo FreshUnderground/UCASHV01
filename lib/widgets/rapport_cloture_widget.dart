@@ -43,10 +43,13 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
       final authService = Provider.of<AuthService>(context, listen: false);
       final shopId = widget.shopId ?? authService.currentUser?.shopId ?? 1;
       
+      // Forcer le rechargement des données en passant null pour les opérations
+      // Cela forcera le service à recharger les opérations depuis la base de données
       final rapport = await RapportClotureService.instance.genererRapport(
         shopId: shopId,
         date: _selectedDate,
         generePar: authService.currentUser?.username ?? 'Admin',
+        operations: null, // Force le rechargement depuis LocalDB
       );
 
       setState(() {
@@ -230,6 +233,12 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
         title: const Text('📊 Rapport de Clôture Journalière'),
         backgroundColor: const Color(0xFFDC2626),
         actions: [
+          // Bouton de rafraîchissement pour forcer le rechargement des données
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Actualiser le rapport',
+            onPressed: _genererRapport,
+          ),
           if (_rapport != null) ...[
             IconButton(
               icon: const Icon(Icons.visibility),
@@ -436,16 +445,6 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Formule: Cash Disponible + Ceux qui Nous qui Doivent - Ceux que Nous que Devons',
-              style: TextStyle(
-                fontSize: 12,
-                fontStyle: FontStyle.italic,
-                color: Colors.grey,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
             Text(
               '${rapport.capitalNet.toStringAsFixed(2)} USD',
               style: TextStyle(
@@ -458,14 +457,26 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
             const Divider(),
             const SizedBox(height: 12),
             _buildCapitalBreakdown('Cash Disponible', rapport.cashDisponibleTotal, Colors.green),
-            _buildCapitalBreakdown('+ Partenaires Servis', rapport.totalClientsNousDoivent, Colors.red),
             _buildCapitalBreakdown('+ Shops Nous qui Doivent', rapport.totalShopsNousDoivent, Colors.orange),
-            _buildCapitalBreakdown('- Dépôts Partenaires', -rapport.totalClientsNousDevons, Colors.green),
             _buildCapitalBreakdown('- Shops Nous que Devons', -rapport.totalShopsNousDevons, Colors.purple),
+            (() {
+              final totalSoldePartenaire = rapport.soldeParPartenaire.values.fold(0.0, (sum, solde) => sum + solde);
+              return _buildCapitalBreakdown('+ Solde Net Partenaires', totalSoldePartenaire, totalSoldePartenaire >= 0 ? Colors.blue : Colors.red);
+            }()),
             const SizedBox(height: 8),
             const Divider(thickness: 2),
             const SizedBox(height: 8),
-            _buildCapitalBreakdown('= CAPITAL NET', rapport.capitalNet, rapport.capitalNet >= 0 ? Colors.blue : Colors.red, bold: true),
+            (() {
+              final totalSoldePartenaire = rapport.soldeParPartenaire.values.fold(0.0, (sum, solde) => sum + solde);
+              // EXCLUSION: Depots Partenaires et Partenaires Servis ne sont plus inclus dans le calcul du capital NET
+              final capitalNetSansPartenaires = rapport.cashDisponibleTotal + 
+                                               rapport.totalShopsNousDoivent - 
+                                               rapport.totalShopsNousDevons - 
+                                               (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour) - 
+                                               rapport.transfertsEnAttente +
+                                               totalSoldePartenaire;
+              return _buildCapitalBreakdown('= CAPITAL NET', capitalNetSansPartenaires, capitalNetSansPartenaires >= 0 ? Colors.blue : Colors.red, bold: true);
+            }()),
           ],
         ),
       ),
@@ -481,7 +492,7 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
           Text(label, style: const TextStyle(fontSize: 14)),
           Text(
             '${montant.toStringAsFixed(2)} USD',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
           ),
         ],
       ),
@@ -503,6 +514,57 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
           ),
           Text(
             '${montant.toStringAsFixed(2)} USD',
+            style: TextStyle(
+              fontWeight: bold ? FontWeight.bold : FontWeight.w500,
+              fontSize: bold ? 16 : 14,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Helper methods - moved to top to fix compilation errors
+  Widget _buildSection(String title, List<Widget> children, Color color) {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLine(String label, double montant, {bool bold = false, Color? color, String prefix = ''}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+              fontSize: bold ? 16 : 14,
+            ),
+          ),
+          Text(
+            '$prefix${montant.toStringAsFixed(2)} USD',
             style: TextStyle(
               fontWeight: bold ? FontWeight.bold : FontWeight.w500,
               fontSize: bold ? 16 : 14,
@@ -678,57 +740,160 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
           ],
           Colors.purple,
         ),
+        const SizedBox(height: 16),
+        
+        // NOUVEAU: Section AUTRES SHOP (opérations où nous sommes destinataires)
+        if (rapport.autresShopServis > 0 || rapport.autresShopDepots > 0)
+          _buildSection(
+            '9️⃣ AUTRES SHOP',
+            [
+              // SERVIS - Retraits où nous sommes destinataires
+              if (rapport.autresShopServis > 0) ...[
+                _buildLine('SERVIS ', rapport.autresShopServis, color: Colors.orange),
+                
+                // Détails SERVIS groupés par shop
+                if (rapport.autresShopServisGroupes.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  const Text('Détail SERVIS par Client:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  const SizedBox(height: 4),
+                  ...rapport.autresShopServisGroupes.entries.map((entry) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '  • ${entry.key}',
+                            style: const TextStyle(fontSize: 11),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Text(
+                          '${entry.value.toStringAsFixed(2)} USD',
+                          style: const TextStyle(
+                            color: Colors.orange,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )),
+                ],
+                const SizedBox(height: 8),
+              ],
+              
+              // DEPOT - Dépôts où nous sommes destinataires
+              if (rapport.autresShopDepots > 0) ...[
+                _buildLine('DEPOT', rapport.autresShopDepots, color: Colors.green),
+                
+                // Détails DEPOT groupés par shop
+                if (rapport.autresShopDepotsGroupes.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  const Text('Détail DEPOT par Client:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  const SizedBox(height: 4),
+                  ...rapport.autresShopDepotsGroupes.entries.map((entry) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '  • ${entry.key}',
+                            style: const TextStyle(fontSize: 11),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Text(
+                          '${entry.value.toStringAsFixed(2)} USD',
+                          style: const TextStyle(
+                            color: Colors.green,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )),
+                ],
+              ],
+              
+              const Divider(),
+              _buildLine('TOTAL', rapport.autresShopServis + rapport.autresShopDepots, color: Colors.blue, bold: true),
+            ],
+            Colors.blue,
+          ),
+        const SizedBox(height: 16),
+        
+        // NOUVEAU: Section SOLDE PAR PARTENAIRE (depot - retrait où nous sommes destination)
+        // Cette section apparaît TOUJOURS, indépendamment des autres sections
+        _buildSection(
+          '🔟 SOLDE PAR PARTENAIRE',
+          [
+            // DEBUG: Afficher le nombre d'entrées pour diagnostic
+            Text(
+              'DEBUG: ${rapport.soldeParPartenaire.length} entrées trouvées',
+              style: const TextStyle(fontSize: 10, color: Colors.blue, fontWeight: FontWeight.bold),
+            ),
+            // DEBUG: Afficher les détails de chaque entrée
+            ...rapport.soldeParPartenaire.entries.map((entry) => Text(
+              'DEBUG: ${entry.key} = ${entry.value.toStringAsFixed(2)} USD',
+              style: const TextStyle(fontSize: 9, color: Colors.orange),
+            )),
+            const SizedBox(height: 4),
+           
+            // Afficher chaque partenaire avec son solde
+            if (rapport.soldeParPartenaire.isEmpty)
+              const Text(
+                'Aucune opération partenaire trouvée pour ce jour',
+                style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey),
+              )
+            else
+              ...rapport.soldeParPartenaire.entries.map((entry) {
+                final solde = entry.value;
+                final color = solde > 0 ? Colors.red : solde < 0 ? Colors.green : Colors.grey;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              entry.key, // Nom du partenaire (via shop)
+                              style: const TextStyle(fontSize: 12),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Text(
+                            '${solde < 0 ? "-" : ""}${solde.abs().toStringAsFixed(2)} USD',
+                            style: TextStyle(
+                              color: color,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            
+            if (rapport.soldeParPartenaire.isNotEmpty) ...[
+              const Divider(),
+              (() {
+                final totalSolde = rapport.soldeParPartenaire.values.fold(0.0, (sum, solde) => sum + solde);
+                final color = totalSolde > 0 ? Colors.red : totalSolde < 0 ? Colors.green : Colors.grey;
+                return _buildLine('SOLDE NET', totalSolde, color: color, bold: true);
+              }()),
+            ],
+          ],
+          Colors.indigo,
+        ),
       ],
     );
   }
 
-  Widget _buildSection(String title, List<Widget> children, Color color) {
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
-            const SizedBox(height: 12),
-            ...children,
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLine(String label, double montant, {bool bold = false, Color? color, String prefix = ''}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontWeight: bold ? FontWeight.bold : FontWeight.normal,
-              fontSize: bold ? 16 : 14,
-            ),
-          ),
-          Text(
-            '$prefix${montant.toStringAsFixed(2)} USD',
-            style: TextStyle(
-              fontWeight: bold ? FontWeight.bold : FontWeight.w500,
-              fontSize: bold ? 16 : 14,
-              color: color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }

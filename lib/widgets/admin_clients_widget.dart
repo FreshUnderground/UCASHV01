@@ -11,6 +11,7 @@ import 'create_client_dialog_responsive.dart';
 import 'depot_dialog.dart';
 import 'retrait_dialog.dart';
 import 'edit_client_dialog.dart';
+import 'initialize_balance_dialog.dart';
 
 /// Widget pour que l'admin puisse voir tous les clients et leurs relevés
 class AdminClientsWidget extends StatefulWidget {
@@ -292,6 +293,23 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
     return balance;
   }
 
+  /// Calculer le solde initialisé d'un client pour un shop spécifique
+  double _calculateInitializedBalance(int clientId, int shopId, List<OperationModel> operations) {
+    double initializedBalance = 0.0;
+    
+    for (final op in operations.where((o) => 
+        o.clientId == clientId && 
+        o.shopSourceId == shopId &&
+        o.isAdministrative &&
+        o.type == OperationType.depot &&
+        (o.observation?.contains('ouverture') == true || o.observation?.contains('initialisation') == true)
+    )) {
+      initializedBalance += op.montantNet;
+    }
+    
+    return initializedBalance;
+  }
+
   Widget _buildClientsList(bool isMobile) {
     return Consumer3<ClientService, ShopService, OperationService>(
       builder: (context, clientService, shopService, operationService, child) {
@@ -342,6 +360,13 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
             // Calculer le solde réel depuis les opérations
             final calculatedBalance = _calculateClientBalance(
               client.id!,
+              operationService.operations,
+            );
+            
+            // Calculer le solde initialisé pour ce shop
+            final initializedBalance = _calculateInitializedBalance(
+              client.id!,
+              shop.id!,
               operationService.operations,
             );
 
@@ -402,6 +427,36 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
                         ),
                       ],
                     ),
+                    if (initializedBalance > 0) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.account_balance_wallet, size: 12, color: Colors.orange),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Initialisé: ',
+                            style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                          ),
+                          Text(
+                            '${initializedBalance.toStringAsFixed(2)} USD',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.orange,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '(Shop #${shop.id})',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey[500],
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 8),
                     // Boutons Dépôt et Retrait
                     Row(
@@ -445,6 +500,12 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
                       icon: const Icon(Icons.edit, color: Colors.blue),
                       tooltip: 'Modifier',
                       onPressed: () => _editClient(client),
+                    ),
+                    // Bouton Initialiser Solde
+                    IconButton(
+                      icon: const Icon(Icons.account_balance_wallet, color: Colors.orange),
+                      tooltip: 'Initialiser Solde',
+                      onPressed: () => _initializeClientBalance(client),
                     ),
                     // Bouton Supprimer
                     IconButton(
@@ -948,6 +1009,17 @@ class _AdminClientsWidgetState extends State<AdminClientsWidget> {
         );
       }
     }
+  }
+
+  void _initializeClientBalance(ClientModel client) {
+    showDialog(
+      context: context,
+      builder: (context) => InitializeBalanceDialog(client: client),
+    ).then((result) {
+      if (result == true) {
+        _loadData();
+      }
+    });
   }
 
 }

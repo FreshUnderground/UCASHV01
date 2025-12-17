@@ -72,6 +72,10 @@ try {
                         shop_designation = ?,
                         solde_initial = ?,
                         solde_actuel = ?,
+                        solde_initial_cdf = ?,
+                        solde_actuel_cdf = ?,
+                        solde_initial_usd = ?,
+                        solde_actuel_usd = ?,
                         statut = ?,
                         motif_suspension = ?,
                         date_creation = ?,
@@ -91,6 +95,10 @@ try {
                     $entity['shop_designation'] ?? null,
                     $entity['solde_initial'] ?? 0,
                     $entity['solde_actuel'] ?? 0,
+                    $entity['solde_initial_cdf'] ?? 0,
+                    $entity['solde_actuel_cdf'] ?? 0,
+                    $entity['solde_initial_usd'] ?? 0,
+                    $entity['solde_actuel_usd'] ?? 0,
                     $entity['statut'] ?? 'active',
                     $entity['motif_suspension'] ?? null,
                     $entity['date_creation'] ?? date('Y-m-d H:i:s'),
@@ -108,11 +116,14 @@ try {
                 $stmt = $pdo->prepare("
                     INSERT INTO sims (
                         numero, operateur, shop_id, shop_designation,
-                        solde_initial, solde_actuel, statut, motif_suspension,
+                        solde_initial, solde_actuel, 
+                        solde_initial_cdf, solde_actuel_cdf,
+                        solde_initial_usd, solde_actuel_usd,
+                        statut, motif_suspension,
                         date_creation, date_suspension, cree_par,
                         last_modified_at, last_modified_by,
                         is_synced, synced_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW())
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW())
                 ");
                 
                 $stmt->execute([
@@ -122,6 +133,10 @@ try {
                     $entity['shop_designation'] ?? null,
                     $entity['solde_initial'] ?? 0,
                     $entity['solde_actuel'] ?? 0,
+                    $entity['solde_initial_cdf'] ?? 0,
+                    $entity['solde_actuel_cdf'] ?? 0,
+                    $entity['solde_initial_usd'] ?? 0,
+                    $entity['solde_actuel_usd'] ?? 0,
                     $entity['statut'] ?? 'active',
                     $entity['motif_suspension'] ?? null,
                     $entity['date_creation'] ?? date('Y-m-d H:i:s'),

@@ -396,10 +396,10 @@ class SimService extends ChangeNotifier {
     return _sims.where((sim) => sim.operateur == operateur).toList();
   }
 
-  /// Calculer automatiquement le solde d'une SIM basé sur les captures, retraits et transferts virtuels
+  /// Calculer automatiquement les soldes d'une SIM par devise (CDF et USD)
   /// FORMULE: Solde = Solde Initial + TOUTES les Captures (même en attente) - Flots - Transferts
   /// NOTE: On compte les captures dès leur enregistrement, car l'argent est déjà reçu sur la SIM
-  Future<double> calculateAutomaticSolde(SimModel sim) async {
+  Future<Map<String, double>> calculateAutomaticSoldesByDevise(SimModel sim) async {
     try {
       // 1. Obtenir TOUTES les captures pour cette SIM (en attente + validées, sauf annulées)
       final toutesCaptures = await LocalDB.instance.getAllVirtualTransactions(
@@ -411,67 +411,72 @@ class SimService extends ChangeNotifier {
           .where((t) => t.statut != VirtualTransactionStatus.annulee)
           .toList();
       
-      // Calculer la somme des captures (montant virtuel encaissé)
-      final totalCaptures = capturesActives.fold<double>(
-        0, 
-        (sum, trans) => sum + trans.montantVirtuel
-      );
+      // Séparer les captures par devise
+      final capturesCdf = capturesActives.where((t) => t.devise == 'CDF').toList();
+      final capturesUsd = capturesActives.where((t) => t.devise == 'USD').toList();
+      
+      // Calculer la somme des captures par devise
+      final totalCapturesCdf = capturesCdf.fold<double>(0, (sum, trans) => sum + trans.montantVirtuel);
+      final totalCapturesUsd = capturesUsd.fold<double>(0, (sum, trans) => sum + trans.montantVirtuel);
       
       // 2. Obtenir les retraits virtuels pour cette SIM
       final retraitsVirtuels = await LocalDB.instance.getAllRetraitsVirtuels(
         simNumero: sim.numero
       );
       
-      // Calculer la somme des retraits virtuels
-      final totalRetraitsVirtuels = retraitsVirtuels.fold<double>(
-        0, 
-        (sum, retrait) => sum + retrait.montant
-      );
+      // Séparer les retraits par devise
+      final retraitsCdf = retraitsVirtuels.where((r) => r.devise == 'CDF').toList();
+      final retraitsUsd = retraitsVirtuels.where((r) => r.devise == 'USD').toList();
       
-      // 3. Obtenir les transferts (notes contenant "Dépot" ou "Transfert")
-      final transferts = retraitsVirtuels
-          .where((r) => (r.notes?.contains('Dépot') ?? false) || (r.notes?.contains('Transfert') ?? false))
-          .toList();
+      final totalRetraitsCdf = retraitsCdf.fold<double>(0, (sum, retrait) => sum + retrait.montant);
+      final totalRetraitsUsd = retraitsUsd.fold<double>(0, (sum, retrait) => sum + retrait.montant);
       
-      final totalTransferts = transferts.fold<double>(
-        0,
-        (sum, trans) => sum + trans.montant
-      );
-      
-      // FORMULE CORRECTE: Solde = Initial + Captures - Retraits - Transferts
-      // Note: totalRetraitsVirtuels inclut déjà les transferts, donc on ne les soustrait pas deux fois
-      final calculatedSolde = sim.soldeInitial + totalCaptures - totalRetraitsVirtuels;
+      // FORMULE CORRECTE par devise: Solde = Initial + Captures - Retraits
+      final soldeCdf = sim.soldeInitialCdf + totalCapturesCdf - totalRetraitsCdf;
+      final soldeUsd = sim.soldeInitialUsd + totalCapturesUsd - totalRetraitsUsd;
       
       foundation.debugPrint('💰 [SIM Solde Auto] ${sim.numero}:');
-      foundation.debugPrint('   Solde Initial: ${sim.soldeInitial}');
-      foundation.debugPrint('   + Captures (en attente + validées): $totalCaptures (${capturesActives.length} transactions)');
-      foundation.debugPrint('   - Flots: $totalRetraitsVirtuels (${retraitsVirtuels.length} retraits)');
-      foundation.debugPrint('   dont Transferts: $totalTransferts (${transferts.length} transferts)');
-      foundation.debugPrint('   = Solde Calculé: $calculatedSolde');
-      foundation.debugPrint('   Solde Actuel (BD): ${sim.soldeActuel}');
+      foundation.debugPrint('   CDF: Initial=${sim.soldeInitialCdf} + Captures=$totalCapturesCdf - Retraits=$totalRetraitsCdf = $soldeCdf');
+      foundation.debugPrint('   USD: Initial=${sim.soldeInitialUsd} + Captures=$totalCapturesUsd - Retraits=$totalRetraitsUsd = $soldeUsd');
       
-      return calculatedSolde;
+      return {
+        'CDF': soldeCdf,
+        'USD': soldeUsd,
+      };
     } catch (e) {
       foundation.debugPrint('❌ Erreur calcul solde auto pour SIM ${sim.numero}: $e');
-      return sim.soldeActuel; // Retourner le solde actuel en cas d'erreur
+      return {
+        'CDF': sim.soldeActuelCdf,
+        'USD': sim.soldeActuelUsd,
+      };
     }
   }
 
-  /// Mettre à jour automatiquement le solde d'une SIM basé sur les opérations
+  /// Mettre à jour automatiquement les soldes d'une SIM basé sur les opérations (double devise)
   Future<bool> updateSoldeAutomatiquement(SimModel sim) async {
     try {
-      final nouveauSolde = await calculateAutomaticSolde(sim);
+      final nouveauxSoldes = await calculateAutomaticSoldesByDevise(sim);
+      final nouveauSoldeCdf = nouveauxSoldes['CDF'] ?? 0.0;
+      final nouveauSoldeUsd = nouveauxSoldes['USD'] ?? 0.0;
       
-      // Ne mettre à jour que si le solde a changé significativement
-      if ((nouveauSolde - sim.soldeActuel).abs() > 0.01) {
+      // Vérifier si les soldes ont changé significativement
+      final cdfChanged = (nouveauSoldeCdf - sim.soldeActuelCdf).abs() > 0.01;
+      final usdChanged = (nouveauSoldeUsd - sim.soldeActuelUsd).abs() > 0.01;
+      
+      if (cdfChanged || usdChanged) {
         final updatedSim = sim.copyWith(
-          soldeActuel: nouveauSolde,
+          soldeActuelCdf: nouveauSoldeCdf,
+          soldeActuelUsd: nouveauSoldeUsd,
+          // Maintenir la compatibilité avec l'ancien système (solde USD comme référence)
+          soldeActuel: nouveauSoldeUsd,
           lastModifiedAt: DateTime.now(),
           lastModifiedBy: 'auto_calculation',
         );
 
         await LocalDB.instance.updateSim(updatedSim);
-        foundation.debugPrint('💰 Solde SIM ${sim.numero} mis à jour automatiquement: ${sim.soldeActuel} → $nouveauSolde');
+        foundation.debugPrint('💰 Soldes SIM ${sim.numero} mis à jour automatiquement:');
+        foundation.debugPrint('   CDF: ${sim.soldeActuelCdf} → $nouveauSoldeCdf');
+        foundation.debugPrint('   USD: ${sim.soldeActuelUsd} → $nouveauSoldeUsd');
 
         // Recharger pour afficher partout
         await loadSims();

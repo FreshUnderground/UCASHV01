@@ -43,8 +43,8 @@ class ClotureVirtuelleModel {
   
   // === RÉSUMÉ FINANCIER ===
   final double soldeTotalVirtuel; // = soldeTotalSims (argent dans les SIMs)
-  final double cashDuAuxClients; // = montantVirtuelEnAttente (à servir)
-  final double fraisTotalJournee; // Commissions du jour
+  final double cashDuAuxClients; // = montantVirtuelEnAttente (à servir) - TOUJOURS EN USD
+  final double fraisTotalJournee; // Commissions du jour - TOUJOURS EN USD
   
   // Métadonnées
   final String cloturePar; // Username de l'agent qui a clôturé

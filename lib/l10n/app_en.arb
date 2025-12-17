@@ -11,6 +11,8 @@
     "description": "Welcome message"
   },
   
+  "physicalFees": "Physical fees",
+  "virtualFees": "Virtual fees",
   "login": "Login",
   "logout": "Logout",
   "username": "Username",
@@ -429,5 +431,26 @@
   
   "feesAccount": "FEES Account",
   "expenseAccount": "EXPENSE Account",
-  "netProfit": "Net Profit"
+  "netProfit": "Net Profit",
+  "availableBalance": "Available balance",
+  "statement": "Statement",
+  "transactionsCount": "Number of transactions",
+  "clientCommissions": "Client commissions",
+  "bossWithdrawals": "Boss withdrawals",
+  "bossDeposits": "Boss deposits",
+  "expensesOutflows": "Expenses outflows",
+  "transactionsDetails": "Transactions details",
+  "noTransactionsForPeriod": "No transactions for this period",
+  "statistics": "Statistics",
+  "totalIn": "Total inflows",
+  "totalOut": "Total outflows",
+  "feesTotal": "Total fees",
+  "transfersDetails": "Transfer details",
+  "noRoutesFound": "No route found",
+  "noFeesCollected": "No fees collected",
+  "noServedTransfers": "No served transfers",
+  "feesWillAppearWhenServingTransfers": "Fees will appear here when you serve transfers",
+  "nationalTransfer": "National transfer",
+  "internationalIncomingTransfer": "Incoming international transfer",
+  "internationalOutgoingTransfer": "Outgoing international transfer"
 }

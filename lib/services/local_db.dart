@@ -19,6 +19,7 @@ import '../models/virtual_transaction_model.dart';
 import '../models/retrait_virtuel_model.dart';
 import '../models/cloture_virtuelle_model.dart';
 import '../models/depot_client_model.dart';
+import '../models/credit_virtuel_model.dart';
 
 class LocalDB {
   static final LocalDB _instance = LocalDB._internal();
@@ -2806,5 +2807,172 @@ class LocalDB {
     }
     
     debugPrint('✅ $deletedCount clôture(s) supprimée(s) pour le $dateKey');
+  }
+
+  /// Obtenir le taux de change CDF/USD
+  Future<double?> getTauxChange() async {
+    final prefs = await database;
+    return prefs.getDouble('taux_cdf_usd');
+  }
+
+  /// Sauvegarder le taux de change CDF/USD
+  Future<void> saveTauxChange(double taux) async {
+    final prefs = await database;
+    await prefs.setDouble('taux_cdf_usd', taux);
+    debugPrint('💱 Taux de change sauvegardé: 1 USD = ${taux.toStringAsFixed(0)} CDF');
+  }
+
+  // === CRUD CREDITS VIRTUELS ===
+  
+  /// Sauvegarder un crédit virtuel
+  Future<CreditVirtuelModel?> insertCreditVirtuel(CreditVirtuelModel credit) async {
+    final prefs = await database;
+    final creditId = credit.id ?? await _generateSequentialId('credit_virtuel_');
+    final updatedCredit = credit.copyWith(id: creditId);
+    
+    debugPrint('💾 Sauvegarde crédit virtuel: credit_virtuel_$creditId');
+    
+    await prefs.setString('credit_virtuel_$creditId', jsonEncode(updatedCredit.toJson()));
+    
+    // Vérifier que la sauvegarde a fonctionné
+    final saved = prefs.getString('credit_virtuel_$creditId');
+    if (saved != null) {
+      debugPrint('✅ Crédit virtuel sauvegardé: ${updatedCredit.reference} (ID: $creditId)');
+      return updatedCredit;
+    } else {
+      debugPrint('❌ Échec de la sauvegarde du crédit virtuel');
+      return null;
+    }
+  }
+
+  /// Mettre à jour un crédit virtuel
+  Future<bool> updateCreditVirtuel(CreditVirtuelModel credit) async {
+    if (credit.id == null) throw Exception('Credit ID is required for update');
+    
+    final prefs = await database;
+    final key = 'credit_virtuel_${credit.id}';
+    
+    debugPrint('🔄 Mise à jour crédit virtuel: $key');
+    
+    await prefs.setString(key, jsonEncode(credit.toJson()));
+    
+    // Vérifier que la mise à jour a fonctionné
+    final updated = prefs.getString(key);
+    if (updated != null) {
+      debugPrint('✅ Crédit virtuel mis à jour: ${credit.reference}');
+      return true;
+    } else {
+      debugPrint('❌ Échec de la mise à jour du crédit virtuel');
+      return false;
+    }
+  }
+
+  /// Récupérer tous les crédits virtuels (avec filtres optionnels)
+  Future<List<CreditVirtuelModel>> getAllCreditsVirtuels({
+    int? shopId,
+    String? simNumero,
+    DateTime? dateDebut,
+    DateTime? dateFin,
+    CreditVirtuelStatus? statut,
+    String? beneficiaire,
+  }) async {
+    final prefs = await database;
+    final credits = <CreditVirtuelModel>[];
+    
+    final keys = prefs.getKeys();
+    debugPrint('🔍 [LocalDB] getAllCreditsVirtuels - Found ${keys.where((k) => k.startsWith('credit_virtuel_')).length} credit keys');
+    
+    for (String key in keys) {
+      if (key.startsWith('credit_virtuel_')) {
+        try {
+          final creditData = prefs.getString(key);
+          if (creditData != null) {
+            final credit = CreditVirtuelModel.fromJson(jsonDecode(creditData));
+            
+            // Appliquer les filtres
+            bool matches = true;
+            
+            if (shopId != null && credit.shopId != shopId) {
+              matches = false;
+            }
+            
+            if (simNumero != null && credit.simNumero != simNumero) {
+              matches = false;
+            }
+            
+            if (statut != null && credit.statut != statut) {
+              matches = false;
+            }
+            
+            if (beneficiaire != null && !credit.beneficiaireNom.toLowerCase().contains(beneficiaire.toLowerCase())) {
+              matches = false;
+            }
+            
+            if (dateDebut != null && credit.dateSortie.isBefore(dateDebut)) {
+              matches = false;
+            }
+            
+            if (dateFin != null && credit.dateSortie.isAfter(dateFin)) {
+              matches = false;
+            }
+            
+            if (matches) {
+              credits.add(credit);
+            }
+          }
+        } catch (e) {
+          debugPrint('⚠️ Erreur chargement crédit virtuel $key: $e');
+        }
+      }
+    }
+    
+    debugPrint('📊 [LocalDB] getAllCreditsVirtuels returning ${credits.length} credits');
+    
+    // Trier par date (plus récents en premier)
+    credits.sort((a, b) => b.dateSortie.compareTo(a.dateSortie));
+    return credits;
+  }
+
+  /// Récupérer un crédit virtuel par ID
+  Future<CreditVirtuelModel?> getCreditVirtuelById(int creditId) async {
+    final prefs = await database;
+    final creditData = prefs.getString('credit_virtuel_$creditId');
+    if (creditData != null) {
+      return CreditVirtuelModel.fromJson(jsonDecode(creditData));
+    }
+    return null;
+  }
+
+  /// Récupérer un crédit virtuel par référence
+  Future<CreditVirtuelModel?> getCreditVirtuelByReference(String reference) async {
+    final prefs = await database;
+    final keys = prefs.getKeys();
+    
+    // Normaliser la référence recherchée
+    final normalizedReference = reference.trim().toUpperCase();
+    
+    for (String key in keys) {
+      if (key.startsWith('credit_virtuel_')) {
+        try {
+          final creditData = prefs.getString(key);
+          if (creditData != null) {
+            final credit = CreditVirtuelModel.fromJson(jsonDecode(creditData));
+            if (credit.reference == normalizedReference) {
+              return credit;
+            }
+          }
+        } catch (e) {
+          debugPrint('⚠️ Erreur lecture crédit virtuel $key: $e');
+        }
+      }
+    }
+    return null;
+  }
+
+  /// Supprimer un crédit virtuel
+  Future<void> deleteCreditVirtuel(int creditId) async {
+    final prefs = await database;
+    await prefs.remove('credit_virtuel_$creditId');
+    debugPrint('🗑️ Crédit virtuel supprimé: $creditId');
   }
 }

@@ -594,7 +594,7 @@ class _AdminClotureReportState extends State<AdminClotureReport> {
             _buildCashRow('Clients qui Nous qui Doivent', rapport.totalClientsNousDoivent),
             _buildCashRow('Shops qui Nous qui Doivent', rapport.totalShopsNousDoivent),
             _buildCashRow('Clients que Nous que Devons', rapport.totalClientsNousDevons),
-            _buildCashRow('Shops que Nous que Devons', rapport.totalShopsNousDevons),
+            _buildCashRow('Shops que Nous Devons', rapport.totalShopsNousDevons),
             const Divider(),
             _buildTotalRow(
               'Capital Net',

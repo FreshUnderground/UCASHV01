@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/operation_model.dart';
+import '../models/virtual_transaction_model.dart';
 import '../models/deletion_request_model.dart';
+import '../models/virtual_transaction_deletion_request_model.dart';
 import '../services/deletion_service.dart';
 import '../services/operation_service.dart';
+import '../services/virtual_transaction_service.dart';
 import '../services/auth_service.dart';
 import 'edit_operation_dialog.dart';
 
-/// Page Admin: Gestion des suppressions d'opérations
+/// Page Admin: Gestion des suppressions d'opérations et transactions virtuelles
 class AdminDeletionPage extends StatefulWidget {
   const AdminDeletionPage({super.key});
 
@@ -16,7 +19,10 @@ class AdminDeletionPage extends StatefulWidget {
 }
 
 class _AdminDeletionPageState extends State<AdminDeletionPage> {
-  // Filtres
+  // Filtre par type de données
+  DeletionType _selectedDataType = DeletionType.operations;
+  
+  // Filtres pour opérations
   OperationType? _filterType;
   String _filterDestinataire = '';
   String _filterExpediteur = '';
@@ -24,31 +30,61 @@ class _AdminDeletionPageState extends State<AdminDeletionPage> {
   double? _filterMontantMin;
   double? _filterMontantMax;
   
+  // Filtres pour transactions virtuelles
+  VirtualTransactionStatus? _filterVTStatus;
+  String _filterVTDestinataire = '';
+  String _filterVTExpediteur = '';
+  String _filterVTClient = '';
+  double? _filterVTMontantMin;
+  double? _filterVTMontantMax;
+  
+  // Cache pour les données filtrées
+  List<OperationModel>? _cachedFilteredOperations;
+  List<VirtualTransactionModel>? _cachedFilteredVirtualTransactions;
+  String _lastOperationsCacheKey = '';
+  String _lastVTCacheKey = '';
+  
+  // Contrôleurs pour optimiser les rebuilds
+  final ValueNotifier<String> _dataTypeNotifier = ValueNotifier<String>('operations');
+  final ValueNotifier<int> _operationsCountNotifier = ValueNotifier<int>(0);
+  final ValueNotifier<int> _vtCountNotifier = ValueNotifier<int>(0);
+
   List<OperationModel> get _filteredOperations {
+    // Créer une clé de cache basée sur les filtres actuels
+    final cacheKey = '${_filterType?.toString() ?? ''}_${_filterDestinataire}_${_filterExpediteur}_${_filterClient}_${_filterMontantMin?.toString() ?? ''}_${_filterMontantMax?.toString() ?? ''}';
+    
+    // Vérifier si le cache est valide
+    if (_cachedFilteredOperations != null && _lastOperationsCacheKey == cacheKey) {
+      return _cachedFilteredOperations!;
+    }
+    
     final operationService = Provider.of<OperationService>(context, listen: false);
     var ops = operationService.operations;
     
-    // Appliquer les filtres
+    // Appliquer les filtres de manière optimisée
     if (_filterType != null) {
       ops = ops.where((op) => op.type == _filterType).toList();
     }
     
     if (_filterDestinataire.isNotEmpty) {
+      final filterLower = _filterDestinataire.toLowerCase();
       ops = ops.where((op) => 
-        op.destinataire?.toLowerCase().contains(_filterDestinataire.toLowerCase()) ?? false
+        op.destinataire?.toLowerCase().contains(filterLower) ?? false
       ).toList();
     }
     
     if (_filterExpediteur.isNotEmpty) {
+      final filterLower = _filterExpediteur.toLowerCase();
       ops = ops.where((op) => 
-        op.clientNom?.toLowerCase().contains(_filterExpediteur.toLowerCase()) ?? false
+        op.clientNom?.toLowerCase().contains(filterLower) ?? false
       ).toList();
     }
     
     if (_filterClient.isNotEmpty) {
+      final filterLower = _filterClient.toLowerCase();
       ops = ops.where((op) => 
-        (op.clientNom?.toLowerCase().contains(_filterClient.toLowerCase()) ?? false) ||
-        (op.destinataire?.toLowerCase().contains(_filterClient.toLowerCase()) ?? false)
+        (op.clientNom?.toLowerCase().contains(filterLower) ?? false) ||
+        (op.destinataire?.toLowerCase().contains(filterLower) ?? false)
       ).toList();
     }
     
@@ -60,39 +96,330 @@ class _AdminDeletionPageState extends State<AdminDeletionPage> {
       ops = ops.where((op) => op.montantNet <= _filterMontantMax!).toList();
     }
     
+    // Mettre en cache le résultat
+    _cachedFilteredOperations = ops;
+    _lastOperationsCacheKey = cacheKey;
+    
+    // Mettre à jour le compteur
+    _operationsCountNotifier.value = ops.length;
+    
     return ops;
+  }
+  
+  List<VirtualTransactionModel> get _filteredVirtualTransactions {
+    // Créer une clé de cache basée sur les filtres VT actuels
+    final cacheKey = '${_filterVTStatus?.toString() ?? ''}_${_filterVTDestinataire}_${_filterVTExpediteur}_${_filterVTClient}_${_filterVTMontantMin?.toString() ?? ''}_${_filterVTMontantMax?.toString() ?? ''}';
+    
+    // Vérifier si le cache est valide
+    if (_cachedFilteredVirtualTransactions != null && _lastVTCacheKey == cacheKey) {
+      return _cachedFilteredVirtualTransactions!;
+    }
+    
+    final vtService = Provider.of<VirtualTransactionService>(context, listen: false);
+    var vts = vtService.transactions;
+    
+    // Appliquer les filtres VT de manière optimisée
+    if (_filterVTStatus != null) {
+      vts = vts.where((vt) => vt.statut == _filterVTStatus).toList();
+    }
+    
+    if (_filterVTDestinataire.isNotEmpty) {
+      final filterLower = _filterVTDestinataire.toLowerCase();
+      vts = vts.where((vt) => 
+        vt.clientNom?.toLowerCase().contains(filterLower) ?? false
+      ).toList();
+    }
+    
+    if (_filterVTExpediteur.isNotEmpty) {
+      final filterLower = _filterVTExpediteur.toLowerCase();
+      vts = vts.where((vt) => 
+        vt.agentUsername?.toLowerCase().contains(filterLower) ?? false
+      ).toList();
+    }
+    
+    if (_filterVTClient.isNotEmpty) {
+      final filterLower = _filterVTClient.toLowerCase();
+      vts = vts.where((vt) => 
+        (vt.clientNom?.toLowerCase().contains(filterLower) ?? false) ||
+        (vt.agentUsername?.toLowerCase().contains(filterLower) ?? false)
+      ).toList();
+    }
+    
+    if (_filterVTMontantMin != null) {
+      vts = vts.where((vt) => vt.montantVirtuel >= _filterVTMontantMin!).toList();
+    }
+    
+    if (_filterVTMontantMax != null) {
+      vts = vts.where((vt) => vt.montantVirtuel <= _filterVTMontantMax!).toList();
+    }
+    
+    // Mettre en cache le résultat
+    _cachedFilteredVirtualTransactions = vts;
+    _lastVTCacheKey = cacheKey;
+    
+    // Mettre à jour le compteur
+    _vtCountNotifier.value = vts.length;
+    
+    return vts;
+  }
+
+  /// Invalider le cache lors de changements de filtres
+  void _invalidateCache() {
+    _cachedFilteredOperations = null;
+    _cachedFilteredVirtualTransactions = null;
+    _lastOperationsCacheKey = '';
+    _lastVTCacheKey = '';
+  }
+
+  /// Invalider le cache lors du refresh des données
+  void _refreshData() async {
+    _invalidateCache();
+    if (mounted) {
+      await Future.wait([
+        Provider.of<OperationService>(context, listen: false).loadOperations(),
+        Provider.of<VirtualTransactionService>(context, listen: false).loadTransactions(),
+        Provider.of<DeletionService>(context, listen: false).syncAll(),
+      ]);
+      // Forcer le recalcul des compteurs
+      _filteredOperations;
+      _filteredVirtualTransactions;
+      setState(() {});
+    }
+  }
+
+  @override
+  void dispose() {
+    _dataTypeNotifier.dispose();
+    _operationsCountNotifier.dispose();
+    _vtCountNotifier.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Suppression d\'Opérations'),
+        title: const Text('Suppressions - Opérations & VT'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () async {
-              if (mounted) {
-                await Provider.of<OperationService>(context, listen: false).loadOperations();
-                await Provider.of<DeletionService>(context, listen: false).loadDeletionRequests();
-              }
-            },
+            onPressed: _refreshData,
           ),
         ],
       ),
       body: Column(
         children: [
+          // Filtres par type de données
+          _buildDataTypeFilter(),
+          
           // Section Filtres
           _buildFiltersSection(),
           
-          // Liste des opérations
+          // Liste des éléments
           Expanded(
-            child: _buildOperationsList(),
+            child: _buildItemsList(),
           ),
           
           // Statut Auto-Sync
           _buildAutoSyncStatus(),
         ],
+      ),
+    );
+  }
+
+  /// Filtre par type de données (Opérations ou Transactions Virtuelles)
+  Widget _buildDataTypeFilter() {
+    return Card(
+      margin: const EdgeInsets.all(8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Text('Type: ', style: TextStyle(fontWeight: FontWeight.bold)),
+            Expanded(
+              child: ValueListenableBuilder<String>(
+                valueListenable: _dataTypeNotifier,
+                builder: (context, dataType, child) {
+                  return SegmentedButton<DeletionType>(
+                    segments: [
+                      ButtonSegment(
+                        value: DeletionType.operations,
+                        label: ValueListenableBuilder<int>(
+                          valueListenable: _operationsCountNotifier,
+                          builder: (context, count, child) {
+                            return Text('Opérations ($count)');
+                          },
+                        ),
+                        icon: Icon(Icons.swap_horiz, color: Colors.orange),
+                      ),
+                      ButtonSegment(
+                        value: DeletionType.virtualTransactions,
+                        label: ValueListenableBuilder<int>(
+                          valueListenable: _vtCountNotifier,
+                          builder: (context, count, child) {
+                            return Text('Virtuelles ($count)');
+                          },
+                        ),
+                        icon: Icon(Icons.account_balance_wallet, color: Colors.purple),
+                      ),
+                    ],
+                    selected: {_selectedDataType},
+                    onSelectionChanged: (Set<DeletionType> selection) {
+                      _selectedDataType = selection.first;
+                      _dataTypeNotifier.value = _selectedDataType == DeletionType.operations ? 'operations' : 'virtuelles';
+                      _invalidateCache(); // Invalider le cache lors du changement de type
+                      setState(() {});
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  /// Liste unifiée selon le type sélectionné
+  Widget _buildItemsList() {
+    switch (_selectedDataType) {
+      case DeletionType.operations:
+        return _buildOperationsList();
+      case DeletionType.virtualTransactions:
+        return _buildVirtualTransactionsList();
+      case DeletionType.all:
+        return _buildOperationsList(); // Par défaut, afficher les opérations
+    }
+  }
+  
+  /// Liste des transactions virtuelles optimisée
+  Widget _buildVirtualTransactionsList() {
+    return ValueListenableBuilder<int>(
+      valueListenable: _vtCountNotifier,
+      builder: (context, count, child) {
+        final filteredVTs = _filteredVirtualTransactions;
+        
+        if (filteredVTs.isEmpty) {
+          return const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.account_balance_wallet, size: 64, color: Colors.grey),
+                SizedBox(height: 16),
+                Text('Aucune transaction virtuelle trouvée', 
+                  style: TextStyle(fontSize: 16, color: Colors.grey)),
+              ],
+            ),
+          );
+        }
+        
+        return ListView.builder(
+          itemCount: filteredVTs.length,
+          itemBuilder: (context, index) {
+            final vt = filteredVTs[index];
+            return _buildVirtualTransactionCard(vt);
+          },
+          // Optimisations de performance
+          cacheExtent: 1000, // Cache plus d'éléments
+          physics: const BouncingScrollPhysics(), // Scroll plus fluide
+        );
+      },
+    );
+  }
+  
+  /// Carte pour une transaction virtuelle
+  Widget _buildVirtualTransactionCard(VirtualTransactionModel vt) {
+    final deletionService = Provider.of<DeletionService>(context);
+    
+    // Vérifier si une demande existe déjà
+    final existingRequest = deletionService.virtualTransactionDeletionRequests
+        .where((r) => r.reference == vt.reference)
+        .firstOrNull;
+    
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: Colors.purple,
+          child: Icon(Icons.account_balance_wallet, color: Colors.white),
+        ),
+        title: Text(
+          'VT - ${vt.montantVirtuel.toStringAsFixed(2)} ${vt.devise}',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (vt.clientNom != null)
+              Text('Client: ${vt.clientNom}'),
+            if (vt.clientTelephone != null)
+              Text('Téléphone: ${vt.clientTelephone}'),
+            Text('Référence: ${vt.reference}'),
+            Text('Date: ${_formatDate(vt.dateEnregistrement)}'),
+            Text('Statut: ${_getVTStatusLabel(vt.statut)}'),
+            if (existingRequest != null)
+              Chip(
+                label: Text(_getVTDeletionStatusLabel(existingRequest.statut)),
+                backgroundColor: _getVTDeletionStatusColor(existingRequest.statut),
+              ),
+          ],
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (existingRequest != null)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: const Icon(Icons.check_circle, color: Colors.green, size: 20),
+              ),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, color: Colors.grey),
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'details',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info, size: 18, color: Colors.blue),
+                      const SizedBox(width: 8),
+                      const Text('Détails'),
+                    ],
+                  ),
+                ),
+                if (existingRequest == null)
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.delete, size: 18, color: Colors.red),
+                        const SizedBox(width: 8),
+                        const Text('Supprimer'),
+                      ],
+                    ),
+                  ),
+                if (existingRequest != null)
+                  const PopupMenuItem(
+                    value: 'request_details',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.pending_actions, size: 18, color: Colors.orange),
+                        const SizedBox(width: 8),
+                        const Text('Détails demande'),
+                      ],
+                    ),
+                  ),
+              ],
+              onSelected: (value) {
+                if (value == 'details') {
+                  _showVirtualTransactionDetails(vt);
+                } else if (value == 'delete') {
+                  _showVTDeletionDialog(vt);
+                } else if (value == 'request_details') {
+                  _showVTRequestDetails(existingRequest!);
+                }
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -675,5 +1002,203 @@ class _AdminDeletionPageState extends State<AdminDeletionPage> {
 
   String _formatTime(DateTime time) {
     return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  }
+
+  // Méthodes pour les transactions virtuelles
+  String _getVTStatusLabel(VirtualTransactionStatus statut) {
+    switch (statut) {
+      case VirtualTransactionStatus.enAttente:
+        return 'En attente';
+      case VirtualTransactionStatus.validee:
+        return 'Validée';
+      case VirtualTransactionStatus.annulee:
+        return 'Annulée';
+    }
+  }
+
+  String _getVTDeletionStatusLabel(VirtualTransactionDeletionRequestStatus statut) {
+    switch (statut) {
+      case VirtualTransactionDeletionRequestStatus.enAttente:
+        return 'En attente';
+      case VirtualTransactionDeletionRequestStatus.adminValidee:
+        return 'Admin validée';
+      case VirtualTransactionDeletionRequestStatus.agentValidee:
+        return 'Agent validée';
+      case VirtualTransactionDeletionRequestStatus.refusee:
+        return 'Refusée';
+      case VirtualTransactionDeletionRequestStatus.annulee:
+        return 'Annulée';
+    }
+  }
+
+  Color _getVTDeletionStatusColor(VirtualTransactionDeletionRequestStatus statut) {
+    switch (statut) {
+      case VirtualTransactionDeletionRequestStatus.enAttente:
+        return Colors.orange.shade200;
+      case VirtualTransactionDeletionRequestStatus.adminValidee:
+      case VirtualTransactionDeletionRequestStatus.agentValidee:
+        return Colors.green.shade200;
+      case VirtualTransactionDeletionRequestStatus.refusee:
+        return Colors.red.shade200;
+      case VirtualTransactionDeletionRequestStatus.annulee:
+        return Colors.grey.shade200;
+    }
+  }
+
+  void _showVirtualTransactionDetails(VirtualTransactionModel vt) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Détails de la transaction virtuelle'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Référence: ${vt.reference}'),
+            Text('Montant virtuel: ${vt.montantVirtuel.toStringAsFixed(2)} ${vt.devise}'),
+            Text('Frais: ${vt.frais.toStringAsFixed(2)} ${vt.devise}'),
+            Text('Montant cash: \$${vt.montantCash.toStringAsFixed(2)} USD'),
+            Text('SIM: ${vt.simNumero}'),
+            if (vt.clientNom != null)
+              Text('Client: ${vt.clientNom}'),
+            if (vt.clientTelephone != null)
+              Text('Téléphone: ${vt.clientTelephone}'),
+            Text('Statut: ${_getVTStatusLabel(vt.statut)}'),
+            Text('Date: ${_formatDate(vt.dateEnregistrement)}'),
+            if (vt.dateValidation != null)
+              Text('Date validation: ${_formatDate(vt.dateValidation!)}'),
+            if (vt.notes != null && vt.notes!.isNotEmpty)
+              Text('Notes: ${vt.notes}'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Fermer'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showVTDeletionDialog(VirtualTransactionModel vt) {
+    final TextEditingController reasonController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Demande de suppression VT'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Transaction virtuelle: ${vt.montantVirtuel.toStringAsFixed(2)} ${vt.devise}'),
+            Text('Référence: ${vt.reference}'),
+            if (vt.clientNom != null)
+              Text('Client: ${vt.clientNom}'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: reasonController,
+              decoration: const InputDecoration(
+                labelText: 'Raison de la suppression',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 3,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final authService = Provider.of<AuthService>(context, listen: false);
+              final admin = authService.currentUser;
+              
+              if (admin == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Admin non connecté')),
+                );
+                return;
+              }
+              
+              if (mounted) {
+                final deletionService = Provider.of<DeletionService>(context, listen: false);
+                final success = await deletionService.createVirtualTransactionDeletionRequest(
+                  virtualTransaction: vt,
+                  adminId: admin.id ?? 0,
+                  adminName: admin.username,
+                  reason: reasonController.text.isEmpty ? null : reasonController.text,
+                );
+                
+                Navigator.pop(context);
+                
+                if (success && mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Demande de suppression VT créée')),
+                  );
+                  setState(() {});
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Créer demande'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showVTRequestDetails(VirtualTransactionDeletionRequestModel request) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Détails de la demande VT'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Référence: ${request.reference}'),
+            Text('Type: ${request.transactionType}'),
+            Text('Montant: ${request.montant} ${request.devise}'),
+            const SizedBox(height: 8),
+            Text('Statut: ${_getVTDeletionStatusLabel(request.statut)}', 
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: _getVTDeletionStatusColor(request.statut),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text('Demandé par: ${request.requestedByAdminName}'),
+            Text('Date: ${_formatDate(request.requestDate)}'),
+            if (request.reason != null && request.reason!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Text('Raison:', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(request.reason!),
+            ],
+            if (request.validatedByAdminName != null) ...[
+              const SizedBox(height: 8),
+              Text('Validé par admin: ${request.validatedByAdminName}'),
+              if (request.validationAdminDate != null)
+                Text('Date validation admin: ${_formatDate(request.validationAdminDate!)}'),
+            ],
+            if (request.validatedByAgentName != null) ...[
+              const SizedBox(height: 8),
+              Text('Validé par agent: ${request.validatedByAgentName}'),
+              if (request.validationDate != null)
+                Text('Date validation agent: ${_formatDate(request.validationDate!)}'),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Fermer'),
+          ),
+        ],
+      ),
+    );
   }
 }

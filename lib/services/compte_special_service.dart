@@ -3,9 +3,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/compte_special_model.dart';
+import 'local_db.dart';
+import '../models/virtual_transaction_model.dart';
 import '../models/cloture_caisse_model.dart';
 import '../config/app_config.dart';
-import '../services/local_db.dart';
 
 /// Service pour gérer les comptes spéciaux (FRAIS et DÉPENSE)
 class CompteSpecialService extends ChangeNotifier {
@@ -1197,6 +1198,72 @@ class CompteSpecialService extends ChangeNotifier {
     return result;
   }
 
+  /// Récupère les frais des transactions virtuelles depuis la base de données locale
+  Future<List<Map<String, dynamic>>> _getLocalVirtualFeesOperations({
+    int? shopId, 
+    DateTime? startDate, 
+    DateTime? endDate
+  }) async {
+    final List<Map<String, dynamic>> virtualFees = [];
+    
+    try {
+      // Ajuster la date de fin pour inclure toute la journée
+      DateTime? adjustedEndDate;
+      if (endDate != null) {
+        adjustedEndDate = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
+      }
+      
+      // Récupérer toutes les transactions virtuelles validées avec frais
+      final virtualTransactions = await LocalDB.instance.getAllVirtualTransactions(
+        shopId: shopId,
+        dateDebut: startDate,
+        dateFin: adjustedEndDate,
+        statut: VirtualTransactionStatus.validee,
+      );
+      
+      // Filtrer pour ne garder que celles avec des frais > 0
+      final transactionsAvecFrais = virtualTransactions.where((t) => t.frais > 0).toList();
+      
+      // Convertir les résultats en format commun
+      for (final transaction in transactionsAvecFrais) {
+        // Vérifier si la date de la transaction est dans la plage demandée
+        final transactionDate = transaction.dateValidation ?? transaction.dateEnregistrement;
+        
+        if (startDate != null && transactionDate.isBefore(startDate)) {
+          continue; // Ignorer les transactions avant la date de début
+        }
+        
+        if (endDate != null && transactionDate.isAfter(DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59))) {
+          continue; // Ignorer les transactions après la date de fin
+        }
+        
+        virtualFees.add({
+          'id': 'virtual_${transaction.id}',
+          'type': 'virtual_transaction',
+          'commission': transaction.frais,
+          'date': transactionDate,
+          'shop_destination_id': transaction.shopId,
+          'montant': transaction.montantVirtuel,
+          'is_virtual': true,
+          'reference': transaction.reference,
+          'client_phone': transaction.clientTelephone ?? '',
+          'status': 'validée',
+        });
+      }
+      
+      // Trier par date (du plus récent au plus ancien)
+      virtualFees.sort((a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
+      
+      debugPrint('✅ ${virtualFees.length} frais virtuels trouvés en local (${startDate?.toIso8601String()} - ${endDate?.toIso8601String()})');
+      
+    } catch (e, stackTrace) {
+      debugPrint('❌ Erreur récupération frais virtuels locaux: $e');
+      debugPrint('Stack trace: $stackTrace');
+    }
+    
+    return virtualFees;
+  }
+
   /// Statistiques pour les rapports
   /// NOUVELLE LOGIQUE: Les frais affichés sont UNIQUEMENT les frais encaissés sur les transferts servis
   Future<Map<String, dynamic>> getStatistics({int? shopId, DateTime? startDate, DateTime? endDate}) async {
@@ -1218,20 +1285,20 @@ class CompteSpecialService extends ChangeNotifier {
     final operations = await _loadOperationsForStats(shopId, startDate, endDate);
     debugPrint('✅ Opérations chargées: ${operations.length}');
     
-    // Filtrer les transferts servis par ce shop dans la période
-    List<dynamic> transfertsServis = [];
+    // Filtrer les transferts avec frais encaissés par ce shop dans la période
+    List<dynamic> transfertsAvecFrais = [];
     try {
-      debugPrint('🔍 Filtrage des transferts servis...');
+      debugPrint('🔍 Filtrage des transferts avec frais encaissés...');
       debugPrint('   Critères: shopId=$shopId, startDate=$startDate, endDate=$endDate');
       
       int rejectedByShop = 0;
       int rejectedByType = 0;
-      int rejectedByStatut = 0;
+      int rejectedByCommission = 0;
       int rejectedByDate = 0;
       
-      transfertsServis = operations.where((op) {
+      transfertsAvecFrais = operations.where((op) {
         try {
-          // Vérifier si c'est un transfert servi par this shop - Comparaison robuste
+          // Vérifier si c'est un transfert reçu par ce shop - Comparaison robuste
           if (shopId != null) {
             final operationShopId = op.shopDestinationId;
             final filterShopId = shopId;
@@ -1251,8 +1318,9 @@ class CompteSpecialService extends ChangeNotifier {
             rejectedByType++;
             return false;
           }
-          if (op.statut.name != 'validee') {
-            rejectedByStatut++;
+          // CHANGEMENT: Inclure tous les transferts avec commission > 0, même non servis
+          if (op.commission == null || op.commission <= 0) {
+            rejectedByCommission++;
             return false;
           }
           
@@ -1280,14 +1348,14 @@ class CompteSpecialService extends ChangeNotifier {
         }
       }).toList();
       
-      debugPrint('📊 Après filtrage: ${transfertsServis.length} transferts servis');
+      debugPrint('📊 Après filtrage: ${transfertsAvecFrais.length} transferts avec frais');
       debugPrint('   ❌ Rejetés par shopId: $rejectedByShop');
       debugPrint('   ❌ Rejetés par type: $rejectedByType');
-      debugPrint('   ❌ Rejetés par statut: $rejectedByStatut');
+      debugPrint('   ❌ Rejetés par commission: $rejectedByCommission');
       debugPrint('   ❌ Rejetés par date: $rejectedByDate');
       
       // Afficher un échantillon des opérations pour debug
-      if (operations.isNotEmpty && transfertsServis.isEmpty) {
+      if (operations.isNotEmpty && transfertsAvecFrais.isEmpty) {
         debugPrint('📋 Échantillon des opérations (premières 3):');
         for (var op in operations.take(3)) {
           debugPrint('   - shopDest: ${op.shopDestinationId}, type: ${op.type.name}, statut: ${op.statut.name}, commission: ${op.commission}');
@@ -1297,22 +1365,80 @@ class CompteSpecialService extends ChangeNotifier {
       debugPrint('❌ Erreur critique lors du filtrage: $e');
     }
     
-    // Calculer le total des frais encaissés
-    final fraisEncaisses = transfertsServis.fold(0.0, (sum, op) => sum + op.commission);
+    // Calculer le total des frais encaissés sur les transferts physiques
+    final fraisEncaissesTransferts = transfertsAvecFrais.fold(0.0, (sum, op) => sum + op.commission);
+
+    // Calculer les frais virtuels (transactions virtuelles validées)
+    double fraisVirtuels = 0.0;
+    try {
+      final virtualTransactions = await LocalDB.instance.getAllVirtualTransactions(
+        shopId: shopId,
+      );
+
+      var vtFiltres = virtualTransactions.where((t) => t.statut == VirtualTransactionStatus.validee);
+
+      if (startDate != null) {
+        final startOfDay = DateTime(startDate.year, startDate.month, startDate.day);
+        vtFiltres = vtFiltres.where((t) {
+          final date = t.dateValidation ?? t.dateEnregistrement;
+          return !date.isBefore(startOfDay);
+        }).toList();
+      }
+      if (endDate != null) {
+        final endOfDay = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59);
+        vtFiltres = vtFiltres.where((t) {
+          final date = t.dateValidation ?? t.dateEnregistrement;
+          return !date.isAfter(endOfDay);
+        }).toList();
+      }
+
+      fraisVirtuels = vtFiltres.fold(0.0, (sum, t) => sum + t.frais);
+      debugPrint('📊 Frais virtuels calculés: ${fraisVirtuels.toStringAsFixed(2)} USD');
+    } catch (e) {
+      debugPrint('❌ Erreur lors du calcul des frais virtuels: $e');
+    }
+    
+    final virtualFeesOperations = await _getLocalVirtualFeesOperations(
+      shopId: shopId,
+      startDate: startDate,
+      endDate: endDate,
+    );
+
+    final List<Map<String, dynamic>> physicalFeesOperations = transfertsAvecFrais.map<Map<String, dynamic>>((op) {
+      final date = op.dateValidation ?? op.createdAt ?? op.dateOp;
+      return {
+        'type': op.type.name,
+        'commission': op.commission,
+        'date': date,
+        'shop_destination_id': op.shopDestinationId,
+        'is_virtual': false,
+      };
+    }).toList();
+
+    final List<Map<String, dynamic>> allFeesOperations = [
+      ...physicalFeesOperations,
+      ...virtualFeesOperations,
+    ];
+
+    // Total des frais encaissés (physiques + virtuels)
+    final fraisEncaisses = fraisEncaissesTransferts + fraisVirtuels;
     
     debugPrint('📊 STATISTIQUES COMPTES SPÉCIAUX:');
     debugPrint('   Shop ID: ${shopId ?? "TOUS LES SHOPS"}');
     debugPrint('   Période: ${startDate != null ? startDate.toString().split(' ')[0] : "Depuis toujours"} au ${endDate != null ? endDate.toString().split(' ')[0] : "Aujourd\'hui"}');
     debugPrint('   Opérations totales chargées: ${operations.length}');
-    debugPrint('   Transferts servis trouvés: ${transfertsServis.length}');
+    debugPrint('   Transferts avec frais trouvés: ${transfertsAvecFrais.length}');
     debugPrint('   Frais encaissés calculés: ${fraisEncaisses.toStringAsFixed(2)} USD');
-    if (transfertsServis.isNotEmpty) {
+    debugPrint('   Virtual fees operations: ${virtualFeesOperations.length}');
+    debugPrint('   Physical fees operations: ${physicalFeesOperations.length}');
+    debugPrint('   All fees operations: ${allFeesOperations.length}');
+    if (transfertsAvecFrais.isNotEmpty) {
       debugPrint('   Détail des transferts:');
-      for (var op in transfertsServis.take(5)) {
+      for (var op in transfertsAvecFrais.take(5)) {
         debugPrint('     - Shop dest: ${op.shopDestinationId}, Commission: ${op.commission.toStringAsFixed(2)}');
       }
-      if (transfertsServis.length > 5) {
-        debugPrint('     ... et ${transfertsServis.length - 5} autres');
+      if (transfertsAvecFrais.length > 5) {
+        debugPrint('     ... et ${transfertsAvecFrais.length - 5} autres');
       }
     }
     
@@ -1412,43 +1538,39 @@ class CompteSpecialService extends ChangeNotifier {
       debugPrint('📊 Sans filtre: Solde DÉPENSE total = $soldeDepenseDuJour');
     }
     
+    // Retourner les statistiques complètes
     return {
+      // FRAIS
+      'frais': frais,
       'solde_frais': soldeFrais,
-      'solde_depense': soldeDepense,
-      'nombre_frais': frais.length,
-      'nombre_depenses': depenses.length,
-      'benefice_net': soldeFraisDuJour + soldeDepenseDuJour, // CORRIGÉ: Utiliser les soldes du jour
-      
-      // Détails FRAIS - MODIFIÉ: Utiliser les frais encaissés au lieu de COMMISSION_AUTO
-      'commissions_auto': fraisEncaisses, // Frais encaissés sur transferts servis
-      'nombre_commissions': transfertsServis.length, // Nombre de transferts servis
-      'retraits_frais': sortieFraisDuJour,
-      'nombre_retraits': retraits.length,
-      
-      // NOUVEAU: Formule du Solde FRAIS
+      'solde_frais_jour': soldeFraisDuJour,
       'frais_anterieur': soldeFraisAnterieur,
       'frais_encaisses_jour': fraisEncaisses,
+      'frais_transferts': fraisEncaissesTransferts,
+      'frais_virtuels': fraisVirtuels,
       'sortie_frais_jour': sortieFraisDuJour,
-      'solde_frais_jour': soldeFraisDuJour,
+      'retraits_frais': retraits.fold(0.0, (sum, t) => sum + t.montant.abs()),
+      'nombre_commissions': transfertsAvecFrais.length + virtualFeesOperations.length,
       
-      // NOUVEAU: Liste des opérations (pour affichage détaillé)
-      'operations_frais': transfertsServis.map((op) => {
-        'shop_destination_id': op.shopDestinationId,
-        'commission': op.commission,
-        'date': op.dateValidation ?? op.createdAt ?? op.dateOp,
-        'type': op.type.name,
-        'statut': op.statut.name,
-      }).toList(),
-      
-      // Détails DÉPENSE - NOUVEAU: Avec formule Antérieur + Dépôts - Sorties
-      'depense_anterieur': soldeDepenseAnterieur,
-      'depots_boss': depotsDuJour,
-      'depots_jour': depotsDuJour,
-      'nombre_depots': depots.length,
-      'sorties': sortiesDuJour,
-      'sorties_jour': sortiesDuJour,
-      'nombre_sorties': sorties.length,
+      // DÉPENSE
+      'depenses': depenses,
+      'solde_depense': soldeDepense,
       'solde_depense_jour': soldeDepenseDuJour,
+      'depense_anterieur': soldeDepenseAnterieur,
+      'depots_jour': depotsDuJour,
+      'depots_boss': depots.fold(0.0, (sum, t) => sum + t.montant),
+      'sorties_jour': sortiesDuJour,
+      'sorties': sorties.fold(0.0, (sum, t) => sum + t.montant.abs()),
+      'nombre_depenses': depenses.length,
+      
+      // OPÉRATIONS (pour affichage) - Maintenant inclut les frais virtuels
+      'operations_frais': allFeesOperations,
+      
+      // MÉTADONNÉES
+      'debut_periode': startDate,
+      'fin_periode': endDate,
+      'shop_id': shopId,
+      'calcul_le': DateTime.now(),
     };
   }
   

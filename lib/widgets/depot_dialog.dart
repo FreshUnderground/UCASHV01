@@ -30,6 +30,10 @@ class _DepotDialogState extends State<DepotDialog> {
   bool _isLoading = false;
   List<ClientModel> _clients = [];
   DateTime _selectedDate = DateTime.now();
+  
+  // Shop destination selection
+  ShopModel? _selectedShopDestination;
+  List<ShopModel> _availableShops = [];
 
   @override
   void initState() {
@@ -51,10 +55,16 @@ class _DepotDialogState extends State<DepotDialog> {
 
   Future<void> _loadClients() async {
     final clientService = Provider.of<ClientService>(context, listen: false);
+    final shopService = Provider.of<ShopService>(context, listen: false);
+    
     await clientService.loadClients();
+    await shopService.loadShops();
+    
     if (mounted) {
       setState(() {
         _clients = clientService.clients;
+        _availableShops = shopService.shops;
+        
         // Re-synchroniser le client présélectionné avec la liste chargée
         if (widget.preselectedClient != null && widget.preselectedClient!.id != null) {
           _selectedClient = _clients.firstWhere(
@@ -201,181 +211,254 @@ class _DepotDialogState extends State<DepotDialog> {
             ),
             SizedBox(height: fieldSpacing),
             
-            // 3. Date de l'opération (Admin seulement pour dates antérieures)
-            Text(
-              '3. Date de l\'opération *',
-              style: TextStyle(
-                fontSize: labelFontSize,
-                fontWeight: FontWeight.bold,
-                color: Colors.green,
-              ),
-            ),
-            SizedBox(height: isMobile ? 8 : 12),
-            
+            // 3. Date de l'opération (Admin seulement)
             Consumer<AuthService>(
               builder: (context, authService, child) {
-                final isAdmin = authService.currentUser?.role?.toUpperCase() == 'ADMIN';
+                final isAdmin = authService.currentUser?.role.toUpperCase() == 'ADMIN';
                 debugPrint('🔐 DEPOT DIALOG - User role: ${authService.currentUser?.role}, isAdmin: $isAdmin');
                 
-                return Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: () async {
-                      if (!isAdmin) {
-                        debugPrint('⚠️ Non-admin - date non modifiable');
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Seul l\'admin peut modifier la date'),
-                            duration: Duration(seconds: 2),
-                            backgroundColor: Colors.orange,
-                          ),
-                        );
-                        return;
-                      }
-                      
-                      debugPrint('📅 Admin clicked - Opening date picker...');
-                      
-                      try {
-                        final date = await showDatePicker(
-                          context: context,
-                          initialDate: _selectedDate,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime.now(),
-                          helpText: 'Sélectionner la date du dépôt',
-                          cancelText: 'Annuler',
-                          confirmText: 'OK',
-                        );
-                        
-                        debugPrint('📍 Date returned: $date');
-                        
-                        if (date != null) {
-                          setState(() {
-                            _selectedDate = date;
-                          });
-                          debugPrint('✅ Date sélectionnée: ${date.toString()}');
-                        }
-                      } catch (e) {
-                        debugPrint('❌ Erreur date picker: $e');
-                      }
-                    },
-                    child: Ink(
-                      decoration: BoxDecoration(
-                        color: isAdmin ? Colors.white : Colors.grey.shade100,
-                        border: Border.all(
-                          color: isAdmin ? Colors.green.shade300 : Colors.grey.shade400,
-                          width: 1.5,
-                        ),
-                        borderRadius: BorderRadius.circular(8),
-                        boxShadow: isAdmin ? [
-                          BoxShadow(
-                            color: Colors.green.withOpacity(0.1),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ] : null,
-                      ),
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isMobile ? 16 : 20,
-                        vertical: isMobile ? 16 : 18,
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: (isAdmin ? Colors.green : Colors.grey).withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Icon(
-                              Icons.calendar_month,
-                              color: isAdmin ? Colors.green : Colors.grey,
-                              size: isMobile ? 20 : 24,
-                            ),
-                          ),
-                          SizedBox(width: isMobile ? 12 : 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Date',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey.shade600,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '${_selectedDate.day.toString().padLeft(2, '0')}/${_selectedDate.month.toString().padLeft(2, '0')}/${_selectedDate.year}',
-                                  style: TextStyle(
-                                    fontSize: isMobile ? 16 : 18,
-                                    color: isAdmin ? Colors.black87 : Colors.grey.shade600,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (!isAdmin)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.orange.shade50,
-                                border: Border.all(color: Colors.orange.shade200),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.lock_outline,
-                                    size: 14,
-                                    color: Colors.orange.shade700,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    "Aujourd'hui",
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.orange.shade800,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          if (isAdmin)
-                            Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: Colors.green.shade50,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Icon(
-                                Icons.edit_calendar,
-                                size: 18,
-                                color: Colors.green.shade700,
-                              ),
-                            ),
-                        ],
+                // Masquer complètement la section pour les agents
+                if (!isAdmin) {
+                  return const SizedBox.shrink();
+                }
+                
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '3. Date de l\'opération *',
+                      style: TextStyle(
+                        fontSize: labelFontSize,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green,
                       ),
                     ),
+                    SizedBox(height: isMobile ? 8 : 12),
+                    
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () async {
+                          debugPrint('📅 Admin clicked - Opening date picker...');
+                          
+                          try {
+                            final date = await showDatePicker(
+                              context: context,
+                              initialDate: _selectedDate,
+                              firstDate: DateTime(2020),
+                              lastDate: DateTime.now(),
+                              helpText: 'Sélectionner la date du dépôt',
+                              cancelText: 'Annuler',
+                              confirmText: 'OK',
+                            );
+                            
+                            debugPrint('📍 Date returned: $date');
+                            
+                            if (date != null) {
+                              setState(() {
+                                _selectedDate = date;
+                              });
+                              debugPrint('✅ Date sélectionnée: ${date.toString()}');
+                            }
+                          } catch (e) {
+                            debugPrint('❌ Erreur date picker: $e');
+                          }
+                        },
+                        child: Ink(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            border: Border.all(
+                              color: Colors.green.shade300,
+                              width: 1.5,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.green.withOpacity(0.1),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isMobile ? 16 : 20,
+                            vertical: isMobile ? 16 : 18,
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Icon(
+                                  Icons.calendar_month,
+                                  color: Colors.green,
+                                  size: isMobile ? 20 : 24,
+                                ),
+                              ),
+                              SizedBox(width: isMobile ? 12 : 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Date',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade600,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${_selectedDate.day.toString().padLeft(2, '0')}/${_selectedDate.month.toString().padLeft(2, '0')}/${_selectedDate.year}',
+                                      style: TextStyle(
+                                        fontSize: isMobile ? 16 : 18,
+                                        color: Colors.black87,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.shade50,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Icon(
+                                  Icons.edit_calendar,
+                                  size: 18,
+                                  color: Colors.green.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: fieldSpacing),
+                  ],
+                );
+              },
+            ),
+            
+            // Shop de destination *
+            Consumer<AuthService>(
+              builder: (context, authService, child) {
+                final isAdmin = authService.currentUser?.role.toUpperCase() == 'ADMIN';
+                final sectionNumber = isAdmin ? '4' : '3';
+                
+                return Text(
+                  '$sectionNumber. Shop de destination *',
+                  style: TextStyle(
+                    fontSize: labelFontSize,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                  ),
+                );
+              },
+            ),
+            SizedBox(height: isMobile ? 8 : 12),          
+            DropdownButtonFormField<ShopModel>(
+              value: _selectedShopDestination,
+              isExpanded: true,
+              decoration: InputDecoration(
+                labelText: 'Shop de destination',
+                border: const OutlineInputBorder(),
+                prefixIcon: Icon(Icons.store, size: ResponsiveDialogUtils.getIconSize(context)),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: isMobile ? 12 : 16,
+                  vertical: isMobile ? 12 : 16,
+                ),
+              ),
+              items: _availableShops.map((shop) {
+                return DropdownMenuItem<ShopModel>(
+                  value: shop,
+                  child: Text(
+                    '${shop.designation} - ID: ${shop.id}',
+                    style: TextStyle(fontSize: isMobile ? 14 : 16),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+              }).toList(),
+              onChanged: (ShopModel? value) {
+                setState(() {
+                  _selectedShopDestination = value;
+                });
+              },
+              validator: (value) {
+                if (value == null) {
+                  return 'Veuillez sélectionner un shop de destination';
+                }
+                return null;
+              },
+            ),
+            
+            // Message informatif dynamique sur le crédit intershop
+            Consumer<AuthService>(
+              builder: (context, authService, child) {
+                if (_selectedShopDestination == null) return const SizedBox.shrink();
+                
+                final currentShopId = authService.currentUser?.shopId;
+                final isIntershop = _selectedShopDestination!.id != currentShopId;
+                
+                return Container(
+                  margin: EdgeInsets.only(top: isMobile ? 8 : 12),
+                  padding: EdgeInsets.all(isMobile ? 12 : 16),
+                  decoration: BoxDecoration(
+                    color: isIntershop ? Colors.orange.withOpacity(0.1) : Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isIntershop ? Colors.orange.withOpacity(0.3) : Colors.green.withOpacity(0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isIntershop ? Icons.swap_horiz : Icons.check_circle,
+                        color: isIntershop ? Colors.orange : Colors.green,
+                        size: ResponsiveDialogUtils.getIconSize(context),
+                      ),
+                      SizedBox(width: isMobile ? 8 : 12),
+                      Expanded(
+                        child: Text(
+                          isIntershop 
+                            ? 'Crédit intershop: Ce dépôt créera une dette/créance entre shops.'
+                            : 'Opération interne: Aucun crédit intershop (même shop).',
+                          style: TextStyle(
+                            color: isIntershop ? Colors.orange.shade700 : Colors.green.shade700,
+                            fontSize: isMobile ? 13 : 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 );
               },
             ),
             SizedBox(height: fieldSpacing),
             
-            // 4. Mode de paiement
-            Text(
-              '4. Mode de paiement *',
-              style: TextStyle(
-                fontSize: labelFontSize,
-                fontWeight: FontWeight.bold,
-                color: Colors.green,
-              ),
+            // Mode de paiement
+            Consumer<AuthService>(
+              builder: (context, authService, child) {
+                final isAdmin = authService.currentUser?.role.toUpperCase() == 'ADMIN';
+                final sectionNumber = isAdmin ? '5' : '4';
+                
+                return Text(
+                  '$sectionNumber. Mode de paiement *',
+                  style: TextStyle(
+                    fontSize: labelFontSize,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                  ),
+                );
+              },
             ),
             SizedBox(height: isMobile ? 8 : 12),
             
@@ -441,14 +524,21 @@ class _DepotDialogState extends State<DepotDialog> {
             ),
             SizedBox(height: fieldSpacing),
             
-            // 5. Observation
-            Text(
-              '5. Observation *',
-              style: TextStyle(
-                fontSize: labelFontSize,
-                fontWeight: FontWeight.bold,
-                color: Colors.green,
-              ),
+            // Observation
+            Consumer<AuthService>(
+              builder: (context, authService, child) {
+                final isAdmin = authService.currentUser?.role.toUpperCase() == 'ADMIN';
+                final sectionNumber = isAdmin ? '6' : '5';
+                
+                return Text(
+                  '$sectionNumber. Observation *',
+                  style: TextStyle(
+                    fontSize: labelFontSize,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                  ),
+                );
+              },
             ),
             SizedBox(height: isMobile ? 8 : 12),
             
@@ -523,6 +613,17 @@ class _DepotDialogState extends State<DepotDialog> {
                       const Text('Mode de paiement:'),
                       Text(
                         _getModePaiementLabel(),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Shop destination:'),
+                      Text(
+                        _selectedShopDestination?.designation ?? 'Non sélectionné',
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ],
@@ -634,7 +735,12 @@ class _DepotDialogState extends State<DepotDialog> {
         shop = null;
       }
       
-      // Créer l'opération de dépôt
+      // Validation: Shop destination requis
+      if (_selectedShopDestination == null) {
+        throw Exception('Veuillez sélectionner un shop de destination');
+      }
+      
+      // Créer l'opération de dépôt avec shop destination
       final operation = OperationModel(
         codeOps: '', // Sera généré automatiquement par createOperation
         type: OperationType.depot,
@@ -649,11 +755,13 @@ class _DepotDialogState extends State<DepotDialog> {
         agentId: authService.currentUser?.id ?? 1,
         agentUsername: authService.currentUser?.username,
         shopSourceId: shopId,
-        shopSourceDesignation: shop?.designation, // Récupérer la designation
+        shopSourceDesignation: shop?.designation,
+        shopDestinationId: _selectedShopDestination!.id,
+        shopDestinationDesignation: _selectedShopDestination!.designation,
         statut: OperationStatus.terminee,
         dateOp: _selectedDate,
-        notes: _observationController.text, // Utiliser la vraie observation saisie par l'utilisateur
-        observation: _observationController.text, // Now required
+        notes: _observationController.text,
+        observation: _observationController.text,
       );
       
       debugPrint('🔍 DEPOT CRÉÉ: statut=${operation.statut.name} (index=${operation.statut.index})');

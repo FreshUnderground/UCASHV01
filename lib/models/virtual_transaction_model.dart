@@ -45,7 +45,7 @@ class VirtualTransactionModel {
     required this.montantVirtuel,
     this.frais = 0.0,
     required this.montantCash,
-    this.devise = 'USD',
+    this.devise = 'USD', // Support USD et CDF
     required this.simNumero,
     required this.shopId,
     this.shopDesignation,

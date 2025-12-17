@@ -53,7 +53,20 @@ class DepotRetraitSyncService extends ChangeNotifier {
         return isDepotRetrait && notSynced;
       }).toList();
 
+      // DEBUG: Compter les opérations administratives
+      final adminOps = depotsRetraits.where((op) => op.isAdministrative).toList();
+      final normalOps = depotsRetraits.where((op) => !op.isAdministrative).toList();
+      
       debugPrint('📊 [DEPOT/RETRAIT] Trouvé ${depotsRetraits.length} opérations non synchronisées');
+      debugPrint('   🔧 Administratives: ${adminOps.length}');
+      debugPrint('   💰 Normales: ${normalOps.length}');
+      
+      if (adminOps.isNotEmpty) {
+        debugPrint('🔍 [DEBUG] Opérations administratives à synchroniser:');
+        for (final op in adminOps.take(3)) {
+          debugPrint('   - ${op.codeOps}: ${op.type.name} ${op.montantNet} USD (${op.clientNom ?? op.destinataire})');
+        }
+      }
       _pendingCount = depotsRetraits.length;
       notifyListeners();
 
@@ -91,6 +104,7 @@ class DepotRetraitSyncService extends ChangeNotifier {
         debugPrint('   Client: ${operation.clientNom}');
         debugPrint('   Statut: ${operation.statut.name}');
         debugPrint('   Agent ID: ${operation.agentId}, Shop ID: ${operation.shopSourceId}');
+        debugPrint('   🔧 ADMINISTRATIF: ${operation.isAdministrative}');
         
         // VALIDATION CRITIQUE: Vérifier que les données essentielles sont présentes
         if (operation.agentId == null) {
@@ -152,10 +166,18 @@ class DepotRetraitSyncService extends ChangeNotifier {
             await LocalDB.instance.updateOperation(syncedOp);
             
             uploaded++;
-            debugPrint('✅ [DEPOT/RETRAIT] ${operation.type.name} synchronisé: ${operation.codeOps}');
+            if (operation.isAdministrative) {
+              debugPrint('✅ [DEPOT/RETRAIT] 🔧 ADMIN ${operation.type.name} synchronisé: ${operation.codeOps}');
+            } else {
+              debugPrint('✅ [DEPOT/RETRAIT] ${operation.type.name} synchronisé: ${operation.codeOps}');
+            }
           } else {
             failed++;
-            debugPrint('❌ [DEPOT/RETRAIT] Échec serveur: ${result['message']}');
+            if (operation.isAdministrative) {
+              debugPrint('❌ [DEPOT/RETRAIT] 🔧 ADMIN Échec serveur: ${result['message']}');
+            } else {
+              debugPrint('❌ [DEPOT/RETRAIT] Échec serveur: ${result['message']}');
+            }
           }
         } else {
           failed++;

@@ -37,15 +37,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 // Log ALL request information for debugging
-error_log("[DELETION_REQUESTS] === NEW AGENT VALIDATION REQUEST ===");
-error_log("[DELETION_REQUESTS] Request Method: " . ($_SERVER['REQUEST_METHOD'] ?? 'UNKNOWN'));
-error_log("[DELETION_REQUESTS] Content Type: " . ($_SERVER['CONTENT_TYPE'] ?? 'NOT SET'));
-error_log("[DELETION_REQUESTS] Request URI: " . ($_SERVER['REQUEST_URI'] ?? 'UNKNOWN'));
+error_log("[AGENT_VALIDATION] === NEW AGENT VALIDATION REQUEST ===");
+error_log("[AGENT_VALIDATION] Request Method: " . ($_SERVER['REQUEST_METHOD'] ?? 'UNKNOWN'));
+error_log("[AGENT_VALIDATION] Content Type: " . ($_SERVER['CONTENT_TYPE'] ?? 'NOT SET'));
+error_log("[AGENT_VALIDATION] Request URI: " . ($_SERVER['REQUEST_URI'] ?? 'UNKNOWN'));
 
 // Log the raw input for debugging
 $rawInput = file_get_contents('php://input');
-error_log("[DELETION_REQUESTS] Raw input received: " . $rawInput);
-error_log("[DELETION_REQUESTS] Raw input length: " . strlen($rawInput));
+error_log("[AGENT_VALIDATION] Raw input received: " . $rawInput);
+error_log("[AGENT_VALIDATION] Raw input length: " . strlen($rawInput));
 
 // Include config for database connection
 require_once __DIR__ . '/../../../config/database.php';

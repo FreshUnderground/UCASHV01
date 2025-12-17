@@ -736,7 +736,7 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Shops qui Nous qui Doivent',
+                          'Shops qui Nous Doivent',
                           style: TextStyle(
                             fontSize: isMobile ? 16 : 18,
                             fontWeight: FontWeight.bold,
@@ -794,7 +794,7 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Shops que Nous que Devons',
+                          'Shops que Nous Devons',
                           style: TextStyle(
                             fontSize: isMobile ? 16 : 18,
                             fontWeight: FontWeight.bold,
@@ -3516,6 +3516,40 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
         color = Colors.purple;
         label = 'Flot Reçu';
         break;
+      // NOUVEAUX TYPES - AUTRES SHOP
+      case 'depot_intershop':
+        color = Colors.teal;
+        label = 'Dépôt Intershop';
+        break;
+      case 'retrait_intershop':
+        color = Colors.indigo;
+        label = 'Retrait Intershop';
+        break;
+      case 'depot_recu':
+        color = Colors.red;
+        label = 'Dépôt Reçu';
+        break;
+      case 'retrait_servi':
+        color = Colors.green;
+        label = 'Retrait Servi';
+        break;
+      case 'depot_fait':
+        color = Colors.cyan;
+        label = 'Dépôt Fait';
+        break;
+      case 'retrait_fait':
+        color = Colors.deepOrange;
+        label = 'Retrait Fait';
+        break;
+      // NOUVEAUX TYPES - SOLDE PAR PARTENAIRE
+      case 'solde_credit_initialise':
+        color = Colors.lightGreen;
+        label = 'Crédit Initialisé';
+        break;
+      case 'solde_dette_initialise':
+        color = Colors.pink;
+        label = 'Dette Initialisée';
+        break;
       default:
         color = Colors.grey;
         label = type;
@@ -4146,6 +4180,24 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
         return 'Flot Envoyé';
       case 'flot_recu':
         return 'Flot Reçu';
+      // NOUVEAUX TYPES - AUTRES SHOP
+      case 'depot_intershop':
+        return 'Dépôt Intershop';
+      case 'retrait_intershop':
+        return 'Retrait Intershop';
+      case 'depot_recu':
+        return 'Dépôt Reçu';
+      case 'retrait_servi':
+        return 'Retrait Servi';
+      case 'depot_fait':
+        return 'Dépôt Fait';
+      case 'retrait_fait':
+        return 'Retrait Fait';
+      // NOUVEAUX TYPES - SOLDE PAR PARTENAIRE
+      case 'solde_credit_initialise':
+        return 'Crédit Initialisé';
+      case 'solde_dette_initialise':
+        return 'Dette Initialisée';
       default:
         return type;
     }

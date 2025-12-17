@@ -206,8 +206,6 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                 child: pw.Column(
                   children: [
                     _buildSection('6. Partenaires Servis', [
-                      pw.Text('${rapport.clientsNousDoivent.length} client(s)', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
-                      pw.Divider(),
                       ...rapport.clientsNousDoivent.map((c) => _buildDetailRow(c.nom, '', c.solde, PdfColors.red700)),
                       pw.Divider(),
                       _buildRow('TOTAL', rapport.totalClientsNousDoivent, color: PdfColors.red700, bold: true),
@@ -215,8 +213,6 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                     pw.SizedBox(height: 8),
                     
                     _buildSection('7. Dépôts Partenaires', [
-                      pw.Text('${rapport.clientsNousDevons.length} client(s)', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
-                      pw.Divider(),
                       ...rapport.clientsNousDevons.map((c) => _buildDetailRow(c.nom, '', c.solde, PdfColors.green700)),
                       pw.Divider(),
                       _buildRow('TOTAL', rapport.totalClientsNousDevons, color: PdfColors.green700, bold: true),
@@ -224,10 +220,6 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                     pw.SizedBox(height: 8),
                     
                     _buildSection('8. Shops Qui Nous Doivent (DIFF. DETTES)', [
-                      pw.Text('${rapport.shopsNousDoivent.length} shop(s)', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
-                      pw.Divider(),
-                      ...rapport.shopsNousDoivent.map((s) => _buildDetailRow(s.designation, s.localisation, s.montant, PdfColors.orange700)),
-                      pw.Divider(),
                       _buildRow('TOTAL', rapport.totalShopsNousDoivent, color: PdfColors.orange700, bold: true),
                     ], PdfColors.orange700),
                     pw.SizedBox(height: 8),
@@ -239,6 +231,79 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                       pw.Divider(),
                       _buildRow('TOTAL', rapport.totalShopsNousDevons, color: PdfColors.purple700, bold: true),
                     ], PdfColors.purple700),
+                    pw.SizedBox(height: 8),
+                    
+                    // NOUVEAU: Section AUTRES SHOP (opérations où nous sommes destinataires)
+                    if (rapport.autresShopServis > 0 || rapport.autresShopDepots > 0)
+                      _buildSection('10. AUTRES SHOP', [
+                        // SERVIS - Retraits où nous sommes destinataires
+                        if (rapport.autresShopServis > 0) ...[
+                          _buildRow('SERVIS ', rapport.autresShopServis, color: PdfColors.orange700),
+                          
+                          // Détails SERVIS groupés par client
+                          if (rapport.autresShopServisGroupes.isNotEmpty) ...[
+                            pw.SizedBox(height: 4),
+                            pw.Text('Détail SERVIS par Client:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                            pw.Divider(),
+                            ...rapport.autresShopServisGroupes.entries.map((entry) => _buildDetailRow(
+                              entry.key, // Nom du client (via shop)
+                              'Retrait servi',
+                              entry.value, // Montant servi
+                              PdfColors.orange700,
+                            )),
+                          ],
+                          pw.SizedBox(height: 4),
+                        ],
+                        
+                        // DEPOT - Dépôts où nous sommes destinataires
+                        if (rapport.autresShopDepots > 0) ...[
+                          _buildRow('DEPOT', rapport.autresShopDepots, color: PdfColors.green700),
+                          
+                          // Détails DEPOT groupés par client
+                          if (rapport.autresShopDepotsGroupes.isNotEmpty) ...[
+                            pw.SizedBox(height: 4),
+                            pw.Text('Détail DEPOT par Client:', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                            pw.Divider(),
+                            ...rapport.autresShopDepotsGroupes.entries.map((entry) => _buildDetailRow(
+                              entry.key, // Nom du client (via shop)
+                              'Dépôt reçu',
+                              entry.value, // Montant reçu
+                              PdfColors.green700,
+                            )),
+                          ],
+                        ],
+                        
+                        pw.Divider(),
+                        _buildRow('TOTAL', rapport.autresShopServis + rapport.autresShopDepots, color: PdfColors.blue700, bold: true),
+                      ], PdfColors.blue700),
+                    pw.SizedBox(height: 8),
+                    
+                    // NOUVEAU: Section SOLDE PAR PARTENAIRE (depot - retrait où nous sommes destination)
+                    _buildSection('11. SOLDE PAR PARTENAIRE', [
+                        // Afficher chaque partenaire avec son solde
+                        if (rapport.soldeParPartenaire.isEmpty)
+                          pw.Text('Aucune opération partenaire trouvée', style: pw.TextStyle(fontSize: 7, color: PdfColors.grey600, fontStyle: pw.FontStyle.italic))
+                        else
+                          ...rapport.soldeParPartenaire.entries.map((entry) {
+                            final solde = entry.value;
+                            final color = solde > 0 ? PdfColors.red700 : solde < 0 ? PdfColors.green700 : PdfColors.grey700;
+                            
+                            return _buildDetailRowWithSign(
+                              entry.key, // Nom du partenaire
+                              '',
+                              solde, // Afficher avec le signe
+                              color,
+                            );
+                          }),
+                        
+                        pw.Divider(),
+                        (() {
+                          final totalSolde = rapport.soldeParPartenaire.values.fold(0.0, (sum, solde) => sum + solde);
+                          final color = totalSolde > 0 ? PdfColors.red700 : totalSolde < 0 ? PdfColors.green700 : PdfColors.grey700;
+                          return _buildRowWithSign('SOLDE NET PARTENAIRES', totalSolde, color: color, bold: true);
+                        }()),
+                      ], PdfColors.blue700),
+                    pw.SizedBox(height: 8),
                   ],
                 ),
               ),
@@ -259,52 +324,26 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
               children: [
                 pw.Text('CAPITAL NET FINAL', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.blue800)),
                 pw.SizedBox(height: 4),
-                pw.Text('Formule: Cash Disponible (incluant -Retraits FRAIS) + Créances - Dettes', style: pw.TextStyle(fontSize: 6, fontStyle: pw.FontStyle.italic)),
-                pw.SizedBox(height: 6),
-                (() {
-                  final capitalNetValue = rapport.cashDisponibleTotal + 
-                                      rapport.totalClientsNousDoivent + 
-                                      rapport.totalShopsNousDoivent - 
-                                      rapport.totalClientsNousDevons - 
-                                      rapport.totalShopsNousDevons - 
-                                      (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour) - 
-                                      rapport.transfertsEnAttente;
-                  return pw.Text(
-                    '${capitalNetValue.toStringAsFixed(2)} USD', 
-                    style: pw.TextStyle(
-                      fontSize: 20, 
-                      fontWeight: pw.FontWeight.bold, 
-                      color: capitalNetValue >= 0 ? PdfColors.blue900 : PdfColors.red900
-                    )
-                  );
-                }()) as pw.Widget,
+                pw.Text(
+                  '${rapport.capitalNet.toStringAsFixed(2)} USD', 
+                  style: pw.TextStyle(
+                    fontSize: 20, 
+                    fontWeight: pw.FontWeight.bold, 
+                    color: rapport.capitalNet >= 0 ? PdfColors.blue900 : PdfColors.red900
+                  )
+                ),
                 pw.Divider(),
                 _buildRow('Cash Disponible', rapport.cashDisponibleTotal, color: PdfColors.green700),
-                _buildRow('+ Partenaires Servis', rapport.totalClientsNousDoivent, color: PdfColors.red700),
                 _buildRow('+ DIFF. DETTES', rapport.totalShopsNousDoivent, color: PdfColors.orange700),
-                _buildRow('- Dépôts Partenaires', rapport.totalClientsNousDevons, color: PdfColors.green700),
                 _buildRow('- Shops Que Nous Devons', rapport.totalShopsNousDevons, color: PdfColors.purple700),
                 _buildRow('- Solde Frais du jour', rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour, color: PdfColors.grey700),
                 _buildRow('- Non Servis', rapport.transfertsEnAttente, color: PdfColors.orange700),
+                (() {
+                  final totalSoldePartenaire = rapport.soldeParPartenaire.values.fold(0.0, (sum, solde) => sum + solde);
+                  return _buildRowWithSign('+ Solde Net Partenaires', totalSoldePartenaire, color: totalSoldePartenaire >= 0 ? PdfColors.blue700 : PdfColors.red700);
+                }()),
                 pw.Divider(thickness: 2, color: PdfColors.blue700),
-                _buildRow('= CAPITAL NET', 
-                  rapport.cashDisponibleTotal + 
-                  rapport.totalClientsNousDoivent + 
-                  rapport.totalShopsNousDoivent - 
-                  rapport.totalClientsNousDevons - 
-                  rapport.totalShopsNousDevons - 
-                  (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour) - 
-                  rapport.transfertsEnAttente, 
-                  color: (
-                    rapport.cashDisponibleTotal + 
-                    rapport.totalClientsNousDoivent + 
-                    rapport.totalShopsNousDoivent - 
-                    rapport.totalClientsNousDevons - 
-                    rapport.totalShopsNousDevons - 
-                    (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour) - 
-                    rapport.transfertsEnAttente
-                  ) >= 0 ? PdfColors.blue700 : PdfColors.red700, 
-                  bold: true),
+                _buildRow('= CAPITAL NET', rapport.capitalNet, color: rapport.capitalNet >= 0 ? PdfColors.blue700 : PdfColors.red700, bold: true),
               ],
             ),
           ),
@@ -444,6 +483,48 @@ pw.Widget _buildTransfertRouteRowPDF(TransfertRouteResume route) {
           ],
         ),
         pw.Divider(height: 4, thickness: 0.5),
+      ],
+    ),
+  );
+}
+
+// Nouvelle méthode pour afficher les montants avec signe
+pw.Widget _buildDetailRowWithSign(String observation, String details, double montant, PdfColor color) {
+  return pw.Padding(
+    padding: const pw.EdgeInsets.symmetric(vertical: 1),
+    child: pw.Row(
+      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      children: [
+        pw.Expanded(
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(observation, style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.normal)),
+              if (details.isNotEmpty) pw.Text(details, style: pw.TextStyle(fontSize: 5, color: PdfColors.grey600)),
+            ],
+          ),
+        ),
+        pw.Text(
+          montant < 0 ? '-${montant.abs().toStringAsFixed(2)} USD' : '${montant.toStringAsFixed(2)} USD', 
+          style: pw.TextStyle(fontSize: 6, color: color, fontWeight: pw.FontWeight.bold)
+        ),
+      ],
+    ),
+  );
+}
+
+// Nouvelle méthode pour afficher les totaux avec signe
+pw.Widget _buildRowWithSign(String label, double montant, {PdfColor? color, bool bold = false}) {
+  return pw.Padding(
+    padding: const pw.EdgeInsets.symmetric(vertical: 2),
+    child: pw.Row(
+      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      children: [
+        pw.Text(label, style: pw.TextStyle(fontSize: 7, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
+        pw.Text(
+          montant < 0 ? '-${montant.abs().toStringAsFixed(2)} USD' : '${montant.toStringAsFixed(2)} USD',
+          style: pw.TextStyle(fontSize: 7, color: color, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)
+        ),
       ],
     ),
   );

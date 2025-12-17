@@ -246,9 +246,8 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
   }
 
   /// Calculer le capital net d'un shop selon la formule de clôture
-  /// SITUATION NETTE = Cash Disponible + Partenaires Servis + Shops qui nous doivent 
-  ///                   - Depots Partenaires - Shops que nous Devons - Frais du Jour - Transferts En Attente
-  /// UTILISE LA MÊME FORMULE QUE LE RAPPORT DE CLÔTURE JOURNALIÈRE
+  /// UTILISE DIRECTEMENT rapport.capitalNet calculé par RapportClotureService
+  /// Toute modification de la formule dans RapportClotureService sera automatiquement reflétée ici
   Future<Map<String, dynamic>> _calculateShopNetCapitalDetails(
     ShopModel shop,
     List<OperationModel> operations,
@@ -257,7 +256,7 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
     final shopId = shop.id!;
     
     // 1. Générer le rapport de clôture pour ce shop à la date sélectionnée
-    // Cela calculera automatiquement le Cash Disponible avec la formule correcte
+    // Le rapport calculera automatiquement le Capital NET avec la formule correcte
     final rapport = await RapportClotureService.instance.genererRapport(
       shopId: shopId,
       date: _selectedDate,
@@ -265,43 +264,33 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
       operations: operations,
     );
     
-    // Utiliser le Cash Disponible calculé par le rapport de clôture
-    final cashDisponible = rapport.cashDisponibleTotal;
+    // 2. Utiliser DIRECTEMENT le Capital NET du rapport de clôture
+    // IMPORTANT: Ne pas recalculer ici pour garantir la cohérence avec le rapport de clôture
+    final capitalNet = rapport.capitalNet;
     
-    // 2. Utiliser les créances/dettes clients du rapport de clôture
-    // Partenaires Servis = Clients qui nous doivent (solde négatif)
-    // Depots Partenaires = Clients que nous devons (solde positif)
+    // 3. Extraire les composants pour l'affichage détaillé
+    final cashDisponible = rapport.cashDisponibleTotal;
     final clientsNousDoivent = rapport.totalClientsNousDoivent;
     final clientsNousDevons = rapport.totalClientsNousDevons;
-    
-    // 3. Utiliser les créances/dettes inter-shops du rapport de clôture
     final shopsNousDoivent = rapport.totalShopsNousDoivent;
     final shopsNousDevons = rapport.totalShopsNousDevons;
-    
-    // 4. Frais du Jour du Rapport de Clôture
-    // Solde Frais = Solde Antérieur + Commissions du Jour - Retraits du Jour
     final fraisDuJour = rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour;
-    
-    // 5. Calculer la SITUATION NETTE selon la formule demandée:
-    // SITUATION NETTE = Cash Disponible + Partenaires Servis + Shops qui nous doivent 
-    //                   - Depots Partenaires - Shops que nous Devons - Frais du Jour - Transferts En Attente
-    final situationNette = cashDisponible + clientsNousDoivent + shopsNousDoivent 
-                          - clientsNousDevons - shopsNousDevons - fraisDuJour - rapport.transfertsEnAttente;
+    final totalSoldePartenaire = rapport.soldeParPartenaire.values.fold(0.0, (sum, solde) => sum + solde);
     
     return {
       'shop': shop,
       'cashDisponible': cashDisponible,
-      'clientsNousDoivent': clientsNousDoivent,  // Partenaires Servis
-      'clientsNousDevons': clientsNousDevons,    // Depots Partenaires
-      'shopsNousDoivent': shopsNousDoivent,      // Shops qui nous doivent
-      'shopsNousDevons': shopsNousDevons,        // Shops que nous devons
-      'fraisDuJour': fraisDuJour,                // Frais du Jour (Rapport Cloture)
-      'transfertsEnAttente': rapport.transfertsEnAttente, // Transferts En Attente
+      'clientsNousDoivent': clientsNousDoivent,
+      'clientsNousDevons': clientsNousDevons,
+      'shopsNousDoivent': shopsNousDoivent,
+      'shopsNousDevons': shopsNousDevons,
+      'fraisDuJour': fraisDuJour,
+      'transfertsEnAttente': rapport.transfertsEnAttente,
       'soldeFraisAnterieur': rapport.soldeFraisAnterieur,
       'commissionsFraisDuJour': rapport.commissionsFraisDuJour,
       'retraitsFraisDuJour': rapport.retraitsFraisDuJour,
-      'situationNette': situationNette,          // Nouvelle formule Situation Nette
-      'capitalNet': rapport.capitalNet,          // Capital Net original (pour référence
+      'soldePartenaire': totalSoldePartenaire,
+      'capitalNet': capitalNet,  // Utilise directement rapport.capitalNet (formule du RapportClotureService)
     };
   }
 
@@ -368,7 +357,7 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
         const SizedBox(width: 12),
         Expanded(
           child: Text(
-            'Situation Nette de l\'Entreprise',
+            'Capital NET de l\'Entreprise',
             style: TextStyle(
               fontSize: isMobile ? 20 : 24,
               fontWeight: FontWeight.bold,
@@ -443,22 +432,24 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
             }
             
             final shopCapitals = snapshot.data!;
-            double totalSituationNette = 0.0;
+            double totalCapitalNet = 0.0;
             double totalCashDisponible = 0.0;
             double totalClientsNousDoivent = 0.0;
             double totalClientsNousDevons = 0.0;
             double totalShopsNousDoivent = 0.0;
             double totalShopsNousDevons = 0.0;
             double totalFraisDuJour = 0.0;
+            double totalSoldePartenaire = 0.0;
 
             for (final details in shopCapitals) {
-              totalSituationNette += details['situationNette'] as double;
+              totalCapitalNet += details['capitalNet'] as double;
               totalCashDisponible += details['cashDisponible'] as double;
               totalClientsNousDoivent += details['clientsNousDoivent'] as double;
               totalClientsNousDevons += details['clientsNousDevons'] as double;
               totalShopsNousDoivent += details['shopsNousDoivent'] as double;
               totalShopsNousDevons += details['shopsNousDevons'] as double;
               totalFraisDuJour += details['fraisDuJour'] as double;
+              totalSoldePartenaire += details['soldePartenaire'] as double;
             }
 
         // Trier par capital net décroissant
@@ -487,10 +478,8 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
         partnersWeOwe.sort((a, b) => (b['balance'] as double).compareTo(a['balance'] as double));
 
         // Calcul de la Situation Nette de l'Entreprise
-        // SITUATION NETTE = Cash Disponible + Partenaires Servis + Shops qui nous doivent 
-        //                   - Depots Partenaires - Shops que nous Devons - Frais du Jour
-        // Note: totalSituationNette est déjà calculé par shop avec la bonne formule
-        final companySituationNette = totalSituationNette;
+        // Utilise le Capital NET calculé par le RapportClotureService
+        final companySituationNette = totalCapitalNet;
 
             return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -503,6 +492,7 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
               totalShopsNousDoivent,
               totalShopsNousDevons,
               totalFraisDuJour,
+              totalSoldePartenaire,
               companySituationNette,
               isMobile,
             ),
@@ -595,6 +585,7 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
     double totalShopsNousDoivent,
     double totalShopsNousDevons,
     double totalFraisDuJour,
+    double totalSoldePartenaire,
     double companySituationNette,
     bool isMobile,
   ) {
@@ -606,7 +597,7 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
         child: Column(
           children: [
             Text(
-              'SITUATION NETTE DE L\'ENTREPRISE',
+              'CAPITAL NET DE L\'ENTREPRISE',
               style: TextStyle(
                 fontSize: isMobile ? 16 : 20,
                 fontWeight: FontWeight.bold,
@@ -615,19 +606,19 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
             ),
             const SizedBox(height: 8),
             CalculationTooltip(
-              title: 'Situation Nette Formula',
-              description: 'La situation nette représente la position financière réelle de l\'entreprise',
-              formula: 'Situation Nette = Cash Disponible + Partenaires Servis + Shops qui nous doivent - Dépôts Partenaires - Shops que nous Devons - Frais du Jour - Transferts En Attente',
+              title: 'Capital NET Formula (RapportClotureService)',
+              description: 'Le capital NET représente la position financière réelle de l\'entreprise selon la formule du RapportClotureService',
+              formula: 'Capital NET = Cash Disponible + Shops qui nous doivent - Shops que nous Devons - Frais du Jour - Transferts En Attente + Solde Net Partenaires',
               components: [
                 'Cash Disponible: Cash physique disponible',
-                'Partenaires Servis: Montants que les clients nous doivent',
                 'Shops qui nous doivent: Créances inter-shops',
-                'Dépôts Partenaires: Montants que nous devons aux clients',
                 'Shops que nous Devons: Dettes inter-shops',
                 'Frais du Jour: Solde du compte FRAIS (Rapport Clôture)',
+                'Transferts En Attente: Transferts non servis',
+                'Solde Net Partenaires: Somme des soldes par partenaire (depot - retrait)',
               ],
               child: Text(
-                'Formule: Cash Disponible + Partenaires Servis + Shops qui nous doivent - Dépôts Partenaires - Shops que nous Devons - Frais du Jour - Transferts En Attente',
+                'Formule: Cash Disponible + Shops qui nous doivent - Shops que nous Devons - Frais du Jour - Transferts En Attente + Solde Net Partenaires',
                 style: TextStyle(
                   fontSize: isMobile ? 10 : 12,
                   fontStyle: FontStyle.italic,
@@ -707,8 +698,8 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
   }
 
   Widget _buildShopCapitals(List<Map<String, dynamic>> shopCapitals, bool isMobile) {
-    // Trier par situation nette décroissante
-    shopCapitals.sort((a, b) => (b['situationNette'] as double).compareTo(a['situationNette'] as double));
+    // Trier par capital net décroissant
+    shopCapitals.sort((a, b) => (b['capitalNet'] as double).compareTo(a['capitalNet'] as double));
     
     return Card(
       child: Column(
@@ -725,7 +716,7 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Situation Nette par Shop (${shopCapitals.length} shop(s))',
+                    'Capital NET par Shop (${shopCapitals.length} shop(s))',
                     style: TextStyle(
                       fontSize: isMobile ? 14 : 16,
                       fontWeight: FontWeight.bold,
@@ -745,7 +736,7 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
             itemBuilder: (context, index) {
               final item = shopCapitals[index];
               final shop = item['shop'] as ShopModel;
-              final situationNette = item['situationNette'] as double;
+              final capitalNet = item['capitalNet'] as double;
               final cashDisponible = item['cashDisponible'] as double;
               final clientsNousDoivent = item['clientsNousDoivent'] as double;  // Partenaires Servis
               final clientsNousDevons = item['clientsNousDevons'] as double;    // Depots Partenaires
@@ -757,13 +748,14 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
               final soldeFraisAnterieur = item['soldeFraisAnterieur'] as double;
               final commissionsFraisDuJour = item['commissionsFraisDuJour'] as double;
               final retraitsFraisDuJour = item['retraitsFraisDuJour'] as double;
+              final soldePartenaire = item['soldePartenaire'] as double;  // Solde Partenaire
               
               return ExpansionTile(
                 leading: CircleAvatar(
-                  backgroundColor: situationNette >= 0 ? Colors.green[100] : Colors.red[100],
+                  backgroundColor: capitalNet >= 0 ? Colors.green[100] : Colors.red[100],
                   child: Icon(
                     Icons.store,
-                    color: situationNette >= 0 ? Colors.green[700] : Colors.red[700],
+                    color: capitalNet >= 0 ? Colors.green[700] : Colors.red[700],
                   ),
                 ),
                 title: Text(
@@ -775,11 +767,11 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
                   style: TextStyle(fontSize: isMobile ? 11 : 12, color: Colors.grey[600]),
                 ),
                 trailing: Text(
-                  '${_numberFormat.format(situationNette)} USD',
+                  '${_numberFormat.format(capitalNet)} USD',
                   style: TextStyle(
                     fontSize: isMobile ? 14 : 16,
                     fontWeight: FontWeight.bold,
-                    color: situationNette >= 0 ? Colors.green[700] : Colors.red[700],
+                    color: capitalNet >= 0 ? Colors.green[700] : Colors.red[700],
                   ),
                 ),
                 children: [
@@ -792,7 +784,7 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Détail de la Situation Nette',
+                          'Détail du Capital NET',
                           style: TextStyle(
                             fontSize: isMobile ? 12 : 14,
                             fontWeight: FontWeight.bold,
@@ -814,11 +806,12 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
                             onTap: () => _showTransfertsEnAttenteDetails(context, transfertsEnAttente)),
                         _buildDetailRow('- Frais du Jour (Rapport Clôture)', -fraisDuJour, Colors.deepOrange, isMobile,
                             onTap: () => _showFraisDuJourDetails(context, fraisDuJour, soldeFraisAnterieur, commissionsFraisDuJour, retraitsFraisDuJour)),
+                        _buildDetailRow('+ Solde Net Partenaires', soldePartenaire, soldePartenaire >= 0 ? Colors.blue : Colors.red, isMobile),
                         const Divider(),
                         _buildDetailRow(
-                          '= SITUATION NETTE',
-                          situationNette,
-                          situationNette >= 0 ? Colors.green[700]! : Colors.red[700]!,
+                          '= CAPITAL NET',
+                          capitalNet,
+                          capitalNet >= 0 ? Colors.green[700]! : Colors.red[700]!,
                           isMobile,
                           isBold: true,
                         ),

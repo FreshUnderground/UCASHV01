@@ -841,9 +841,7 @@ class _RapportClotureState extends State<RapportCloture> {
         _buildSection(
           '7️⃣ Dépôts Partenaires',
           [
-            Text('${rapport.clientsNousDevons.length} partenaire(s)', style: const TextStyle(fontWeight: FontWeight.bold)),
-            const Divider(),
-            // Show detailed client list like UI
+           // Show detailed client list like UI
             ...rapport.clientsNousDevons.map((client) => _buildClientRow(
               client.nom,
               client.solde,
@@ -858,7 +856,7 @@ class _RapportClotureState extends State<RapportCloture> {
 
         // Shops Qui Nous qui Doivent
         _buildSection(
-          '8️⃣ Shops Qui Nous qui Doivent (DIFF. DETTES)',
+          '8️⃣ Shops Qui Nous Doivent (DIFF. DETTES)',
           [
             Text('${rapport.shopsNousDoivent.length} shop(s)', style: const TextStyle(fontWeight: FontWeight.bold)),
             const Divider(),
@@ -892,6 +890,95 @@ class _RapportClotureState extends State<RapportCloture> {
           ],
           Colors.purple,
         ),
+        const SizedBox(height: 16),
+
+        // NOUVEAU: Section SOLDE PAR PARTENAIRE
+        _buildSection(
+          '🔟 SOLDE PAR PARTENAIRE',
+          [
+            // Afficher chaque partenaire avec son solde
+            if (rapport.soldeParPartenaire.isEmpty)
+              const Text(
+                'Aucune opération partenaire trouvée',
+                style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey),
+              )
+            else
+              ...rapport.soldeParPartenaire.entries.map((entry) {
+                final solde = entry.value;
+                final color = solde > 0 ? Colors.red : solde < 0 ? Colors.green : Colors.grey;
+                return Column(
+                  children: [
+                    _buildClientRowWithSign(
+                      entry.key, // Nom du partenaire (via shop)
+                      solde,
+                      color,
+                    ),
+                  ],
+                );
+              }).toList(),
+            
+            // Ajouter le total de la section
+            if (rapport.soldeParPartenaire.isNotEmpty) ...[
+              const Divider(),
+              (() {
+                final totalSolde = rapport.soldeParPartenaire.values.fold(0.0, (sum, solde) => sum + solde);
+                final color = totalSolde > 0 ? Colors.red : totalSolde < 0 ? Colors.green : Colors.grey;
+                return _buildTotalRow('SOLDE NET PARTENAIRES', totalSolde, color: color, bold: true);
+              }()),
+            ],
+          ],
+          Colors.blue,
+        ),
+        const SizedBox(height: 16),
+
+        if (rapport.autresShopServis > 0 || rapport.autresShopDepots > 0)
+          _buildSection(
+            '1️⃣1️⃣ AUTRES SHOP',
+            [
+              // SERVIS - Retraits où nous sommes destinataires
+              if (rapport.autresShopServis > 0) ...[
+                const Divider(),
+                _buildCashRow('SERVIS ', rapport.autresShopServis),
+                
+                // Détails SERVIS groupés par client
+                if (rapport.autresShopServisGroupes.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  const Text('  Détail SERVIS par Client :', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  const Divider(),
+                  ...rapport.autresShopServisGroupes.entries.map((entry) => _buildFlotDetailRow(
+                    entry.key, // Nom du client (via shop)
+                    'Retrait servi',
+                    entry.value, // Montant servi
+                    Colors.orange,
+                  )).toList(),
+                ],
+                const SizedBox(height: 8),
+              ],
+              
+              // DEPOT - Dépôts où nous sommes destinataires
+              if (rapport.autresShopDepots > 0) ...[
+                const Divider(),
+                _buildCashRow('DEPOT', rapport.autresShopDepots),
+                
+                // Détails DEPOT groupés par client
+                if (rapport.autresShopDepotsGroupes.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  const Text('  Détail DEPOT par Client :', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  const Divider(),
+                  ...rapport.autresShopDepotsGroupes.entries.map((entry) => _buildFlotDetailRow(
+                    entry.key, // Nom du client (via shop)
+                    'Dépôt reçu',
+                    entry.value, // Montant reçu
+                    Colors.green,
+                  )).toList(),
+                ],
+              ],
+              
+              const Divider(),
+              _buildTotalRow('TOTAL', rapport.autresShopServis + rapport.autresShopDepots, color: Colors.blue, bold: true),
+            ],
+            Colors.blue,
+          ),
       ],
     );
   }
@@ -919,60 +1006,49 @@ class _RapportClotureState extends State<RapportCloture> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
-                        Text(
-              '${(() {
-                final capitalNetValue = rapport.cashDisponibleTotal + 
-                                    rapport.totalClientsNousDoivent + 
-                                    rapport.totalShopsNousDoivent - 
-                                    rapport.totalClientsNousDevons - 
-                                    rapport.totalShopsNousDevons - 
-                                    (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour) - 
-                                    rapport.transfertsEnAttente;
-                return capitalNetValue;
-              }()).toStringAsFixed(2)} USD',
+            Text(
+              '${rapport.capitalNet.toStringAsFixed(2)} USD',
               style: TextStyle(
                 fontSize: 32,
                 fontWeight: FontWeight.bold,
-                color: (() {
-                  final capitalNetValue = rapport.cashDisponibleTotal + 
-                                      rapport.totalClientsNousDoivent + 
-                                      rapport.totalShopsNousDoivent - 
-                                      rapport.totalClientsNousDevons - 
-                                      rapport.totalShopsNousDevons - 
-                                      (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour) - 
-                                      rapport.transfertsEnAttente;
-                  return capitalNetValue >= 0 ? Colors.blue : Colors.red;
-                }()),
+                color: rapport.capitalNet >= 0 ? Colors.blue : Colors.red,
               ),
             ),
                         const Divider(color: Colors.blue),
             const SizedBox(height: 8),
             _buildCashRow('Cash Disponible', rapport.cashDisponibleTotal),
-            _buildCashRow('+ Partenaires Servis', rapport.totalClientsNousDoivent),
             _buildCashRow('+ DIFF. DETTES', rapport.totalShopsNousDoivent),
-            _buildCashRow('- Dépôts Partenaires', rapport.totalClientsNousDevons),
             _buildCashRow('- Shops Que Nous que Devons', rapport.totalShopsNousDevons),
             _buildCashRow('- Solde Frais du jour', rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour),
             _buildCashRow('- Non Servis', rapport.transfertsEnAttente),
+            (() {
+              final totalSoldePartenaire = rapport.soldeParPartenaire.values.fold(0.0, (sum, solde) => sum + solde);
+              return _buildCashRow('+ Solde Net Partenaires', totalSoldePartenaire);
+            }()),
             const Divider(thickness: 2, color: Colors.blue),
             _buildTotalRow('= CAPITAL NET', 
-              rapport.cashDisponibleTotal + 
-              rapport.totalClientsNousDoivent + 
-              rapport.totalShopsNousDoivent - 
-              rapport.totalClientsNousDevons - 
-              rapport.totalShopsNousDevons - 
-              (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour) - 
-              rapport.transfertsEnAttente, 
+              (() {
+                final totalSoldePartenaire = rapport.soldeParPartenaire.values.fold(0.0, (sum, solde) => sum + solde);
+                // EXCLUSION: Depots Partenaires et Partenaires Servis ne sont plus inclus dans le calcul du capital NET
+                return rapport.cashDisponibleTotal + 
+                       rapport.totalShopsNousDoivent - 
+                       rapport.totalShopsNousDevons - 
+                       (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour) - 
+                       rapport.transfertsEnAttente +
+                       totalSoldePartenaire;
+              }()), 
               bold: true, 
-              color: (
-                rapport.cashDisponibleTotal + 
-                rapport.totalClientsNousDoivent + 
-                rapport.totalShopsNousDoivent - 
-                rapport.totalClientsNousDevons - 
-                rapport.totalShopsNousDevons - 
-                (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour) - 
-                rapport.transfertsEnAttente
-              ) >= 0 ? Colors.blue : Colors.red),
+              color: (() {
+                final totalSoldePartenaire = rapport.soldeParPartenaire.values.fold(0.0, (sum, solde) => sum + solde);
+                // EXCLUSION: Depots Partenaires et Partenaires Servis ne sont plus inclus dans le calcul du capital NET
+                final capitalNet = rapport.cashDisponibleTotal + 
+                                   rapport.totalShopsNousDoivent - 
+                                   rapport.totalShopsNousDevons - 
+                                   (rapport.soldeFraisAnterieur + rapport.commissionsFraisDuJour - rapport.retraitsFraisDuJour) - 
+                                   rapport.transfertsEnAttente +
+                                   totalSoldePartenaire;
+                return capitalNet >= 0 ? Colors.blue : Colors.red;
+              }())),
           ],
         ),
       ),
@@ -1260,6 +1336,32 @@ class _RapportClotureState extends State<RapportCloture> {
               fontSize: 10,
               color: color,
               fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClientRowWithSign(String name, double balance, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(
+              name,
+              style: const TextStyle(fontSize: 12),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Text(
+            '${balance < 0 ? "-" : ""}${balance.abs().toStringAsFixed(2)} USD',
+            style: TextStyle(
+              fontSize: 12,
+              color: color,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],

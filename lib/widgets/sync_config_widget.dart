@@ -231,7 +231,7 @@ class _SyncConfigWidgetState extends State<SyncConfigWidget> {
                         child: TextField(
                           controller: _urlController,
                           decoration: const InputDecoration(
-                            hintText: 'https://mahanaim.investee-group.com/server/api',
+                            hintText: 'https://mahanaimeservice.investee-group.com/server/api',
                             prefixIcon: Icon(Icons.link),
                             border: OutlineInputBorder(),
                             contentPadding: EdgeInsets.symmetric(

@@ -7,6 +7,11 @@ class SimModel {
   final String? shopDesignation;
   final double soldeInitial;
   final double soldeActuel;
+  // NOUVEAU: Soldes par devise
+  final double soldeInitialCdf;
+  final double soldeActuelCdf;
+  final double soldeInitialUsd;
+  final double soldeActuelUsd;
   final SimStatus statut;
   final String? motifSuspension;
   final DateTime dateCreation;
@@ -25,6 +30,11 @@ class SimModel {
     this.shopDesignation,
     this.soldeInitial = 0.0,
     this.soldeActuel = 0.0,
+    // NOUVEAU: Soldes par devise
+    this.soldeInitialCdf = 0.0,
+    this.soldeActuelCdf = 0.0,
+    this.soldeInitialUsd = 0.0,
+    this.soldeActuelUsd = 0.0,
     this.statut = SimStatus.active,
     this.motifSuspension,
     required this.dateCreation,
@@ -44,6 +54,10 @@ class SimModel {
     String? shopDesignation,
     double? soldeInitial,
     double? soldeActuel,
+    double? soldeInitialCdf,
+    double? soldeActuelCdf,
+    double? soldeInitialUsd,
+    double? soldeActuelUsd,
     SimStatus? statut,
     String? motifSuspension,
     DateTime? dateCreation,
@@ -62,6 +76,10 @@ class SimModel {
       shopDesignation: shopDesignation ?? this.shopDesignation,
       soldeInitial: soldeInitial ?? this.soldeInitial,
       soldeActuel: soldeActuel ?? this.soldeActuel,
+      soldeInitialCdf: soldeInitialCdf ?? this.soldeInitialCdf,
+      soldeActuelCdf: soldeActuelCdf ?? this.soldeActuelCdf,
+      soldeInitialUsd: soldeInitialUsd ?? this.soldeInitialUsd,
+      soldeActuelUsd: soldeActuelUsd ?? this.soldeActuelUsd,
       statut: statut ?? this.statut,
       motifSuspension: motifSuspension ?? this.motifSuspension,
       dateCreation: dateCreation ?? this.dateCreation,
@@ -83,6 +101,10 @@ class SimModel {
       'shop_designation': shopDesignation,
       'solde_initial': soldeInitial,
       'solde_actuel': soldeActuel,
+      'solde_initial_cdf': soldeInitialCdf,
+      'solde_actuel_cdf': soldeActuelCdf,
+      'solde_initial_usd': soldeInitialUsd,
+      'solde_actuel_usd': soldeActuelUsd,
       'statut': statut.name,
       'motif_suspension': motifSuspension,
       'date_creation': dateCreation.toIso8601String(),
@@ -124,6 +146,10 @@ class SimModel {
       shopDesignation: json['shop_designation'] as String?,
       soldeInitial: (json['solde_initial'] as num?)?.toDouble() ?? 0.0,
       soldeActuel: (json['solde_actuel'] as num?)?.toDouble() ?? 0.0,
+      soldeInitialCdf: (json['solde_initial_cdf'] as num?)?.toDouble() ?? 0.0,
+      soldeActuelCdf: (json['solde_actuel_cdf'] as num?)?.toDouble() ?? 0.0,
+      soldeInitialUsd: (json['solde_initial_usd'] as num?)?.toDouble() ?? 0.0,
+      soldeActuelUsd: (json['solde_actuel_usd'] as num?)?.toDouble() ?? 0.0,
       statut: SimStatus.values.firstWhere(
         (e) => e.name == json['statut'],
         orElse: () => SimStatus.active,

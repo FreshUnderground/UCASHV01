@@ -39,6 +39,7 @@ import '../services/deletion_service.dart';
 import '../widgets/partner_net_position_widget.dart';
 import '../widgets/reports/dettes_intershop_report.dart';
 import '../widgets/admin_flot_dialog.dart';
+import '../widgets/admin_initialization_widget.dart';
 
 class DashboardAdminPage extends StatefulWidget {
   const DashboardAdminPage({super.key});
@@ -56,35 +57,39 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
 
   // Les clés de menu qui seront traduites dynamiquement
   List<String> _getMenuItems(AppLocalizations l10n) => [
-    l10n.dashboard,
-    l10n.expenses,
-    l10n.shops,
-    l10n.agents,
-    'Administrateurs',
-    l10n.partners,
-    l10n.ratesAndCommissions,
-    l10n.reports,
-    'Dettes Intershop',
-    l10n.configuration,
-    'Suppressions',
-    'Validations Admin',  // ✅ NOUVEAU: Pour valider les demandes de suppression
-    'Corbeille',
+    l10n.dashboard,           // 0
+    l10n.expenses,            // 1
+    l10n.shops,               // 2
+    l10n.agents,              // 3
+    'Administrateurs',        // 4
+    'VIRTUEL',                // 5 - ✅ 6ème position (index 5)
+    l10n.partners,            // 6
+    l10n.ratesAndCommissions, // 7
+    l10n.reports,             // 8
+    'Dettes Intershop',       // 9
+    l10n.configuration,       // 10
+    'Suppressions',           // 11
+    'Validations Admin',      // 12
+    'Corbeille',              // 13
+    'Initialisation',         // 14
   ];
 
   final List<IconData> _menuIcons = [
-    Icons.dashboard,
-    Icons.account_balance_wallet,
-    Icons.store,
-    Icons.people,
-    Icons.admin_panel_settings,
-    Icons.account_circle,
-    Icons.currency_exchange,
-    Icons.analytics,
-    Icons.swap_horiz,
-    Icons.settings,
-    Icons.delete_outline,
-    Icons.how_to_reg,  // ✅ NOUVEAU: Icône pour Validations Admin
-    Icons.restore_from_trash,
+    Icons.dashboard,              // 0
+    Icons.account_balance_wallet, // 1
+    Icons.store,                  // 2
+    Icons.people,                 // 3
+    Icons.admin_panel_settings,   // 4
+    Icons.mobile_friendly,        // 5 - ✅ VIRTUEL
+    Icons.account_circle,         // 6
+    Icons.currency_exchange,      // 7
+    Icons.analytics,              // 8
+    Icons.swap_horiz,             // 9
+    Icons.settings,               // 10
+    Icons.delete_outline,         // 11
+    Icons.how_to_reg,             // 12 - Validations Admin
+    Icons.restore_from_trash,     // 13
+    Icons.settings_suggest,       // 14 - Initialisation
   ];
 
   @override
@@ -372,24 +377,24 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
                       ),
                     ),
                     onTap: () async {
-                      if (index == 5) {
-                        // Partenaires (index 5)
+                      if (index == 6) {
+                        // Partenaires (index 6)
                         Navigator.pop(context);
                         await _handlePartenairesSelection();
-                      } else if (index == 7) {
-                        // Rapports (index 7) - Sync d'abord si online
+                      } else if (index == 8) {
+                        // Rapports (index 8) - Sync d'abord si online
                         Navigator.pop(context);
                         await _handleRapportsSelection();
-                      } else if (index == 10) {
-                        // Suppressions (index 10)
+                      } else if (index == 11) {
+                        // Suppressions (index 11)
                         Navigator.pop(context);
                         await _handleSuppressionsSelection();
-                      } else if (index == 11) {
-                        // Validations Admin (index 11)
+                      } else if (index == 12) {
+                        // Validations Admin (index 12)
                         Navigator.pop(context);
                         await _handleValidationsAdminSelection();
-                      } else if (index == 12) {
-                        // Corbeille (index 12)
+                      } else if (index == 13) {
+                        // Corbeille (index 13)
                         Navigator.pop(context);
                         await _handleCorbeilleSelection();
                       } else {
@@ -499,20 +504,20 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
                       ),
                     ),
                     onTap: () async {
-                      if (index == 5) {
-                        // Partenaires (index 5)
+                      if (index == 6) {
+                        // Partenaires (index 6)
                         await _handlePartenairesSelection();
-                      } else if (index == 7) {
-                        // Rapports (index 7) - Sync d'abord si online
+                      } else if (index == 8) {
+                        // Rapports (index 8) - Sync d'abord si online
                         await _handleRapportsSelection();
-                      } else if (index == 10) {
-                        // Suppressions (index 10)
-                        await _handleSuppressionsSelection();
                       } else if (index == 11) {
-                        // Validations Admin (index 11)
-                        await _handleValidationsAdminSelection();
+                        // Suppressions (index 11)
+                        await _handleSuppressionsSelection();
                       } else if (index == 12) {
-                        // Corbeille (index 12)
+                        // Validations Admin (index 12)
+                        await _handleValidationsAdminSelection();
+                      } else if (index == 13) {
+                        // Corbeille (index 13)
                         await _handleCorbeilleSelection();
                       } else {
                         setState(() {
@@ -543,21 +548,25 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
       case 4:
         return _buildAdminManagementContent();
       case 5:
-        return _isSyncingClients ? _buildSyncingClientsIndicator() : _buildClientsContent();
+        return _buildVirtuelContent();  // ✅ VIRTUEL à la 6ème position
       case 6:
-        return _buildTauxCommissionsContent();
+        return _isSyncingClients ? _buildSyncingClientsIndicator() : _buildClientsContent();
       case 7:
-        return _isSyncingRapports ? _buildSyncingIndicator('Synchronisation des opérations...') : _buildReportsContent();
+        return _buildTauxCommissionsContent();
       case 8:
-        return _buildDettesIntershopContent();
+        return _isSyncingRapports ? _buildSyncingIndicator('Synchronisation des opérations...') : _buildReportsContent();
       case 9:
-        return _buildConfigurationContent();
+        return _buildDettesIntershopContent();
       case 10:
-        return _isSyncingDeletions ? _buildSyncingIndicator('Synchronisation des opérations...') : const AdminDeletionPage();
+        return _buildConfigurationContent();
       case 11:
-        return const AdminDeletionValidationWidget();  // ✅ NOUVEAU: Validations Admin
+        return _isSyncingDeletions ? _buildSyncingIndicator('Synchronisation des opérations...') : const AdminDeletionPage();
       case 12:
+        return const AdminDeletionValidationWidget();  // Validations Admin
+      case 13:
         return _isSyncingTrash ? _buildSyncingIndicator('Chargement de la corbeille...') : const TrashBinWidget(showAll: true);
+      case 14:
+        return const AdminInitializationWidget();  // Initialisation
       default:
         return _buildDashboardContent();
     }
@@ -815,7 +824,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
     if (hasConnection) {
       setState(() {
         _isSyncingRapports = true;
-        _selectedIndex = 7;  // Rapports (index 7)
+        _selectedIndex = 8;  // Rapports (index 8)
       });
 
       try {
@@ -870,7 +879,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
       // Pas de connexion - afficher directement avec les données locales
       debugPrint('📡 [ADMIN RAPPORTS] Hors ligne - données locales');
       setState(() {
-        _selectedIndex = 7;
+        _selectedIndex = 8;
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -893,7 +902,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
   Future<void> _handlePartenairesSelection() async {
     setState(() {
       _isSyncingClients = true;
-      _selectedIndex = 5;  // Partenaires (index 5)
+      _selectedIndex = 6;  // Partenaires (index 6)
     });
 
     try {
@@ -957,7 +966,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
   Future<void> _handleSuppressionsSelection() async {
     setState(() {
       _isSyncingDeletions = true;  // ✅ Activer le loader
-      _selectedIndex = 10;  // Suppressions (index 10)
+      _selectedIndex = 11;  // Suppressions (index 11)
     });
 
     try {
@@ -1011,7 +1020,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
   /// ✅ NOUVEAU: Handler pour Validations Admin
   Future<void> _handleValidationsAdminSelection() async {
     setState(() {
-      _selectedIndex = 11;  // Validations Admin (index 11)
+      _selectedIndex = 12;  // Validations Admin (index 12)
     });
 
     try {
@@ -1027,7 +1036,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
   Future<void> _handleCorbeilleSelection() async {
     setState(() {
       _isSyncingTrash = true;  // ✅ Activer le loader
-      _selectedIndex = 12;  // Corbeille (index 12)
+      _selectedIndex = 13;  // Corbeille (index 13)
     });
 
     try {

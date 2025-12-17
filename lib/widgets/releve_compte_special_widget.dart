@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import '../models/compte_special_model.dart';
 import '../services/compte_special_service.dart';
 
@@ -20,6 +21,7 @@ class ReleveCompteSpecialWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final service = CompteSpecialService.instance;
     final transactions = typeCompte == TypeCompteSpecial.FRAIS
         ? service.getFrais(shopId: shopId, startDate: startDate, endDate: endDate)
@@ -29,8 +31,9 @@ class ReleveCompteSpecialWidget extends StatelessWidget {
         ? service.getSoldeFrais(shopId: shopId, startDate: startDate, endDate: endDate)
         : service.getSoldeDepense(shopId: shopId, startDate: startDate, endDate: endDate);
     
-    final numberFormat = NumberFormat('#,##0.00', 'fr_FR');
-    final dateFormat = DateFormat('dd/MM/yyyy');
+    final locale = Localizations.localeOf(context).toString();
+    final numberFormat = NumberFormat('#,##0.00', locale);
+    final dateFormat = DateFormat('dd/MM/yyyy', locale);
     
     return Card(
       margin: const EdgeInsets.all(16),
@@ -57,14 +60,14 @@ class ReleveCompteSpecialWidget extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'RELEVÉ ${typeCompte.label.toUpperCase()}',
+                        '${l10n.statement.toUpperCase()} ${_getAccountLabel(typeCompte, l10n).toUpperCase()}',
                         style: const TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       Text(
-                        'Période: ${dateFormat.format(startDate)} - ${dateFormat.format(endDate)}',
+                        '${l10n.period}: ${dateFormat.format(startDate)} - ${dateFormat.format(endDate)}',
                         style: const TextStyle(color: Colors.grey),
                       ),
                     ],
@@ -85,31 +88,31 @@ class ReleveCompteSpecialWidget extends StatelessWidget {
               child: Column(
                 children: [
                   _buildSummaryRow(
-                    'Nombre de transactions',
+                    l10n.transactionsCount,
                     transactions.length.toString(),
                   ),
                   if (typeCompte == TypeCompteSpecial.FRAIS) ...[
                     _buildSummaryRow(
-                      'Commissions clients',
+                      l10n.clientCommissions,
                       '\$${numberFormat.format(transactions.where((t) => t.typeTransaction == TypeTransactionCompte.COMMISSION_AUTO).fold(0.0, (sum, t) => sum + t.montant))}',
                     ),
                     _buildSummaryRow(
-                      'Retraits Boss',
+                      l10n.bossWithdrawals,
                       '\$${numberFormat.format(transactions.where((t) => t.typeTransaction == TypeTransactionCompte.RETRAIT).fold(0.0, (sum, t) => sum + t.montant.abs()))}',
                     ),
                   ] else ...[
                     _buildSummaryRow(
-                      'Dépôts Boss',
+                      l10n.bossDeposits,
                       '\$${numberFormat.format(transactions.where((t) => t.typeTransaction == TypeTransactionCompte.DEPOT).fold(0.0, (sum, t) => sum + t.montant))}',
                     ),
                     _buildSummaryRow(
-                      'Sorties/Dépenses',
+                      l10n.expensesOutflows,
                       '\$${numberFormat.format(transactions.where((t) => t.typeTransaction == TypeTransactionCompte.SORTIE).fold(0.0, (sum, t) => sum + t.montant.abs()))}',
                     ),
                   ],
                   const Divider(),
                   _buildSummaryRow(
-                    'SOLDE',
+                    l10n.balance.toUpperCase(),
                     '\$${numberFormat.format(solde)}',
                     isTotal: true,
                     color: solde >= 0 ? Colors.green : Colors.red,
@@ -121,19 +124,19 @@ class ReleveCompteSpecialWidget extends StatelessWidget {
             const SizedBox(height: 24),
             
             // Liste des transactions
-            const Text(
-              'Détail des transactions',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Text(
+              l10n.transactionsDetails,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             
             if (transactions.isEmpty)
-              const Center(
+              Center(
                 child: Padding(
-                  padding: EdgeInsets.all(32),
+                  padding: const EdgeInsets.all(32),
                   child: Text(
-                    'Aucune transaction pour cette période',
-                    style: TextStyle(color: Colors.grey),
+                    l10n.noTransactionsForPeriod,
+                    style: const TextStyle(color: Colors.grey),
                   ),
                 ),
               )
@@ -161,7 +164,7 @@ class ReleveCompteSpecialWidget extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            DateFormat('dd/MM/yyyy HH:mm').format(transaction.dateTransaction),
+                            DateFormat('dd/MM/yyyy HH:mm', locale).format(transaction.dateTransaction),
                             style: const TextStyle(fontSize: 10),
                           ),
                           Text(
@@ -223,5 +226,14 @@ class ReleveCompteSpecialWidget extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _getAccountLabel(TypeCompteSpecial type, AppLocalizations l10n) {
+    switch (type) {
+      case TypeCompteSpecial.FRAIS:
+        return l10n.feesAccount;
+      case TypeCompteSpecial.DEPENSE:
+        return l10n.expenseAccount;
+    }
   }
 }

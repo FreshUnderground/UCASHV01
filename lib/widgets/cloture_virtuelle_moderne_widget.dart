@@ -628,7 +628,7 @@ class _ClotureVirtuelleModerneWidgetState extends State<ClotureVirtuelleModerneW
           const SizedBox(height: 8),
           Text(
             label.contains('Frais') || label.contains('Solde') 
-              ? '\$${value.toStringAsFixed(2)}'
+              ? '\$${value.toStringAsFixed(2)} USD'
               : '${value.toStringAsFixed(0)}',
             style: TextStyle(
               fontSize: 14,

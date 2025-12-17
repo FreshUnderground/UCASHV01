@@ -7,7 +7,7 @@ import 'dart:convert';
 void main() async {
   print('\n🔍 ======== DIAGNOSTIC SYNCHRONISATION SIMS ========\n');
   
-  const serverUrl = 'https://mahanaim.investee-group.com/server/api/sync/sims/changes.php';
+  const serverUrl = 'https://mahanaimeservice.investee-group.com/server/api/sync/sims/changes.php';
   
   try {
     // 1. Vérifier les SIMs sur le serveur

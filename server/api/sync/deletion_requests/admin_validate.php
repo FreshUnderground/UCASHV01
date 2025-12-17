@@ -83,7 +83,7 @@ try {
         error_log("[DELETION_REQUESTS] Available keys in data: " . json_encode(array_keys($data ?? [])));
     }
     
-    if (!$adminId) {
+    if ($adminId === null || $adminId === '') {
         error_log("[DELETION_REQUESTS] ERROR: Missing validated_by_admin_id field");
     }
     
@@ -91,17 +91,18 @@ try {
         error_log("[DELETION_REQUESTS] ERROR: Missing validated_by_admin_name field");
     }
     
-    if (!$codeOps || !$adminId || !$adminName) {
+    if (!$codeOps || $adminId === null || $adminId === '' || !$adminName) {
         error_log("[DELETION_REQUESTS] Missing required fields: code_ops=$codeOps, admin_id=$adminId, admin_name=$adminName");
         http_response_code(400);
         echo json_encode([
             'success' => false,
             'message' => 'Champs requis manquants: code_ops, validated_by_admin_id, validated_by_admin_name',
+            'error_code' => 'MISSING_FIELDS',
             'received_data' => $data,
             'available_fields' => $data ? array_keys($data) : [],
             'debug_info' => [
                 'code_ops_present' => !empty($codeOps),
-                'admin_id_present' => !empty($adminId),
+                'admin_id_present' => ($adminId !== null && $adminId !== ''),
                 'admin_name_present' => !empty($adminName)
             ]
         ]);
@@ -151,6 +152,21 @@ try {
         ':last_modified_by' => "admin_$adminName",
         ':code_ops' => $codeOps
     ]);
+    
+    // VALIDATION: Vérifier que le statut a bien été mis à jour
+    if ($result && $stmt->rowCount() > 0) {
+        $verifyStmt = $db->prepare("SELECT statut FROM deletion_requests WHERE code_ops = ?");
+        $verifyStmt->execute([$codeOps]);
+        $actualStatus = $verifyStmt->fetchColumn();
+        
+        if ($actualStatus !== 'admin_validee') {
+            error_log("[DELETION_REQUESTS] WARNING: Status not updated correctly. Expected 'admin_validee', got '$actualStatus'");
+            // Force update with explicit status
+            $forceStmt = $db->prepare("UPDATE deletion_requests SET statut = 'admin_validee' WHERE code_ops = ?");
+            $forceStmt->execute([$codeOps]);
+            error_log("[DELETION_REQUESTS] Force updated status to 'admin_validee'");
+        }
+    }
     
     error_log("[DELETION_REQUESTS] Update result: " . ($result ? 'true' : 'false') . ", Rows affected: " . $stmt->rowCount());
     

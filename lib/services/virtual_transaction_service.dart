@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/virtual_transaction_model.dart';
 import 'local_db.dart';
 import 'sync_service.dart';
 import 'sim_service.dart';
+import 'currency_service.dart';
+import 'virtual_transaction_sync_service.dart';
 
 /// Service de gestion des transactions virtuelles (Mobile Money)
 class VirtualTransactionService extends ChangeNotifier {
@@ -14,10 +17,44 @@ class VirtualTransactionService extends ChangeNotifier {
   List<VirtualTransactionModel> _transactions = [];
   bool _isLoading = false;
   String? _errorMessage;
+  VirtualTransactionSyncService _syncService = VirtualTransactionSyncService();
+  bool _isSyncing = false;
+  String? _syncError;
 
   List<VirtualTransactionModel> get transactions => _transactions;
   bool get isLoading => _isLoading;
+  bool get isSyncing => _isSyncing;
   String? get errorMessage => _errorMessage;
+  String? get syncError => _syncError;
+  VirtualTransactionSyncService get syncService => _syncService;
+
+  /// Initialiser le service avec l'ID du shop
+  Future<void> initialize(int shopId) async {
+    try {
+      debugPrint('🔄 Initialisation VirtualTransactionService pour shop: $shopId');
+      await _syncService.initialize(shopId);
+      
+      // Écouter les changements d'état de synchronisation
+      _syncService.addListener(_handleSyncStatusChange);
+      
+      // Charger les transactions initiales
+      await loadTransactions(shopId: shopId);
+      
+      debugPrint('✅ VirtualTransactionService initialisé avec succès');
+    } catch (e, stackTrace) {
+      _errorMessage = 'Erreur initialisation VirtualTransactionService: $e';
+      debugPrint('❌ $_errorMessage');
+      debugPrint('Stack trace: $stackTrace');
+      rethrow;
+    }
+  }
+  
+  /// Gérer les changements d'état de synchronisation
+  void _handleSyncStatusChange() {
+    _isSyncing = _syncService.isSyncing;
+    _syncError = _syncService.error;
+    notifyListeners();
+  }
 
   /// Charger toutes les transactions (optionnellement filtrées)
   Future<void> loadTransactions({
@@ -27,15 +64,17 @@ class VirtualTransactionService extends ChangeNotifier {
     DateTime? dateFin,
     VirtualTransactionStatus? statut,
     bool cleanDuplicates = false, // Nouveau paramètre pour forcer le nettoyage
+    bool forceSync = false, // Forcer une synchronisation avec le serveur
   }) async {
     _setLoading(true);
     try {
       debugPrint('🔍 [VirtualTransactionService] Chargement transactions...');
-      debugPrint('   Filtre shopId: $shopId (${shopId?.runtimeType})');
+      debugPrint('   Filtre shopId: $shopId');
       debugPrint('   Filtre SIM: $simNumero');
       debugPrint('   Filtre dateDebut: $dateDebut');
       debugPrint('   Filtre dateFin: $dateFin');
       debugPrint('   Filtre statut: $statut');
+      debugPrint('   Forcer sync: $forceSync');
       
       // Nettoyer les doublons si demandé
       if (cleanDuplicates) {
@@ -45,6 +84,13 @@ class VirtualTransactionService extends ChangeNotifier {
         }
       }
       
+      // Si forceSync est vrai, forcer une synchronisation avant de charger
+      if (forceSync) {
+        debugPrint('🔄 Forçage de la synchronisation...');
+        await _syncService.syncTransactions();
+      }
+      
+      // Charger depuis la base de données locale
       _transactions = await LocalDB.instance.getAllVirtualTransactions(
         shopId: shopId,
         simNumero: simNumero,
@@ -57,14 +103,16 @@ class VirtualTransactionService extends ChangeNotifier {
       
       // Log transaction details for debugging
       if (_transactions.isNotEmpty) {
-        debugPrint('📋 [VirtualTransactionService] Transaction details:');
-        for (var i = 0; i < _transactions.length && i < 5; i++) {
+        debugPrint('📋 Transaction details:');
+        for (var i = 0; i < _transactions.length && i < 3; i++) {
           final t = _transactions[i];
-          debugPrint('   #$i: ${t.reference} - Shop: ${t.shopId} (${t.shopId.runtimeType}) - Status: ${t.statut.name} - SIM: ${t.simNumero}');
+          debugPrint('   #$i: ${t.reference} - ${t.montantVirtuel} ${t.devise} - ${t.statut.name}');
         }
-        if (_transactions.length > 5) {
-          debugPrint('   ... and ${_transactions.length - 5} more transactions');
+        if (_transactions.length > 3) {
+          debugPrint('   ... et ${_transactions.length - 3} transactions supplémentaires');
         }
+      } else {
+        debugPrint('ℹ️ Aucune transaction trouvée avec les filtres actuels');
       }
       
       _errorMessage = null;
@@ -76,6 +124,7 @@ class VirtualTransactionService extends ChangeNotifier {
       debugPrint('📚 Stack trace: $stackTrace');
       _setLoading(false);
       notifyListeners();
+      rethrow;
     }
   }
 
@@ -84,6 +133,7 @@ class VirtualTransactionService extends ChangeNotifier {
     required String reference,
     required double montantVirtuel,
     required double frais,
+    String devise = 'USD', // Support USD et CDF
     required String simNumero,
     required int shopId,
     String? shopDesignation,
@@ -115,6 +165,7 @@ class VirtualTransactionService extends ChangeNotifier {
         montantVirtuel: montantVirtuel,
         frais: frais,
         montantCash: montantCash,
+        devise: devise, // Utiliser la devise sélectionnée
         simNumero: simNumero,
         shopId: shopId,
         shopDesignation: shopDesignation,
@@ -141,8 +192,8 @@ class VirtualTransactionService extends ChangeNotifier {
       // Recharger les transactions
       await loadTransactions(shopId: shopId);
       
-      // Synchronisation en arrière-plan
-      _syncInBackground();
+      // Ajouter à la file de synchronisation
+      await _addToSyncQueue(savedTransaction);
       
       _errorMessage = null;
       _setLoading(false);
@@ -159,6 +210,7 @@ class VirtualTransactionService extends ChangeNotifier {
   }
 
   /// Valider une transaction (servir le client)
+  /// NOUVEAU: Conversion automatique CDF → USD pour le cash
   Future<bool> validateTransaction({
     required VirtualTransactionModel transaction,
     required String clientNom,
@@ -171,6 +223,7 @@ class VirtualTransactionService extends ChangeNotifier {
       debugPrint('✅ [VirtualTransactionService] Validation transaction...');
       debugPrint('   ID: ${transaction.id}');
       debugPrint('   Référence: ${transaction.reference}');
+      debugPrint('   Devise: ${transaction.devise}');
       debugPrint('   Client: $clientNom');
       debugPrint('   Commission saisie: $commission (Frais initiaux: ${transaction.frais})');
       
@@ -191,15 +244,26 @@ class VirtualTransactionService extends ChangeNotifier {
         return false;
       }
       
-      // Calculer le montant cash avec la commission saisie
-      final montantCash = transaction.montantVirtuel - commission;
-      debugPrint('   Calcul: Virtuel ${transaction.montantVirtuel} - Commission $commission = Cash $montantCash');
+      // NOUVEAU: Calcul du cash selon la devise
+      double montantCashUsd;
+      
+      if (transaction.devise == 'CDF') {
+        // Conversion CDF → USD pour le cash
+        final montantVirtuelApresCommission = transaction.montantVirtuel - commission;
+        montantCashUsd = CurrencyService.instance.convertCdfToUsd(montantVirtuelApresCommission);
+        debugPrint('   Calcul CDF: Virtuel ${transaction.montantVirtuel} CDF - Commission $commission CDF = ${montantVirtuelApresCommission} CDF');
+        debugPrint('   Conversion: ${montantVirtuelApresCommission} CDF → \$${montantCashUsd.toStringAsFixed(2)} USD (taux: ${CurrencyService.instance.tauxCdfToUsd})');
+      } else {
+        // Transaction déjà en USD
+        montantCashUsd = transaction.montantVirtuel - commission;
+        debugPrint('   Calcul USD: Virtuel \$${transaction.montantVirtuel} - Commission \$$commission = Cash \$${montantCashUsd.toStringAsFixed(2)}');
+      }
 
       final updatedTransaction = transaction.copyWith(
         clientNom: clientNom,
         clientTelephone: clientTelephone,
         frais: commission, // Mettre à jour avec la commission saisie
-        montantCash: montantCash, // Mettre à jour le montant cash
+        montantCash: montantCashUsd, // TOUJOURS en USD pour le cash
         statut: VirtualTransactionStatus.validee,
         dateValidation: DateTime.now(), // Définie UNE SEULE FOIS
         lastModifiedAt: DateTime.now(),
@@ -208,7 +272,7 @@ class VirtualTransactionService extends ChangeNotifier {
       );
 
       await LocalDB.instance.updateVirtualTransaction(updatedTransaction);
-      debugPrint('✅ [VirtualTransactionService] Transaction validée avec commission $commission');
+      debugPrint('✅ [VirtualTransactionService] Transaction validée - Cash à donner: \$${montantCashUsd.toStringAsFixed(2)} USD');
       
       // Mettre à jour le solde de la SIM (augmenter virtuel)
       await _updateSimBalance(updatedTransaction);
@@ -216,8 +280,8 @@ class VirtualTransactionService extends ChangeNotifier {
       // Recharger les transactions
       await loadTransactions(shopId: transaction.shopId);
       
-      // Synchronisation en arrière-plan
-      _syncInBackground();
+      // Ajouter à la file de synchronisation
+      await _addToSyncQueue(updatedTransaction);
       
       _errorMessage = null;
       _setLoading(false);
@@ -275,8 +339,8 @@ class VirtualTransactionService extends ChangeNotifier {
       // Recharger les transactions
       await loadTransactions(shopId: transaction.shopId);
       
-      // Synchronisation en arrière-plan
-      _syncInBackground();
+      // Ajouter à la file de synchronisation
+      await _addToSyncQueue(updatedTransaction);
       
       _errorMessage = null;
       _setLoading(false);
@@ -304,6 +368,7 @@ class VirtualTransactionService extends ChangeNotifier {
   }
 
   /// Obtenir les statistiques quotidiennes
+  /// IMPORTANT: Sépare les captures (dateEnregistrement) du cash servi (dateValidation)
   Future<Map<String, dynamic>> getDailyStats({
     required int shopId,
     DateTime? date,
@@ -313,26 +378,49 @@ class VirtualTransactionService extends ChangeNotifier {
       final startOfDay = DateTime(targetDate.year, targetDate.month, targetDate.day);
       final endOfDay = DateTime(targetDate.year, targetDate.month, targetDate.day, 23, 59, 59);
       
-      final dayTransactions = await LocalDB.instance.getAllVirtualTransactions(
+      // Récupérer TOUTES les transactions du shop (pas de filtre de date ici)
+      final allTransactions = await LocalDB.instance.getAllVirtualTransactions(
         shopId: shopId,
-        dateDebut: startOfDay,
-        dateFin: endOfDay,
       );
       
-      final enAttente = dayTransactions.where((t) => t.statut == VirtualTransactionStatus.enAttente).toList();
-      final validees = dayTransactions.where((t) => t.statut == VirtualTransactionStatus.validee).toList();
+      // CAPTURES DU JOUR: Basées sur la DATE D'ENREGISTREMENT
+      final capturesDuJour = allTransactions.where((t) => 
+        t.dateEnregistrement.isAfter(startOfDay.subtract(const Duration(seconds: 1))) &&
+        t.dateEnregistrement.isBefore(endOfDay.add(const Duration(seconds: 1)))
+      ).toList();
       
+      // SERVICES DU JOUR: Basées sur la DATE DE VALIDATION
+      final servicesDuJour = allTransactions.where((t) => 
+        t.statut == VirtualTransactionStatus.validee &&
+        t.dateValidation != null &&
+        t.dateValidation!.isAfter(startOfDay.subtract(const Duration(seconds: 1))) &&
+        t.dateValidation!.isBefore(endOfDay.add(const Duration(seconds: 1)))
+      ).toList();
+      
+      final enAttente = capturesDuJour.where((t) => t.statut == VirtualTransactionStatus.enAttente).toList();
+      final validees = capturesDuJour.where((t) => t.statut == VirtualTransactionStatus.validee).toList();
+      
+      // Statistiques des CAPTURES (dateEnregistrement)
       final totalVirtuelEncaisse = validees.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
       final totalFrais = validees.fold<double>(0, (sum, t) => sum + t.frais);
-      final totalCashServi = validees.fold<double>(0, (sum, t) => sum + t.montantCash);
+      
+      // CASH SERVI: Basé sur les services du jour (dateValidation)
+      final totalCashServi = servicesDuJour.fold<double>(0, (sum, t) => sum + t.montantCash);
+      
+      debugPrint('📊 [VirtualTransactionService] Stats quotidiennes pour ${targetDate.toIso8601String().split('T')[0]}:');
+      debugPrint('   Captures du jour (dateEnregistrement): ${capturesDuJour.length}');
+      debugPrint('   Services du jour (dateValidation): ${servicesDuJour.length}');
+      debugPrint('   Cash servi (validation): ${totalCashServi.toStringAsFixed(2)} USD');
       
       return {
-        'total_transactions': dayTransactions.length,
+        'total_transactions': capturesDuJour.length,
         'transactions_en_attente': enAttente.length,
         'transactions_validees': validees.length,
         'total_virtuel_encaisse': totalVirtuelEncaisse,
         'total_frais': totalFrais,
-        'total_cash_servi': totalCashServi,
+        'total_cash_servi': totalCashServi, // Basé sur dateValidation
+        'services_du_jour': servicesDuJour.length, // NOUVEAU: Nombre de services
+        'captures_du_jour': capturesDuJour.length, // NOUVEAU: Nombre de captures
       };
     } catch (e) {
       debugPrint('❌ [VirtualTransactionService] Erreur stats: $e');
@@ -367,16 +455,48 @@ class VirtualTransactionService extends ChangeNotifier {
     }
   }
 
-  /// Synchronisation en arrière-plan
-  void _syncInBackground() {
-    Future.delayed(const Duration(milliseconds: 500), () {
-      try {
-        SyncService().syncAll();
-        debugPrint('🔄 Synchronisation en arrière-plan déclenchée');
-      } catch (e) {
-        debugPrint('⚠️ Erreur sync en arrière-plan: $e');
+  /// Forcer une synchronisation complète
+  Future<bool> syncNow() async {
+    try {
+      _isSyncing = true;
+      _syncError = null;
+      notifyListeners();
+      
+      debugPrint('🔄 Démarrage manuel de la synchronisation...');
+      final success = await _syncService.syncTransactions();
+      
+      if (success) {
+        // Recharger les données après synchronisation
+        await loadTransactions(forceSync: false);
       }
-    });
+      
+      return success;
+    } catch (e) {
+      _syncError = 'Erreur synchronisation: $e';
+      debugPrint('❌ $_syncError');
+      return false;
+    } finally {
+      _isSyncing = false;
+      notifyListeners();
+    }
+  }
+  
+  @override
+  void dispose() {
+    _syncService.removeListener(_handleSyncStatusChange);
+    super.dispose();
+  }
+
+  /// Ajouter une transaction à la file de synchronisation
+  Future<void> _addToSyncQueue(VirtualTransactionModel transaction) async {
+    try {
+      await _syncService.addToSyncQueue(transaction);
+      debugPrint('🔄 Transaction ajoutée à la file de synchronisation: ${transaction.reference}');
+    } catch (e, stackTrace) {
+      debugPrint('⚠️ Erreur ajout à la file de synchronisation: $e');
+      debugPrint('Stack trace: $stackTrace');
+      rethrow;
+    }
   }
 
   void _setLoading(bool value) {

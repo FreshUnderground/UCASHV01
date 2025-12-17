@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:ucashv01/models/operation_model.dart';
 import '../models/client_model.dart';
 import '../data/initial_client_data.dart';
 import 'local_db.dart';
@@ -166,6 +167,100 @@ class ClientService extends ChangeNotifier {
       return false;
     } finally {
       _setLoading(false);
+    }
+  }
+
+  // Récupérer le solde initialisé d'un client pour un shop spécifique
+  Future<double> getSoldeInitialise(int clientId, int shopId) async {
+    try {
+      final operations = await LocalDB.instance.getAllOperations();
+      
+      // Filtrer les opérations d'initialisation pour ce client et ce shop
+      final initialisations = operations.where((op) =>
+          op.clientId == clientId &&
+          op.shopSourceId == shopId &&
+          op.type == OperationType.depot &&
+          op.isAdministrative &&
+          op.observation?.contains('ouverture') == true
+      ).toList();
+      
+      // Calculer le total des initialisations
+      double total = 0.0;
+      for (final op in initialisations) {
+        total += op.montantNet;
+      }
+      
+      return total;
+    } catch (e) {
+      debugPrint('Erreur lors de la récupération du solde initialisé: $e');
+      return 0.0;
+    }
+  }
+
+  // Initialiser le solde d'un client sans impacter le cash disponible
+  Future<bool> initialiserSoldeClient({
+    required int clientId,
+    required double montantInitial,
+    required int shopId,
+    required int agentId,
+    String? observation,
+    ModePaiement modePaiement = ModePaiement.cash,
+  }) async {
+    try {
+      // Vérifier que le client existe
+      final client = _clients.firstWhere(
+        (c) => c.id == clientId,
+        orElse: () => throw Exception('Client introuvable'),
+      );
+
+      // Déterminer le type d'opération selon le montant
+      // Montant positif = nous leur devons (dépôt administratif)
+      // Montant négatif = ils nous doivent (retrait administratif)
+      final isCredit = montantInitial > 0;
+      final operationType = isCredit ? OperationType.depot : OperationType.retrait;
+      final montantAbs = montantInitial.abs();
+      
+      // Créer une opération administrative (n'impacte PAS le cash disponible)
+      final operationInitialisation = OperationModel(
+        type: operationType,
+        montantBrut: montantAbs,
+        commission: 0.0,
+        montantNet: montantAbs,
+        clientId: clientId,
+        clientNom: client.nom,
+        shopSourceId: shopId,
+        agentId: agentId,
+        codeOps: 'INIT${DateTime.now().millisecondsSinceEpoch}',
+        destinataire: client.nom,
+        modePaiement: modePaiement,
+        observation: observation ?? (isCredit 
+            ? 'Solde d\'ouverture - Crédit initial' 
+            : 'Solde d\'ouverture - Dette initiale'),
+        dateOp: DateTime.now(),
+        isAdministrative: true, // IMPORTANT: Opération administrative
+        lastModifiedBy: 'agent_$agentId',
+      );
+
+      // Sauvegarder l'opération d'initialisation
+      final savedOperation = await LocalDB.instance.saveOperation(operationInitialisation);
+      debugPrint('✅ Opération d\'initialisation sauvegardée: ${savedOperation.codeOps}');
+      debugPrint('   🔧 isAdministrative: ${savedOperation.isAdministrative}');
+      debugPrint('   🔄 isSynced: ${savedOperation.isSynced}');
+      debugPrint('   📤 Sera synchronisée par DepotRetraitSyncService');
+      
+      debugPrint('✅ Solde client initialisé: ${client.nom} - ${montantInitial.toStringAsFixed(2)} USD pour Shop #$shopId (ADMINISTRATIF - sans impact cash)');
+      
+      // Synchroniser vers le serveur en arrière-plan
+      // TODO: Ajouter la synchronisation serveur si nécessaire
+      
+      _errorMessage = null;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = 'Erreur lors de l\'initialisation du solde: $e';
+      debugPrint(_errorMessage);
+      notifyListeners();
+      return false;
     }
   }
 

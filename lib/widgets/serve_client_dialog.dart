@@ -3,11 +3,13 @@ import 'package:provider/provider.dart';
 import '../services/virtual_transaction_service.dart';
 import '../services/auth_service.dart';
 import '../services/shop_service.dart';
+import '../services/currency_service.dart';
 import '../models/virtual_transaction_model.dart';
 import '../models/operation_model.dart';
 import '../models/shop_model.dart';
 import '../models/agent_model.dart';
 import '../utils/auto_print_helper.dart';
+import '../utils/currency_utils.dart';
 
 /// Dialog pour servir un client (valider une transaction virtuelle)
 class ServeClientDialog extends StatefulWidget {
@@ -48,29 +50,48 @@ class _ServeClientDialogState extends State<ServeClientDialog> {
   }
 
   /// Calculer le montant cash et la commission à partir du pourcentage
-  /// Formule: Montant Cash = Montant Virtuel - (Montant Virtuel * Pourcentage / 100)
-  /// Commission = Montant Virtuel * Pourcentage / 100
+  /// NOUVEAU: Pour CDF, convertir d'abord en USD puis appliquer les frais
+  /// Pour USD, appliquer directement les frais
   void _calculateFromPercentage() {
     if (_isDisposed || !mounted) return;
     
     final pourcentage = double.tryParse(_pourcentageController.text) ?? 0.0;
     final montantVirtuel = widget.transaction.montantVirtuel;
     
-    // Calculer la commission basée sur le pourcentage du montant virtuel
-    final commission = (montantVirtuel * pourcentage) / 100;
-    // Montant cash = Montant virtuel - Commission
-    final montantCash = montantVirtuel - commission;
-    
-    setState(() {
-      _commissionCalculee = commission;
-      _montantCashCalcule = montantCash;
-    });
+    if (widget.transaction.devise == 'CDF') {
+      // NOUVEAU: Pour CDF, convertir d'abord en USD, puis appliquer les frais
+      final montantUsd = CurrencyService.instance.convertCdfToUsd(montantVirtuel);
+      final commissionUsd = (montantUsd * pourcentage) / 100;
+      final montantCashUsd = montantUsd - commissionUsd;
+      
+      setState(() {
+        _commissionCalculee = commissionUsd; // Commission en USD
+        _montantCashCalcule = montantCashUsd; // Cash en USD
+      });
+    } else {
+      // Pour USD, calcul normal
+      final commission = (montantVirtuel * pourcentage) / 100;
+      final montantCash = montantVirtuel - commission;
+      
+      setState(() {
+        _commissionCalculee = commission;
+        _montantCashCalcule = montantCash;
+      });
+    }
   }
   
   /// Calculer le pourcentage des frais par rapport au montant virtuel
   double _calculatePercentageVirtuel() {
-    if (widget.transaction.montantVirtuel == 0) return 0.0;
-    return (_commissionCalculee / widget.transaction.montantVirtuel) * 100;
+    if (widget.transaction.devise == 'CDF') {
+      // Pour CDF, calculer le pourcentage par rapport au montant USD converti
+      final montantUsd = CurrencyService.instance.convertCdfToUsd(widget.transaction.montantVirtuel);
+      if (montantUsd == 0) return 0.0;
+      return (_commissionCalculee / montantUsd) * 100;
+    } else {
+      // Pour USD, calcul normal
+      if (widget.transaction.montantVirtuel == 0) return 0.0;
+      return (_commissionCalculee / widget.transaction.montantVirtuel) * 100;
+    }
   }
   
   /// Calculer le pourcentage des frais par rapport au montant cash
@@ -116,15 +137,40 @@ class _ServeClientDialogState extends State<ServeClientDialog> {
             Text('Client: ${_clientNomController.text}', style: const TextStyle(fontWeight: FontWeight.w600)),
             Text('Téléphone: ${_clientTelephoneController.text}'),
             const SizedBox(height: 8),
-            Text('Montant Virtuel: \$${widget.transaction.montantVirtuel.toStringAsFixed(2)}'),
-            Text('Frais: \$${commission.toStringAsFixed(2)} (${percentVirtuel.toStringAsFixed(2)}% saisi)', 
+            Text('Montant Virtuel: ${CurrencyUtils.formatAmount(widget.transaction.montantVirtuel, widget.transaction.devise)}'),
+            if (widget.transaction.devise == 'CDF') ...[
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.blue[50],
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.blue[200]!),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Conversion CDF → USD:',
+                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue[700]),
+                    ),
+                    const SizedBox(height: 4),
+                    Text('${widget.transaction.montantVirtuel.toStringAsFixed(0)} CDF → \$${CurrencyService.instance.convertCdfToUsd(widget.transaction.montantVirtuel).toStringAsFixed(2)} USD'),
+                    Text('Taux: 1 USD = ${CurrencyService.instance.tauxCdfToUsd.toStringAsFixed(0)} CDF', 
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+            Text('Frais: \$${commission.toStringAsFixed(2)} USD (${percentVirtuel.toStringAsFixed(2)}% saisi)', 
               style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.w600)),
             if (montantCash > 0)
               Text('  = ${percentCash.toStringAsFixed(2)}% du cash servi',
                 style: const TextStyle(color: Colors.orange, fontSize: 12)),
             const Divider(),
             Text(
-              'Cash à remettre: \$${montantCash.toStringAsFixed(2)}',
+              'Cash à remettre: \$${montantCash.toStringAsFixed(2)} USD',
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green),
             ),
           ],
@@ -182,7 +228,7 @@ class _ServeClientDialogState extends State<ServeClientDialog> {
           if (!_isDisposed && mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('✅ Client servi!\nFrais: \$${commission.toStringAsFixed(2)} (${_calculatePercentageVirtuel().toStringAsFixed(2)}%)\nCash remis: \$${montantCash.toStringAsFixed(2)}'),
+                content: Text('✅ Client servi!\nFrais: \$${commission.toStringAsFixed(2)} USD (${_calculatePercentageVirtuel().toStringAsFixed(2)}%)\nCash remis: \$${montantCash.toStringAsFixed(2)} USD'),
                 backgroundColor: Colors.green,
                 duration: const Duration(seconds: 4),
               ),
@@ -260,15 +306,46 @@ class _ServeClientDialogState extends State<ServeClientDialog> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Transaction: ${widget.transaction.reference}',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Transaction: ${widget.transaction.reference}',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
+                            ),
+                            // NOUVEAU: Affichage du taux de change
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.blue[600],
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.currency_exchange, color: Colors.white, size: 14),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '1 USD = ${CurrencyService.instance.tauxCdfToUsd.toStringAsFixed(0)} CDF',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 8),
                         _buildInfoRow('SIM', widget.transaction.simNumero),
-                        _buildInfoRow('Montant Virtuel', '\$${widget.transaction.montantVirtuel.toStringAsFixed(2)}'),
+                        _buildInfoRow('Montant Virtuel', CurrencyUtils.formatAmount(widget.transaction.montantVirtuel, widget.transaction.devise)),
+                          if (widget.transaction.devise == 'CDF')
+                          _buildInfoRow('Montant Converti', '\$${CurrencyService.instance.convertCdfToUsd(widget.transaction.montantVirtuel).toStringAsFixed(2)} USD'),
                         const Divider(height: 16),
-                        Row(
+                       Row(
                           children: [
                             const Text('Frais calculés:', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.orange)),
                             const Spacer(),
@@ -276,7 +353,7 @@ class _ServeClientDialogState extends State<ServeClientDialog> {
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text(
-                                  '\$${_commissionCalculee.toStringAsFixed(2)}',
+                                  '\$${_commissionCalculee.toStringAsFixed(2)} USD',
                                   style: const TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
@@ -354,15 +431,6 @@ class _ServeClientDialogState extends State<ServeClientDialog> {
                   // Pourcentage de frais (à saisir par l'agent)
                   TextFormField(
                     controller: _pourcentageController,
-                    decoration: InputDecoration(
-                      labelText: 'Pourcentage de frais (%) *',
-                      hintText: '2.0',
-                      border: const OutlineInputBorder(),
-                      prefixIcon: const Icon(Icons.percent),
-                      suffixText: '%',
-                      helperText: 'Cash calculé: ${_montantCashCalcule.toStringAsFixed(2)} USD | Frais: ${_commissionCalculee.toStringAsFixed(2)} USD',
-                      helperStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green),
-                    ),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {

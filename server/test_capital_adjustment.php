@@ -48,7 +48,7 @@ $increaseData = [
     'admin_username' => 'admin_test'
 ];
 
-$ch = curl_init('https://mahanaim.investee-group.com/server/api/audit/log_capital_adjustment.php');
+$ch = curl_init('https://mahanaimeservice.investee-group.com/server/api/audit/log_capital_adjustment.php');
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_POST, true);
 curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($increaseData));
@@ -97,7 +97,7 @@ $decreaseData = [
     'admin_username' => 'admin_test'
 ];
 
-$ch = curl_init('https://mahanaim.investee-group.com/server/api/audit/log_capital_adjustment.php');
+$ch = curl_init('https://mahanaimeservice.investee-group.com/server/api/audit/log_capital_adjustment.php');
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_POST, true);
 curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($decreaseData));
@@ -132,7 +132,7 @@ if ($httpCode == 200) {
 // Étape 4: Récupérer l'historique
 echo "📊 Étape 4: Récupération de l'historique des ajustements...\n";
 
-$ch = curl_init("https://mahanaim.investee-group.com/server/api/audit/get_capital_adjustments.php?shop_id=$shopId&limit=10");
+$ch = curl_init("https://mahanaimeservice.investee-group.com/server/api/audit/get_capital_adjustments.php?shop_id=$shopId&limit=10");
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 
 $response = curl_exec($ch);

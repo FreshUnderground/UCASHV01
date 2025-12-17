@@ -510,15 +510,15 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
               children: [
                 Icon(Icons.date_range, color: Colors.grey.shade600),
                 const SizedBox(width: 12),
-                const Text(
-                  'Période:',
-                  style: TextStyle(fontWeight: FontWeight.w600),
+                Text(
+                  '${l10n.period}:',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
               ],
             ),
             const SizedBox(height: 12),
             _buildDatePicker(
-              label: 'Date de début',
+              label: l10n.startDate,
               date: _startDate,
               onDateSelected: (date) {
                 setState(() => _startDate = date);
@@ -527,7 +527,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
             ),
             const SizedBox(height: 8),
             _buildDatePicker(
-              label: 'Date de fin',
+              label: l10n.endDate,
               date: _endDate,
               onDateSelected: (date) {
                 setState(() => _endDate = date);
@@ -546,7 +546,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                   _loadData(); // Recharger les données après réinitialisation
                 },
                 icon: const Icon(Icons.clear),
-                label: const Text('Réinitialiser'),
+                label: Text(l10n.reset),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.grey.shade200,
                   foregroundColor: Colors.grey.shade800,
@@ -613,14 +613,21 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
     // - Avec filtre de date: Frais Antérieur + Frais encaissés - Sortie
     // - Sans filtre: Total Frais encaissés - Total Sortie (pas de "Frais Antérieur")
     final l10n = AppLocalizations.of(context)!;
+    final double fraisTransferts = (stats['frais_transferts'] ?? 0.0) as double;
+    final double fraisVirtuels = (stats['frais_virtuels'] ?? 0.0) as double;
+    final double fraisTotal = (stats['frais_encaisses_jour'] ?? stats['commissions_auto'] ?? 0.0) as double;
+
     final List<Map<String, dynamic>> fraisDetails = hasDateFilter
         ? [
             {'label': l10n.previousFees, 'value': stats['frais_anterieur'] ?? 0.0},
-            {'label': '+ ${l10n.feesCollected}', 'value': stats['frais_encaisses_jour'] ?? stats['commissions_auto']},
+            {'label': '+ ${l10n.physicalFees}', 'value': fraisTransferts},
+            {'label': '+ ${l10n.virtualFees}', 'value': fraisVirtuels},
             {'label': '- ${l10n.feesWithdrawn}', 'value': stats['sortie_frais_jour'] ?? stats['retraits_frais']},
           ]
         : [
-            {'label': l10n.totalFeesCollected, 'value': stats['frais_encaisses_jour'] ?? stats['commissions_auto']},
+            {'label': l10n.totalFeesCollected, 'value': fraisTotal},
+            {'label': l10n.physicalFees, 'value': fraisTransferts},
+            {'label': l10n.virtualFees, 'value': fraisVirtuels},
             {'label': '- ${l10n.totalFeesWithdrawn}', 'value': stats['sortie_frais_jour'] ?? stats['retraits_frais']},
           ];
     
@@ -675,7 +682,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
           );
         }
         
-        // Tablette et desktop: toujours 3 colonnes sur 1 ligne
+        // Tablette et desktop: 2 colonnes sur 1 ligne (profit net masqué)
         return Row(
           children: [
             Expanded(
@@ -704,21 +711,6 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                     : [const Color(0xFFEF4444), const Color(0xFFDC2626)],
                 ),
                 details: depenseDetails,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _buildModernCard(
-                title: l10n.netProfit,
-                amount: stats['benefice_net'],
-                count: null,
-                icon: Icons.account_balance,
-                gradient: LinearGradient(
-                  colors: stats['benefice_net'] >= 0
-                    ? [const Color(0xFF8B5CF6), const Color(0xFF7C3AED)]
-                    : [const Color(0xFFF59E0B), const Color(0xFFD97706)],
-                ),
-                details: null,
               ),
             ),
           ],
@@ -997,9 +989,9 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                 indicatorWeight: 3,
                 isScrollable: widget.isAdmin, // Scrollable si 5 tabs
                 tabs: [
-                  const Tab(icon: Icon(Icons.list), text: 'Toutes'),
-                  const Tab(icon: Icon(Icons.trending_up), text: 'FRAIS'),
-                  const Tab(icon: Icon(Icons.receipt_long), text: 'DÉPENSE'),
+                  Tab(icon: const Icon(Icons.list), text: AppLocalizations.of(context)!.all),
+                  Tab(icon: const Icon(Icons.trending_up), text: AppLocalizations.of(context)!.fees),
+                  Tab(icon: const Icon(Icons.receipt_long), text: AppLocalizations.of(context)!.expenses),
                   if (widget.isAdmin)
                     const Tab(icon: Icon(Icons.route), text: 'Par Route'),
                   if (widget.isAdmin)
@@ -1033,6 +1025,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
   }
 
   Widget _buildTransactionsListView(List<CompteSpecialModel> transactions, bool isWide) {
+    final l10n = AppLocalizations.of(context)!;
     if (transactions.isEmpty) {
       return Center(
         child: Padding(
@@ -1043,7 +1036,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
               Icon(Icons.inbox_outlined, size: 64, color: Colors.grey.shade300),
               const SizedBox(height: 16),
               Text(
-                'Aucune transaction',
+                l10n.noData,
                 style: TextStyle(
                   fontSize: 16,
                   color: Colors.grey.shade600,
@@ -1090,9 +1083,9 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Statistiques',
-                style: TextStyle(
+              Text(
+                l10n.statistics,
+                style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: Colors.blue,
@@ -1102,15 +1095,15 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
               Row(
                 children: [
                   Expanded(
-                    child: _buildExpenseStatCard('Total Entrées', totalEntrees, Colors.green),
+                    child: _buildExpenseStatCard(l10n.totalIn, totalEntrees, Colors.green),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: _buildExpenseStatCard('Total Sorties', totalSorties, Colors.red),
+                    child: _buildExpenseStatCard(l10n.totalOut, totalSorties, Colors.red),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: _buildExpenseStatCard('Solde', solde, solde >= 0 ? Colors.green : Colors.red),
+                    child: _buildExpenseStatCard(l10n.balance, solde, solde >= 0 ? Colors.green : Colors.red),
                   ),
                 ],
               ),
@@ -1119,148 +1112,150 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
         ),
         
         // Transaction list
-        ListView.separated(
-          padding: const EdgeInsets.all(8),
-          itemCount: transactions.length,
-          separatorBuilder: (context, index) => const SizedBox(height: 8),
-          itemBuilder: (context, index) {
-            final transaction = transactions[index];
-            final isPositive = transaction.montant >= 0;
-            
-            return InkWell(
-              onTap: widget.isAdmin ? () => _showTransactionDetails(context, transaction) : null,
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.shade200),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.02),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    // Icon avec gradient
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: transaction.type == TypeCompteSpecial.FRAIS
-                              ? [const Color(0xFF10B981), const Color(0xFF059669)]
-                              : [const Color(0xFF3B82F6), const Color(0xFF2563EB)],
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.all(8),
+            itemCount: transactions.length,
+            separatorBuilder: (context, index) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              final transaction = transactions[index];
+              final isPositive = transaction.montant >= 0;
+              
+              return InkWell(
+                onTap: widget.isAdmin ? () => _showTransactionDetails(context, transaction) : null,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade200),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.02),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      // Icon avec gradient
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: transaction.type == TypeCompteSpecial.FRAIS
+                                ? [const Color(0xFF10B981), const Color(0xFF059669)]
+                                : [const Color(0xFF3B82F6), const Color(0xFF2563EB)],
+                          ),
+                          borderRadius: BorderRadius.circular(10),
                         ),
-                        borderRadius: BorderRadius.circular(10),
+                        child: Text(
+                          transaction.typeTransaction.icon,
+                          style: const TextStyle(fontSize: 20),
+                        ),
                       ),
-                      child: Text(
-                        transaction.typeTransaction.icon,
-                        style: const TextStyle(fontSize: 20),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    
-                    // Description et détails
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            transaction.description,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
+                      const SizedBox(width: 16),
+                      
+                      // Description et détails
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              transaction.description,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 3, // Afficher jusqu'à 3 lignes
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            maxLines: 3, // Afficher jusqu'à 3 lignes
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.access_time,
-                                size: 12,
-                                color: Colors.grey.shade600,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                DateFormat('dd/MM/yyyy HH:mm').format(transaction.dateTransaction),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey.shade600,
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (transaction.agentUsername != null) ...[
-                            const SizedBox(height: 2),
+                            const SizedBox(height: 4),
                             Row(
                               children: [
                                 Icon(
-                                  Icons.person_outline,
+                                  Icons.access_time,
                                   size: 12,
                                   color: Colors.grey.shade600,
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  transaction.agentUsername!,
+                                  DateFormat('dd/MM/yyyy HH:mm').format(transaction.dateTransaction),
                                   style: TextStyle(
-                                    fontSize: 11,
+                                    fontSize: 12,
                                     color: Colors.grey.shade600,
-                                    fontStyle: FontStyle.italic,
                                   ),
                                 ),
                               ],
                             ),
+                            if (transaction.agentUsername != null) ...[
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.person_outline,
+                                    size: 12,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    transaction.agentUsername!,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade600,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ],
-                        ],
-                      ),
-                    ),
-                    
-                    // Montant et badge
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          '${isPositive ? '+' : ''}\$${_numberFormat.format(transaction.montant.abs())}',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: isPositive ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-                          ),
                         ),
-                        const SizedBox(height: 4),
-                        // Badge du type de compte
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: transaction.type == TypeCompteSpecial.FRAIS
-                                ? const Color(0xFF10B981).withOpacity(0.1)
-                                : const Color(0xFF3B82F6).withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            transaction.type == TypeCompteSpecial.FRAIS ? 'FRAIS' : 'DÉPENSE',
+                      ),
+                      
+                      // Montant et badge
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            '${isPositive ? '+' : ''}\$${_numberFormat.format(transaction.montant.abs())}',
                             style: TextStyle(
-                              fontSize: 10,
+                              fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              color: transaction.type == TypeCompteSpecial.FRAIS
-                                  ? const Color(0xFF10B981)
-                                  : const Color(0xFF3B82F6),
+                              color: isPositive ? const Color(0xFF10B981) : const Color(0xFFEF4444),
                             ),
                           ),
-                        ),
-                       ],
-                    ),
-                  ],
+                          const SizedBox(height: 4),
+                          // Badge du type de compte
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: transaction.type == TypeCompteSpecial.FRAIS
+                                  ? const Color(0xFF10B981).withOpacity(0.1)
+                                  : const Color(0xFF3B82F6).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              transaction.type == TypeCompteSpecial.FRAIS ? 'FRAIS' : 'DÉPENSE',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: transaction.type == TypeCompteSpecial.FRAIS
+                                    ? const Color(0xFF10B981)
+                                    : const Color(0xFF3B82F6),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ],
     );
@@ -1304,6 +1299,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
     final operations = stats['operations_frais'] as List<dynamic>? ?? [];
     
     if (operations.isEmpty) {
+      final l10n = AppLocalizations.of(context)!;
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(10),
@@ -1313,7 +1309,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
               Icon(Icons.inbox_outlined, size: 64, color: Colors.grey.shade300),
               const SizedBox(height: 16),
               Text(
-                'Aucun transfert servi',
+                l10n.noServedTransfers,
                 style: TextStyle(
                   fontSize: 16,
                   color: Colors.grey.shade600,
@@ -1321,7 +1317,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Les frais s\'afficheront ici quand vous servez des transferts',
+                l10n.feesWillAppearWhenServingTransfers,
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.grey.shade500,
@@ -1340,25 +1336,16 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
       separatorBuilder: (context, index) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         final operation = operations[index] as Map<String, dynamic>;
-        final commission = operation['commission'] as double;
+        final commission = (operation['commission'] as num).toDouble();
         final date = operation['date'] as DateTime;
         final type = operation['type'] as String;
+        final isVirtual = operation['is_virtual'] == true;
+        final l10n = AppLocalizations.of(context)!;
+        final String reference = (operation['reference'] ?? '') as String;
+        final String clientPhone = (operation['client_phone'] ?? '') as String;
         
         // Convertir le type en label lisible
-        String typeLabel;
-        switch (type) {
-          case 'transfertNational':
-            typeLabel = 'Transfert National';
-            break;
-          case 'transfertInternationalEntrant':
-            typeLabel = 'Intl. Entrant';
-            break;
-          case 'transfertInternationalSortant':
-            typeLabel = 'Intl. Sortant';
-            break;
-          default:
-            typeLabel = type;
-        }
+        final typeLabel = _mapOperationTypeToLabel(type, l10n);
         
         return Container(
           padding: const EdgeInsets.all(16),
@@ -1423,6 +1410,19 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                         ),
                       ],
                     ),
+                    if (isVirtual && (reference.isNotEmpty || clientPhone.isNotEmpty)) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        [
+                          if (reference.isNotEmpty) 'REF: $reference',
+                          if (clientPhone.isNotEmpty) 'Tel: $clientPhone',
+                        ].join(' • '),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -1478,6 +1478,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
     final operations = stats['operations_frais'] as List<dynamic>? ?? [];
     
     if (transactions.isEmpty && operations.isEmpty) {
+      final l10n = AppLocalizations.of(context)!;
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(10),
@@ -1487,7 +1488,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
               Icon(Icons.inbox_outlined, size: 64, color: Colors.grey.shade300),
               const SizedBox(height: 16),
               Text(
-                'Aucune transaction',
+                l10n.noData,
                 style: TextStyle(
                   fontSize: 16,
                   color: Colors.grey.shade600,
@@ -1724,6 +1725,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
 
         final fraisParRoute = snapshot.data!;
         if (fraisParRoute.isEmpty) {
+          final l10n = AppLocalizations.of(context)!;
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(2),
@@ -1733,7 +1735,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                   Icon(Icons.inbox_outlined, size: 64, color: Colors.grey.shade300),
                   const SizedBox(height: 16),
                   Text(
-                    'Aucune route trouvée',
+                    l10n.noRoutesFound,
                     style: TextStyle(
                       fontSize: 16,
                       color: Colors.grey.shade600,
@@ -1756,6 +1758,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
             final montant = data['montant'] as double;
             final count = data['count'] as int;
             final details = data['details'] as List;
+            final l10n = AppLocalizations.of(context)!;
 
             return Card(
               elevation: 2,
@@ -1788,7 +1791,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                   subtitle: Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
-                      '$count transfert(s)',
+                      '${l10n.transactionsCount}: $count',
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.grey.shade600,
@@ -1807,9 +1810,9 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                           color: Color(0xFF10B981),
                         ),
                       ),
-                      const Text(
-                        'Frais total',
-                        style: TextStyle(
+                      Text(
+                        l10n.feesCollected,
+                        style: const TextStyle(
                           fontSize: 10,
                           color: Colors.grey,
                         ),
@@ -1826,9 +1829,9 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Détails des transferts:',
-                            style: TextStyle(
+                          Text(
+                            l10n.transfersDetails,
+                            style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 12,
                             ),
@@ -1919,6 +1922,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
 
         final fraisParShop = snapshot.data!;
         if (fraisParShop.isEmpty) {
+          final l10n = AppLocalizations.of(context)!;
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(4),
@@ -1928,7 +1932,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                   Icon(Icons.inbox_outlined, size: 64, color: Colors.grey.shade300),
                   const SizedBox(height: 16),
                   Text(
-                    'Aucun frais encaissé',
+                    l10n.noFeesCollected,
                     style: TextStyle(
                       fontSize: 16,
                       color: Colors.grey.shade600,
@@ -1951,6 +1955,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
             final montant = data['montant'] as double;
             final count = data['count'] as int;
             final details = data['details'] as List;
+            final l10n = AppLocalizations.of(context)!;
 
             return Card(
               elevation: 2,
@@ -1983,7 +1988,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                   subtitle: Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
-                      '$count transfert(s) servi(s)',
+                      '${l10n.transactionsCount}: $count',
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.grey.shade600,
@@ -2002,9 +2007,9 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                           color: Color(0xFF10B981),
                         ),
                       ),
-                      const Text(
-                        'Frais encaissés',
-                        style: TextStyle(
+                      Text(
+                        l10n.feesCollected,
+                        style: const TextStyle(
                           fontSize: 10,
                           color: Colors.grey,
                         ),
@@ -2021,9 +2026,9 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Détails des transferts:',
-                            style: TextStyle(
+                          Text(
+                            l10n.transfersDetails,
+                            style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 12,
                             ),
@@ -2101,20 +2106,21 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
   }
 
   void _showDepotDepenseDialog(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final montantController = TextEditingController();
     final descriptionController = TextEditingController();
     
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('➕ Dépôt Boss - Compte DÉPENSE'),
+        title: Text('➕ ${l10n.bossDeposits} - ${l10n.expenseAccount}'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: montantController,
-              decoration: const InputDecoration(
-                labelText: 'Montant (USD)',
+              decoration: InputDecoration(
+                labelText: '${l10n.amount} (USD)',
                 prefixIcon: Icon(Icons.attach_money),
               ),
               keyboardType: TextInputType.number,
@@ -2122,9 +2128,9 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
             const SizedBox(height: 16),
             TextField(
               controller: descriptionController,
-              decoration: const InputDecoration(
-                labelText: 'Description',
-                prefixIcon: Icon(Icons.description),
+              decoration: InputDecoration(
+                labelText: l10n.description,
+                prefixIcon: const Icon(Icons.description),
               ),
               maxLines: 3,
             ),
@@ -2133,7 +2139,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Annuler'),
+            child: Text(l10n.cancel),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -2151,14 +2157,14 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                 if (!context.mounted) return;
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('✅ Dépôt enregistré')),
+                  SnackBar(content: Text('✅ ${l10n.operationSuccess}')),
                 );
               }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blue,
             ),
-            child: const Text('Enregistrer'),
+            child: Text(l10n.save),
           ),
         ],
       ),
@@ -2166,6 +2172,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
   }
 
   void _showSortieDepenseDialog(BuildContext context) async {
+    final l10n = AppLocalizations.of(context)!;
     final montantController = TextEditingController();
     final descriptionController = TextEditingController();
     
@@ -2190,7 +2197,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('💸 Sortie - Compte DÉPENSE'),
+        title: Text('💸 ${l10n.expensesOutflows} - ${l10n.expenseAccount}'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -2211,7 +2218,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Solde disponible',
+                          l10n.availableBalance,
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.grey.shade600,
@@ -2243,9 +2250,9 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
             const SizedBox(height: 16),
             TextField(
               controller: descriptionController,
-              decoration: const InputDecoration(
-                labelText: 'Description (ex: Salaires, Internet...)',
-                prefixIcon: Icon(Icons.description),
+              decoration: InputDecoration(
+                labelText: l10n.description,
+                prefixIcon: const Icon(Icons.description),
               ),
               maxLines: 3,
             ),
@@ -2273,7 +2280,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                   if (!context.mounted) return;
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('✅ Sortie enregistrée')),
+                    SnackBar(content: Text('✅ ${l10n.operationSuccess}')),
                   );
                 } catch (e) {
                   if (!context.mounted) return;
@@ -2286,7 +2293,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange,
             ),
-            child: const Text('Enregistrer'),
+            child: Text(l10n.save),
           ),
         ],
       ),
@@ -2294,6 +2301,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
   }
 
   void _showRetraitFraisDialog(BuildContext context) async {
+    final l10n = AppLocalizations.of(context)!;
     final montantController = TextEditingController();
     final descriptionController = TextEditingController();
     
@@ -2320,7 +2328,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('➖ Retrait Boss - Compte FRAIS'),
+        title: Text('➖ ${l10n.withdrawalFromCapital} - ${l10n.feesAccount}'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -2403,7 +2411,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                   if (!context.mounted) return;
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('✅ Retrait enregistré')),
+                    SnackBar(content: Text('✅ ${l10n.operationSuccess}')),
                   );
                 } catch (e) {
                   if (!context.mounted) return;
@@ -2416,7 +2424,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green,
             ),
-            child: const Text('Retrait'),
+            child: Text(l10n.withdrawal),
           ),
         ],
       ),
@@ -2426,6 +2434,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
   // Méthode supprimée - remplacée par _showSortieDepenseDialog
 
   void _showTransactionDetails(BuildContext context, CompteSpecialModel transaction) {
+    final l10n = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -2434,13 +2443,13 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildDetailRow('Montant', '\$${_numberFormat.format(transaction.montant)}'),
-            _buildDetailRow('Description', transaction.description),
-            _buildDetailRow('Date', DateFormat('dd/MM/yyyy HH:mm').format(transaction.dateTransaction)),
+            _buildDetailRow(l10n.amount, '\$${_numberFormat.format(transaction.montant)}'),
+            _buildDetailRow(l10n.description, transaction.description),
+            _buildDetailRow(l10n.date, DateFormat('dd/MM/yyyy HH:mm', Localizations.localeOf(context).toString()).format(transaction.dateTransaction)),
             if (transaction.agentUsername != null)
-              _buildDetailRow('Agent', transaction.agentUsername!),
+              _buildDetailRow(l10n.agent, transaction.agentUsername!),
             if (transaction.operationId != null)
-              _buildDetailRow('Opération', '#${transaction.operationId}'),
+              _buildDetailRow('ID', '#${transaction.operationId}'),
           ],
         ),
         actions: [
@@ -2450,17 +2459,17 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                 final confirm = await showDialog<bool>(
                   context: context,
                   builder: (context) => AlertDialog(
-                    title: const Text('⚠️ Confirmer la suppression'),
-                    content: const Text('Voulez-vous vraiment supprimer cette transaction? Cette action est irréversible.'),
+                    title: Text('⚠️ ${l10n.confirmAction}'),
+                    content: Text('${l10n.areYouSure} ${l10n.thisActionCannotBeUndone}'),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(context, false),
-                        child: const Text('Annuler'),
+                        child: Text(l10n.cancel),
                       ),
                       ElevatedButton(
                         onPressed: () => Navigator.pop(context, true),
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                        child: const Text('Supprimer'),
+                        child: Text(l10n.delete),
                       ),
                     ],
                   ),
@@ -2475,8 +2484,8 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                   if (success && context.mounted) {
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('✅ Transaction supprimée'),
+                      SnackBar(
+                        content: Text('✅ ${l10n.operationSuccess}'),
                         backgroundColor: Colors.green,
                       ),
                     );
@@ -2484,23 +2493,38 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
                     _loadData();
                   } else if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('❌ Erreur lors de la suppression'),
+                      SnackBar(
+                        content: Text('❌ ${l10n.operationFailed}'),
                         backgroundColor: Colors.red,
                       ),
                     );
                   }
                 }
               },
-              child: const Text('Supprimer', style: TextStyle(color: Colors.red)),
+              child: Text(l10n.delete, style: const TextStyle(color: Colors.red)),
             ),
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Fermer'),
+            child: Text(l10n.close),
           ),
         ],
       ),
     );
+  }
+
+  String _mapOperationTypeToLabel(String type, AppLocalizations l10n) {
+    switch (type) {
+      case 'transfertNational':
+        return l10n.nationalTransfer;
+      case 'transfertInternationalEntrant':
+        return l10n.internationalIncomingTransfer;
+      case 'transfertInternationalSortant':
+        return l10n.internationalOutgoingTransfer;
+      case 'virtual_transaction':
+        return l10n.virtualFees;
+      default:
+        return type;
+    }
   }
 
   Widget _buildDetailRow(String label, String value) {
@@ -2593,18 +2617,8 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
       final operationsFrais = stats['operations_frais'] as List<dynamic>? ?? [];
       debugPrint('   📊 Nombre d\'opérations FRAIS dans stats: ${operationsFrais.length}');
       
-      // Si aucune transaction FRAIS et aucune opération FRAIS, alors afficher le message
-      if (frais.isEmpty && operationsFrais.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('⚠️ Aucune transaction FRAIS trouvée pour cette période'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
-        return;
-      }
+      // Toujours générer le PDF, même sans données - comme l'UI
+      debugPrint('   ✅ Génération PDF: ${frais.length} transactions + ${operationsFrais.length} opérations');
 
       // Trier par date croissante
       final sortedFrais = List<CompteSpecialModel>.from(frais)..sort((a, b) => a.dateTransaction.compareTo(b.dateTransaction));
@@ -2612,18 +2626,107 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
 
       final pdf = pw.Document();
       
-      // Calculer le solde cumulatif
-      double solde = 0;
-      final transactionsWithSolde = sortedFrais.map((t) {
-        solde += t.montant;
-        return {
-          'date': DateFormat('dd/MM/yyyy HH:mm').format(t.dateTransaction),
+      // Calculer le solde selon la logique métier: Solde Frais = Total Frais encaissés - Sorties Frais
+      final soldeAnterieur = stats['frais_anterieur'] ?? 0.0;
+      
+      // Créer une liste combinée de toutes les opérations avec dates
+      final List<Map<String, dynamic>> allOperations = [];
+      
+      // Ajouter le solde antérieur comme première ligne si différent de 0
+      if (soldeAnterieur != 0.0) {
+        allOperations.add({
+          'date': effectiveStartDate,
+          'dateStr': DateFormat('dd/MM/yyyy').format(effectiveStartDate),
+          'type': 'Solde antérieur',
+          'description': 'Report du solde de clôture précédent',
+          'montant': 0.0,
+          'isEntry': false, // Pas une entrée/sortie, juste un report
+        });
+      }
+      
+      // Ajouter les transactions FRAIS (retraits = sorties négatives)
+      for (final t in sortedFrais) {
+        allOperations.add({
+          'date': t.dateTransaction,
+          'dateStr': DateFormat('dd/MM/yyyy HH:mm').format(t.dateTransaction),
           'type': t.typeTransaction.label,
           'description': t.description,
-          'montant': t.montant,
+          'montant': t.montant, // Négatif pour les retraits
+          'isEntry': t.montant > 0,
+        });
+      }
+      
+      // Ajouter les opérations de frais (commissions = entrées positives)
+      for (final operation in operationsFrais) {
+        final opMap = operation as Map<String, dynamic>;
+        final commission = (opMap['commission'] as num).toDouble();
+        final date = opMap['date'] as DateTime;
+        final type = opMap['type'] as String;
+        final isVirtual = opMap['is_virtual'] == true;
+        final reference = (opMap['reference'] ?? '') as String;
+        final clientPhone = (opMap['client_phone'] ?? '') as String;
+        
+        String typeLabel;
+        switch (type) {
+          case 'transfertNational':
+            typeLabel = 'Transfert National';
+            break;
+          case 'transfertInternationalEntrant':
+            typeLabel = 'Transfert International Entrant';
+            break;
+          case 'transfertInternationalSortant':
+            typeLabel = 'Transfert International Sortant';
+            break;
+          case 'virtual_transaction':
+            typeLabel = 'Frais Virtuels';
+            break;
+          default:
+            typeLabel = type;
+        }
+        
+        String description = 'Commission $typeLabel';
+        if (isVirtual && reference.isNotEmpty) {
+          description += ' - Réf: $reference';
+        }
+        if (clientPhone.isNotEmpty) {
+          description += ' - Tel: $clientPhone';
+        }
+        
+        allOperations.add({
+          'date': date,
+          'dateStr': DateFormat('dd/MM/yyyy HH:mm').format(date),
+          'type': typeLabel,
+          'description': description,
+          'montant': commission, // Positif pour les commissions
+          'isEntry': true,
+        });
+      }
+      
+      // Trier toutes les opérations par date (sauf solde antérieur en premier)
+      allOperations.sort((a, b) {
+        if (a['type'] == 'Solde antérieur') return -1;
+        if (b['type'] == 'Solde antérieur') return 1;
+        return (a['date'] as DateTime).compareTo(b['date'] as DateTime);
+      });
+      
+      // Calculer le solde cumulatif avec la logique métier correcte
+      double solde = soldeAnterieur;
+      final List<Map<String, dynamic>> transactionsWithSolde = [];
+      
+      for (final op in allOperations) {
+        if (op['type'] != 'Solde antérieur') {
+          // Pour les frais: Entrées (+) = commissions, Sorties (-) = retraits
+          solde += op['montant'] as double;
+        }
+        
+        transactionsWithSolde.add({
+          'date': op['dateStr'],
+          'type': op['type'],
+          'description': op['description'],
+          'montant': op['montant'],
           'solde': solde,
-        };
-      }).toList();
+        });
+      }
       
       debugPrint('   ✅ Soldes cumulatifs calculés');
       
@@ -3074,9 +3177,33 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
 
     final pdf = pw.Document();
     
-    // Calculer le solde cumulatif
-    double solde = 0;
-    final transactionsWithSolde = depenses.map((t) {
+    // Récupérer les stats pour le solde antérieur
+    final stats = await service.getStatistics(
+      shopId: effectiveShopId,
+      startDate: effectiveStartDate,
+      endDate: effectiveEndDate,
+    );
+    
+    // Calculer le solde cumulatif en commençant par le solde antérieur
+    final soldeAnterieur = stats['depense_anterieur'] ?? 0.0;
+    double solde = soldeAnterieur;
+    
+    // Créer une liste avec le solde antérieur comme première entrée
+    final List<Map<String, dynamic>> transactionsWithSolde = [];
+    
+    // Ajouter le solde antérieur comme première ligne si différent de 0
+    if (soldeAnterieur != 0.0) {
+      transactionsWithSolde.add({
+        'date': DateFormat('dd/MM/yyyy').format(effectiveStartDate),
+        'type': 'Solde antérieur',
+        'description': 'Report du solde de clôture précédent',
+        'montant': 0.0, // Pas de mouvement, juste le report
+        'solde': soldeAnterieur,
+      });
+    }
+    
+    // Ajouter les transactions avec calcul cumulatif
+    transactionsWithSolde.addAll(depenses.map((t) {
       solde += t.montant;
       return {
         'date': DateFormat('dd/MM/yyyy HH:mm').format(t.dateTransaction),
@@ -3085,7 +3212,7 @@ class _ComptesSpeciauxWidgetState extends State<ComptesSpeciauxWidget> {
         'montant': t.montant,
         'solde': solde,
       };
-    }).toList();
+    }).toList());
     
     pdf.addPage(
       pw.MultiPage(

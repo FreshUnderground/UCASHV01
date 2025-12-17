@@ -13,6 +13,7 @@ import '../services/sim_service.dart';
 import '../services/auth_service.dart';
 import '../services/local_db.dart';
 import '../services/compte_special_service.dart';
+import '../services/currency_service.dart';
 
 /// Widget pour la clôture virtuelle détaillée par SIM
 class ClotureVirtuelleParSimWidget extends StatefulWidget {
@@ -287,13 +288,17 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        '\$${sim.soldeActuel.toStringAsFixed(2)}',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: sim.soldeActuel >= 0 ? Colors.green : Colors.red,
-                        ),
+                      Consumer<CurrencyService>(
+                        builder: (context, currencyService, child) {
+                          return Text(
+                            'Cash ${currencyService.formatMontant(sim.soldeActuel, 'USD')}',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: sim.soldeActuel >= 0 ? Colors.green : Colors.red,
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -431,10 +436,18 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
                   'Soldes',
                   Icons.account_balance_wallet,
                   [
-                    _buildInfoRow('Solde Antérieur', '\$${cloture.soldeAnterieur.toStringAsFixed(2)}', Colors.grey),
-                    _buildInfoRow('Solde Actuel', '\$${cloture.soldeActuel.toStringAsFixed(2)}', 
-                      cloture.soldeActuel >= 0 ? Colors.green : Colors.red, bold: true),
-                    _buildInfoRow('Cash Physique Compté', '\$${cloture.cashDisponible.toStringAsFixed(2)}', Colors.blue),
+                    Consumer<CurrencyService>(
+                      builder: (context, currencyService, child) {
+                        return Column(
+                          children: [
+                            _buildInfoRow('Solde Antérieur', 'Cash ${currencyService.formatMontant(cloture.soldeAnterieur, 'USD')}', Colors.grey),
+                            _buildInfoRow('Solde Actuel', 'Cash ${currencyService.formatMontant(cloture.soldeActuel, 'USD')}', 
+                              cloture.soldeActuel >= 0 ? Colors.green : Colors.red, bold: true),
+                            _buildInfoRow('Cash Physique Compté', 'Cash ${currencyService.formatMontant(cloture.cashDisponible, 'USD')}', Colors.blue),
+                          ],
+                        );
+                      },
+                    ),
                   ],
                   isMobile,
                 ),
@@ -445,9 +458,17 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
                   'Frais',
                   Icons.attach_money,
                   [
-                    _buildInfoRow('Frais Antérieur', '\$${cloture.fraisAnterieur.toStringAsFixed(2)}', Colors.grey),
-                    _buildInfoRow('Frais du Jour', '\$${cloture.fraisDuJour.toStringAsFixed(2)}', Colors.orange),
-                    _buildInfoRow('Frais Total', '\$${cloture.fraisTotal.toStringAsFixed(2)}', Colors.deepOrange, bold: true),
+                    Consumer<CurrencyService>(
+                      builder: (context, currencyService, child) {
+                        return Column(
+                          children: [
+                            _buildInfoRow('Frais Antérieur', 'Cash ${currencyService.formatMontant(cloture.fraisAnterieur, 'USD')}', Colors.grey),
+                            _buildInfoRow('Frais du Jour', 'Cash ${currencyService.formatMontant(cloture.fraisDuJour, 'USD')}', Colors.orange),
+                            _buildInfoRow('Frais Total', 'Cash ${currencyService.formatMontant(cloture.fraisTotal, 'USD')}', Colors.deepOrange, bold: true),
+                          ],
+                        );
+                      },
+                    ),
                   ],
                   isMobile,
                 ),
@@ -458,10 +479,18 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
                   'Transactions du Jour',
                   Icons.compare_arrows,
                   [
-                    _buildInfoRow('Captures', '${cloture.nombreCaptures} (\$${cloture.montantCaptures.toStringAsFixed(2)})', Colors.green),
-                    _buildInfoRow('Servies', '${cloture.nombreServies} (\$${cloture.montantServies.toStringAsFixed(2)})', Colors.blue),
-                    _buildInfoRow('Cash Servi', '\$${cloture.cashServi.toStringAsFixed(2)}', Colors.purple),
-                    _buildInfoRow('En Attente', '${cloture.nombreEnAttente} (\$${cloture.montantEnAttente.toStringAsFixed(2)})', Colors.orange),
+                    Consumer<CurrencyService>(
+                      builder: (context, currencyService, child) {
+                        return Column(
+                          children: [
+                            _buildInfoRow('Captures', '${cloture.nombreCaptures} (${currencyService.formatMontant(cloture.montantCapturesUSD, 'USD')} + ${currencyService.formatMontant(cloture.montantCapturesCDF, 'CDF')})', Colors.green),
+                            _buildInfoRow('Servies', '${cloture.nombreServies} (${currencyService.formatMontant(cloture.montantServiesUSD, 'USD')} + ${currencyService.formatMontant(cloture.montantServiesCDF, 'CDF')})', Colors.blue),
+                            _buildInfoRow('Cash Servi', 'Cash ${currencyService.formatMontant(cloture.cashServi, 'USD')}', Colors.purple),
+                            _buildInfoRow('En Attente', '${cloture.nombreEnAttente} (${currencyService.formatMontant(cloture.montantEnAttenteUSD, 'USD')} + ${currencyService.formatMontant(cloture.montantEnAttenteCDF, 'CDF')})', Colors.orange),
+                          ],
+                        );
+                      },
+                    ),
                   ],
                   isMobile,
                 ),
@@ -472,8 +501,16 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
                   'Mouvements',
                   Icons.swap_horiz,
                   [
-                    _buildInfoRow('Retraits', '${cloture.nombreRetraits} (\$${cloture.montantRetraits.toStringAsFixed(2)})', Colors.red),
-                    _buildInfoRow('Dépôts Clients', '${cloture.nombreDepots} (\$${cloture.montantDepots.toStringAsFixed(2)})', Colors.teal),
+                    Consumer<CurrencyService>(
+                      builder: (context, currencyService, child) {
+                        return Column(
+                          children: [
+                            _buildInfoRow('Retraits', '${cloture.nombreRetraits} (Cash ${currencyService.formatMontant(cloture.montantRetraits, 'USD')})', Colors.red),
+                            _buildInfoRow('Dépôts Clients', '${cloture.nombreDepots} (Cash ${currencyService.formatMontant(cloture.montantDepots, 'USD')})', Colors.teal),
+                          ],
+                        );
+                      },
+                    ),
                   ],
                   isMobile,
                 ),
@@ -965,7 +1002,7 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
                                     labelText: 'Comptage cash physique',
                                     labelStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                                     hintText: '0.00',
-                                    prefixText: r'$ ',
+                                    prefixText: 'Cash \$ ',
                                     prefixStyle: const TextStyle(
                                       color: Color(0xFFDC6B19),
                                       fontWeight: FontWeight.bold,
@@ -1015,7 +1052,6 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
                               
                               // Récupérer les valeurs du Virtuel Disponible
                               final virtuelDisponible = double.tryParse(simControllers['virtuelDisponible']!.text) ?? 0.0;
-                              final capturesDuJour = double.tryParse(simControllers['capturesDuJour']!.text) ?? 0.0;
                               final retraitsDuJour = double.tryParse(simControllers['retraitsDuJour']!.text) ?? 0.0;
                               final depotsDuJour = double.tryParse(simControllers['depotsDuJour']!.text) ?? 0.0;
                               
@@ -1128,13 +1164,17 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
                                                     color: Colors.grey.shade700,
                                                   ),
                                                 ),
-                                                Text(
-                                                  '\$${soldeAnterieur.toStringAsFixed(2)}',
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: Colors.grey.shade800,
-                                                  ),
+                                                Consumer<CurrencyService>(
+                                                  builder: (context, currencyService, child) {
+                                                    return Text(
+                                                      'Cash ${currencyService.formatMontant(soldeAnterieur, 'USD')}',
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: Colors.grey.shade800,
+                                                      ),
+                                                    );
+                                                  },
                                                 ),
                                               ],
                                             ),
@@ -1151,7 +1191,7 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
                                                   ),
                                                 ),
                                                 Text(
-                                                  '\$${capturesDuJour.toStringAsFixed(2)}',
+                                                  'Mixte',
                                                   style: TextStyle(
                                                     fontSize: 12,
                                                     fontWeight: FontWeight.bold,
@@ -1172,13 +1212,17 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
                                                     color: Colors.grey.shade700,
                                                   ),
                                                 ),
-                                                Text(
-                                                  '\$${retraitsDuJour.toStringAsFixed(2)}',
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: Colors.red.shade700,
-                                                  ),
+                                                Consumer<CurrencyService>(
+                                                  builder: (context, currencyService, child) {
+                                                    return Text(
+                                                      'Cash ${currencyService.formatMontant(retraitsDuJour, 'USD')}',
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: Colors.red.shade700,
+                                                      ),
+                                                    );
+                                                  },
                                                 ),
                                               ],
                                             ),
@@ -1194,13 +1238,17 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
                                                     color: Colors.grey.shade700,
                                                   ),
                                                 ),
-                                                Text(
-                                                  '\$${depotsDuJour.toStringAsFixed(2)}',
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: Colors.red.shade700,
-                                                  ),
+                                                Consumer<CurrencyService>(
+                                                  builder: (context, currencyService, child) {
+                                                    return Text(
+                                                      'Cash ${currencyService.formatMontant(depotsDuJour, 'USD')}',
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: Colors.red.shade700,
+                                                      ),
+                                                    );
+                                                  },
                                                 ),
                                               ],
                                             ),
@@ -1219,13 +1267,17 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
                                                     color: Colors.purple,
                                                   ),
                                                 ),
-                                                Text(
-                                                  '\$${virtuelDisponible.toStringAsFixed(2)}',
-                                                  style: TextStyle(
-                                                    fontSize: 16,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: virtuelDisponible >= 0 ? Colors.purple.shade700 : Colors.red.shade700,
-                                                  ),
+                                                Consumer<CurrencyService>(
+                                                  builder: (context, currencyService, child) {
+                                                    return Text(
+                                                      'Cash ${currencyService.formatMontant(virtuelDisponible, 'USD')}',
+                                                      style: TextStyle(
+                                                        fontSize: 16,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: virtuelDisponible >= 0 ? Colors.purple.shade700 : Colors.red.shade700,
+                                                      ),
+                                                    );
+                                                  },
                                                 ),
                                               ],
                                             ),
@@ -1248,13 +1300,13 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
                                           labelText: 'Solde Virtuel',
                                           labelStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                                           hintText: '0.00',
-                                          prefixText: r'$ ',
+                                          prefixText: 'Cash \$ ',
                                           prefixStyle: TextStyle(
                                             color: soldeCalcule >= 0 ? Colors.green : Colors.red,
                                             fontWeight: FontWeight.bold,
                                             fontSize: 18,
                                           ),
-                                          helperText: 'Solde dans la SIM • Calculé: \$${sim.soldeActuel.toStringAsFixed(2)}',
+                                          helperText: 'Solde dans la SIM (Cash USD uniquement)',
                                           helperStyle: const TextStyle(fontSize: 11),
                                           border: OutlineInputBorder(
                                             borderRadius: BorderRadius.circular(12),
@@ -1295,13 +1347,17 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
                                                     ),
                                                   ),
                                                  
-                                                  Text(
-                                                    'Total: \$${fraisCalcules.toStringAsFixed(2)}',
-                                                    style: const TextStyle(
-                                                      fontSize: 13,
-                                                      fontWeight: FontWeight.bold,
-                                                      color: Colors.purple,
-                                                    ),
+                                                  Consumer<CurrencyService>(
+                                                    builder: (context, currencyService, child) {
+                                                      return Text(
+                                                        'Total: Cash ${currencyService.formatMontant(fraisCalcules, 'USD')}',
+                                                        style: const TextStyle(
+                                                          fontSize: 13,
+                                                          fontWeight: FontWeight.bold,
+                                                          color: Colors.purple,
+                                                        ),
+                                                      );
+                                                    },
                                                   ),
                                                 ],
                                               ),

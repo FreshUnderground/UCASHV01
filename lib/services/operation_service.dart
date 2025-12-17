@@ -664,13 +664,27 @@ class OperationService extends ChangeNotifier {
       if (operation.clientId != null) {
         final client = await LocalDB.instance.getClientById(operation.clientId!);
         if (client != null) {
+          final nouveauSolde = client.solde + operation.montantNet;
           final updatedClient = client.copyWith(
-            solde: client.solde + operation.montantNet,
+            solde: nouveauSolde,
             lastModifiedAt: DateTime.now(),
             lastModifiedBy: 'operation_${operation.id}',
           );
           await LocalDB.instance.saveClient(updatedClient);
-          debugPrint('💰 Solde client ${client.nom}: ${client.solde} → ${updatedClient.solde} USD');
+          debugPrint('💰 Solde client ${client.nom}: ${client.solde} → ${nouveauSolde} USD');
+          
+          // 🔥 NOUVEAU: Dépôt avec shop de destination différent du shop source
+          if (operation.shopDestinationId != null && 
+              operation.shopDestinationId != operation.shopSourceId) {
+            await _handleIntershopCredit(
+              sourceShopId: operation.shopSourceId!,
+              destinationShopId: operation.shopDestinationId!,
+              amount: operation.montantNet,
+              operationType: 'depot',
+              clientName: client.nom,
+              operationId: operation.id,
+            );
+          }
         }
       }
 
@@ -786,14 +800,27 @@ class OperationService extends ChangeNotifier {
             debugPrint('💰 Solde client ${client.nom}: ${client.solde} → ${nouveauSolde} USD');
           }
           
-          // 🔥 NOUVELLE LOGIQUE: Détection retrait cross-shop et création dette automatique
-          // Si le client a été créé par un shop différent de celui qui effectue le retrait
+          // 🔥 LOGIQUE INTERSHOP: Gestion des crédits/dettes pour retrait avec destination
+          // 1. Retrait cross-shop classique (client d'un autre shop)
           final clientShopId = client.shopId;
           if (clientShopId != null && clientShopId != operation.shopSourceId) {
             await _handleCrossShopDebt(
               clientOriginalShopId: clientShopId,
               withdrawalShopId: operation.shopSourceId!,
               amount: operation.montantNet,
+              clientName: client.nom,
+              operationId: operation.id,
+            );
+          }
+          
+          // 2. NOUVEAU: Retrait avec shop de destination différent du shop source
+          if (operation.shopDestinationId != null && 
+              operation.shopDestinationId != operation.shopSourceId) {
+            await _handleIntershopCredit(
+              sourceShopId: operation.shopSourceId!,
+              destinationShopId: operation.shopDestinationId!,
+              amount: operation.montantNet,
+              operationType: 'retrait',
               clientName: client.nom,
               operationId: operation.id,
             );
@@ -1833,6 +1860,99 @@ class OperationService extends ChangeNotifier {
     
     // ❗ SÉCURITÉ CRITIQUE: Vérifier que le shop est le DESTINATAIRE
     return operation.shopDestinationId == currentShopId;
+  }
+  
+  /// Gérer les crédits/dettes intershop pour les opérations depot/retrait avec shop destination
+  /// 
+  /// **Logique métier pour depot/retrait avec destination:**
+  /// - Agent du Shop A fait un dépôt pour un client vers Shop B
+  /// - 🔄 DETTE: Shop A doit le montant à Shop B (car Shop B recevra l'impact)
+  /// - 🔄 CRÉANCE: Shop B a une créance sur Shop A
+  /// 
+  /// Pour retrait:
+  /// - Agent du Shop A fait un retrait pour un client depuis Shop B
+  /// - 🔄 DETTE: Shop B doit le montant à Shop A (car Shop A donne l'argent)
+  /// - 🔄 CRÉANCE: Shop A a une créance sur Shop B
+  Future<void> _handleIntershopCredit({
+    required int sourceShopId,
+    required int destinationShopId,
+    required double amount,
+    required String operationType,
+    required String clientName,
+    int? operationId,
+  }) async {
+    try {
+      // Charger les deux shops concernés
+      final sourceShop = await LocalDB.instance.getShopById(sourceShopId);
+      final destinationShop = await LocalDB.instance.getShopById(destinationShopId);
+      
+      if (sourceShop == null || destinationShop == null) {
+        debugPrint('⚠️ Shops non trouvés pour calcul crédit intershop');
+        return;
+      }
+      
+      debugPrint('🔥 === CRÉDIT INTERSHOP DÉTECTÉ ===');
+      debugPrint('🏪 Shop source: ${sourceShop.designation} (ID: ${sourceShop.id})');
+      debugPrint('🏪 Shop destination: ${destinationShop.designation} (ID: ${destinationShop.id})');
+      debugPrint('💵 Montant: $amount USD');
+      debugPrint('📋 Type: $operationType');
+      debugPrint('👤 Client: $clientName');
+      
+      if (operationType == 'depot') {
+        // DÉPÔT: Shop source doit à shop destination
+        // Car le shop destination recevra l'impact du dépôt
+        
+        // 1. Augmenter les dettes du shop source
+        final updatedSourceShop = sourceShop.copyWith(
+          dettes: sourceShop.dettes + amount,
+          lastModifiedAt: DateTime.now(),
+          lastModifiedBy: 'system_intershop_depot',
+        );
+        await LocalDB.instance.saveShop(updatedSourceShop);
+        debugPrint('❌ ${sourceShop.designation}: Dettes ${sourceShop.dettes} → ${updatedSourceShop.dettes} USD');
+        
+        // 2. Augmenter les créances du shop destination
+        final updatedDestinationShop = destinationShop.copyWith(
+          creances: destinationShop.creances + amount,
+          lastModifiedAt: DateTime.now(),
+          lastModifiedBy: 'system_intershop_depot',
+        );
+        await LocalDB.instance.saveShop(updatedDestinationShop);
+        debugPrint('✅ ${destinationShop.designation}: Créances ${destinationShop.creances} → ${updatedDestinationShop.creances} USD');
+        
+      } else if (operationType == 'retrait') {
+        // RETRAIT: Shop destination doit à shop source
+        // Car le shop source donne l'argent pour un client du shop destination
+        
+        // 1. Augmenter les créances du shop source
+        final updatedSourceShop = sourceShop.copyWith(
+          creances: sourceShop.creances + amount,
+          lastModifiedAt: DateTime.now(),
+          lastModifiedBy: 'system_intershop_retrait',
+        );
+        await LocalDB.instance.saveShop(updatedSourceShop);
+        debugPrint('✅ ${sourceShop.designation}: Créances ${sourceShop.creances} → ${updatedSourceShop.creances} USD');
+        
+        // 2. Augmenter les dettes du shop destination
+        final updatedDestinationShop = destinationShop.copyWith(
+          dettes: destinationShop.dettes + amount,
+          lastModifiedAt: DateTime.now(),
+          lastModifiedBy: 'system_intershop_retrait',
+        );
+        await LocalDB.instance.saveShop(updatedDestinationShop);
+        debugPrint('❌ ${destinationShop.designation}: Dettes ${destinationShop.dettes} → ${updatedDestinationShop.dettes} USD');
+      }
+      
+      debugPrint('📊 RÉSUMÉ INTERSHOP:');
+      debugPrint('   • Opération: $operationType de $amount USD');
+      debugPrint('   • Client: $clientName');
+      debugPrint('   • Impact crédit intershop appliqué avec succès');
+      debugPrint('🔥 === FIN CRÉDIT INTERSHOP ===');
+      
+    } catch (e) {
+      debugPrint('❌ Erreur gestion crédit intershop: $e');
+      // Ne pas bloquer l'opération si le crédit ne peut pas être créé
+    }
   }
   
   /// Gérer la dette automatique entre shops lors d'un retrait cross-shop

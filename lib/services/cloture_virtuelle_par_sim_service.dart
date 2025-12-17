@@ -118,25 +118,52 @@ class ClotureVirtuelleParSimService {
     // === TRANSACTIONS DU JOUR ===
     int nombreCaptures = 0;
     double montantCaptures = 0.0;
+    double montantCapturesUSD = 0.0;
+    double montantCapturesCDF = 0.0;
     int nombreServies = 0;
     double montantServies = 0.0;
+    double montantServiesUSD = 0.0;
+    double montantServiesCDF = 0.0;
     double cashServi = 0.0;
     double fraisDuJour = 0.0;
     int nombreEnAttente = 0;
     double montantEnAttente = 0.0;
+    double montantEnAttenteUSD = 0.0;
+    double montantEnAttenteCDF = 0.0;
     
     for (var trans in transactions) {
       nombreCaptures++;
       montantCaptures += trans.montantVirtuel;
+      
+      // Séparer par devise pour les captures
+      if (trans.devise == 'USD') {
+        montantCapturesUSD += trans.montantVirtuel;
+      } else if (trans.devise == 'CDF') {
+        montantCapturesCDF += trans.montantVirtuel;
+      }
       
       if (trans.statut == VirtualTransactionStatus.validee) {
         nombreServies++;
         montantServies += trans.montantVirtuel;
         cashServi += trans.montantCash;
         fraisDuJour += trans.frais;
+        
+        // Séparer par devise pour les servies
+        if (trans.devise == 'USD') {
+          montantServiesUSD += trans.montantVirtuel;
+        } else if (trans.devise == 'CDF') {
+          montantServiesCDF += trans.montantVirtuel;
+        }
       } else if (trans.statut == VirtualTransactionStatus.enAttente) {
         nombreEnAttente++;
         montantEnAttente += trans.montantVirtuel;
+        
+        // Séparer par devise pour les en attente
+        if (trans.devise == 'USD') {
+          montantEnAttenteUSD += trans.montantVirtuel;
+        } else if (trans.devise == 'CDF') {
+          montantEnAttenteCDF += trans.montantVirtuel;
+        }
       }
     }
     
@@ -185,11 +212,17 @@ class ClotureVirtuelleParSimService {
       fraisTotal: fraisTotal,
       nombreCaptures: nombreCaptures,
       montantCaptures: montantCaptures,
+      montantCapturesUSD: montantCapturesUSD,
+      montantCapturesCDF: montantCapturesCDF,
       nombreServies: nombreServies,
       montantServies: montantServies,
+      montantServiesUSD: montantServiesUSD,
+      montantServiesCDF: montantServiesCDF,
       cashServi: cashServi,
       nombreEnAttente: nombreEnAttente,
       montantEnAttente: montantEnAttente,
+      montantEnAttenteUSD: montantEnAttenteUSD,
+      montantEnAttenteCDF: montantEnAttenteCDF,
       nombreRetraits: nombreRetraits,
       montantRetraits: montantRetraits,
       nombreDepots: nombreDepots,

@@ -9,9 +9,13 @@ import '../services/virtual_transaction_service.dart';
 import '../services/auth_service.dart';
 import '../services/sim_service.dart';
 import '../services/shop_service.dart';
+import '../services/client_service.dart'; // Add this import
 import '../services/local_db.dart';
 import '../services/depot_retrait_sync_service.dart';
 import '../services/cloture_virtuelle_par_sim_service.dart';
+import '../services/currency_service.dart';
+import '../services/credit_virtuel_service.dart';
+import '../models/credit_virtuel_model.dart';
 import '../models/cloture_virtuelle_par_sim_model.dart';
 import '../models/virtual_transaction_model.dart';
 import '../models/sim_model.dart';
@@ -29,6 +33,7 @@ import 'cloture_virtuelle_par_sim_widget.dart';
 import 'modern_transaction_card.dart';
 import 'pdf_viewer_dialog.dart';
 import 'flot_management_widget.dart';
+import '../utils/currency_utils.dart';
 
 
 /// Widget pour la gestion des transactions virtuelles par les agents
@@ -54,6 +59,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
   VirtualTransactionStatus? _statusFilter = VirtualTransactionStatus.enAttente; // Par défaut: En Attente
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = ''; // Pour recherche par référence ou téléphone
+  String? _deviseFilter; // NOUVEAU: Filtre par devise (USD/CDF)
   
   // 🔍 NOUVEAU: Filtres pour Flots
   bool _showFlotFilters = false; // Masquer les filtres par défaut
@@ -67,10 +73,30 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
   final TextEditingController _depotSearchController = TextEditingController();
   String _depotSearchQuery = ''; // Pour recherche par numéro de téléphone
   
+  // 🔍 NOUVEAU: Filtres pour Liste des Transactions
+  bool _showListeTransactionsFilters = false;
+  DateTime? _listeTransactionsDateDebut;
+  DateTime? _listeTransactionsDateFin;
+  double? _listeTransactionsMontantMin;
+  
+  // 🔍 NOUVEAU: Filtres pour Crédits Virtuels
+  CreditVirtuelStatus? _creditStatusFilter; // Filtre par statut
+  DateTime? _creditDateDebutFilter; // Filtre par date début
+  DateTime? _creditDateFinFilter; // Filtre par date fin
+  String? _creditSimFilter; // Filtre par SIM
+  final TextEditingController _creditSearchController = TextEditingController();
+  String _creditSearchQuery = ''; // Recherche par bénéficiaire/référence
+  double? _listeTransactionsMontantMax;
+  VirtualTransactionStatus? _listeTransactionsStatusFilter;
+  final TextEditingController _listeTransactionsSearchController = TextEditingController();
+  String _listeTransactionsSearchQuery = '';
+  String? _listeTransactionsDeviseFilter;
+  String? _listeTransactionsSimFilter;
+  
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this); // 4 tabs: Captures, Flots, Dépôt, Rapport
+    _tabController = TabController(length: 5, vsync: this); // 5 tabs: Captures, Flots, Dépôt, Crédit, Rapport
     // Initialiser la date à aujourd'hui pour le filtre Vue d'ensemble
     _selectedDate = DateTime.now();
     // Charger les données APRÈS le build initial pour éviter setState() during build
@@ -95,6 +121,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
     _searchController.dispose();
     _flotSearchController.dispose();
     _depotSearchController.dispose();
+    _listeTransactionsSearchController.dispose();
     super.dispose();
   }
 
@@ -642,6 +669,10 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                   text: 'Dépôt',
                 ),
                 Tab(
+                  icon: Icon(Icons.credit_card, size: isMobile ? 18 : 22),
+                  text: 'Crédit',
+                ),
+                Tab(
                   icon: Icon(Icons.analytics, size: isMobile ? 18 : 22),
                   text: 'Rapport',
                 ),
@@ -797,13 +828,13 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                 _buildTransactionsTab(),
                 _buildFlotTab(),
                 _buildDepotTab(),
+                _buildCreditVirtuelTab(),
                 _buildRapportTab(),
               ],
             ),
           ),
         ],
       ),
-
     );
   }
 
@@ -825,9 +856,9 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                   label: const Text(
                     'Nouvelle Capture',
                     style: TextStyle(
-                      fontSize: 15,
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      letterSpacing: 0.5,
+                      letterSpacing: 0.3,
                     ),
                   ),
                   style: ElevatedButton.styleFrom(
@@ -854,13 +885,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                   _showFilters ? Icons.filter_alt_off : Icons.filter_alt,
                   size: 20,
                 ),
-                label: Text(
-                  _showFilters ? 'Masquer' : 'Filtres',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+                label: const SizedBox.shrink(), // Remove text, keep only icon
                 style: OutlinedButton.styleFrom(
                   foregroundColor: const Color(0xFF48bb78),
                   side: const BorderSide(color: Color(0xFF48bb78), width: 1.5),
@@ -878,8 +903,9 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
           Container(
             color: Colors.grey[100],
             padding: const EdgeInsets.all(8),
-            child: Column(
-              children: [
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
                 // FILTRE PAR SHOP (Admin uniquement) - EN PREMIER
                 Consumer<AuthService>(
                   builder: (context, authService, child) {
@@ -925,12 +951,14 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                 // Barre de recherche
                 TextField(
                   controller: _searchController,
+                  style: const TextStyle(fontSize: 12),
                   decoration: InputDecoration(
-                    hintText: 'Rechercher par référence ou téléphone...',
-                    prefixIcon: const Icon(Icons.search, color: Color(0xFF48bb78)),
+                    hintText: 'Rechercher...',
+                    hintStyle: const TextStyle(fontSize: 12),
+                    prefixIcon: const Icon(Icons.search, color: Color(0xFF48bb78), size: 18),
                     suffixIcon: _searchQuery.isNotEmpty
                         ? IconButton(
-                            icon: const Icon(Icons.clear),
+                            icon: const Icon(Icons.clear, size: 18),
                             onPressed: () {
                               setState(() {
                                 _searchController.clear();
@@ -945,7 +973,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                       borderRadius: BorderRadius.circular(8),
                       borderSide: BorderSide.none,
                     ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   ),
                   onChanged: (value) {
                     setState(() {
@@ -959,7 +987,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                   children: [
                     Expanded(
                       child: ChoiceChip(
-                        label: const Text('Tout'),
+                        label: const Text('Tout', style: TextStyle(fontSize: 10)),
                         selected: _statusFilter == null,
                         onSelected: (selected) {
                           setState(() {
@@ -976,7 +1004,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                     const SizedBox(width: 8),
                     Expanded(
                       child: ChoiceChip(
-                        label: const Text('En Attente'),
+                        label: const Text('En Attente', style: TextStyle(fontSize: 10)),
                         selected: _statusFilter == VirtualTransactionStatus.enAttente,
                         onSelected: (selected) {
                           setState(() {
@@ -993,7 +1021,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                     const SizedBox(width: 8),
                     Expanded(
                       child: ChoiceChip(
-                        label: const Text('Servies'),
+                        label: const Text('Servies', style: TextStyle(fontSize: 10)),
                         selected: _statusFilter == VirtualTransactionStatus.validee,
                         onSelected: (selected) {
                           setState(() {
@@ -1010,9 +1038,10 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                   ],
                 ),
               ],
+              ),
             ),
           ),
-        // Liste des transactions
+        // Liste des transactions (scrollable)
         Expanded(
           child: _buildFilteredTransactionsList(),
         ),
@@ -1051,6 +1080,11 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
         // Filtrer par statut si sélectionné
         if (_statusFilter != null) {
           transactions = transactions.where((t) => t.statut == _statusFilter).toList();
+        }
+
+        // Filtrer par devise si sélectionnée
+        if (_deviseFilter != null) {
+          transactions = transactions.where((t) => t.devise == _deviseFilter).toList();
         }
 
         // Filtrer par recherche (référence ou téléphone)
@@ -1169,12 +1203,12 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
         }
         if (_dateDebutFilter != null) {
           filteredTransactions = filteredTransactions
-              .where((t) => t.dateEnregistrement.isAfter(_dateDebutFilter!))
+              .where((t) => t.dateEnregistrement.isAtSameMomentAs(_dateDebutFilter!) || t.dateEnregistrement.isAfter(_dateDebutFilter!))
               .toList();
         }
         if (_dateFinFilter != null) {
           filteredTransactions = filteredTransactions
-              .where((t) => t.dateEnregistrement.isBefore(_dateFinFilter!))
+              .where((t) => t.dateEnregistrement.isAtSameMomentAs(_dateFinFilter!) || t.dateEnregistrement.isBefore(_dateFinFilter!))
               .toList();
         }
         
@@ -1231,7 +1265,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                       });
                     },
                     icon: Icon(_showFilters ? Icons.filter_alt_off : Icons.filter_alt),
-                    label: Text(_showFilters ? 'Masquer filtres' : 'Afficher filtres'),
+                    label: const SizedBox.shrink(), // Remove text, keep only icon
                     style: TextButton.styleFrom(
                       foregroundColor: const Color(0xFF48bb78),
                     ),
@@ -1300,12 +1334,12 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
         }
         if (_dateDebutFilter != null) {
           transactions = transactions
-              .where((t) => t.dateValidation != null && t.dateValidation!.isAfter(_dateDebutFilter!))
+              .where((t) => t.dateValidation != null && (t.dateValidation!.isAtSameMomentAs(_dateDebutFilter!) || t.dateValidation!.isAfter(_dateDebutFilter!)))
               .toList();
         }
         if (_dateFinFilter != null) {
           transactions = transactions
-              .where((t) => t.dateValidation != null && t.dateValidation!.isBefore(_dateFinFilter!))
+              .where((t) => t.dateValidation != null && (t.dateValidation!.isAtSameMomentAs(_dateFinFilter!) || t.dateValidation!.isBefore(_dateFinFilter!)))
               .toList();
         }
         
@@ -1341,7 +1375,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                       });
                     },
                     icon: Icon(_showFilters ? Icons.filter_alt_off : Icons.filter_alt),
-                    label: Text(_showFilters ? 'Masquer filtres' : 'Afficher filtres'),
+                    label: const SizedBox.shrink(), // Remove text, keep only icon
                     style: TextButton.styleFrom(
                       foregroundColor: const Color(0xFF48bb78),
                     ),
@@ -1412,8 +1446,17 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
         // Créer une liste de mouvements combinés avec type et date
         final List<Map<String, dynamic>> mouvements = [];
         
-        // Ajouter les retraits
+        // Ajouter les retraits (avec filtrage par date si nécessaire)
         for (var retrait in retraits) {
+          // Appliquer le filtre de date si défini
+          if (_flotDateFilter != null) {
+            final filterDate = DateTime(_flotDateFilter!.year, _flotDateFilter!.month, _flotDateFilter!.day);
+            final retraitDate = DateTime(retrait.dateRetrait.year, retrait.dateRetrait.month, retrait.dateRetrait.day);
+            if (!retraitDate.isAtSameMomentAs(filterDate)) {
+              continue; // Ignorer ce retrait s'il ne correspond pas à la date filtrée
+            }
+          }
+          
           mouvements.add({
             'type': 'retrait',
             'data': retrait,
@@ -1421,8 +1464,17 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
           });
         }
         
-        // Ajouter les FLOTs
+        // Ajouter les FLOTs (avec filtrage par date si nécessaire)
         for (var flot in flots) {
+          // Appliquer le filtre de date si défini
+          if (_flotDateFilter != null) {
+            final filterDate = DateTime(_flotDateFilter!.year, _flotDateFilter!.month, _flotDateFilter!.day);
+            final flotDate = DateTime(flot.dateOp.year, flot.dateOp.month, flot.dateOp.day);
+            if (!flotDate.isAtSameMomentAs(filterDate)) {
+              continue; // Ignorer ce flot s'il ne correspond pas à la date filtrée
+            }
+          }
+          
           mouvements.add({
             'type': 'flot',
             'data': flot,
@@ -1702,12 +1754,12 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
         }
         if (_dateDebutFilter != null) {
           transactions = transactions
-              .where((t) => t.dateEnregistrement.isAfter(_dateDebutFilter!))
+              .where((t) => t.dateEnregistrement.isAtSameMomentAs(_dateDebutFilter!) || t.dateEnregistrement.isAfter(_dateDebutFilter!))
               .toList();
         }
         if (_dateFinFilter != null) {
           transactions = transactions
-              .where((t) => t.dateEnregistrement.isBefore(_dateFinFilter!))
+              .where((t) => t.dateEnregistrement.isAtSameMomentAs(_dateFinFilter!) || t.dateEnregistrement.isBefore(_dateFinFilter!))
               .toList();
         }
         
@@ -1739,7 +1791,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                       });
                     },
                     icon: Icon(_showFilters ? Icons.filter_alt_off : Icons.filter_alt),
-                    label: Text(_showFilters ? 'Masquer filtres' : 'Afficher filtres'),
+                    label: const SizedBox.shrink(), // Remove text, keep only icon
                     style: TextButton.styleFrom(
                       foregroundColor: const Color(0xFF48bb78),
                     ),
@@ -1915,7 +1967,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                       lastDate: DateTime.now(),
                     );
                     if (date != null) {
-                      setState(() => _dateDebutFilter = DateTime(date.year, date.month, date.day));
+                      setState(() => _dateDebutFilter = DateTime(date.year, date.month, date.day, 0, 0, 0));
                     }
                   },
                 ),
@@ -2102,13 +2154,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                       _showDepotFilters ? Icons.filter_alt_off : Icons.filter_alt,
                       size: 20,
                     ),
-                    label: Text(
-                      _showDepotFilters ? 'Masquer' : 'Filtres',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+                    label: const SizedBox.shrink(), // Remove text, keep only icon
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFF48bb78),
                       side: const BorderSide(color: Color(0xFF48bb78), width: 1.5),
@@ -2430,13 +2476,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                   _showFlotFilters ? Icons.filter_alt_off : Icons.filter_alt,
                   size: 20,
                 ),
-                label: Text(
-                  _showFlotFilters ? 'Masquer' : 'Filtres',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+                label: const SizedBox.shrink(), // Remove text, keep only icon
                 style: OutlinedButton.styleFrom(
                   foregroundColor: const Color(0xFF48bb78),
                   side: const BorderSide(color: Color(0xFF48bb78), width: 1.5),
@@ -3671,10 +3711,204 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
     );
   }
 
+  /// Onglet Crédit Virtuel - Gestion des crédits accordés aux shops/partenaires
+  Widget _buildCreditVirtuelTab() {
+    return DefaultTabController(
+      length: 3,
+      child: Column(
+        children: [
+          Container(
+            color: Colors.grey[200],
+            child: const TabBar(
+              labelColor: Color(0xFF48bb78),
+              unselectedLabelColor: Colors.grey,
+              indicatorColor: Color(0xFF48bb78),
+              tabs: [
+                Tab(text: 'Accorder Crédit', icon: Icon(Icons.add_card, size: 20)),
+                Tab(text: 'Gestion Crédits', icon: Icon(Icons.credit_card, size: 20)),
+                Tab(text: 'Statistiques', icon: Icon(Icons.analytics, size: 20)),
+              ],
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                _buildAccorderCreditTab(),
+                _buildGestionCreditsTab(),
+                _buildStatistiquesCreditTab(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Sous-onglet pour accorder un nouveau crédit
+  Widget _buildAccorderCreditTab() {
+    return Consumer<CreditVirtuelService>(
+      builder: (context, creditService, child) {
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Place the button and filter toggle on the same line
+                      Row(
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: () => _showAccorderCreditDialog(),
+                            icon: const Icon(Icons.add_card),
+                            label: const Text('Crédit'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF48bb78),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          // Filter toggle button
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                _showFilters = !_showFilters;
+                              });
+                            },
+                            icon: Icon(
+                              _showFilters ? Icons.visibility_off : Icons.visibility,
+                              size: 20,
+                            ),
+                            label: const Text('Afficher/Masquer'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF48bb78),
+                              side: const BorderSide(color: Color(0xFF48bb78), width: 1.5),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                      // Conditionally show the solde virtuel disponible when filters are shown
+                      if (_showFilters) ...[
+                        const SizedBox(height: 16),
+                        _buildCreditFilters(),
+                        const SizedBox(height: 16),
+                        _buildSoldeVirtuelDisponible(),
+                      ]
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Sous-onglet pour gérer les crédits existants
+  Widget _buildGestionCreditsTab() {
+    return Consumer<CreditVirtuelService>(
+      builder: (context, creditService, child) {
+        return Column(
+          children: [
+            // Barre de filtres et actions
+            Container(
+              color: Colors.grey[200],
+              padding: const EdgeInsets.all(8),
+              child: Row(
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: () => _loadCreditsData(),
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text('Actualiser'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF48bb78),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '${creditService.credits.length} crédit(s)',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+            ),
+            // Liste des crédits
+            Expanded(
+              child: creditService.isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : creditService.credits.isEmpty
+                      ? const Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.credit_card_off, size: 64, color: Colors.grey),
+                              SizedBox(height: 16),
+                              Text(
+                                'Aucun crédit accordé',
+                                style: TextStyle(fontSize: 16, color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(8),
+                          itemCount: creditService.credits.length,
+                          itemBuilder: (context, index) {
+                            final credit = creditService.credits[index];
+                            return _buildCreditCard(credit);
+                          },
+                        ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Sous-onglet pour les statistiques des crédits
+  Widget _buildStatistiquesCreditTab() {
+    return Consumer<CreditVirtuelService>(
+      builder: (context, creditService, child) {
+        return FutureBuilder<Map<String, dynamic>>(
+          future: creditService.getStatistiques(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final stats = snapshot.data ?? {};
+            
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  _buildStatCard('Total Accordé', stats['total_accorde']?.toString() ?? '0', Icons.trending_up, Colors.blue),
+                  _buildStatCard('Total Payé', stats['total_paye']?.toString() ?? '0', Icons.payment, Colors.green),
+                  _buildStatCard('En Attente', stats['total_en_attente']?.toString() ?? '0', Icons.schedule, Colors.orange),
+                  _buildStatCard('En Retard', stats['total_en_retard']?.toString() ?? '0', Icons.warning, Colors.red),
+                  _buildStatCard('Taux Recouvrement', '${(stats['taux_recouvrement'] ?? 0.0).toStringAsFixed(1)}%', Icons.percent, Colors.purple),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   /// Onglet rapport avec sous-onglets (par SIM et Frais)
   Widget _buildRapportTab() {
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Column(
         children: [
           Container(
@@ -3688,6 +3922,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                 Tab(text: 'Vue d\'ensemble', icon: Icon(Icons.dashboard, size: 20)),
                 Tab(text: 'Par SIM', icon: Icon(Icons.sim_card, size: 20)),
                 Tab(text: 'Frais', icon: Icon(Icons.attach_money, size: 20)),
+                Tab(text: 'Liste Transactions', icon: Icon(Icons.list_alt, size: 20)),
                 Tab(text: 'Clôture par SIM', icon: Icon(Icons.phonelink_lock, size: 20)),
               ],
             ),
@@ -3698,6 +3933,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                 _buildRapportVueEnsembleTab(),
                 _buildRapportParSimTab(),
                 _buildRapportFraisTab(),
+                _buildListeTransactionsTab(),
                 _buildClotureParSimTab(),
               ],
             ),
@@ -3903,8 +4139,8 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                   final startOfDay = DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
                   final endOfDay = DateTime(selectedDate.year, selectedDate.month, selectedDate.day, 23, 59, 59);
                   
-                  if (transDate.isAfter(startOfDay.subtract(const Duration(seconds: 1))) &&
-                      transDate.isBefore(endOfDay.add(const Duration(seconds: 1)))) {
+                  if (transDate.isAfter(startOfDay) &&
+                      transDate.isBefore(endOfDay)) {
                     final montant = json['montant'] as num?;
                     if (montant != null) {
                       sortieFrais += montant.toDouble().abs(); // Prendre valeur absolue car montant est négatif
@@ -3933,8 +4169,8 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
 
   /// Vue d'ensemble avec statistiques globales et graphiques
   Widget _buildRapportVueEnsembleTab() {
-    return Consumer2<VirtualTransactionService, SimService>(
-      builder: (BuildContext context, vtService, simService, child) {
+    return Consumer3<VirtualTransactionService, SimService, CreditVirtuelService>(
+      builder: (BuildContext context, vtService, simService, creditService, child) {
         final authService = Provider.of<AuthService>(context, listen: false);
         final currentUser = authService.currentUser;
         final isAdmin = currentUser?.isAdmin ?? false;
@@ -3958,42 +4194,222 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
             ? vtService.transactions.where((t) => t.shopId == shopIdFilter).toList()
             : vtService.transactions;
 
-        // Appliquer les filtres de dates (date unique pour Vue d'Ensemble)
-        var filteredTransactions = transactions;
+        // NOUVEAU: Séparer les filtres selon la logique des dates
+        // CAPTURES DU JOUR: Basées sur dateEnregistrement
+        var capturesDuJour = transactions;
+        // SERVICES DU JOUR: Basées sur dateValidation
+        var servicesDuJour = transactions.where((t) => 
+          t.statut == VirtualTransactionStatus.validee && t.dateValidation != null
+        ).toList();
+        
         if (_selectedDate != null) {
-          // Filtrer pour la date exacte sélectionnée
-          final startOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day);
+          final startOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day, 0, 0, 0);
           final endOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day, 23, 59, 59);
-          filteredTransactions = filteredTransactions
+          
+          // Filtrer CAPTURES par dateEnregistrement
+          capturesDuJour = capturesDuJour
               .where((t) => 
-                t.dateEnregistrement.isAfter(startOfDay.subtract(const Duration(seconds: 1))) &&
-                t.dateEnregistrement.isBefore(endOfDay.add(const Duration(seconds: 1))))
+                (t.dateEnregistrement.isAtSameMomentAs(startOfDay) || t.dateEnregistrement.isAfter(startOfDay)) &&
+                (t.dateEnregistrement.isAtSameMomentAs(endOfDay) || t.dateEnregistrement.isBefore(endOfDay)))
+              .toList();
+              
+          // Filtrer SERVICES par dateValidation (CASH SERVI)
+          servicesDuJour = servicesDuJour
+              .where((t) => 
+                t.dateValidation != null &&
+                (t.dateValidation!.isAtSameMomentAs(startOfDay) || t.dateValidation!.isAfter(startOfDay)) &&
+                (t.dateValidation!.isAtSameMomentAs(endOfDay) || t.dateValidation!.isBefore(endOfDay)))
               .toList();
         }
+        
         // Filtrer par SIM (si sélectionnée)
         if (_selectedSimFilter != null) {
-          filteredTransactions = filteredTransactions
+          capturesDuJour = capturesDuJour
+              .where((t) => t.simNumero == _selectedSimFilter)
+              .toList();
+          servicesDuJour = servicesDuJour
               .where((t) => t.simNumero == _selectedSimFilter)
               .toList();
         }
 
-        // Calculer les statistiques globales
-        final captures = filteredTransactions;
-        final validees = filteredTransactions.where((t) => t.statut == VirtualTransactionStatus.validee).toList();
-        final enAttente = filteredTransactions.where((t) => t.statut == VirtualTransactionStatus.enAttente).toList();
-        final annulees = filteredTransactions.where((t) => t.statut == VirtualTransactionStatus.annulee).toList();
+        // Calculer les statistiques basées sur la logique correcte des dates
+        final captures = capturesDuJour; // CAPTURES = dateEnregistrement
+        final validees = servicesDuJour; // SERVICES = dateValidation
+        final enAttente = capturesDuJour.where((t) => t.statut == VirtualTransactionStatus.enAttente).toList();
+        final annulees = capturesDuJour.where((t) => t.statut == VirtualTransactionStatus.annulee).toList();
 
-        final montantTotalCaptures = captures.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
-        final montantVirtuelServies = validees.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
-        final fraisPercus = validees.fold<double>(0, (sum, t) => sum + t.frais);
+        // NOUVEAU: Séparer les captures par devise
+        final capturesCdf = captures.where((t) => t.devise == 'CDF').toList();
+        final capturesUsd = captures.where((t) => t.devise == 'USD').toList();
+        final montantCapturesCdf = capturesCdf.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
+        final montantCapturesUsd = capturesUsd.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
+        
+        // NOUVEAU: Séparer les servies par devise
+        final serviesCdf = validees.where((t) => t.devise == 'CDF').toList();
+        final serviesUsd = validees.where((t) => t.devise == 'USD').toList();
+        final montantServiesCdf = serviesCdf.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
+        final montantServiesUsd = serviesUsd.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
+        
+        // NOUVEAU: Séparer les en attente par devise
+        final enAttenteCdf = enAttente.where((t) => t.devise == 'CDF').toList();
+        final enAttenteUsd = enAttente.where((t) => t.devise == 'USD').toList();
+        final montantEnAttenteCdf = enAttenteCdf.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
+        final montantEnAttenteUsd = enAttenteUsd.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
+        
+        // Totaux pour compatibilité (conversion CDF en USD pour totaux globaux)
+        final montantTotalCaptures = montantCapturesUsd + CurrencyService.instance.convertCdfToUsd(montantCapturesCdf);
+        final montantVirtuelServies = montantServiesUsd + CurrencyService.instance.convertCdfToUsd(montantServiesCdf);
+        final montantEnAttente = montantEnAttenteUsd + CurrencyService.instance.convertCdfToUsd(montantEnAttenteCdf);
+        
+        final fraisPercus = captures.fold<double>(0, (sum, t) => sum + t.frais);
         // NOUVEAU: Total des frais de TOUTES les captures (pas seulement servies)
         final fraisToutesCaptures = captures.fold<double>(0, (sum, t) => sum + t.frais);
+        
+        // DEBUG: Afficher les détails des CAPTURES incluses dans le calcul
+        debugPrint('📋 [DEBUG] Captures Calculation');
+        debugPrint('   Nombre total captures incluses: ${captures.length}');
+        for (var t in captures.take(5)) { // Afficher seulement les 5 premières
+          debugPrint('   - ID: ${t.id}, Ref: ${t.reference}, Montant: ${t.montantVirtuel} ${t.devise}, Frais: ${t.frais}');
+          debugPrint('     DateEnregistrement RAW: ${t.dateEnregistrement.toIso8601String()}');
+          debugPrint('     DateEnregistrement LOCAL: ${t.dateEnregistrement.toLocal().toIso8601String()}');
+          debugPrint('     DateEnregistrement UTC: ${t.dateEnregistrement.toUtc().toIso8601String()}');
+        }
+        if (captures.length > 5) {
+          debugPrint('   ... et ${captures.length - 5} autres captures');
+        }
         final cashServi = validees.fold<double>(0, (sum, t) => sum + t.montantCash);
-        final montantEnAttente = enAttente.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
+        
+        // DEBUG ENHANCED: Vérification détaillée du calcul Cash Servi
+        debugPrint('🔍 [DEBUG ENHANCED] Cash Servi Calculation - VERIFICATION BD');
+        debugPrint('   Date sélectionnée: ${_selectedDate?.toIso8601String().split('T')[0] ?? 'Toutes'}');
+        debugPrint('   Shop ID Filter: $shopIdFilter');
+        debugPrint('   SIM Filter: $_selectedSimFilter');
+        
+        // Vérifier les transactions AVANT filtrage par date
+        final allValidatedTransactions = transactions.where((t) => 
+          t.statut == VirtualTransactionStatus.validee && t.dateValidation != null
+        ).toList();
+        debugPrint('   Total transactions validées (AVANT filtrage date): ${allValidatedTransactions.length}');
+        
+        // Vérifier les transactions APRÈS filtrage par date
+        debugPrint('   Total transactions validées (APRÈS filtrage date): ${servicesDuJour.length}');
+        debugPrint('   Total validées utilisées pour calcul: ${validees.length}');
+        
+        if (_selectedDate != null) {
+          final startOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day, 0, 0, 0);
+          final endOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day, 23, 59, 59);
+          debugPrint('   Plage de filtrage: $startOfDay à $endOfDay');
+          
+          // Vérifier chaque transaction validée pour voir si elle passe le filtre
+          debugPrint('   === ANALYSE DÉTAILLÉE DU FILTRAGE ===');
+          double totalCashIncluded = 0.0;
+          double totalCashExcluded = 0.0;
+          int countIncluded = 0;
+          int countExcluded = 0;
+          
+          for (var t in allValidatedTransactions) {
+            final dateVal = t.dateValidation!;
+            final passesFilter = (dateVal.isAtSameMomentAs(startOfDay) || dateVal.isAfter(startOfDay)) &&
+                               (dateVal.isAtSameMomentAs(endOfDay) || dateVal.isBefore(endOfDay));
+            
+            if (passesFilter) {
+              totalCashIncluded += t.montantCash;
+              countIncluded++;
+              debugPrint('   ✅ INCLUS - ID: ${t.id}, Ref: ${t.reference}');
+              debugPrint('      DateValidation: ${dateVal.toIso8601String()}');
+              debugPrint('      MontantVirtuel: ${t.montantVirtuel} ${t.devise}');
+              debugPrint('      MontantCash: \$${t.montantCash}');
+              debugPrint('      Frais: \$${t.frais}');
+              debugPrint('      Statut: ${t.statut}');
+            } else {
+              totalCashExcluded += t.montantCash;
+              countExcluded++;
+              debugPrint('   ❌ EXCLU - ID: ${t.id}, DateValidation: ${dateVal.toIso8601String()}, Cash: \$${t.montantCash}');
+            }
+          }
+          
+          debugPrint('   === RÉSUMÉ DU FILTRAGE ===');
+          debugPrint('   Transactions INCLUSES: $countIncluded, Cash total: \$${totalCashIncluded.toStringAsFixed(2)}');
+          debugPrint('   Transactions EXCLUES: $countExcluded, Cash total: \$${totalCashExcluded.toStringAsFixed(2)}');
+          debugPrint('   TOTAL BD: ${countIncluded + countExcluded}, Cash total BD: \$${(totalCashIncluded + totalCashExcluded).toStringAsFixed(2)}');
+        }
+        
+        // Calculer le total manuellement pour vérification
+        debugPrint('   === CALCUL MANUEL DÉTAILLÉ ===');
+        double manualCashServi = 0.0;
+        for (var t in validees) {
+          // Calculer le montant cash attendu selon la formule: montantVirtuel - frais
+          final expectedCash = t.montantVirtuel - t.frais;
+          manualCashServi += t.montantCash;
+          
+          debugPrint('   Transaction ID: ${t.id}');
+          debugPrint('     MontantVirtuel: ${t.montantVirtuel} ${t.devise}');
+          debugPrint('     Frais: \$${t.frais}');
+          debugPrint('     MontantCash (BD): \$${t.montantCash}');
+          debugPrint('     MontantCash (Attendu): \$${expectedCash.toStringAsFixed(2)}');
+          debugPrint('     CONCORDANCE: ${t.montantCash == expectedCash ? 'OUI' : 'NON - DIFFÉRENCE!'}');
+          debugPrint('     Total cumulé: \$${manualCashServi.toStringAsFixed(2)}');
+          debugPrint('   ---');
+        }
+        
+        debugPrint('   RÉSULTAT FINAL Cash Servi: \$${cashServi.toStringAsFixed(2)}');
+        debugPrint('   VÉRIFICATION MANUELLE: \$${manualCashServi.toStringAsFixed(2)}');
+        debugPrint('   CONCORDANCE: ${cashServi == manualCashServi ? 'OUI' : 'NON - ERREUR!'}');
         final montantAnnulees = annulees.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
 
         // Soldes SIMs
         final soldeTotalSims = sims.fold<double>(0, (sum, s) => sum + s.soldeActuel);
+
+        // NOUVEAU: Statistiques des crédits virtuels
+        final creditsVirtuels = shopIdFilter != null
+            ? creditService.credits.where((c) => c.shopId == shopIdFilter).toList()
+            : creditService.credits;
+        
+        // Filtrer les crédits par date (date de sortie)
+        var creditsDuJour = creditsVirtuels;
+        var paiementsDuJour = creditsVirtuels.where((c) => c.datePaiement != null).toList();
+        
+        if (_selectedDate != null) {
+          final startOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day, 0, 0, 0);
+          final endOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day, 23, 59, 59);
+          
+          // Crédits accordés du jour (basé sur date_sortie)
+          creditsDuJour = creditsDuJour.where((c) => 
+            (c.dateSortie.isAtSameMomentAs(startOfDay) || c.dateSortie.isAfter(startOfDay)) &&
+            (c.dateSortie.isAtSameMomentAs(endOfDay) || c.dateSortie.isBefore(endOfDay))).toList();
+            
+          // Paiements reçus du jour (basé sur date_paiement)
+          paiementsDuJour = paiementsDuJour.where((c) => 
+            c.datePaiement != null &&
+            (c.datePaiement!.isAtSameMomentAs(startOfDay) || c.datePaiement!.isAfter(startOfDay)) &&
+            (c.datePaiement!.isAtSameMomentAs(endOfDay) || c.datePaiement!.isBefore(endOfDay))).toList();
+        }
+        
+        // Filtrer par SIM si sélectionnée
+        if (_selectedSimFilter != null) {
+          creditsDuJour = creditsDuJour.where((c) => c.simNumero == _selectedSimFilter).toList();
+          paiementsDuJour = paiementsDuJour.where((c) => c.simNumero == _selectedSimFilter).toList();
+        }
+        
+        // Calculs des crédits virtuels
+        final montantCreditsAccordes = creditsDuJour.fold<double>(0, (sum, c) => sum + c.montantCredit);
+        final montantPaiementsRecus = paiementsDuJour.fold<double>(0, (sum, c) => sum + (c.montantPaye ?? 0.0));
+        final nombreCreditsAccordes = creditsDuJour.length;
+        final nombrePaiementsRecus = paiementsDuJour.length;
+        
+        // Impact sur le solde virtuel (crédits accordés diminuent le virtuel)
+        final impactVirtuelNegatif = montantCreditsAccordes;
+        
+        // Impact sur le cash (paiements reçus augmentent le cash)
+        final impactCashPositif = montantPaiementsRecus;
+        
+        // Statistiques globales des crédits (tous statuts)
+        final totalCreditsEnCours = creditsVirtuels.where((c) => 
+          c.statut != CreditVirtuelStatus.paye && c.statut != CreditVirtuelStatus.annule).length;
+        final montantTotalEnAttente = creditsVirtuels.where((c) => 
+          c.statut != CreditVirtuelStatus.paye && c.statut != CreditVirtuelStatus.annule)
+          .fold<double>(0, (sum, c) => sum + c.montantRestant);
+        final creditsEnRetard = creditsVirtuels.where((c) => c.estEnRetard).length;
 
         // Statistiques par opérateur
         final Map<String, Map<String, dynamic>> statsParOperateur = {};
@@ -4010,10 +4426,10 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
           statsParOperateur[operateur]!['nombre_sims'] += 1;
           statsParOperateur[operateur]!['solde_total'] += sim.soldeActuel;
 
-          final simTransactions = filteredTransactions.where((t) => t.simNumero == sim.numero).toList();
-          final simValidees = simTransactions.where((t) => t.statut == VirtualTransactionStatus.validee).toList();
-          statsParOperateur[operateur]!['transactions'] += simTransactions.length;
-          statsParOperateur[operateur]!['frais'] += simValidees.fold<double>(0, (sum, t) => sum + t.frais);
+          final simCaptures = capturesDuJour.where((t) => t.simNumero == sim.numero).toList();
+          final simServices = servicesDuJour.where((t) => t.simNumero == sim.numero).toList();
+          statsParOperateur[operateur]!['transactions'] += simCaptures.length;
+          statsParOperateur[operateur]!['frais'] += simServices.fold<double>(0, (sum, t) => sum + t.frais);
         }
 
         // NOUVEAU: Charger les retraits virtuels via FutureBuilder
@@ -4028,8 +4444,8 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
               final startOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day);
               final endOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day, 23, 59, 59);
               retraits = retraits.where((r) => 
-                r.dateRetrait.isAfter(startOfDay.subtract(const Duration(seconds: 1))) &&
-                r.dateRetrait.isBefore(endOfDay.add(const Duration(seconds: 1)))).toList();
+                (r.dateRetrait.isAtSameMomentAs(startOfDay) || r.dateRetrait.isAfter(startOfDay)) &&
+                (r.dateRetrait.isAtSameMomentAs(endOfDay) || r.dateRetrait.isBefore(endOfDay))).toList();
             }
             // Filtrer par SIM
             if (_selectedSimFilter != null) {
@@ -4075,27 +4491,27 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                 
                 // Appliquer les filtres de date sur FLOTs REÇUS
                 if (_selectedDate != null) {
-                  final startOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day);
+                  final startOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day, 0, 0, 0);
                   final endOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day, 23, 59, 59);
                   flotsRecus = flotsRecus.where((f) {
-                    // Utiliser UNIQUEMENT created_at pour le filtrage
+                    // Utiliser created_at pour la date de réception du FLOT
                     if (f.createdAt == null) return false; // Exclure si pas de created_at
                     final dateToCheck = f.createdAt!;
-                    return dateToCheck.isAfter(startOfDay.subtract(const Duration(seconds: 1))) &&
-                           dateToCheck.isBefore(endOfDay.add(const Duration(seconds: 1)));
+                    return (dateToCheck.isAtSameMomentAs(startOfDay) || dateToCheck.isAfter(startOfDay)) &&
+                           (dateToCheck.isAtSameMomentAs(endOfDay) || dateToCheck.isBefore(endOfDay));
                   }).toList();
                 }
                 
-                // Appliquer les filtres de date sur FLOTs ENVOYÉS
+                // Appliquer les filtres de date sur FLOTs ENVOYÉS (DATE ENVOI)
                 if (_selectedDate != null) {
-                  final startOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day);
+                  final startOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day, 0, 0, 0);
                   final endOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day, 23, 59, 59);
                   flotsEnvoyes = flotsEnvoyes.where((f) {
-                    // Utiliser UNIQUEMENT created_at pour le filtrage
+                    // Utiliser created_at pour la date d'envoi du FLOT
                     if (f.createdAt == null) return false; // Exclure si pas de created_at
                     final dateToCheck = f.createdAt!;
-                    return dateToCheck.isAfter(startOfDay.subtract(const Duration(seconds: 1))) &&
-                           dateToCheck.isBefore(endOfDay.add(const Duration(seconds: 1)));
+                    return (dateToCheck.isAtSameMomentAs(startOfDay) || dateToCheck.isAfter(startOfDay)) &&
+                           (dateToCheck.isAtSameMomentAs(endOfDay) || dateToCheck.isBefore(endOfDay));
                   }).toList();
                 }
                 
@@ -4115,13 +4531,13 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                       builder: (BuildContext context, depotsSnapshot) {
                         var depots = depotsSnapshot.data ?? [];
                         
-                        // Filtrer par date unique
+                        // Filtrer par date unique (DATE ENREGISTREMENT)
                         if (_selectedDate != null) {
-                          final startOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day);
+                          final startOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day, 0, 0, 0);
                           final endOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day, 23, 59, 59);
                           depots = depots.where((d) => 
-                            d.dateDepot.isAfter(startOfDay.subtract(const Duration(seconds: 1))) &&
-                            d.dateDepot.isBefore(endOfDay.add(const Duration(seconds: 1)))).toList();
+                            (d.dateDepot.isAtSameMomentAs(startOfDay) || d.dateDepot.isAfter(startOfDay)) &&
+                            (d.dateDepot.isAtSameMomentAs(endOfDay) || d.dateDepot.isBefore(endOfDay))).toList();
                         }
                         // Filtrer par SIM
                         if (_selectedSimFilter != null) {
@@ -4135,8 +4551,8 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                         final flotsRecus = flotsRecusPhysiques; // FLOTs PHYSIQUES reçus
                         final flotsEnvoyes = flotsEnvoyesPhysiques; // FLOTs PHYSIQUES envoyés
                         final cashServiValue = cashServi; // Cash physique servi (toutes les SIMs)
-                        // FORMULE: Cash Dispo = Solde Antérieur + FLOT Reçu - FLOT Envoyé + Dépôts Clients - Cash Servi
-                        final cashDisponible = capitalInitialCash + flotsRecus - flotsEnvoyes + depotsClients - cashServiValue;
+                        // NOUVELLE FORMULE: Cash Dispo = Solde Antérieur + FLOT Reçu - FLOT Envoyé + Dépôts Clients - Cash Servi + Paiements Crédits Reçus
+                        final cashDisponible = capitalInitialCash + flotsRecus - flotsEnvoyes + depotsClients - cashServiValue + impactCashPositif;
                 
                         return Consumer<ShopService>(
                   builder: (BuildContext context, shopService, child) {
@@ -4158,13 +4574,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                                 _showVueEnsembleFilter ? Icons.filter_alt_off : Icons.filter_alt,
                                 size: 20,
                               ),
-                              label: Text(
-                                _showVueEnsembleFilter ? 'Masquer Filtre' : 'Afficher Filtre',
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
+                              label: const SizedBox.shrink(), // Remove text, keep only icon
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: const Color(0xFF48bb78),
                                 side: const BorderSide(color: Color(0xFF48bb78), width: 1.5),
@@ -4382,8 +4792,8 @@ const SizedBox(height: 16),
                               final soldeAnterieurVirtuel = virtuelSnapshot.data ?? 0.0;
                               final capturesDuJour = montantTotalCaptures; // Captures SANS Frais
                               final retraitsDuJour = montantTotalRetraits; // Retraits (Toutes SIMs)
-                              // FORMULE: Virtuel Dispo = Solde Antérieur + Captures - Retraits - Dépôts Clients
-                              final virtuelDisponible = soldeAnterieurVirtuel + capturesDuJour - retraitsDuJour - depotsClients;
+                              // NOUVELLE FORMULE: Virtuel Dispo = Solde Antérieur + Captures - Retraits - Dépôts Clients - Crédits Accordés
+                              final virtuelDisponible = soldeAnterieurVirtuel + capturesDuJour - retraitsDuJour - depotsClients - impactVirtuelNegatif;
                               
                               return Container(
                                 margin: const EdgeInsets.symmetric(vertical: 8),
@@ -4445,7 +4855,28 @@ const SizedBox(height: 16),
                                           children: [
                                             _buildFinanceRow('Solde Antérieur', soldeAnterieurVirtuel, Colors.grey),
                                             const SizedBox(height: 8),
-                                            _buildFinanceRow('+ Captures du jour', capturesDuJour, Colors.green),
+                                            // NOUVEAU: Afficher les captures par devise
+                                            if (montantCapturesCdf > 0) ...[
+                                              _buildFinanceRowWithCurrency('+ Captures CDF', montantCapturesCdf, 'CDF', Colors.green),
+                                              const SizedBox(height: 4),
+                                            ],
+                                            if (montantCapturesUsd > 0) ...[
+                                              _buildFinanceRowWithCurrency('+ Captures USD', montantCapturesUsd, 'USD', Colors.green),
+                                              const SizedBox(height: 4),
+                                            ],
+                                            if (montantCapturesCdf == 0 && montantCapturesUsd == 0)
+                                              _buildFinanceRow('+ Captures du jour', 0.0, Colors.green),
+                                            // NOUVEAU: Afficher les en attente par devise
+                                            if (montantEnAttenteCdf > 0) ...[
+                                              _buildFinanceRowWithCurrency('- En Attente CDF', montantEnAttenteCdf, 'CDF', Colors.orange),
+                                              const SizedBox(height: 4),
+                                            ],
+                                            if (montantEnAttenteUsd > 0) ...[
+                                              _buildFinanceRowWithCurrency('- En Attente USD', montantEnAttenteUsd, 'USD', Colors.orange),
+                                              const SizedBox(height: 4),
+                                            ],
+                                            if (montantEnAttenteCdf == 0 && montantEnAttenteUsd == 0)
+                                              _buildFinanceRow('- En Attente', 0.0, Colors.orange),
                                             // Détails Captures par SIM
                                             FutureBuilder<Map<String, Map<String, dynamic>>>(
                                               future: _getCapturesParSim(shopIdFilter, captures),
@@ -4458,20 +4889,48 @@ const SizedBox(height: 16),
                                                   child: Column(
                                                     crossAxisAlignment: CrossAxisAlignment.start,
                                                     children: [
-                                                      ...capturesParSim.entries.map((e) => 
-                                                        Padding(
+                                                      ...capturesParSim.entries.map((e) {
+                                                        final simNumero = e.key;
+                                                        final data = e.value;
+                                                        final countCdf = data['count_cdf'] as int;
+                                                        final countUsd = data['count_usd'] as int;
+                                                        final montantCdf = data['montant_cdf'] as double;
+                                                        final montantUsd = data['montant_usd'] as double;
+                                                        
+                                                        return Padding(
                                                           padding: const EdgeInsets.only(bottom: 2, left: 8),
-                                                          child: Text(
-                                                            '• ${e.key}: ${e.value['count']} capture(s) = \$${e.value['montant'].toStringAsFixed(2)}',
-                                                            style: TextStyle(fontSize: 11, color: Colors.purple[700]),
+                                                          child: Column(
+                                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                                            children: [
+                                                              if (countCdf > 0)
+                                                                Text(
+                                                                  '• $simNumero: CDF = ${montantCdf.toStringAsFixed(0)} FC',
+                                                                  style: TextStyle(fontSize: 11, color: Colors.blue[700]),
+                                                                ),
+                                                              if (countUsd > 0)
+                                                                Text(
+                                                                  '• $simNumero: USD = \$${montantUsd.toStringAsFixed(2)}',
+                                                                  style: TextStyle(fontSize: 11, color: Colors.green[700]),
+                                                                ),
+                                                            ],
                                                           ),
-                                                        )
-                                                      ).toList(),
+                                                        );
+                                                      }).toList(),
                                                     ],
                                                   ),
                                                 );
                                               },
                                             ),
+                                            const SizedBox(height: 8),
+                                            _buildFinanceRow('- Crédits Accordés', impactVirtuelNegatif, Colors.red),
+                                            if (nombreCreditsAccordes > 0)
+                                              Padding(
+                                                padding: const EdgeInsets.only(left: 16, top: 4),
+                                                child: Text(
+                                                  '• $nombreCreditsAccordes crédit(s) accordé(s) (sortie virtuelle)',
+                                                  style: TextStyle(fontSize: 11, color: Colors.red[700]),
+                                                ),
+                                              ),
                                             const SizedBox(height: 8),
                                             _buildFinanceRow('- Flot Envoyé Virtuel', retraitsDuJour, Colors.red),
                                             // Détails Flots Virtuels (Retraits)
@@ -4553,21 +5012,26 @@ const SizedBox(height: 16),
                                               ),
                                               const SizedBox(height: 8),
                                               ...(() {
-                                                // Grouper les non servis par SIM
-                                                final Map<String, List<VirtualTransactionModel>> nonServisParSim = {};
+                                                // Grouper les non servis par SIM et par devise
+                                                final Map<String, Map<String, List<VirtualTransactionModel>>> nonServisParSim = {};
                                                 for (var transaction in enAttente) {
                                                   final simKey = transaction.simNumero;
+                                                  final devise = transaction.devise;
                                                   if (!nonServisParSim.containsKey(simKey)) {
-                                                    nonServisParSim[simKey] = [];
+                                                    nonServisParSim[simKey] = {'CDF': [], 'USD': []};
                                                   }
-                                                  nonServisParSim[simKey]!.add(transaction);
+                                                  nonServisParSim[simKey]![devise]!.add(transaction);
                                                 }
                                                 
-                                                // Créer les widgets pour chaque SIM
+                                                // Créer les widgets pour chaque SIM avec séparation par devise
                                                 return nonServisParSim.entries.map((entry) {
                                                   final simNumero = entry.key;
-                                                  final transactions = entry.value;
-                                                  final totalMontant = transactions.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
+                                                  final transactionsParDevise = entry.value;
+                                                  final transactionsCdf = transactionsParDevise['CDF']!;
+                                                  final transactionsUsd = transactionsParDevise['USD']!;
+                                                  
+                                                  final montantCdf = transactionsCdf.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
+                                                  final montantUsd = transactionsUsd.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
                                                   
                                                   return Padding(
                                                     padding: const EdgeInsets.only(bottom: 8),
@@ -4578,8 +5042,8 @@ const SizedBox(height: 16),
                                                         borderRadius: BorderRadius.circular(8),
                                                         border: Border.all(color: Colors.orange.shade200),
                                                       ),
-                                                      child: Row(
-                                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                      child: Column(
+                                                        crossAxisAlignment: CrossAxisAlignment.start,
                                                         children: [
                                                           Text(
                                                             '📱 SIM: $simNumero',
@@ -4589,20 +5053,357 @@ const SizedBox(height: 16),
                                                               color: Colors.orange[900],
                                                             ),
                                                           ),
-                                                          Text(
-                                                            '${transactions.length} = \$${totalMontant.toStringAsFixed(2)}',
-                                                            style: TextStyle(
-                                                              fontSize: 15,
-                                                              fontWeight: FontWeight.bold,
-                                                              color: Colors.orange[700],
+                                                          const SizedBox(height: 4),
+                                                          if (transactionsCdf.isNotEmpty)
+                                                            Text(
+                                                              'CDF = ${montantCdf.toStringAsFixed(0)} FC',
+                                                              style: TextStyle(
+                                                                fontSize: 13,
+                                                                fontWeight: FontWeight.w600,
+                                                                color: Colors.blue[700],
+                                                              ),
                                                             ),
-                                                          ),
+                                                          if (transactionsUsd.isNotEmpty)
+                                                            Text(
+                                                              'USD = \$${montantUsd.toStringAsFixed(2)}',
+                                                              style: TextStyle(
+                                                                fontSize: 13,
+                                                                fontWeight: FontWeight.w600,
+                                                                color: Colors.green[700],
+                                                              ),
+                                                            ),
                                                         ],
                                                       ),
                                                     ),
                                                   );
                                                 }).toList();
                                               })(),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          
+                          // NOUVELLE SECTION: CRÉDITS VIRTUELS
+                          Container(
+                            margin: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(24),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.08),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(24),
+                              child: Column(
+                                children: [
+                                  // HEADER - CRÉDITS VIRTUELS
+                                  Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [
+                                          Colors.orange.withOpacity(0.1),
+                                          Colors.orange.withOpacity(0.05),
+                                        ],
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          width: 30,
+                                          height: 30,
+                                          decoration: const BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            gradient: LinearGradient(
+                                              colors: [Colors.orange, Color(0xFFFF8F00)],
+                                            ),
+                                          ),
+                                          child: const Icon(Icons.credit_card, color: Colors.white, size: 24),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        const Expanded(
+                                          child: Text(
+                                            'CRÉDITS VIRTUELS',
+                                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  // BODY - DÉTAILS CRÉDITS
+                                  Padding(
+                                    padding: const EdgeInsets.all(20),
+                                    child: Column(
+                                      children: [
+                                        // Impact sur le virtuel (crédits accordés)
+                                        _buildFinanceRow('Crédits Accordés (Sortie)', montantCreditsAccordes, Colors.red),
+                                        if (nombreCreditsAccordes > 0)
+                                          Padding(
+                                            padding: const EdgeInsets.only(left: 16, top: 4),
+                                            child: Text(
+                                              '• $nombreCreditsAccordes crédit(s) accordé(s)',
+                                              style: TextStyle(fontSize: 11, color: Colors.red[700]),
+                                            ),
+                                          ),
+                                        const SizedBox(height: 8),
+                                        
+                                        // Impact sur le cash (paiements reçus)
+                                        _buildFinanceRow('Paiements Reçus (Entrée)', montantPaiementsRecus, Colors.green),
+                                        if (nombrePaiementsRecus > 0)
+                                          Padding(
+                                            padding: const EdgeInsets.only(left: 16, top: 4),
+                                            child: Text(
+                                              '• $nombrePaiementsRecus paiement(s) reçu(s)',
+                                              style: TextStyle(fontSize: 11, color: Colors.green[700]),
+                                            ),
+                                          ),
+                                        const SizedBox(height: 8),
+                                        
+                                        const Divider(),
+                                        
+                                        // Impact net sur les soldes
+                                        _buildFinanceRow('Impact Virtuel (Négatif)', -impactVirtuelNegatif, Colors.red, isBold: true),
+                                        const SizedBox(height: 4),
+                                        _buildFinanceRow('Impact Cash (Positif)', impactCashPositif, Colors.green, isBold: true),
+                                        
+                                        const SizedBox(height: 16),
+                                        
+                                        // Statistiques globales
+                                        if (totalCreditsEnCours > 0 || montantTotalEnAttente > 0 || creditsEnRetard > 0) ...[
+                                          const Divider(height: 16),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            'Situation Globale des Crédits:',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.orange[800],
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          
+                                          if (totalCreditsEnCours > 0)
+                                            Padding(
+                                              padding: const EdgeInsets.only(bottom: 4),
+                                              child: Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Text(
+                                                    'Crédits en cours:',
+                                                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                                  ),
+                                                  Text(
+                                                    '$totalCreditsEnCours crédit(s)',
+                                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          
+                                          if (montantTotalEnAttente > 0)
+                                            Padding(
+                                              padding: const EdgeInsets.only(bottom: 4),
+                                              child: Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Text(
+                                                    'Montant en attente:',
+                                                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                                  ),
+                                                  Text(
+                                                    CurrencyService.instance.formatMontant(montantTotalEnAttente, 'USD'),
+                                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.orange),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          
+                                          if (creditsEnRetard > 0)
+                                            Padding(
+                                              padding: const EdgeInsets.only(bottom: 4),
+                                              child: Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Text(
+                                                    'Crédits en retard:',
+                                                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                                  ),
+                                                  Text(
+                                                    '$creditsEnRetard crédit(s)',
+                                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.red),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          
+                          // SECTION SOLDE PAR PARTENAIRE
+                          FutureBuilder<Map<String, double>>(
+                            future: _calculerSoldeParPartenaire(shopIdFilter, _selectedDate),
+                            builder: (context, soldePartenaireSnapshot) {
+                              final soldeParPartenaire = soldePartenaireSnapshot.data ?? {};
+                              
+                              return Container(
+                                margin: const EdgeInsets.symmetric(vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(24),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.08),
+                                      blurRadius: 20,
+                                      offset: const Offset(0, 8),
+                                    ),
+                                  ],
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(24),
+                                  child: Column(
+                                    children: [
+                                      // HEADER - SOLDE PAR PARTENAIRE
+                                      Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            begin: Alignment.topLeft,
+                                            end: Alignment.bottomRight,
+                                            colors: [
+                                              Colors.indigo.withOpacity(0.1),
+                                              Colors.indigo.withOpacity(0.05),
+                                            ],
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Container(
+                                              width: 30,
+                                              height: 30,
+                                              decoration: const BoxDecoration(
+                                                shape: BoxShape.circle,
+                                                gradient: LinearGradient(
+                                                  colors: [Colors.indigo, Color(0xFF3F51B5)],
+                                                ),
+                                              ),
+                                              child: const Icon(Icons.people, color: Colors.white, size: 24),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            const Expanded(
+                                              child: Text(
+                                                'SOLDE PAR PARTENAIRE',
+                                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      // BODY - DETAILS PARTENAIRES
+                                      Padding(
+                                        padding: const EdgeInsets.all(20),
+                                        child: Column(
+                                          children: [
+                                            if (soldeParPartenaire.isEmpty)
+                                              Text(
+                                                'Aucune opération partenaire trouvée',
+                                                style: TextStyle(
+                                                  fontSize: 14,
+                                                  color: Colors.grey[600],
+                                                  fontStyle: FontStyle.italic,
+                                                ),
+                                              )
+                                            else ...[
+                                              ...soldeParPartenaire.entries.map((entry) {
+                                                final partenaire = entry.key;
+                                                final solde = entry.value;
+                                                final color = solde > 0 
+                                                  ? Colors.red[700] 
+                                                  : solde < 0 
+                                                    ? Colors.green[700] 
+                                                    : Colors.grey[700];
+                                                final status = solde > 0 
+                                                  ? 'NOUS DEVONS' 
+                                                  : solde < 0 
+                                                    ? 'NOUS DOIT' 
+                                                    : 'ÉQUILIBRÉ';
+                                                
+                                                return Padding(
+                                                  padding: const EdgeInsets.only(bottom: 8),
+                                                  child: Row(
+                                                    children: [
+                                                      Expanded(
+                                                        child: Text(
+                                                          partenaire,
+                                                          style: const TextStyle(
+                                                            fontSize: 13,
+                                                            fontWeight: FontWeight.w500,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 8),
+                                                      Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                        decoration: BoxDecoration(
+                                                          color: color!.withOpacity(0.1),
+                                                          borderRadius: BorderRadius.circular(4),
+                                                        ),
+                                                        child: Text(
+                                                          status,
+                                                          style: TextStyle(
+                                                            fontSize: 10,
+                                                            fontWeight: FontWeight.bold,
+                                                            color: color,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 8),
+                                                      Text(
+                                                        '${solde >= 0 ? '+' : ''}${solde.toStringAsFixed(2)} USD',
+                                                        style: TextStyle(
+                                                          fontSize: 13,
+                                                          fontWeight: FontWeight.bold,
+                                                          color: color,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                );
+                                              }).toList(),
+                                              const Divider(),
+                                              () {
+                                                final totalSolde = soldeParPartenaire.values.fold(0.0, (sum, solde) => sum + solde);
+                                                final color = totalSolde > 0 
+                                                  ? Colors.red[700] 
+                                                  : totalSolde < 0 
+                                                    ? Colors.green[700] 
+                                                    : Colors.grey[700];
+                                                return _buildFinanceRow(
+                                                  'SOLDE NET PARTENAIRES', 
+                                                  totalSolde, 
+                                                  color!, 
+                                                  isBold: true
+                                                );
+                                              }(),
                                             ],
                                           ],
                                         ),
@@ -4690,7 +5491,7 @@ const SizedBox(height: 16),
                                                   children: [
                                                     _buildFinanceRow('Frais Antérieur', fraisAnterieur, Colors.grey),
                                                     const SizedBox(height: 8),
-                                                    _buildFinanceRow('+ Frais du jour', fraisPercus, Colors.green),
+                                                    _buildFinanceRow('+ Frais du jour (captures)', fraisPercus, Colors.green),
                                                     const SizedBox(height: 4),
                                                     _buildFinanceRow('- Sortie Frais', sortieFrais, Colors.red),
                                                     const SizedBox(height: 4),
@@ -4741,8 +5542,14 @@ const SizedBox(height: 16),
                                           final shopsNousDoivent = capitalData['shopsNousDoivent'] ?? 0.0;
                                           final shopsNousDevons = capitalData['shopsNousDevons'] ?? 0.0;
                                           
-                                          // CAPITAL NET = Cash Disponible + Virtuel Disponible + Shop qui Nous qui Doivent - Shop que Nous que Devons - Non Servi - Solde FRAIS
-                                          final capitalNet = cashDisponible + virtuelDisponible + shopsNousDoivent - shopsNousDevons - nonServi - soldeFraisTotal;
+                                          return FutureBuilder<Map<String, double>>(
+                                            future: _calculerSoldeParPartenaire(shopIdFilter, _selectedDate),
+                                            builder: (context, partenaireSnapshot) {
+                                              final soldeParPartenaire = partenaireSnapshot.data ?? {};
+                                              final totalSoldePartenaire = soldeParPartenaire.values.fold(0.0, (sum, solde) => sum + solde);
+                                              
+                                              // CAPITAL NET = Cash Disponible + Virtuel Disponible + Shop qui Nous qui Doivent - Shop que Nous que Devons - Non Servi - Solde FRAIS + Solde Net Partenaires
+                                              final capitalNet = cashDisponible + virtuelDisponible + shopsNousDoivent - shopsNousDevons - nonServi - soldeFraisTotal + totalSoldePartenaire;
                                       final isPositif = capitalNet >= 0;
                               
                               return Container(
@@ -4843,6 +5650,8 @@ const SizedBox(height: 16),
                                                 _buildFinanceRow('- Non Servi (Virtuel)', nonServi, Colors.red),
                                                 const SizedBox(height: 8),
                                                 _buildFinanceRow('- Solde FRAIS', soldeFraisTotal, Colors.red),
+                                                const SizedBox(height: 8),
+                                                _buildFinanceRow('+ Solde Net Partenaires', totalSoldePartenaire, totalSoldePartenaire >= 0 ? Colors.green : Colors.red),
                                                                    const SizedBox(height: 16),
                                             // BOUTON PRÉVISUALISATION PDF
                                             ElevatedButton.icon(
@@ -4865,6 +5674,7 @@ const SizedBox(height: 16),
                                                 flotsRecus,
                                                 flotsEnvoyes,
                                                 soldeFraisTotal, // Ajouter le solde frais total
+                                                totalSoldePartenaire, // Ajouter le solde net partenaires
                                               ),
                                               icon: const Icon(Icons.picture_as_pdf),
                                               label: const Text('Prévisualiser le Rapport PDF'),
@@ -4884,6 +5694,8 @@ const SizedBox(height: 16),
                                   ),
                                 ),
                               );
+                                            },
+                                          );
                                         },
                                       );
                                     },
@@ -4934,7 +5746,7 @@ const SizedBox(height: 16),
                                                 Icon(Icons.store, color: Colors.orange.shade700),
                                                 const SizedBox(width: 8),
                                                 Text(
-                                                  'Shops Qui Nous qui Doivent',
+                                                  'Shops Qui Nous Doivent',
                                                   style: TextStyle(
                                                     fontSize: 16,
                                                     fontWeight: FontWeight.bold,
@@ -5039,7 +5851,7 @@ const SizedBox(height: 16),
                                                 Icon(Icons.store, color: Colors.purple.shade700),
                                                 const SizedBox(width: 8),
                                                 Text(
-                                                  'Shops Que Nous que Devons',
+                                                  'Shops Que Nous Devons',
                                                   style: TextStyle(
                                                     fontSize: 16,
                                                     fontWeight: FontWeight.bold,
@@ -5181,7 +5993,7 @@ const SizedBox(height: 16),
         final dateFin = _dateFinFilter ?? DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day, 23, 59, 59);
         
         transactions = transactions
-            .where((t) => t.dateEnregistrement.isAfter(dateDebut) && t.dateEnregistrement.isBefore(dateFin))
+            .where((t) => t.dateEnregistrement.isAfter(dateDebut.subtract(const Duration(milliseconds: 1))) && t.dateEnregistrement.isBefore(dateFin.add(const Duration(milliseconds: 1))))
             .toList();
         
         // Filtrer par SIM (si sélectionnée)
@@ -5199,7 +6011,7 @@ const SizedBox(height: 16),
             var retraits = retraitsSnapshot.data ?? [];
             
             // Appliquer les filtres de dates sur les retraits (par défaut: aujourd'hui)
-            retraits = retraits.where((r) => r.dateRetrait.isAfter(dateDebut) && r.dateRetrait.isBefore(dateFin)).toList();
+            retraits = retraits.where((r) => r.dateRetrait.isAfter(dateDebut.subtract(const Duration(milliseconds: 1))) && r.dateRetrait.isBefore(dateFin.add(const Duration(milliseconds: 1)))).toList();
             
             // Filtrer par SIM
             if (_selectedSimFilter != null) {
@@ -5213,7 +6025,7 @@ const SizedBox(height: 16),
                 var depots = depotsSnapshot.data ?? [];
                 
                 // Appliquer les filtres de dates sur les dépôts (par défaut: aujourd'hui)
-                depots = depots.where((d) => d.dateDepot.isAfter(dateDebut) && d.dateDepot.isBefore(dateFin)).toList();
+                depots = depots.where((d) => d.dateDepot.isAfter(dateDebut.subtract(const Duration(milliseconds: 1))) && d.dateDepot.isBefore(dateFin.add(const Duration(milliseconds: 1)))).toList();
                 
                 // Filtrer par SIM
                 if (_selectedSimFilter != null) {
@@ -5251,10 +6063,22 @@ const SizedBox(height: 16),
           final nbRetraits = simRetraits.length;
           final montantTotalRetraits = simRetraits.fold<double>(0, (sum, r) => sum + r.montant);
           
-          final totalVirtuel = validees.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
+          // NOUVEAU: Séparer par devise pour les validées
+          final valideesCdf = validees.where((t) => t.devise == 'CDF').toList();
+          final valideesUsd = validees.where((t) => t.devise == 'USD').toList();
+          final totalVirtuelCdf = valideesCdf.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
+          final totalVirtuelUsd = valideesUsd.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
+          final totalVirtuel = totalVirtuelUsd + CurrencyService.instance.convertCdfToUsd(totalVirtuelCdf);
+          
+          // NOUVEAU: Séparer par devise pour les en attente
+          final enAttenteCdf = enAttente.where((t) => t.devise == 'CDF').toList();
+          final enAttenteUsd = enAttente.where((t) => t.devise == 'USD').toList();
+          final montantEnAttenteCdf = enAttenteCdf.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
+          final montantEnAttenteUsd = enAttenteUsd.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
+          final montantEnAttente = montantEnAttenteUsd + CurrencyService.instance.convertCdfToUsd(montantEnAttenteCdf);
+          
           final totalFrais = validees.fold<double>(0, (sum, t) => sum + t.frais);
           final totalCash = validees.fold<double>(0, (sum, t) => sum + t.montantCash);
-          final montantEnAttente = enAttente.fold<double>(0, (sum, t) => sum + t.montantVirtuel);
           
           // Calculer le solde pour la période filtrée (avec filtres appliqués)
           final simDepots = depots.where((d) => d.simNumero == sim.numero).toList();
@@ -5315,6 +6139,15 @@ const SizedBox(height: 16),
             'total_frais': totalFrais,
             'total_cash': totalCash,
             'montant_en_attente': montantEnAttente,
+            // NOUVEAU: Données par devise
+            'total_virtuel_cdf': totalVirtuelCdf,
+            'total_virtuel_usd': totalVirtuelUsd,
+            'nb_validees_cdf': valideesCdf.length,
+            'nb_validees_usd': valideesUsd.length,
+            'montant_en_attente_cdf': montantEnAttenteCdf,
+            'montant_en_attente_usd': montantEnAttenteUsd,
+            'nb_en_attente_cdf': enAttenteCdf.length,
+            'nb_en_attente_usd': enAttenteUsd.length,
             'solde_actuel': sim.soldeActuel, // Solde de la BDD (peut être incorrect)
             'solde_global': soldeGlobalCalcule, // Solde calculé (TOUTES périodes)
             'solde_periode': soldePeriode, // Solde calculé pour la période filtrée
@@ -5474,7 +6307,7 @@ const SizedBox(height: 16),
                               const Icon(Icons.account_balance_wallet, size: 12, color: Color(0xFF48bb78)),
                               const SizedBox(width: 4),
                               Text(
-                                '\$${stats['solde_global'].toStringAsFixed(2)}',
+                                'Cash USD ${stats['solde_global'].toStringAsFixed(2)}',
                                 style: const TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.bold,
@@ -5526,11 +6359,11 @@ const SizedBox(height: 16),
                                   _buildSimStatRow('Servies', '${stats['nb_validees']}', Icons.check_circle, Colors.green),
                                   _buildSimStatRow('En Attente', '${stats['nb_en_attente']}', Icons.hourglass_empty, Colors.orange),
                                   const Divider(height: 16),
-                                  _buildSimStatRow('Captures', '\$${stats['montant_captures'].toStringAsFixed(2)}', Icons.add_circle, const Color(0xFF48bb78)),
-                                  _buildSimStatRow('Total Retraits', '\$${stats['montant_retraits'].toStringAsFixed(2)}', Icons.remove_circle, Colors.red),
-                                  _buildSimStatRow('Total Dépôts', '\$${stats['montant_depots_filtre'].toStringAsFixed(2)}', Icons.account_balance, Colors.purple),
+                                  _buildSimStatRowWithCurrencyBreakdown('Captures', stats, 'periode', Icons.add_circle, const Color(0xFF48bb78)),
+                                  _buildSimStatRow('Total Retraits', 'Cash USD ${stats['montant_retraits'].toStringAsFixed(2)}', Icons.remove_circle, Colors.red),
+                                  _buildSimStatRow('Total Dépôts', 'Cash USD ${stats['montant_depots_filtre'].toStringAsFixed(2)}', Icons.account_balance, Colors.purple),
                                   const Divider(height: 16),
-                                  _buildSimStatRow('Solde Période', '\$${stats['solde_periode'].toStringAsFixed(2)}', Icons.trending_up, Colors.blue, isBold: true),
+                                  _buildSimStatRow('Solde Période', 'Cash USD ${stats['solde_periode'].toStringAsFixed(2)}', Icons.trending_up, Colors.blue, isBold: true),
                                 ],
                               ),
                             ),
@@ -5564,11 +6397,11 @@ const SizedBox(height: 16),
                                     ],
                                   ),
                                   const SizedBox(height: 12),
-                                  _buildSimStatRow('Total Captures', '\$${stats['total_captures_global'].toStringAsFixed(2)}', Icons.add_circle, Colors.green),
-                                  _buildSimStatRow('Total Retraits', '\$${stats['total_retraits_global'].toStringAsFixed(2)}', Icons.remove_circle, Colors.orange),
-                                  _buildSimStatRow('Total Dépôts', '\$${stats['total_depots_global'].toStringAsFixed(2)}', Icons.account_balance, Colors.purple),
+                                  _buildSimStatRowWithCurrencyBreakdown('Total Captures', stats, 'global', Icons.add_circle, Colors.green),
+                                  _buildSimStatRow('Total Retraits', 'Cash USD ${stats['total_retraits_global'].toStringAsFixed(2)}', Icons.remove_circle, Colors.orange),
+                                  _buildSimStatRow('Total Dépôts', 'Cash USD ${stats['total_depots_global'].toStringAsFixed(2)}', Icons.account_balance, Colors.purple),
                                   const Divider(height: 16),
-                                  _buildSimStatRow('Solde Global', '\$${stats['solde_global'].toStringAsFixed(2)}', Icons.account_balance_wallet, const Color(0xFF48bb78), isBold: true),
+                                  _buildSimStatRow('Solde Global', 'Cash USD ${stats['solde_global'].toStringAsFixed(2)}', Icons.account_balance_wallet, const Color(0xFF48bb78), isBold: true),
                                 ],
                               ),
                             ),
@@ -5616,9 +6449,9 @@ const SizedBox(height: 16),
             .where((t) => t.shopId == currentShopId && t.statut == VirtualTransactionStatus.validee)
             .toList();
 
-        // Appliquer les filtres de dates (toujours)
+        // Appliquer les filtres de dates (toujours) - FRAIS basés sur dateEnregistrement
         transactions = transactions
-            .where((t) => t.dateValidation != null && t.dateValidation!.isAfter(dateDebut) && t.dateValidation!.isBefore(dateFin))
+            .where((t) => t.dateEnregistrement.isAfter(dateDebut.subtract(const Duration(milliseconds: 1))) && t.dateEnregistrement.isBefore(dateFin.add(const Duration(milliseconds: 1))))
             .toList();
 
         if (transactions.isEmpty) {
@@ -5930,8 +6763,84 @@ const SizedBox(height: 16),
     );
   }
 
+  /// Ligne de statistique avec détail des devises pour les captures
+  Widget _buildSimStatRowWithCurrencyBreakdown(String label, Map<String, dynamic> stats, String type, IconData icon, Color color) {
+    double totalCdf, totalUsd;
+    int countCdf, countUsd;
+    
+    if (type == 'periode') {
+      // Pour la période filtrée, utiliser les montants des transactions filtrées
+      totalCdf = stats['total_virtuel_cdf'] ?? 0.0;
+      totalUsd = stats['total_virtuel_usd'] ?? 0.0;
+      countCdf = stats['nb_validees_cdf'] ?? 0;
+      countUsd = stats['nb_validees_usd'] ?? 0;
+    } else {
+      // Pour global, on utilise le montant total (déjà converti)
+      totalCdf = 0.0; // On n'a pas le détail global par devise
+      totalUsd = stats['total_captures_global'] ?? 0.0;
+      countCdf = 0;
+      countUsd = stats['nb_validees'] ?? 0;
+    }
+    
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 14),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (totalUsd > 0)
+                Text(
+                  'USD ${totalUsd.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                ),
+              if (totalCdf > 0)
+                Text(
+                  'CDF ${totalCdf.toStringAsFixed(0)}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                ),
+              if (totalCdf == 0 && totalUsd == 0)
+                Text(
+                  '0.00',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Carte pour afficher un total dans le récapitulatif
   Widget _buildTotalCard(String label, double value, IconData icon, Color color, {bool isBold = false}) {
+    // Determine currency display based on label
+    String currencyDisplay;
+    if (label.contains('Captures')) {
+      currencyDisplay = 'Mixed ${value.toStringAsFixed(2)}';
+    } else {
+      currencyDisplay = 'Cash USD ${value.toStringAsFixed(2)}';
+    }
+    
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -5960,7 +6869,7 @@ const SizedBox(height: 16),
           ),
           const SizedBox(height: 8),
           Text(
-            '\$${value.toStringAsFixed(2)}',
+            currencyDisplay,
             style: TextStyle(
               fontSize: isBold ? 20 : 18,
               fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
@@ -6114,17 +7023,31 @@ const SizedBox(height: 16),
     return cashParSim;
   }
   
-  /// Obtenir les captures groupées par SIM
+  /// Obtenir les captures groupées par SIM avec gestion des devises
   Future<Map<String, Map<String, dynamic>>> _getCapturesParSim(int? shopId, List<VirtualTransactionModel> captures) async {
     final Map<String, Map<String, dynamic>> capturesParSim = {};
     
     for (final transaction in captures) {
       final simKey = transaction.simNumero;
       if (!capturesParSim.containsKey(simKey)) {
-        capturesParSim[simKey] = {'count': 0, 'montant': 0.0};
+        capturesParSim[simKey] = {
+          'count': 0, 
+          'montant_cdf': 0.0,
+          'montant_usd': 0.0,
+          'count_cdf': 0,
+          'count_usd': 0,
+        };
       }
       capturesParSim[simKey]!['count'] += 1;
-      capturesParSim[simKey]!['montant'] += transaction.montantVirtuel;
+      
+      // Séparer par devise
+      if (transaction.devise == 'CDF') {
+        capturesParSim[simKey]!['montant_cdf'] += transaction.montantVirtuel;
+        capturesParSim[simKey]!['count_cdf'] += 1;
+      } else {
+        capturesParSim[simKey]!['montant_usd'] += transaction.montantVirtuel;
+        capturesParSim[simKey]!['count_usd'] += 1;
+      }
     }
     
     return capturesParSim;
@@ -6346,7 +7269,33 @@ const SizedBox(height: 16),
           ),
         ),
         Text(
-          '\$${amount.toStringAsFixed(2)}',
+          '\$${amount.toStringAsFixed(2)} USD',
+          style: TextStyle(
+            fontSize: fontSize + 2,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Widget pour afficher un montant avec sa devise originale (CDF ou USD)
+  Widget _buildFinanceRowWithCurrency(String label, double amount, String currency, Color color, {bool isBold = false, double fontSize = 14}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: fontSize,
+            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+        Text(
+          currency == 'CDF' 
+            ? '${amount.toStringAsFixed(0)} FC'
+            : '\$${amount.toStringAsFixed(2)} USD',
           style: TextStyle(
             fontSize: fontSize + 2,
             fontWeight: FontWeight.bold,
@@ -6362,8 +7311,9 @@ const SizedBox(height: 16),
     return Container(
       padding: const EdgeInsets.all(12),
       color: Colors.grey[100],
-      child: Column(
-        children: [
+      child: SingleChildScrollView(
+        child: Column(
+          children: [
           Row(
             children: [
               Expanded(
@@ -6396,6 +7346,47 @@ const SizedBox(height: 16),
                         });
                       },
                     );
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              // NOUVEAU: Filtre par devise
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: _deviseFilter,
+                  decoration: const InputDecoration(
+                    labelText: 'Devise',
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    prefixIcon: Icon(Icons.currency_exchange, size: 20),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: null, child: Text('Toutes')),
+                    DropdownMenuItem(
+                      value: 'USD',
+                      child: Row(
+                        children: [
+                          Icon(Icons.attach_money, size: 16, color: Colors.green),
+                          SizedBox(width: 8),
+                          Text('USD (\$)'),
+                        ],
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'CDF',
+                      child: Row(
+                        children: [
+                          Icon(Icons.monetization_on, size: 16, color: Colors.blue),
+                          SizedBox(width: 8),
+                          Text('CDF (FC)'),
+                        ],
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _deviseFilter = value;
+                    });
                   },
                 ),
               ),
@@ -6450,12 +7441,14 @@ const SizedBox(height: 16),
                     _selectedSimFilter = null;
                     _dateDebutFilter = null;
                     _dateFinFilter = null;
+                    _deviseFilter = null;
                   });
                 },
               ),
             ],
           ),
         ],
+        ),
       ),
     );
   }
@@ -6505,7 +7498,7 @@ const SizedBox(height: 16),
                       Text(
                         '\$${transaction.montantCash.toStringAsFixed(2)}',
                         style: TextStyle(
-                          fontSize: 18,
+                          fontSize: 14,
                           fontWeight: FontWeight.bold,
                           color: color,
                         ),
@@ -6523,11 +7516,11 @@ const SizedBox(height: 16),
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Virtuel: \$${transaction.montantVirtuel.toStringAsFixed(2)}',
+                    'Virtuel: ${CurrencyUtils.formatAmount(transaction.montantVirtuel, transaction.devise)}',
                     style: TextStyle(color: Colors.grey[700]),
                   ),
                   Text(
-                    'Frais: \$${transaction.frais.toStringAsFixed(2)}',
+                    'Frais: ${CurrencyUtils.formatAmount(transaction.frais, transaction.devise)}',
                     style: TextStyle(color: Colors.grey[700]),
                   ),
                 ],
@@ -6535,13 +7528,13 @@ const SizedBox(height: 16),
               const SizedBox(height: 4),
               Text(
                 'Enregistré: ${DateFormat('dd/MM/yyyy HH:mm').format(transaction.dateEnregistrement)}',
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                style: TextStyle(fontSize: 10, color: Colors.grey[600]),
               ),
               if (transaction.clientNom != null) ...[
                 const SizedBox(height: 4),
                 Text(
                   'Client: ${transaction.clientNom} - ${transaction.clientTelephone}',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500),
                 ),
               ],
               if (isEnAttente) ...[
@@ -6568,7 +7561,7 @@ const SizedBox(height: 16),
                         Text(
                           'Servir Client',
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -6620,6 +7613,19 @@ const SizedBox(height: 16),
     );
   }
 
+  /// Formater le montant cash avec conversion si nécessaire
+  String _formatCashAmount(VirtualTransactionModel transaction) {
+    if (transaction.devise == 'CDF') {
+      // Pour les transactions CDF, calculer le cash USD avec le taux actuel
+      final montantApresCommission = transaction.montantVirtuel - transaction.frais;
+      final cashUsd = CurrencyService.instance.convertCdfToUsd(montantApresCommission);
+      return '\$${cashUsd.toStringAsFixed(2)} USD (converti de ${montantApresCommission.toStringAsFixed(0)} CDF)';
+    } else {
+      // Pour les transactions USD, afficher directement
+      return '\$${transaction.montantCash.toStringAsFixed(2)} USD';
+    }
+  }
+
   /// Afficher les détails d'une transaction
   void _showTransactionDetails(VirtualTransactionModel transaction) {
     showDialog(
@@ -6633,9 +7639,11 @@ const SizedBox(height: 16),
             children: [
               _buildDetailRow('Référence', transaction.reference),
               _buildDetailRow('SIM', transaction.simNumero),
-              _buildDetailRow('Montant Virtuel', '\$${transaction.montantVirtuel.toStringAsFixed(2)}'),
-              _buildDetailRow('Frais', '\$${transaction.frais.toStringAsFixed(2)}'),
-              _buildDetailRow('Cash à Servir', '\$${transaction.montantCash.toStringAsFixed(2)}'),
+              _buildDetailRow('Montant Virtuel', CurrencyUtils.formatAmount(transaction.montantVirtuel, transaction.devise)),
+              _buildDetailRow('Frais', CurrencyUtils.formatAmount(transaction.frais, transaction.devise)),
+              _buildDetailRow('Cash à Servir', _formatCashAmount(transaction)),
+              if (transaction.devise == 'CDF')
+                _buildDetailRow('Devise Originale', 'CDF (Franc Congolais)'),
               _buildDetailRow('Statut', transaction.statutLabel),
               _buildDetailRow('Date Enregistrement', DateFormat('dd/MM/yyyy HH:mm').format(transaction.dateEnregistrement)),
               if (transaction.dateValidation != null)
@@ -6888,6 +7896,90 @@ const SizedBox(height: 16),
       await _loadData();
     }
   }
+
+  /// Calculer le solde par partenaire pour les transactions virtuelles
+  /// Adapté de la logique du rapport de clôture
+  Future<Map<String, double>> _calculerSoldeParPartenaire(int? shopId, DateTime? dateRapport) async {
+    if (shopId == null) return {};
+    
+    final dateReference = dateRapport ?? DateTime.now();
+    
+    try {
+      // Charger toutes les opérations depuis LocalDB
+      final operations = await LocalDB.instance.getAllOperations();
+      
+      // Charger tous les shops pour avoir leurs noms
+      final shops = await LocalDB.instance.getAllShops();
+      final shopsMap = {for (var shop in shops) shop.id: shop.designation};
+      
+      // DEPOT = TOUS les dépôts où nous sommes destinataires (shopDestination)
+      // + INCLURE les opérations administratives (initialisations) où nous sommes source
+      // CHANGEMENT: Inclut TOUTES les opérations jusqu'à la date du rapport (solde cumulatif)
+      final depotsRecus = operations.where((op) =>
+          op.type == OperationType.depot &&
+          ((op.shopDestinationId == shopId) || 
+           (op.shopSourceId == shopId && op.isAdministrative)) && // INCLURE les initialisations
+          op.dateOp.isBefore(dateReference.add(const Duration(days: 1))) // Jusqu'à la fin du jour du rapport
+      ).toList();
+      
+      // RETRAIT = TOUS les retraits où nous sommes destinataires (shopDestination)
+      // + INCLURE les retraits administratifs (dettes initialisées) où nous sommes source
+      // CHANGEMENT: Inclut TOUTES les opérations jusqu'à la date du rapport (solde cumulatif)
+      final retraitsServis = operations.where((op) =>
+          op.type == OperationType.retrait &&
+          ((op.shopDestinationId == shopId) || 
+           (op.shopSourceId == shopId && op.isAdministrative)) && // INCLURE les dettes initialisées
+          op.dateOp.isBefore(dateReference.add(const Duration(days: 1))) // Jusqu'à la fin du jour du rapport
+      ).toList();
+      
+      // Calculer le solde net par partenaire
+      final Map<String, double> soldeParPartenaire = {};
+      
+      // Ajouter les dépôts (positif - nous devons au partenaire)
+      for (var op in depotsRecus) {
+        String partenaireKey;
+        
+        if (op.isAdministrative) {
+          // Pour les initialisations administratives, utiliser le nom du client directement
+          final clientName = op.clientNom ?? op.destinataire ?? 'Client inconnu';
+          partenaireKey = clientName;
+        } else {
+          // Pour les opérations normales, utiliser uniquement le nom du client pour grouper correctement
+          final clientName = op.clientNom ?? op.destinataire ?? 'Client inconnu';
+          partenaireKey = clientName;
+        }
+        
+        soldeParPartenaire[partenaireKey] = (soldeParPartenaire[partenaireKey] ?? 0.0) + op.montantNet;
+      }
+      
+      // Soustraire les retraits (négatif - le partenaire nous doit)
+      for (var op in retraitsServis) {
+        String partenaireKey;
+        
+        if (op.isAdministrative) {
+          // Pour les dettes initialisées administratives, utiliser le nom du client directement
+          final clientName = op.clientNom ?? op.destinataire ?? 'Client inconnu';
+          partenaireKey = clientName;
+        } else {
+          // Pour les opérations normales, utiliser uniquement le nom du client pour grouper correctement
+          final clientName = op.clientNom ?? op.destinataire ?? 'Client inconnu';
+          partenaireKey = clientName;
+        }
+        
+        soldeParPartenaire[partenaireKey] = (soldeParPartenaire[partenaireKey] ?? 0.0) - op.montantNet;
+      }
+      
+      debugPrint('🔟 SOLDE PAR PARTENAIRE - Virtuel');
+      debugPrint('   Dépôts reçus: ${depotsRecus.length}');
+      debugPrint('   Retraits servis: ${retraitsServis.length}');
+      debugPrint('   Solde calculé par partenaire: ${soldeParPartenaire.length} entrées');
+      
+      return soldeParPartenaire;
+    } catch (e) {
+      debugPrint('❌ Erreur calcul solde par partenaire: $e');
+      return {};
+    }
+  }
   
 
 
@@ -6911,6 +8003,7 @@ const SizedBox(height: 16),
     double flotsRecus,
     double flotsEnvoyes,
     double soldeFraisTotal, // NOUVEAU: Ajouter le solde frais total
+    double totalSoldePartenaire, // NOUVEAU: Ajouter le solde net partenaires
   ) async {
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
@@ -6941,7 +8034,7 @@ const SizedBox(height: 16),
                       pw.Text(
                         'RAPPORT DES TRANSACTIONS VIRTUELLES',
                         style: pw.TextStyle(
-                          fontSize: 20,
+                          fontSize: 18,
                           fontWeight: pw.FontWeight.bold,
                           color: PdfColors.white,
                         ),
@@ -6950,14 +8043,14 @@ const SizedBox(height: 16),
                       pw.Text(
                         '$shopName - $agentName',
                         style: const pw.TextStyle(
-                          fontSize: 14,
+                          fontSize: 11,
                           color: PdfColors.white,
                         ),
                       ),
                       pw.Text(
                         DateFormat('dd/MM/yyyy HH:mm').format(dateNow),
                         style: const pw.TextStyle(
-                          fontSize: 12,
+                          fontSize: 10,
                           color: PdfColors.white,
                         ),
                       ),
@@ -6969,7 +8062,7 @@ const SizedBox(height: 16),
                 // CASH DISPONIBLE
                 pw.Text(
                   'Cash Disponible (Physique)',
-                  style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+                  style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
                 ),
                 pw.Divider(),
                 _buildPdfRow('FLOTs reçus', flotsRecus),
@@ -6982,7 +8075,7 @@ const SizedBox(height: 16),
                 // VIRTUEL DISPONIBLE
                 pw.Text(
                   'Virtuel Disponible',
-                  style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+                  style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
                 ),
                 pw.Divider(),
                 _buildPdfRow('Captures du jour', montantTotalCaptures),
@@ -6992,10 +8085,10 @@ const SizedBox(height: 16),
                 pw.SizedBox(height: 20),
                 
                 // CAPITAL NET
-                // Formule: Cash Disponible + Virtuel Disponible + Shop qui Nous qui Doivent - Shop que Nous que Devons - Non Servi - Solde FRAIS
+                // Formule: Cash Disponible + Virtuel Disponible + Shop qui Nous qui Doivent - Shop que Nous que Devons - Non Servi - Solde FRAIS + Solde Net Partenaires
                 pw.Text(
                   'CAPITAL NET',
-                  style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+                  style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
                 ),
                 pw.Divider(),
                 _buildPdfRow('Cash Disponible', cashDisponible),
@@ -7003,15 +8096,16 @@ const SizedBox(height: 16),
                 _buildPdfRow('+ Shop qui Nous Doivent (DIFF. DETTES)', shopsNousDoivent),
                 _buildPdfRow('- Shop que Nous Devons', shopsNousDevons),
                 _buildPdfRow('- Non Servi (Virtuel)', nonServi),
-                _buildPdfRow('- Solde FRAIS Total', soldeFraisTotal),
+                _buildPdfRow('- Solde FRAIS', soldeFraisTotal),
+                _buildPdfRow('+ Solde Net Partenaires', totalSoldePartenaire),
                 pw.Divider(),
-                _buildPdfRow('= CAPITAL NET', capitalNet, isBold: true, fontSize: 18),
+                _buildPdfRow('= CAPITAL NET', capitalNet, isBold: true, fontSize: 16),
                 pw.SizedBox(height: 20),
                 
                 // STATISTIQUES
                 pw.Text(
                   'Statistiques',
-                  style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+                  style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
                 ),
                 pw.Divider(),
                 _buildPdfRow('Total Captures', captures.length.toDouble(), isCount: true),
@@ -7048,7 +8142,7 @@ const SizedBox(height: 16),
   }
   
   /// Construire une ligne pour le PDF
-  pw.Widget _buildPdfRow(String label, double value, {bool isBold = false, double fontSize = 12, bool isCount = false}) {
+  pw.Widget _buildPdfRow(String label, double value, {bool isBold = false, double fontSize = 10, bool isCount = false}) {
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(vertical: 4),
       child: pw.Row(
@@ -7071,5 +8165,2000 @@ const SizedBox(height: 16),
         ],
       ),
     );
+  }
+
+  /// Onglet Liste des Transactions avec filtres avancés
+  Widget _buildListeTransactionsTab() {
+    // Set default filter to today's transactions if not already set
+    if (_listeTransactionsDateDebut == null && _listeTransactionsDateFin == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        setState(() {
+          final today = DateTime.now();
+          _listeTransactionsDateDebut = DateTime(today.year, today.month, today.day);
+          _listeTransactionsDateFin = DateTime(today.year, today.month, today.day, 23, 59, 59);
+        });
+      });
+    }
+    
+    return Column(
+      children: [
+        // Barre de filtres
+        Container(
+          color: Colors.grey[100],
+          padding: const EdgeInsets.all(8.0),
+          child: Column(
+            children: [
+              // Bouton pour afficher/masquer les filtres
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _showListeTransactionsFilters = !_showListeTransactionsFilters;
+                        });
+                      },
+                      icon: Icon(_showListeTransactionsFilters ? Icons.filter_list_off : Icons.filter_list),
+                      label: const SizedBox.shrink(), // Remove text, keep only icon
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF48bb78),
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: _resetListeTransactionsFilters,
+                    icon: const Icon(Icons.clear_all),
+                    label: const Text('Reset'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: _exportListeTransactionsToPdf,
+                    icon: const Icon(Icons.picture_as_pdf),
+                    label: const Text('Export PDF'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+              
+              // Filtres détaillés (masqués par défaut)
+              if (_showListeTransactionsFilters) ...[
+                const SizedBox(height: 12),
+                _buildListeTransactionsFilters(),
+              ],
+            ],
+          ),
+        ),
+        
+        // Liste des transactions (with proper mobile scrolling)
+        Expanded(
+          child: _buildListeTransactionsFilteredList(),
+        ),
+      ],
+    );
+  }
+
+  /// Construire les filtres pour la liste des transactions
+  Widget _buildListeTransactionsFilters() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Filtres de Recherche',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF48bb78),
+              ),
+            ),
+            const SizedBox(height: 16),
+            
+            // Ligne 1: Recherche par texte et Statut
+            Row(
+              children: [
+                // Recherche par référence/téléphone
+                Expanded(
+                  flex: 2,
+                  child: TextField(
+                    controller: _listeTransactionsSearchController,
+                    decoration: const InputDecoration(
+                      labelText: 'Recherche (Référence, Téléphone)',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (value) {
+                      setState(() {
+                        _listeTransactionsSearchQuery = value.toLowerCase();
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                
+                // Filtre par statut
+                Expanded(
+                  child: DropdownButtonFormField<VirtualTransactionStatus?>(
+                    value: _listeTransactionsStatusFilter,
+                    decoration: const InputDecoration(
+                      labelText: 'Statut',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      const DropdownMenuItem<VirtualTransactionStatus?>(
+                        value: null,
+                        child: Text('Tous les statuts'),
+                      ),
+                      ...VirtualTransactionStatus.values.map((status) {
+                        String statusText;
+                        switch (status) {
+                          case VirtualTransactionStatus.enAttente:
+                            statusText = 'En Attente';
+                            break;
+                          case VirtualTransactionStatus.validee:
+                            statusText = 'Servi';
+                            break;
+                          case VirtualTransactionStatus.annulee:
+                            statusText = 'Annulé';
+                            break;
+                        }
+                        return DropdownMenuItem<VirtualTransactionStatus?>(
+                          value: status,
+                          child: Text(statusText),
+                        );
+                      }),
+                    ],
+                    onChanged: (value) {
+                      setState(() {
+                        _listeTransactionsStatusFilter = value;
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Ligne 2: Filtres de date
+            Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () => _selectListeTransactionsDateDebut(),
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Date Début',
+                        prefixIcon: Icon(Icons.calendar_today),
+                        border: OutlineInputBorder(),
+                      ),
+                      child: Text(
+                        _listeTransactionsDateDebut != null
+                            ? DateFormat('dd/MM/yyyy').format(_listeTransactionsDateDebut!)
+                            : 'Sélectionner',
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: InkWell(
+                    onTap: () => _selectListeTransactionsDateFin(),
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Date Fin',
+                        prefixIcon: Icon(Icons.calendar_today),
+                        border: OutlineInputBorder(),
+                      ),
+                      child: Text(
+                        _listeTransactionsDateFin != null
+                            ? DateFormat('dd/MM/yyyy').format(_listeTransactionsDateFin!)
+                            : 'Sélectionner',
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Ligne 3: Filtres de montant et devise
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    decoration: const InputDecoration(
+                      labelText: 'Montant Min',
+                      prefixIcon: Icon(Icons.attach_money),
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                    onChanged: (value) {
+                      setState(() {
+                        _listeTransactionsMontantMin = double.tryParse(value);
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    decoration: const InputDecoration(
+                      labelText: 'Montant Max',
+                      prefixIcon: Icon(Icons.attach_money),
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                    onChanged: (value) {
+                      setState(() {
+                        _listeTransactionsMontantMax = double.tryParse(value);
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: DropdownButtonFormField<String?>(
+                    value: _listeTransactionsDeviseFilter,
+                    decoration: const InputDecoration(
+                      labelText: 'Devise',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('Toutes devises'),
+                      ),
+                      DropdownMenuItem<String?>(
+                        value: 'USD',
+                        child: Text('USD'),
+                      ),
+                      DropdownMenuItem<String?>(
+                        value: 'CDF',
+                        child: Text('CDF'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      setState(() {
+                        _listeTransactionsDeviseFilter = value;
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Ligne 4: Filtre par SIM
+            Row(
+              children: [
+                Expanded(
+                  child: Consumer<SimService>(
+                    builder: (context, simService, child) {
+                      return FutureBuilder<void>(
+                        future: simService.loadSims(),
+                        builder: (context, snapshot) {
+                          final sims = simService.sims;
+                          return DropdownButtonFormField<String?>(
+                            value: _listeTransactionsSimFilter,
+                            decoration: const InputDecoration(
+                              labelText: 'SIM',
+                              prefixIcon: Icon(Icons.sim_card),
+                              border: OutlineInputBorder(),
+                            ),
+                            items: [
+                              const DropdownMenuItem<String?>(
+                                value: null,
+                                child: Text('Toutes les SIMs'),
+                              ),
+                              ...sims.map((sim) {
+                                return DropdownMenuItem<String?>(
+                                  value: sim.numero,
+                                  child: Text('${sim.operateur} (${sim.numero})'),
+                                );
+                              }),
+                            ],
+                            onChanged: (value) {
+                              setState(() {
+                                _listeTransactionsSimFilter = value;
+                              });
+                            },
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(flex: 2, child: SizedBox()), // Espace vide pour alignement
+              ],
+            ),
+          ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Construire la liste filtrée des transactions pour Liste des Transactions
+  Widget _buildListeTransactionsFilteredList() {
+    return Consumer<VirtualTransactionService>(
+      builder: (context, service, child) {
+        return FutureBuilder<List<VirtualTransactionModel>>(
+          future: Future.value(service.transactions),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            
+            if (snapshot.hasError) {
+              return Center(
+                child: Text('Erreur: ${snapshot.error}'),
+              );
+            }
+            
+            final allTransactions = snapshot.data ?? [];
+            final filteredTransactions = _applyListeTransactionsFilters(allTransactions);
+            
+            if (filteredTransactions.isEmpty) {
+              return const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.inbox, size: 64, color: Colors.grey),
+                    SizedBox(height: 16),
+                    Text(
+                      'Aucune transaction trouvée',
+                      style: TextStyle(fontSize: 16, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              );
+            }
+            
+            return Column(
+              children: [
+                Expanded(
+                  child: ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    shrinkWrap: false,
+                    itemCount: filteredTransactions.length,
+                    itemBuilder: (context, index) {
+                      final transaction = filteredTransactions[index];
+                      return _buildListeTransactionListItem(transaction);
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Appliquer les filtres à la liste des transactions
+  List<VirtualTransactionModel> _applyListeTransactionsFilters(List<VirtualTransactionModel> transactions) {
+    return transactions.where((transaction) {
+      // Filtre par recherche textuelle
+      if (_listeTransactionsSearchQuery.isNotEmpty) {
+        final searchLower = _listeTransactionsSearchQuery.toLowerCase();
+        final matchesReference = transaction.reference.toLowerCase().contains(searchLower);
+        final matchesPhone = (transaction.clientTelephone ?? '').toLowerCase().contains(searchLower);
+        if (!matchesReference && !matchesPhone) return false;
+      }
+      
+      // Filtre par statut
+      if (_listeTransactionsStatusFilter != null && 
+          transaction.statut != _listeTransactionsStatusFilter) {
+        return false;
+      }
+      
+      // Filtre par date de début
+      if (_listeTransactionsDateDebut != null) {
+        final dateDebut = DateTime(_listeTransactionsDateDebut!.year, 
+                                  _listeTransactionsDateDebut!.month, 
+                                  _listeTransactionsDateDebut!.day);
+        final transactionDate = DateTime(transaction.dateEnregistrement.year,
+                                       transaction.dateEnregistrement.month,
+                                       transaction.dateEnregistrement.day);
+        if (transactionDate.isBefore(dateDebut)) return false;
+      }
+      
+      // Filtre par date de fin
+      if (_listeTransactionsDateFin != null) {
+        final dateFin = DateTime(_listeTransactionsDateFin!.year, 
+                                _listeTransactionsDateFin!.month, 
+                                _listeTransactionsDateFin!.day, 23, 59, 59);
+        final transactionDate = DateTime(transaction.dateEnregistrement.year,
+                                       transaction.dateEnregistrement.month,
+                                       transaction.dateEnregistrement.day);
+        if (transactionDate.isAfter(dateFin)) return false;
+      }
+      
+      // Filtre par montant minimum
+      if (_listeTransactionsMontantMin != null && 
+          transaction.montantVirtuel < _listeTransactionsMontantMin!) {
+        return false;
+      }
+      
+      // Filtre par montant maximum
+      if (_listeTransactionsMontantMax != null && 
+          transaction.montantVirtuel > _listeTransactionsMontantMax!) {
+        return false;
+      }
+      
+      // Filtre par devise
+      if (_listeTransactionsDeviseFilter != null && 
+          transaction.devise != _listeTransactionsDeviseFilter) {
+        return false;
+      }
+      
+      // Filtre par SIM
+      if (_listeTransactionsSimFilter != null && 
+          transaction.simNumero != _listeTransactionsSimFilter) {
+        return false;
+      }
+      
+      return true;
+    }).toList();
+  }
+
+  /// Construire un élément de la liste des transactions pour Liste des Transactions
+  Widget _buildListeTransactionListItem(VirtualTransactionModel transaction) {
+    final currencyService = CurrencyService.instance;
+    
+    // Déterminer la couleur selon le statut
+    Color statusColor;
+    IconData statusIcon;
+    String statusText;
+    
+    switch (transaction.statut) {
+      case VirtualTransactionStatus.enAttente:
+        statusColor = Colors.orange;
+        statusIcon = Icons.hourglass_empty;
+        statusText = 'En Attente';
+        break;
+      case VirtualTransactionStatus.validee:
+        statusColor = Colors.green;
+        statusIcon = Icons.check_circle;
+        statusText = 'Servi';
+        break;
+      case VirtualTransactionStatus.annulee:
+        statusColor = Colors.red;
+        statusIcon = Icons.cancel;
+        statusText = 'Annulé';
+        break;
+    }
+    
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: statusColor.withOpacity(0.2),
+          child: Icon(statusIcon, color: statusColor),
+        ),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Réf: ${transaction.reference}',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: statusColor.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                statusText,
+                style: TextStyle(
+                  color: statusColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 10,
+                ),
+              ),
+            ),
+          ],
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.phone, size: 16, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Text(transaction.clientTelephone ?? 'N/A'),
+                const Spacer(),
+                Icon(Icons.calendar_today, size: 16, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Text(DateFormat('dd/MM/yyyy HH:mm').format(transaction.dateEnregistrement)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.attach_money, size: 16, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Text(
+                  transaction.devise == 'USD' 
+                      ? currencyService.formatMontant(transaction.montantVirtuel, 'USD')
+                      : currencyService.formatMontant(transaction.montantVirtuel, 'CDF'),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+                const Spacer(),
+                if (transaction.statut == VirtualTransactionStatus.validee && transaction.dateValidation != null) ...[
+                  Icon(Icons.check_circle, size: 16, color: Colors.green),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Servi: ${DateFormat('dd/MM/yyyy HH:mm').format(transaction.dateValidation!)}',
+                    style: TextStyle(
+                      color: Colors.green,
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+        trailing: PopupMenuButton<String>(
+          onSelected: (value) {
+            switch (value) {
+              case 'details':
+                _showListeTransactionDetails(transaction);
+                break;
+              case 'serve':
+                if (transaction.statut == VirtualTransactionStatus.enAttente) {
+                  _serveTransaction(transaction);
+                }
+                break;
+            }
+          },
+          itemBuilder: (context) => [
+            const PopupMenuItem<String>(
+              value: 'details',
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline),
+                  SizedBox(width: 8),
+                  Text('Détails'),
+                ],
+              ),
+            ),
+            if (transaction.statut == VirtualTransactionStatus.enAttente)
+              const PopupMenuItem<String>(
+                value: 'serve',
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle_outline),
+                    SizedBox(width: 8),
+                    Text('Servir'),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Sélectionner la date de début pour les filtres
+  Future<void> _selectListeTransactionsDateDebut() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _listeTransactionsDateDebut ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked != null) {
+      setState(() {
+        _listeTransactionsDateDebut = picked;
+      });
+    }
+  }
+
+  /// Sélectionner la date de fin pour les filtres
+  Future<void> _selectListeTransactionsDateFin() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _listeTransactionsDateFin ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked != null) {
+      setState(() {
+        _listeTransactionsDateFin = picked;
+      });
+    }
+  }
+
+  /// Réinitialiser tous les filtres
+  void _resetListeTransactionsFilters() {
+    setState(() {
+      _listeTransactionsDateDebut = null;
+      _listeTransactionsDateFin = null;
+      _listeTransactionsMontantMin = null;
+      _listeTransactionsMontantMax = null;
+      _listeTransactionsStatusFilter = null;
+      _listeTransactionsSearchController.clear();
+      _listeTransactionsSearchQuery = '';
+      _listeTransactionsDeviseFilter = null;
+      _listeTransactionsSimFilter = null;
+    });
+  }
+
+  /// Afficher les détails d'une transaction pour Liste des Transactions
+  void _showListeTransactionDetails(VirtualTransactionModel transaction) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Détails Transaction'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildListeTransactionDetailRow('Référence', transaction.reference),
+              _buildListeTransactionDetailRow('Téléphone', transaction.clientTelephone ?? 'N/A'),
+              _buildListeTransactionDetailRow('Montant', '${transaction.montantVirtuel.toStringAsFixed(2)} ${transaction.devise}'),
+              _buildListeTransactionDetailRow('Statut', transaction.statut.toString().split('.').last),
+              _buildListeTransactionDetailRow('Date Enregistrement', DateFormat('dd/MM/yyyy HH:mm:ss').format(transaction.dateEnregistrement)),
+              if (transaction.dateValidation != null)
+                _buildListeTransactionDetailRow('Date Validation', DateFormat('dd/MM/yyyy HH:mm:ss').format(transaction.dateValidation!)),
+              _buildListeTransactionDetailRow('Shop ID', transaction.shopId.toString()),
+              _buildListeTransactionDetailRow('SIM', transaction.simNumero),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Fermer'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Construire une ligne de détail pour Liste des Transactions
+  Widget _buildListeTransactionDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              '$label:',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          Expanded(
+            child: Text(value),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Servir une transaction
+  void _serveTransaction(VirtualTransactionModel transaction) {
+    showDialog(
+      context: context,
+      builder: (context) => ServeClientDialog(
+        transaction: transaction,
+      ),
+    );
+  }
+
+  /// Exporter la liste des transactions filtrées en PDF
+  Future<void> _exportListeTransactionsToPdf() async {
+    try {
+      // Récupérer les transactions filtrées
+      final service = Provider.of<VirtualTransactionService>(context, listen: false);
+      await service.loadTransactions(); // Load transactions first
+      final allTransactions = service.transactions;
+      final filteredTransactions = _applyListeTransactionsFilters(allTransactions);
+      
+      if (filteredTransactions.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Aucune transaction à exporter'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      // Générer le PDF
+      final pdf = pw.Document();
+      
+      // Récupérer les informations de l'utilisateur et du shop
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final currentUser = authService.currentUser;
+      final shopService = Provider.of<ShopService>(context, listen: false);
+      final shop = await shopService.getShopById(currentUser?.shopId ?? 0);
+      
+      // Créer les pages du PDF
+      await _generateListeTransactionsPdfPages(pdf, filteredTransactions, shop, currentUser);
+      
+      // Afficher le PDF dans un dialog de prévisualisation
+      // final pdfBytes = await pdf.save(); // Not needed for PdfViewerDialog
+      
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => PdfViewerDialog(
+            pdfDocument: pdf,
+            fileName: 'liste_transactions_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.pdf',
+            title: 'Liste des Transactions - ${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now())}',
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors de l\'export PDF: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Générer les pages du PDF pour la liste des transactions
+  Future<void> _generateListeTransactionsPdfPages(
+    pw.Document pdf,
+    List<VirtualTransactionModel> transactions,
+    dynamic shop,
+    dynamic currentUser,
+  ) async {
+    const int transactionsPerPage = 20;
+    final totalPages = (transactions.length / transactionsPerPage).ceil();
+    
+    for (int pageIndex = 0; pageIndex < totalPages; pageIndex++) {
+      final startIndex = pageIndex * transactionsPerPage;
+      final endIndex = (startIndex + transactionsPerPage).clamp(0, transactions.length);
+      final pageTransactions = transactions.sublist(startIndex, endIndex);
+      
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(20),
+          build: (pw.Context context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                // En-tête
+                _buildListeTransactionsPdfHeader(shop, currentUser, pageIndex + 1, totalPages),
+                pw.SizedBox(height: 20),
+                
+                // Informations sur les filtres appliqués
+                _buildListeTransactionsPdfFilters(),
+                pw.SizedBox(height: 20),
+                
+                // Tableau des transactions
+                _buildListeTransactionsPdfTable(pageTransactions),
+                
+                pw.Spacer(),
+                
+                // Pied de page
+                _buildListeTransactionsPdfFooter(transactions.length),
+              ],
+            );
+          },
+        ),
+      );
+    }
+  }
+
+  /// Construire l'en-tête du PDF
+  pw.Widget _buildListeTransactionsPdfHeader(dynamic shop, dynamic currentUser, int currentPage, int totalPages) {
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  shop?.nom ?? 'Shop',
+                  style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+                ),
+                pw.Text(
+                  'Liste des Transactions Virtuelles',
+                  style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+                ),
+              ],
+            ),
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.end,
+              children: [
+                pw.Text(
+                  'Date: ${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now())}',
+                  style: const pw.TextStyle(fontSize: 10),
+                ),
+                pw.Text(
+                  'Agent: ${currentUser?.nom ?? 'N/A'}',
+                  style: const pw.TextStyle(fontSize: 10),
+                ),
+                pw.Text(
+                  'Page $currentPage/$totalPages',
+                  style: const pw.TextStyle(fontSize: 10),
+                ),
+              ],
+            ),
+          ],
+        ),
+        pw.Divider(thickness: 2),
+      ],
+    );
+  }
+
+  /// Construire les informations sur les filtres appliqués
+  pw.Widget _buildListeTransactionsPdfFilters() {
+    final List<String> activeFilters = [];
+    
+    if (_listeTransactionsDateDebut != null) {
+      activeFilters.add('Date début: ${DateFormat('dd/MM/yyyy').format(_listeTransactionsDateDebut!)}');
+    }
+    if (_listeTransactionsDateFin != null) {
+      activeFilters.add('Date fin: ${DateFormat('dd/MM/yyyy').format(_listeTransactionsDateFin!)}');
+    }
+    if (_listeTransactionsStatusFilter != null) {
+      String statusText = '';
+      switch (_listeTransactionsStatusFilter!) {
+        case VirtualTransactionStatus.enAttente:
+          statusText = 'En Attente';
+          break;
+        case VirtualTransactionStatus.validee:
+          statusText = 'Servi';
+          break;
+        case VirtualTransactionStatus.annulee:
+          statusText = 'Annulé';
+          break;
+      }
+      activeFilters.add('Statut: $statusText');
+    }
+    if (_listeTransactionsMontantMin != null) {
+      activeFilters.add('Montant min: ${_listeTransactionsMontantMin!.toStringAsFixed(2)}');
+    }
+    if (_listeTransactionsMontantMax != null) {
+      activeFilters.add('Montant max: ${_listeTransactionsMontantMax!.toStringAsFixed(2)}');
+    }
+    if (_listeTransactionsDeviseFilter != null) {
+      activeFilters.add('Devise: $_listeTransactionsDeviseFilter');
+    }
+    if (_listeTransactionsSimFilter != null) {
+      activeFilters.add('SIM: $_listeTransactionsSimFilter');
+    }
+    if (_listeTransactionsSearchQuery.isNotEmpty) {
+      activeFilters.add('Recherche: $_listeTransactionsSearchQuery');
+    }
+    
+    if (activeFilters.isEmpty) {
+      return pw.Text(
+        'Filtres: Aucun filtre appliqué',
+        style: pw.TextStyle(fontSize: 10, fontStyle: pw.FontStyle.italic),
+      );
+    }
+    
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(
+          'Filtres appliqués:',
+          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+        ),
+        pw.Text(
+          activeFilters.join(' • '),
+          style: const pw.TextStyle(fontSize: 9),
+        ),
+      ],
+    );
+  }
+
+  /// Construire le tableau des transactions
+  pw.Widget _buildListeTransactionsPdfTable(List<VirtualTransactionModel> transactions) {
+    return pw.Table(
+      border: pw.TableBorder.all(width: 0.5),
+      columnWidths: {
+        0: const pw.FlexColumnWidth(2), // Référence
+        1: const pw.FlexColumnWidth(2), // Téléphone
+        2: const pw.FlexColumnWidth(1.5), // Montant
+        3: const pw.FlexColumnWidth(1), // Devise
+        4: const pw.FlexColumnWidth(1.5), // Statut
+        5: const pw.FlexColumnWidth(2), // Date
+        6: const pw.FlexColumnWidth(1), // SIM
+      },
+      children: [
+        // En-tête du tableau
+        pw.TableRow(
+          decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+          children: [
+            _buildPdfTableCell('Référence', isHeader: true),
+            _buildPdfTableCell('Téléphone', isHeader: true),
+            _buildPdfTableCell('Montant', isHeader: true),
+            _buildPdfTableCell('Devise', isHeader: true),
+            _buildPdfTableCell('Statut', isHeader: true),
+            _buildPdfTableCell('Date', isHeader: true),
+            _buildPdfTableCell('SIM', isHeader: true),
+          ],
+        ),
+        // Lignes de données
+        ...transactions.map((transaction) {
+          String statusText = '';
+          switch (transaction.statut) {
+            case VirtualTransactionStatus.enAttente:
+              statusText = 'En Attente';
+              break;
+            case VirtualTransactionStatus.validee:
+              statusText = 'Servi';
+              break;
+            case VirtualTransactionStatus.annulee:
+              statusText = 'Annulé';
+              break;
+          }
+          
+          return pw.TableRow(
+            children: [
+              _buildPdfTableCell(transaction.reference),
+              _buildPdfTableCell(transaction.clientTelephone ?? 'N/A'),
+              _buildPdfTableCell(transaction.montantVirtuel.toStringAsFixed(2)),
+              _buildPdfTableCell(transaction.devise),
+              _buildPdfTableCell(statusText),
+              _buildPdfTableCell(DateFormat('dd/MM/yyyy HH:mm').format(transaction.dateEnregistrement)),
+              _buildPdfTableCell(transaction.simNumero),
+            ],
+          );
+        }),
+      ],
+    );
+  }
+
+  /// Construire une cellule du tableau PDF
+  pw.Widget _buildPdfTableCell(String text, {bool isHeader = false}) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(4),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          fontSize: isHeader ? 9 : 8,
+          fontWeight: isHeader ? pw.FontWeight.bold : pw.FontWeight.normal,
+        ),
+        textAlign: pw.TextAlign.center,
+      ),
+    );
+  }
+
+  /// Construire le pied de page du PDF
+  pw.Widget _buildListeTransactionsPdfFooter(int totalTransactions) {
+    return pw.Column(
+      children: [
+        pw.Divider(),
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text(
+              'Total: $totalTransactions transaction(s)',
+              style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.Text(
+              'Généré le ${DateFormat('dd/MM/yyyy à HH:mm').format(DateTime.now())}',
+              style: const pw.TextStyle(fontSize: 8),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // === MÉTHODES HELPER POUR CRÉDIT VIRTUEL ===
+
+  /// Charger les données des crédits
+  Future<void> _loadCreditsData() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final currentUser = authService.currentUser;
+    
+    if (currentUser != null) {
+      final creditService = Provider.of<CreditVirtuelService>(context, listen: false);
+      await creditService.loadCredits(
+        shopId: currentUser.role == 'ADMIN' ? _selectedShopFilter : currentUser.shopId,
+        simNumero: _creditSimFilter,
+        dateDebut: _creditDateDebutFilter,
+        dateFin: _creditDateFinFilter,
+        statut: _creditStatusFilter,
+        beneficiaire: _creditSearchQuery.isNotEmpty ? _creditSearchQuery : null,
+      );
+    }
+  }
+
+  /// Afficher le dialog pour accorder un crédit
+  void _showAccorderCreditDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => _AccorderCreditDialog(
+        onCreditAccorde: () {
+          _loadCreditsData();
+        },
+      ),
+    );
+  }
+
+  /// Construire les filtres pour les crédits virtuels
+  Widget _buildCreditFilters() {
+    return Consumer<SimService>(
+      builder: (context, simService, child) {
+        return Card(
+          elevation: 2,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.filter_list, color: const Color(0xFF48bb78), size: 20),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Filtres de Recherche',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF48bb78),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                
+                // Barre de recherche
+                TextField(
+                  controller: _creditSearchController,
+                  decoration: InputDecoration(
+                    hintText: 'Rechercher par bénéficiaire ou référence...',
+                    prefixIcon: const Icon(Icons.search, color: Color(0xFF48bb78)),
+                    suffixIcon: _creditSearchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              setState(() {
+                                _creditSearchController.clear();
+                                _creditSearchQuery = '';
+                              });
+                              _loadCreditsData();
+                            },
+                          )
+                        : null,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                  onChanged: (value) {
+                    setState(() => _creditSearchQuery = value);
+                    _loadCreditsData();
+                  },
+                ),
+                const SizedBox(height: 16),
+                
+                // Row with filters
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    // Filtre par statut
+                    SizedBox(
+                      width: 200,
+                      child: DropdownButtonFormField<CreditVirtuelStatus?>(
+                        value: _creditStatusFilter,
+                        decoration: InputDecoration(
+                          labelText: 'Statut',
+                          prefixIcon: const Icon(Icons.info_outline, size: 20),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                        items: [
+                          const DropdownMenuItem(value: null, child: Text('Tous')),
+                          ...CreditVirtuelStatus.values.map((status) => DropdownMenuItem(
+                            value: status,
+                            child: Text(_getStatusLabel(status)),
+                          )),
+                        ],
+                        onChanged: (value) {
+                          setState(() => _creditStatusFilter = value);
+                          _loadCreditsData();
+                        },
+                      ),
+                    ),
+                    
+                    // Filtre par SIM
+                    SizedBox(
+                      width: 200,
+                      child: DropdownButtonFormField<String?>(
+                        value: _creditSimFilter,
+                        decoration: InputDecoration(
+                          labelText: 'SIM',
+                          prefixIcon: const Icon(Icons.sim_card, size: 20),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                        items: [
+                          const DropdownMenuItem(value: null, child: Text('Toutes')),
+                          ...simService.sims.map((sim) => DropdownMenuItem(
+                            value: sim.numero,
+                            child: Text('${sim.operateur} (${sim.numero})'),
+                          )),
+                        ],
+                        onChanged: (value) {
+                          setState(() => _creditSimFilter = value);
+                          _loadCreditsData();
+                        },
+                      ),
+                    ),
+                    
+                    // Filtre date début
+                    SizedBox(
+                      width: 180,
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.calendar_today, size: 18),
+                        label: Text(
+                          _creditDateDebutFilter != null
+                              ? DateFormat('dd/MM/yyyy').format(_creditDateDebutFilter!)
+                              : 'Date début',
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: _creditDateDebutFilter != null 
+                              ? const Color(0xFF48bb78).withOpacity(0.1) 
+                              : null,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        ),
+                        onPressed: () async {
+                          final date = await showDatePicker(
+                            context: context,
+                            initialDate: _creditDateDebutFilter ?? DateTime.now(),
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime.now(),
+                          );
+                          if (date != null) {
+                            setState(() => _creditDateDebutFilter = DateTime(date.year, date.month, date.day, 0, 0, 0));
+                            _loadCreditsData();
+                          }
+                        },
+                      ),
+                    ),
+                    
+                    // Filtre date fin
+                    SizedBox(
+                      width: 180,
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.calendar_today, size: 18),
+                        label: Text(
+                          _creditDateFinFilter != null
+                              ? DateFormat('dd/MM/yyyy').format(_creditDateFinFilter!)
+                              : 'Date fin',
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: _creditDateFinFilter != null 
+                              ? const Color(0xFF48bb78).withOpacity(0.1) 
+                              : null,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        ),
+                        onPressed: () async {
+                          final date = await showDatePicker(
+                            context: context,
+                            initialDate: _creditDateFinFilter ?? DateTime.now(),
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime.now(),
+                          );
+                          if (date != null) {
+                            setState(() => _creditDateFinFilter = DateTime(date.year, date.month, date.day, 23, 59, 59));
+                            _loadCreditsData();
+                          }
+                        },
+                      ),
+                    ),
+                    
+                    // Bouton réinitialiser
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _creditStatusFilter = null;
+                          _creditDateDebutFilter = null;
+                          _creditDateFinFilter = null;
+                          _creditSimFilter = null;
+                          _creditSearchController.clear();
+                          _creditSearchQuery = '';
+                        });
+                        _loadCreditsData();
+                      },
+                      icon: const Icon(Icons.clear_all, size: 18),
+                      label: const Text('Réinitialiser'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.grey[700],
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+  
+  /// Helper pour obtenir le label du statut
+  String _getStatusLabel(CreditVirtuelStatus status) {
+    switch (status) {
+      case CreditVirtuelStatus.accorde:
+        return 'Accordé';
+      case CreditVirtuelStatus.partiellementPaye:
+        return 'Partiellement Payé';
+      case CreditVirtuelStatus.paye:
+        return 'Payé';
+      case CreditVirtuelStatus.annule:
+        return 'Annulé';
+      case CreditVirtuelStatus.enRetard:
+        return 'En Retard';
+    }
+  }
+
+  /// Construire le widget d'affichage du solde virtuel disponible
+  Widget _buildSoldeVirtuelDisponible() {
+    return Consumer<SimService>(
+      builder: (context, simService, child) {
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Solde Virtuel Disponible par SIM',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF48bb78),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ...simService.sims.map((sim) => FutureBuilder<double>(
+                  future: CreditVirtuelService.instance.calculateSoldeVirtuelDisponible(sim.numero),
+                  builder: (context, snapshot) {
+                    final solde = snapshot.data ?? 0.0;
+                    final currencyService = CurrencyService.instance;
+                    
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('${sim.operateur} (${sim.numero})'),
+                          Text(
+                            currencyService.formatMontant(solde, 'USD'),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: solde > 0 ? Colors.green : Colors.red,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                )),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Construire une carte de crédit
+  Widget _buildCreditCard(CreditVirtuelModel credit) {
+    final currencyService = CurrencyService.instance;
+    
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  credit.reference,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                _buildCreditStatusBadge(credit.statut),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.person, size: 16, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    credit.beneficiaireNom,
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.account_balance_wallet, size: 16, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Text(
+                  'Crédit: ${currencyService.formatMontant(credit.montantCredit, credit.devise)}',
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(width: 16),
+                Text(
+                  'Restant: ${currencyService.formatMontant(credit.montantRestant, credit.devise)}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w500,
+                    color: credit.montantRestant > 0 ? Colors.orange : Colors.green,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.calendar_today, size: 16, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Text(
+                  'Accordé: ${DateFormat('dd/MM/yyyy').format(credit.dateSortie)}',
+                  style: TextStyle(color: Colors.grey[600]),
+                ),
+                if (credit.dateEcheance != null) ...[
+                  const SizedBox(width: 16),
+                  Text(
+                    'Échéance: ${DateFormat('dd/MM/yyyy').format(credit.dateEcheance!)}',
+                    style: TextStyle(
+                      color: credit.estEnRetard ? Colors.red : Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            if (credit.statut != CreditVirtuelStatus.paye && credit.statut != CreditVirtuelStatus.annule) ...[
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton.icon(
+                    onPressed: () => _showEnregistrerPaiementDialog(credit),
+                    icon: const Icon(Icons.payment, size: 16),
+                    label: const Text('Paiement'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF48bb78),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton.icon(
+                    onPressed: () => _showAnnulerCreditDialog(credit),
+                    icon: const Icon(Icons.cancel, size: 16),
+                    label: const Text('Annuler'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.red,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Construire le badge de statut du crédit
+  Widget _buildCreditStatusBadge(CreditVirtuelStatus statut) {
+    Color color;
+    String label;
+    
+    switch (statut) {
+      case CreditVirtuelStatus.accorde:
+        color = Colors.blue;
+        label = 'Accordé';
+        break;
+      case CreditVirtuelStatus.partiellementPaye:
+        color = Colors.orange;
+        label = 'Partiel';
+        break;
+      case CreditVirtuelStatus.paye:
+        color = Colors.green;
+        label = 'Payé';
+        break;
+      case CreditVirtuelStatus.annule:
+        color = Colors.red;
+        label = 'Annulé';
+        break;
+      case CreditVirtuelStatus.enRetard:
+        color = Colors.red;
+        label = 'En Retard';
+        break;
+    }
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  /// Construire une carte de statistique
+  // Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+  //   return Card(
+  //     margin: const EdgeInsets.symmetric(vertical: 4),
+  //     child: Padding(
+  //       padding: const EdgeInsets.all(16),
+  //       child: Row(
+  //         children: [
+  //           Container(
+  //             padding: const EdgeInsets.all(12),
+  //             decoration: BoxDecoration(
+  //               color: color.withOpacity(0.1),
+  //               borderRadius: BorderRadius.circular(8),
+  //             ),
+  //             child: Icon(icon, color: color, size: 24),
+  //           ),
+  //           const SizedBox(width: 16),
+  //           Expanded(
+  //             child: Column(
+  //               crossAxisAlignment: CrossAxisAlignment.start,
+  //               children: [
+  //                 Text(
+  //                   title,
+  //                   style: TextStyle(
+  //                     color: Colors.grey[600],
+  //                     fontSize: 14,
+  //                   ),
+  //                 ),
+  //                 Text(
+  //                   value,
+  //                   style: const TextStyle(
+  //                     fontSize: 18,
+  //                     fontWeight: FontWeight.bold,
+  //                   ),
+  //                 ),
+  //               ],
+  //             ),
+  //           ),
+  //         ],
+  //       ),
+  //     ),
+  //   );
+  // }
+
+  /// Afficher le dialog d'enregistrement de paiement
+  void _showEnregistrerPaiementDialog(CreditVirtuelModel credit) {
+    showDialog(
+      context: context,
+      builder: (context) => _EnregistrerPaiementDialog(
+        credit: credit,
+        onPaiementEnregistre: () {
+          _loadCreditsData();
+        },
+      ),
+    );
+  }
+
+  /// Afficher le dialog d'annulation de crédit
+  void _showAnnulerCreditDialog(CreditVirtuelModel credit) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Annuler le Crédit'),
+        content: Text('Êtes-vous sûr de vouloir annuler le crédit ${credit.reference} ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Non'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              
+              final authService = Provider.of<AuthService>(context, listen: false);
+              final currentUser = authService.currentUser;
+              
+              if (currentUser != null) {
+                final creditService = Provider.of<CreditVirtuelService>(context, listen: false);
+                final success = await creditService.annulerCredit(
+                  creditId: credit.id!,
+                  agentId: currentUser.id!,
+                  agentUsername: currentUser.username,
+                  motifAnnulation: 'Annulation manuelle',
+                );
+                
+                if (success && mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Crédit annulé avec succès'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                  _loadCreditsData();
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Oui, Annuler'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// === DIALOGS POUR CRÉDIT VIRTUEL ===
+
+/// Dialog pour accorder un nouveau crédit
+class _AccorderCreditDialog extends StatefulWidget {
+  final VoidCallback onCreditAccorde;
+
+  const _AccorderCreditDialog({required this.onCreditAccorde});
+
+  @override
+  State<_AccorderCreditDialog> createState() => _AccorderCreditDialogState();
+}
+
+class _AccorderCreditDialogState extends State<_AccorderCreditDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _referenceController = TextEditingController();
+  final _montantController = TextEditingController();
+  final _notesController = TextEditingController();
+  
+  String _devise = 'USD';
+  String? _selectedSim;
+  final _partenaireController = TextEditingController(); // For partner name input
+  bool _isLoading = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Accorder un Crédit Virtuel'),
+      content: SizedBox(
+        width: 500,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _referenceController,
+                  decoration: const InputDecoration(
+                    labelText: 'Référence *',
+                    hintText: 'Ex: CRED001',
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Référence requise';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: TextFormField(
+                        controller: _montantController,
+                        decoration: const InputDecoration(
+                          labelText: 'Montant *',
+                        ),
+                        keyboardType: TextInputType.number,
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Montant requis';
+                          }
+                          final montant = double.tryParse(value);
+                          if (montant == null || montant <= 0) {
+                            return 'Montant invalide';
+                          }
+                          return null;
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: _devise,
+                        decoration: const InputDecoration(
+                          labelText: 'Devise',
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'USD', child: Text('USD')),
+                          DropdownMenuItem(value: 'CDF', child: Text('CDF')),
+                        ],
+                        onChanged: (value) {
+                          setState(() {
+                            _devise = value!;
+                          });
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Consumer<SimService>(
+                  builder: (context, simService, child) {
+                    return DropdownButtonFormField<String>(
+                      value: _selectedSim,
+                      decoration: const InputDecoration(
+                        labelText: 'SIM *',
+                      ),
+                      items: simService.sims.map((sim) {
+                        return DropdownMenuItem(
+                          value: sim.numero,
+                          child: Text('${sim.operateur} (${sim.numero})'),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedSim = value;
+                        });
+                      },
+                      validator: (value) {
+                        if (value == null) {
+                          return 'SIM requise';
+                        }
+                        return null;
+                      },
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+
+
+                  TextFormField(
+                    controller: _partenaireController,
+                    decoration: const InputDecoration(
+                      labelText: 'Nom du Partenaire *',
+                      hintText: 'Entrez le nom du partenaire',
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Nom du partenaire requis';
+                      }
+                      return null;
+                    },
+                  ),
+
+
+                
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _notesController,
+                  decoration: const InputDecoration(
+                    labelText: 'Notes',
+                  ),
+                  maxLines: 3,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
+          child: const Text('Annuler'),
+        ),
+        ElevatedButton(
+          onPressed: _isLoading ? null : _accorderCredit,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF48bb78),
+          ),
+          child: _isLoading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Accorder'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _accorderCredit() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final currentUser = authService.currentUser;
+      
+      if (currentUser == null) {
+        throw Exception('Utilisateur non connecté');
+      }
+
+      final creditService = Provider.of<CreditVirtuelService>(context, listen: false);
+      final shopService = Provider.of<ShopService>(context, listen: false);
+      
+      final shop = shopService.shops.firstWhere(
+        (s) => s.id == currentUser.shopId,
+        orElse: () => throw Exception('Shop non trouvé'),
+      );
+
+      // Get partner information from text field
+      String beneficiaireNom = _partenaireController.text.trim();
+      String? beneficiaireTelephone;
+      String? beneficiaireAdresse;
+      
+      final credit = await creditService.accorderCredit(
+        reference: _referenceController.text.trim(),
+        montantCredit: double.parse(_montantController.text),
+        devise: _devise,
+        beneficiaireNom: beneficiaireNom,
+        beneficiaireTelephone: beneficiaireTelephone,
+        beneficiaireAdresse: beneficiaireAdresse,
+        typeBeneficiaire: 'partenaire',
+        simNumero: _selectedSim!,
+        shopId: currentUser.shopId!,
+        shopDesignation: shop.designation,
+        agentId: currentUser.id!,
+        agentUsername: currentUser.username,
+        notes: _notesController.text.trim().isEmpty ? null : _notesController.text.trim(),
+      );
+
+      if (credit != null && mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Crédit accordé avec succès'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        widget.onCreditAccorde();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+}
+
+/// Dialog pour enregistrer un paiement
+class _EnregistrerPaiementDialog extends StatefulWidget {
+  final CreditVirtuelModel credit;
+  final VoidCallback onPaiementEnregistre;
+
+  const _EnregistrerPaiementDialog({
+    required this.credit,
+    required this.onPaiementEnregistre,
+  });
+
+  @override
+  State<_EnregistrerPaiementDialog> createState() => _EnregistrerPaiementDialogState();
+}
+
+class _EnregistrerPaiementDialogState extends State<_EnregistrerPaiementDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _montantController = TextEditingController();
+  final _referenceController = TextEditingController();
+  
+  String _modePaiement = 'cash';
+  bool _isLoading = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final currencyService = CurrencyService.instance;
+    
+    return AlertDialog(
+      title: Text('Paiement - ${widget.credit.reference}'),
+      content: SizedBox(
+        width: 400,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Bénéficiaire: ${widget.credit.beneficiaireNom}',
+                style: const TextStyle(fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Montant restant: ${currencyService.formatMontant(widget.credit.montantRestant, widget.credit.devise)}',
+                style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.orange),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _montantController,
+                decoration: InputDecoration(
+                  labelText: 'Montant du paiement *',
+                  suffixText: widget.credit.devise,
+                ),
+                keyboardType: TextInputType.number,
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Montant requis';
+                  }
+                  final montant = double.tryParse(value);
+                  if (montant == null || montant <= 0) {
+                    return 'Montant invalide';
+                  }
+                  if (montant > widget.credit.montantRestant) {
+                    return 'Montant supérieur au restant dû';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _modePaiement,
+                decoration: const InputDecoration(
+                  labelText: 'Mode de paiement',
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'cash', child: Text('Cash')),
+                  DropdownMenuItem(value: 'mobile_money', child: Text('Mobile Money')),
+                  DropdownMenuItem(value: 'virement', child: Text('Virement')),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _modePaiement = value!;
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _referenceController,
+                decoration: const InputDecoration(
+                  labelText: 'Référence du paiement',
+                  hintText: 'Ex: REF123456',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
+          child: const Text('Annuler'),
+        ),
+        ElevatedButton(
+          onPressed: _isLoading ? null : _enregistrerPaiement,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF48bb78),
+          ),
+          child: _isLoading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Enregistrer'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _enregistrerPaiement() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final currentUser = authService.currentUser;
+      
+      if (currentUser == null) {
+        throw Exception('Utilisateur non connecté');
+      }
+
+      final creditService = Provider.of<CreditVirtuelService>(context, listen: false);
+      
+      final success = await creditService.enregistrerPaiement(
+        creditId: widget.credit.id!,
+        montantPaiement: double.parse(_montantController.text),
+        modePaiement: _modePaiement,
+        referencePaiement: _referenceController.text.trim().isEmpty ? null : _referenceController.text.trim(),
+        agentId: currentUser.id!,
+        agentUsername: currentUser.username,
+      );
+
+      if (success && mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Paiement enregistré avec succès'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        widget.onPaiementEnregistre();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 }

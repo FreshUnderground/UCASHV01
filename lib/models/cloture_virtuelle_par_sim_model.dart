@@ -22,11 +22,17 @@ class ClotureVirtuelleParSimModel {
   // === TRANSACTIONS DU JOUR ===
   final int nombreCaptures;
   final double montantCaptures;
+  final double montantCapturesUSD;
+  final double montantCapturesCDF;
   final int nombreServies;
   final double montantServies;
+  final double montantServiesUSD;
+  final double montantServiesCDF;
   final double cashServi;
   final int nombreEnAttente;
   final double montantEnAttente;
+  final double montantEnAttenteUSD;
+  final double montantEnAttenteCDF;
   
   // === RETRAITS (FLOTS VIRTUELS) ===
   final int nombreRetraits;
@@ -62,11 +68,17 @@ class ClotureVirtuelleParSimModel {
     required this.fraisTotal,
     required this.nombreCaptures,
     required this.montantCaptures,
+    required this.montantCapturesUSD,
+    required this.montantCapturesCDF,
     required this.nombreServies,
     required this.montantServies,
+    required this.montantServiesUSD,
+    required this.montantServiesCDF,
     required this.cashServi,
     required this.nombreEnAttente,
     required this.montantEnAttente,
+    required this.montantEnAttenteUSD,
+    required this.montantEnAttenteCDF,
     required this.nombreRetraits,
     required this.montantRetraits,
     required this.nombreDepots,
@@ -96,11 +108,17 @@ class ClotureVirtuelleParSimModel {
       'frais_total': fraisTotal,
       'nombre_captures': nombreCaptures,
       'montant_captures': montantCaptures,
+      'montant_captures_usd': montantCapturesUSD,
+      'montant_captures_cdf': montantCapturesCDF,
       'nombre_servies': nombreServies,
       'montant_servies': montantServies,
+      'montant_servies_usd': montantServiesUSD,
+      'montant_servies_cdf': montantServiesCDF,
       'cash_servi': cashServi,
       'nombre_en_attente': nombreEnAttente,
       'montant_en_attente': montantEnAttente,
+      'montant_en_attente_usd': montantEnAttenteUSD,
+      'montant_en_attente_cdf': montantEnAttenteCDF,
       'nombre_retraits': nombreRetraits,
       'montant_retraits': montantRetraits,
       'nombre_depots': nombreDepots,
@@ -131,11 +149,17 @@ class ClotureVirtuelleParSimModel {
       fraisTotal: (map['frais_total'] as num).toDouble(),
       nombreCaptures: map['nombre_captures'] as int,
       montantCaptures: (map['montant_captures'] as num).toDouble(),
+      montantCapturesUSD: (map['montant_captures_usd'] as num?)?.toDouble() ?? 0.0,
+      montantCapturesCDF: (map['montant_captures_cdf'] as num?)?.toDouble() ?? 0.0,
       nombreServies: map['nombre_servies'] as int,
       montantServies: (map['montant_servies'] as num).toDouble(),
+      montantServiesUSD: (map['montant_servies_usd'] as num?)?.toDouble() ?? 0.0,
+      montantServiesCDF: (map['montant_servies_cdf'] as num?)?.toDouble() ?? 0.0,
       cashServi: (map['cash_servi'] as num).toDouble(),
       nombreEnAttente: map['nombre_en_attente'] as int,
       montantEnAttente: (map['montant_en_attente'] as num).toDouble(),
+      montantEnAttenteUSD: (map['montant_en_attente_usd'] as num?)?.toDouble() ?? 0.0,
+      montantEnAttenteCDF: (map['montant_en_attente_cdf'] as num?)?.toDouble() ?? 0.0,
       nombreRetraits: map['nombre_retraits'] as int,
       montantRetraits: (map['montant_retraits'] as num).toDouble(),
       nombreDepots: map['nombre_depots'] as int,
@@ -165,11 +189,17 @@ class ClotureVirtuelleParSimModel {
     double? fraisTotal,
     int? nombreCaptures,
     double? montantCaptures,
+    double? montantCapturesUSD,
+    double? montantCapturesCDF,
     int? nombreServies,
     double? montantServies,
+    double? montantServiesUSD,
+    double? montantServiesCDF,
     double? cashServi,
     int? nombreEnAttente,
     double? montantEnAttente,
+    double? montantEnAttenteUSD,
+    double? montantEnAttenteCDF,
     int? nombreRetraits,
     double? montantRetraits,
     int? nombreDepots,
@@ -197,11 +227,17 @@ class ClotureVirtuelleParSimModel {
       fraisTotal: fraisTotal ?? this.fraisTotal,
       nombreCaptures: nombreCaptures ?? this.nombreCaptures,
       montantCaptures: montantCaptures ?? this.montantCaptures,
+      montantCapturesUSD: montantCapturesUSD ?? this.montantCapturesUSD,
+      montantCapturesCDF: montantCapturesCDF ?? this.montantCapturesCDF,
       nombreServies: nombreServies ?? this.nombreServies,
       montantServies: montantServies ?? this.montantServies,
+      montantServiesUSD: montantServiesUSD ?? this.montantServiesUSD,
+      montantServiesCDF: montantServiesCDF ?? this.montantServiesCDF,
       cashServi: cashServi ?? this.cashServi,
       nombreEnAttente: nombreEnAttente ?? this.nombreEnAttente,
       montantEnAttente: montantEnAttente ?? this.montantEnAttente,
+      montantEnAttenteUSD: montantEnAttenteUSD ?? this.montantEnAttenteUSD,
+      montantEnAttenteCDF: montantEnAttenteCDF ?? this.montantEnAttenteCDF,
       nombreRetraits: nombreRetraits ?? this.nombreRetraits,
       montantRetraits: montantRetraits ?? this.montantRetraits,
       nombreDepots: nombreDepots ?? this.nombreDepots,

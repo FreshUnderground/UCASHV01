@@ -46,12 +46,20 @@ class RapportClotureService {
 
       // 4. Calculer les opérations clients (dépôts/retraits)
       final operationsClients = await _calculerOperationsClients(shopId, dateRapport, operations);
+      
+      // 4.5. NOUVEAU: Calculer les opérations AUTRES SHOP (dépôts/retraits où nous sommes destinataires)
+      final autresShopOperations = await _calculerAutresShopOperations(shopId, dateRapport, operations);
+      
+      // 4.6. NOUVEAU: Calculer le solde par partenaire (depot - retrait où nous sommes shop destination)
+      debugPrint('🔟 AVANT APPEL _calculerSoldeParPartenaire');
+      final soldeParPartenaire = await _calculerSoldeParPartenaire(shopId, dateRapport, operations);
+      debugPrint('🔟 APRÈS APPEL _calculerSoldeParPartenaire - Résultat: ${soldeParPartenaire.length} entrées');
 
       // 5. Récupérer les transactions partenaires du jour
       final comptesClients = await _getComptesClients(shopId, dateRapport, operations);
       
       // 6. Calculer les dettes/créances inter-shops
-      final comptesShops = await _getComptesShops(shopId);
+      final comptesShops = await _getComptesShops(shopId, dateRapport);
       
       // 6.5. Calculer les comptes spéciaux (FRAIS et DÉPENSE)
       final comptesSpeciaux = await _calculerComptesSpeciaux(shopId, dateRapport, operations);
@@ -79,7 +87,8 @@ class RapportClotureService {
       );
 
       // Calculate capital net according to the formula:
-      // CAPITAL NET = CASH DISPONIBLE (déjà diminué des retraits FRAIS) + CRÉANCES - DETTES
+      // CAPITAL NET = CASH DISPONIBLE (déjà diminué des retraits FRAIS) + CRÉANCES INTER-SHOPS - DETTES INTER-SHOPS
+      // EXCLUSION: Depots Partenaires et Partenaires Servis ne sont plus inclus dans le calcul du capital NET
       final totalClientsNousDoivent = comptesClients['nousDoivent']!
           .fold(0.0, (sum, client) => sum + client.solde.abs());
       final totalClientsNousDevons = comptesClients['nousDevons']!
@@ -90,12 +99,11 @@ class RapportClotureService {
           .fold(0.0, (sum, shop) => sum + shop.montant);
       
       // Le cash disponible a déjà les retraits FRAIS soustraits, donc on ne les soustrait PAS ici
-      // Formule complète pour la Situation Nette: Cash Disponible + Créances - Dettes - Frais du Jour - Transferts En Attente
+      // Formule modifiée pour la Situation Nette: Cash Disponible + Créances Inter-Shops - Dettes Inter-Shops - Frais du Jour - Transferts En Attente
+      // EXCLUSION: totalClientsNousDoivent et totalClientsNousDevons ne sont plus inclus
       final fraisDuJour = soldeFraisAnterieur + (comptesSpeciaux['commissions_frais'] as double) - (comptesSpeciaux['retraits_frais'] as double);
       final capitalNet = cashDisponible['total']! 
-          + totalClientsNousDoivent 
           + totalShopsNousDoivent 
-          - totalClientsNousDevons 
           - totalShopsNousDevons
           - fraisDuJour
           - transferts['enAttente']!;
@@ -154,6 +162,15 @@ class RapportClotureService {
         // NOUVEAU: Listes détaillées des opérations clients
         depotsClientsDetails: operationsClients['depotsDetails'] as List<OperationResume>,
         retraitsClientsDetails: operationsClients['retraitsDetails'] as List<OperationResume>,
+        
+        // NOUVEAU: Opérations AUTRES SHOP (où nous sommes destinataires)
+        autresShopServis: autresShopOperations['servis'] as double,
+        autresShopDepots: autresShopOperations['depots'] as double,
+        autresShopServisGroupes: autresShopOperations['servisGroupesParClient'] as Map<String, double>,
+        autresShopDepotsGroupes: autresShopOperations['depotsGroupesParClient'] as Map<String, double>,
+        
+        // NOUVEAU: Solde par partenaire (depot - retrait où nous sommes shop destination)
+        soldeParPartenaire: soldeParPartenaire,
         
         // NOUVEAU: Liste détaillée des transferts en attente
         transfertsEnAttenteDetails: transferts['enAttenteDetails'] as List<OperationResume>,
@@ -459,12 +476,14 @@ class RapportClotureService {
     final depotsAujourdhui = operations.where((op) =>
         op.shopSourceId == shopId &&
         op.type == OperationType.depot &&
+        !(op.isAdministrative) && // Exclure les opérations administratives du cash disponible
         _isSameDay(op.dateOp, dateRapport)
     ).toList();
 
     final retraitsAujourdhui = operations.where((op) =>
         op.shopSourceId == shopId &&
         (op.type == OperationType.retrait || op.type == OperationType.retraitMobileMoney) &&
+        !(op.isAdministrative) && // Exclure les opérations administratives du cash disponible
         _isSameDay(op.dateOp, dateRapport)
     ).toList();
     
@@ -513,18 +532,22 @@ class RapportClotureService {
     final partenairesServis = <CompteClientResume>[];
 
     // Récupérer les opérations de type DÉPÔT avec clientId (partenaire dépose dans son compte)
+    // EXCLURE les opérations administratives pour ne pas les compter dans "Dépôts Partenaires"
     final depotsCompte = operations.where((op) =>
         op.shopSourceId == shopId &&
         op.type == OperationType.depot &&
         op.clientId != null && // Dépôt dans un compte client
+        !(op.isAdministrative) && // EXCLURE les initialisations administratives
         _isSameDay(op.dateOp, dateRapport)
     );
 
     // Récupérer les opérations de type RETRAIT avec clientId (partenaire retire de son compte)
+    // EXCLURE les opérations administratives pour ne pas les compter dans "Partenaires Servis"
     final retraitsCompte = operations.where((op) =>
         op.shopSourceId == shopId &&
         (op.type == OperationType.retrait || op.type == OperationType.retraitMobileMoney) &&
         op.clientId != null && // Retrait d'un compte client
+        !(op.isAdministrative) && // EXCLURE les initialisations administratives
         _isSameDay(op.dateOp, dateRapport)
     );
     
@@ -584,7 +607,7 @@ class RapportClotureService {
   /// - FLOTs reçus DE eux → On leur doit rembourser
   /// - FLOTs envoyés À eux → Ils Nous qui Doivent rembourser
   /// Le solde final détermine si c'est une dette ou une créance
-  Future<Map<String, List<CompteShopResume>>> _getComptesShops(int shopId) async {
+  Future<Map<String, List<CompteShopResume>>> _getComptesShops(int shopId, DateTime dateRapport) async {
     final shops = await LocalDB.instance.getAllShops();
     final operations = await LocalDB.instance.getAllOperations();
     final flotService = FlotService.instance;
@@ -683,6 +706,83 @@ class RapportClotureService {
         }
       }
     }
+    
+    // 6. NOUVEAU: AUTRES SHOP - RETRAITS où nous sommes destinataires (shopDestinationId = nous)
+    // Ces opérations créent une DETTE: l'autre shop nous doit car on a donné l'argent pour leur client
+    final retraitsAutresShop = operations.where((op) =>
+        op.type == OperationType.retrait &&
+        op.shopDestinationId == shopId &&
+        op.shopSourceId != shopId &&
+        op.devise == 'USD' &&
+        _isSameDay(op.dateOp, dateRapport)
+    ).toList();
+    
+    for (final retrait in retraitsAutresShop) {
+      final autreShopId = retrait.shopSourceId;
+      if (autreShopId != null && autreShopId != shopId) {
+        soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + retrait.montantNet;
+        debugPrint('   RETRAIT AUTRES SHOP: Shop $autreShopId nous doit +${retrait.montantNet} USD (client: ${retrait.clientNom ?? retrait.destinataire})');
+      }
+    }
+    
+    // 7. NOUVEAU: AUTRES SHOP - DÉPÔTS où nous sommes destinataires (shopDestinationId = nous)
+    // Ces opérations créent une CRÉANCE: on leur doit car ils ont fait un dépôt pour nous
+    final depotsAutresShop = operations.where((op) =>
+        op.type == OperationType.depot &&
+        op.shopDestinationId == shopId &&
+        op.shopSourceId != shopId &&
+        op.devise == 'USD' &&
+        _isSameDay(op.dateOp, dateRapport)
+    ).toList();
+    
+    for (final depot in depotsAutresShop) {
+      final autreShopId = depot.shopSourceId;
+      if (autreShopId != null && autreShopId != shopId) {
+        soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - depot.montantNet;
+        debugPrint('   DEPOT AUTRES SHOP: On doit à Shop $autreShopId -${depot.montantNet} USD (client: ${depot.clientNom ?? depot.destinataire})');
+      }
+    }
+    
+    // 8. NOUVEAU: OPÉRATIONS où NOUS SOMMES LE SHOP SOURCE (côté opposé des dettes inter-shops)
+    // Ces opérations créent des dettes/créances du côté du shop source (nous)
+    
+    // RETRAITS où nous sommes le shop source (nous envoyons vers un autre shop)
+    // Cela crée une CRÉANCE: l'autre shop nous doit car on a payé pour leur client
+    final retraitsNousSource = operations.where((op) =>
+        op.type == OperationType.retrait &&
+        op.shopSourceId == shopId &&
+        op.shopDestinationId != shopId &&
+        op.devise == 'USD' &&
+        _isSameDay(op.dateOp, dateRapport)
+    ).toList();
+    
+    for (final retrait in retraitsNousSource) {
+      final autreShopId = retrait.shopDestinationId;
+      if (autreShopId != null && autreShopId != shopId) {
+        soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + retrait.montantNet;
+        debugPrint('   RETRAIT NOUS SOURCE: Shop $autreShopId nous doit +${retrait.montantNet} USD (on a payé pour leur client: ${retrait.clientNom ?? retrait.destinataire})');
+      }
+    }
+    
+    // DÉPÔTS où nous sommes le shop source (nous recevons d'un autre shop)
+    // Cela crée une DETTE: on leur doit car ils ont payé pour notre client
+    final depotsNousSource = operations.where((op) =>
+        op.type == OperationType.depot &&
+        op.shopSourceId == shopId &&
+        op.shopDestinationId != shopId &&
+        op.devise == 'USD' &&
+        _isSameDay(op.dateOp, dateRapport)
+    ).toList();
+    
+    for (final depot in depotsNousSource) {
+      final autreShopId = depot.shopDestinationId;
+      if (autreShopId != null && autreShopId != shopId) {
+        soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - depot.montantNet;
+        debugPrint('   DEPOT NOUS SOURCE: On doit à Shop $autreShopId -${depot.montantNet} USD (ils ont reçu pour notre client: ${depot.clientNom ?? depot.destinataire})');
+      }
+    }
+    
+    // Debug integration info masked
     
     // Séparer en créances (solde > 0) et dettes (solde < 0)
     final shopsNousDoivent = <CompteShopResume>[];
@@ -1414,5 +1514,204 @@ class RapportClotureService {
       // En cas d'erreur, permettre l'accès pour ne pas bloquer l'agent
       return null;
     }
+  }
+  
+  /// NOUVEAU: Calculer les opérations AUTRES SHOP (dépôts/retraits où nous sommes destinataires)
+  /// SERVIS = Retraits où nous sommes destinataires (nous donnons l'argent)
+  /// DEPOT = Dépôts où nous sommes destinataires (nous recevons l'impact)
+  Future<Map<String, dynamic>> _calculerAutresShopOperations(int shopId, DateTime dateRapport, List<OperationModel>? providedOperations) async {
+    // Utiliser les opérations fournies (de "Mes Ops") ou charger depuis LocalDB
+    final operations = providedOperations ?? await LocalDB.instance.getAllOperations();
+    
+    // Charger tous les shops pour avoir leurs noms
+    final shops = await LocalDB.instance.getAllShops();
+    final shopsMap = {for (var shop in shops) shop.id: shop.designation};
+    
+    // SERVIS = Retraits où nous sommes destinataires ET venant d'autres shops (inter-shop uniquement)
+    // Exclut les opérations internes pour se concentrer sur les dettes entre shops différents
+    final retraitsServis = operations.where((op) =>
+        op.type == OperationType.retrait &&
+        op.shopDestinationId == shopId &&
+        op.shopSourceId != shopId && // INTER-SHOP: shop source différent du shop destination
+        _isSameDay(op.dateOp, dateRapport)
+    ).toList();
+    
+    // DEPOT = Dépôts où nous sommes destinataires ET venant d'autres shops (inter-shop uniquement)
+    // Exclut les opérations internes pour se concentrer sur les dettes entre shops différents
+    final depotsRecus = operations.where((op) =>
+        op.type == OperationType.depot &&
+        op.shopDestinationId == shopId &&
+        op.shopSourceId != shopId && // INTER-SHOP: shop source différent du shop destination
+        _isSameDay(op.dateOp, dateRapport)
+    ).toList();
+    
+    // Debug section masked
+    
+    // Debug des opérations depot/retrait avec destination
+    final allDepotRetrait = operations.where((op) => 
+        (op.type == OperationType.depot || op.type == OperationType.retrait) &&
+        op.shopDestinationId != null &&
+        _isSameDay(op.dateOp, dateRapport)
+    ).toList();
+    
+    // All debug information masked for cleaner logs
+    
+    // Créer les listes détaillées pour affichage dans le rapport
+    final servisDetails = retraitsServis.map((op) => OperationResume(
+      operationId: op.id!,
+      type: 'retrait_servi',
+      montant: op.montantNet,
+      devise: op.devise,
+      date: op.dateOp,
+      destinataire: '${op.clientNom ?? op.destinataire ?? "Client"} (via ${shopsMap[op.shopSourceId] ?? "Shop ${op.shopSourceId}"})',
+      observation: op.observation,
+      notes: op.notes,
+      modePaiement: op.modePaiement.name,
+    )).toList();
+    
+    final depotsDetails = depotsRecus.map((op) => OperationResume(
+      operationId: op.id!,
+      type: 'depot_recu',
+      montant: op.montantNet,
+      devise: op.devise,
+      date: op.dateOp,
+      destinataire: '${op.clientNom ?? op.destinataire ?? "Client"} (via ${shopsMap[op.shopSourceId] ?? "Shop ${op.shopSourceId}"})',
+      observation: op.observation,
+      notes: op.notes,
+      modePaiement: op.modePaiement.name,
+    )).toList();
+    
+    // GROUPER LES RETRAITS SERVIS PAR CLIENT/PARTENAIRE
+    final servisGroupesParClient = <String, double>{};
+    for (var op in retraitsServis) {
+      final shopSrcId = op.shopSourceId;
+      final shopName = shopsMap[shopSrcId] ?? 'Shop inconnu (ID: $shopSrcId)';
+      final clientName = op.clientNom ?? op.destinataire ?? 'Client inconnu';
+      final clientKey = '$clientName (via $shopName)';
+      servisGroupesParClient[clientKey] = (servisGroupesParClient[clientKey] ?? 0.0) + op.montantNet;
+    }
+    
+    // GROUPER LES DÉPÔTS REÇUS PAR CLIENT/PARTENAIRE
+    final depotsGroupesParClient = <String, double>{};
+    for (var op in depotsRecus) {
+      final shopSrcId = op.shopSourceId;
+      final shopName = shopsMap[shopSrcId] ?? 'Shop inconnu (ID: $shopSrcId)';
+      final clientName = op.clientNom ?? op.destinataire ?? 'Client inconnu';
+      final clientKey = '$clientName (via $shopName)';
+      depotsGroupesParClient[clientKey] = (depotsGroupesParClient[clientKey] ?? 0.0) + op.montantNet;
+    }
+    
+    final totalServis = retraitsServis.fold(0.0, (sum, op) => sum + op.montantNet);
+    final totalDepots = depotsRecus.fold(0.0, (sum, op) => sum + op.montantNet);
+    
+    // Debug totals masked
+    
+    // Debug grouping information masked for cleaner logs
+    
+    return {
+      'servis': totalServis,
+      'depots': totalDepots,
+      // 'servisDetails': servisDetails,
+      // 'depotsDetails': depotsDetails,
+      'servisGroupesParClient': servisGroupesParClient,
+      'depotsGroupesParClient': depotsGroupesParClient,
+    };
+  }
+
+  /// NOUVEAU: Calculer le solde par partenaire (depot - retrait où nous sommes shop destination)
+  /// Retourne le solde net par partenaire: depot - retrait
+  /// Positif = nous devons au partenaire, Négatif = le partenaire nous doit
+  /// IMPORTANT: Calcule le SOLDE CUMULATIF jusqu'à la date du rapport (pas seulement le jour)
+  Future<Map<String, double>> _calculerSoldeParPartenaire(int shopId, DateTime dateRapport, List<OperationModel>? providedOperations) async {
+    debugPrint('🔟 === DÉBUT CALCUL SOLDE PAR PARTENAIRE ===');
+    debugPrint('   Shop ID: $shopId, Date: ${dateRapport.toIso8601String().split('T')[0]}');
+    debugPrint('   CALCUL: Solde cumulatif jusqu\'à cette date (pas seulement le jour)');
+    
+    // Utiliser les opérations fournies (de "Mes Ops") ou charger depuis LocalDB
+    final operations = providedOperations ?? await LocalDB.instance.getAllOperations();
+    
+    // Charger tous les shops pour avoir leurs noms
+    final shops = await LocalDB.instance.getAllShops();
+    final shopsMap = {for (var shop in shops) shop.id: shop.designation};
+    
+    // DEPOT = TOUS les dépôts où nous sommes destinataires (shopDestination)
+    // + INCLURE les opérations administratives (initialisations) où nous sommes source
+    // CHANGEMENT: Inclut TOUTES les opérations jusqu'à la date du rapport (solde cumulatif)
+    final depotsRecus = operations.where((op) =>
+        op.type == OperationType.depot &&
+        ((op.shopDestinationId == shopId) || 
+         (op.shopSourceId == shopId && op.isAdministrative)) && // INCLURE les initialisations
+        op.dateOp.isBefore(dateRapport.add(const Duration(days: 1))) // Jusqu'à la fin du jour du rapport
+    ).toList();
+    
+    // RETRAIT = TOUS les retraits où nous sommes destinataires (shopDestination)
+    // + INCLURE les retraits administratifs (dettes initialisées) où nous sommes source
+    // CHANGEMENT: Inclut TOUTES les opérations jusqu'à la date du rapport (solde cumulatif)
+    final retraitsServis = operations.where((op) =>
+        op.type == OperationType.retrait &&
+        ((op.shopDestinationId == shopId) || 
+         (op.shopSourceId == shopId && op.isAdministrative)) && // INCLURE les dettes initialisées
+        op.dateOp.isBefore(dateRapport.add(const Duration(days: 1))) // Jusqu'à la fin du jour du rapport
+    ).toList();
+    
+    // Calculer le solde net par partenaire
+    final Map<String, double> soldeParPartenaire = {};
+    
+    // Ajouter les dépôts (positif - nous devons au partenaire)
+    for (var op in depotsRecus) {
+      String partenaireKey;
+      
+      if (op.isAdministrative) {
+        // Pour les initialisations administratives, utiliser le nom du client directement
+        final clientName = op.clientNom ?? op.destinataire ?? 'Client inconnu';
+        partenaireKey = '$clientName';
+      } else {
+        // Pour les opérations normales, utiliser uniquement le nom du client pour grouper correctement
+        final clientName = op.clientNom ?? op.destinataire ?? 'Client inconnu';
+        partenaireKey = '$clientName';
+      }
+      
+      soldeParPartenaire[partenaireKey] = (soldeParPartenaire[partenaireKey] ?? 0.0) + op.montantNet;
+    }
+    
+    // Soustraire les retraits (négatif - le partenaire nous doit)
+    for (var op in retraitsServis) {
+      String partenaireKey;
+      
+      if (op.isAdministrative) {
+        // Pour les dettes initialisées administratives, utiliser le nom du client directement
+        final clientName = op.clientNom ?? op.destinataire ?? 'Client inconnu';
+        partenaireKey = '$clientName';
+      } else {
+        // Pour les opérations normales, utiliser uniquement le nom du client pour grouper correctement
+        final clientName = op.clientNom ?? op.destinataire ?? 'Client inconnu';
+        partenaireKey = '$clientName';
+      }
+      
+      soldeParPartenaire[partenaireKey] = (soldeParPartenaire[partenaireKey] ?? 0.0) - op.montantNet;
+    }
+    
+    try {
+      debugPrint('🔟 📊 SOLDE PAR PARTENAIRE - Calcul terminé');
+      debugPrint('🔟    Dépôts reçus: ${depotsRecus.length}');
+      debugPrint('🔟    Retraits servis: ${retraitsServis.length}');
+      debugPrint('🔟    Solde calculé par partenaire: ${soldeParPartenaire.length} entrées');
+      
+      // Debug simplifié pour éviter les crashes
+      if (soldeParPartenaire.isNotEmpty) {
+        debugPrint('🔟    Premiers partenaires:');
+        int count = 0;
+        for (var entry in soldeParPartenaire.entries) {
+          if (count >= 3) break; // Limiter à 3 pour éviter trop de logs
+          final status = entry.value > 0 ? 'NOUS DEVONS' : (entry.value < 0 ? 'NOUS DOIT' : 'ÉQUILIBRÉ');
+          debugPrint('🔟      ${entry.key}: ${entry.value.toStringAsFixed(2)} USD ($status)');
+          count++;
+        }
+      }
+    } catch (e) {
+      debugPrint('🔟 ❌ Erreur dans debug SOLDE PAR PARTENAIRE: $e');
+    }
+    
+    return soldeParPartenaire;
   }
 }

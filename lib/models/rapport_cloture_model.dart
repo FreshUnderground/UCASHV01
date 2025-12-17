@@ -77,6 +77,17 @@ class RapportClotureModel {
   final List<OperationResume> depotsClientsDetails;
   final List<OperationResume> retraitsClientsDetails;
   
+  // NOUVEAU: Opérations AUTRES SHOP (où nous sommes destinataires)
+  final double autresShopServis; // Retraits où nous sommes destinataires
+  final double autresShopDepots; // Dépôts où nous sommes destinataires
+  final List<OperationResume> autresShopServisDetails;
+  final List<OperationResume> autresShopDepotsDetails;
+  final Map<String, double> autresShopServisGroupes; // SERVIS groupés par client/partenaire
+  final Map<String, double> autresShopDepotsGroupes; // DEPOT groupés par client/partenaire
+  
+  // NOUVEAU: Solde par partenaire (depot - retrait où nous sommes shop destination)
+  final Map<String, double> soldeParPartenaire; // Solde net par partenaire (depot - retrait)
+  
   // NOUVEAU: Liste détaillée des transferts en attente
   final List<OperationResume> transfertsEnAttenteDetails;
   
@@ -157,6 +168,13 @@ class RapportClotureModel {
     required this.flotsEnAttenteGroupes, // NEW: FLOTs en attente groupés
     this.depotsClientsDetails = const [],
     this.retraitsClientsDetails = const [],
+    this.autresShopServis = 0.0,
+    this.autresShopDepots = 0.0,
+    this.autresShopServisDetails = const [],
+    this.autresShopDepotsDetails = const [],
+    this.autresShopServisGroupes = const {},
+    this.autresShopDepotsGroupes = const {},
+    this.soldeParPartenaire = const {},
     this.transfertsEnAttenteDetails = const [],
     this.transfertsGroupes = const [],
     required this.cashDisponibleCash,
@@ -242,6 +260,11 @@ class RapportClotureModel {
       'flots_en_attente_groupes': flotsEnAttenteGroupes, // NEW: FLOTs en attente groupés
       'depots_clients_details': depotsClientsDetails.map((d) => d.toJson()).toList(),
       'retraits_clients_details': retraitsClientsDetails.map((r) => r.toJson()).toList(),
+      'autres_shop_servis': autresShopServis,
+      'autres_shop_depots': autresShopDepots,
+      'autres_shop_servis_groupes': autresShopServisGroupes,
+      'autres_shop_depots_groupes': autresShopDepotsGroupes,
+      'solde_par_partenaire': soldeParPartenaire,
       'transferts_en_attente_details': transfertsEnAttenteDetails.map((t) => t.toJson()).toList(),
       'transferts_groupes': transfertsGroupes.map((t) => t.toJson()).toList(),
       'cash_disponible_cash': cashDisponibleCash,

@@ -505,18 +505,22 @@ class RapportClotureService {
     final partenairesServis = <CompteClientResume>[];
 
     // Récupérer les opérations de type DÉPÔT avec clientId (partenaire dépose dans son compte)
+    // EXCLURE les opérations administratives pour ne pas les compter dans "Dépôts Partenaires"
     final depotsCompte = operations.where((op) =>
         op.shopSourceId == shopId &&
         op.type == OperationType.depot &&
         op.clientId != null && // Dépôt dans un compte client
+        !(op.isAdministrative) && // EXCLURE les initialisations administratives
         _isSameDay(op.dateOp, dateRapport)
     );
 
     // Récupérer les opérations de type RETRAIT avec clientId (partenaire retire de son compte)
+    // EXCLURE les opérations administratives pour ne pas les compter dans "Partenaires Servis"
     final retraitsCompte = operations.where((op) =>
         op.shopSourceId == shopId &&
         (op.type == OperationType.retrait || op.type == OperationType.retraitMobileMoney) &&
         op.clientId != null && // Retrait d'un compte client
+        !(op.isAdministrative) && // EXCLURE les initialisations administratives
         _isSameDay(op.dateOp, dateRapport)
     );
     

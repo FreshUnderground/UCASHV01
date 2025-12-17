@@ -20,6 +20,7 @@ class _CreateVirtualTransactionDialogState extends State<CreateVirtualTransactio
   final _notesController = TextEditingController();
   
   SimModel? _selectedSim;
+  String _selectedDevise = 'USD'; // Par défaut USD
   bool _isLoading = false;
   bool _isLoadingSims = true;
   bool _isDisposed = false; // Track disposal state
@@ -143,15 +144,25 @@ class _CreateVirtualTransactionDialogState extends State<CreateVirtualTransactio
 
       debugPrint('📦 [CreateVirtualTransaction] Création transaction...');
       debugPrint('   Référence: $reference');
-      debugPrint('   Montant virtuel: $montantVirtuel');
+      debugPrint('   Montant virtuel: $montantVirtuel ${_selectedDevise}');
+      debugPrint('   Devise: $_selectedDevise');
       debugPrint('   SIM: ${_selectedSim!.numero}');
       debugPrint('   Shop ID: ${currentUser.shopId}');
       debugPrint('   Agent: ${currentUser.username}');
+      
+      // Afficher le montant cash qui sera donné (toujours en USD)
+      if (_selectedDevise == 'CDF') {
+        final montantUsd = montantVirtuel / 2500; // Estimation avec taux par défaut
+        debugPrint('   💰 Cash à donner (estimation): \$${montantUsd.toStringAsFixed(2)} USD');
+      } else {
+        debugPrint('   💰 Cash à donner: \$${montantVirtuel.toStringAsFixed(2)} USD');
+      }
 
       final transaction = await VirtualTransactionService.instance.createTransaction(
         reference: reference,
         montantVirtuel: montantVirtuel,
         frais: 0.0, // Frais = 0, commission saisie lors du service
+        devise: _selectedDevise, // NOUVEAU: Devise sélectionnée
         simNumero: _selectedSim!.numero,
         shopId: currentUser.shopId!,
         shopDesignation: _selectedSim!.shopDesignation,
@@ -346,15 +357,39 @@ class _CreateVirtualTransactionDialogState extends State<CreateVirtualTransactio
                     ),
                   const SizedBox(height: 12),
                   
+                  // Devise
+                  DropdownButtonFormField<String>(
+                    value: _selectedDevise,
+                    decoration: const InputDecoration(
+                      labelText: 'Devise *',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.currency_exchange),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'USD',
+                        child: Text('USD (\$) - Dollar Américain'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'CDF',
+                        child: Text('CDF (FC) - Franc Congolais'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      setState(() => _selectedDevise = value!);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  
                   // Montant
                   TextFormField(
                     controller: _montantController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Montant Virtuel *',
-                      hintText: '100.00',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.attach_money),
-                      suffixText: 'USD',
+                      hintText: _selectedDevise == 'CDF' ? '250000' : '100.00',
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.attach_money),
+                      suffixText: _selectedDevise == 'CDF' ? 'FC' : 'USD',
                     ),
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     validator: (value) {
@@ -368,6 +403,67 @@ class _CreateVirtualTransactionDialogState extends State<CreateVirtualTransactio
                       return null;
                     },
                   ),
+                  const SizedBox(height: 12),
+                  
+                  // Aperçu du cash à remettre (toujours en USD)
+                  if (_montantController.text.isNotEmpty && double.tryParse(_montantController.text) != null)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.green[50],
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.green[200]!),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.info_outline, color: Colors.green[700], size: 16),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Cash à remettre au client:',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green[700],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Builder(
+                            builder: (context) {
+                              final montant = double.tryParse(_montantController.text) ?? 0;
+                              if (_selectedDevise == 'CDF') {
+                                final cashUsd = montant / 2500; // Estimation avec taux par défaut
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('${montant.toStringAsFixed(0)} CDF → \$${cashUsd.toStringAsFixed(2)} USD'),
+                                    Text(
+                                      '(Conversion automatique selon le taux)',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              } else {
+                                return Text(
+                                  '\$${montant.toStringAsFixed(2)} USD',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.green,
+                                  ),
+                                );
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
                   const SizedBox(height: 12),
                   
                   // Notes

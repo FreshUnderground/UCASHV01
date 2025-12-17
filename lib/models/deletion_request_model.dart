@@ -167,8 +167,13 @@ class DeletionRequestModel {
         case 'enattente':
         case 'en_attente':
           return DeletionRequestStatus.enAttente;
-        case 'validee':
+        case 'admin_validee':
+        case 'adminvalidee':
           return DeletionRequestStatus.adminValidee;
+        case 'agent_validee':
+        case 'agentvalidee':
+        case 'validee':
+          return DeletionRequestStatus.agentValidee;
         case 'refusee':
           return DeletionRequestStatus.refusee;
         case 'annulee':

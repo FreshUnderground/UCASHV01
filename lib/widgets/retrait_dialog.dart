@@ -30,6 +30,10 @@ class _RetraitDialogState extends State<RetraitDialog> {
   bool _isLoading = false;
   List<ClientModel> _clients = [];
   DateTime _selectedDate = DateTime.now();
+  
+  // Shop destination selection
+  ShopModel? _selectedShopDestination;
+  List<ShopModel> _availableShops = [];
 
   @override
   void initState() {
@@ -51,10 +55,16 @@ class _RetraitDialogState extends State<RetraitDialog> {
 
   Future<void> _loadClients() async {
     final clientService = Provider.of<ClientService>(context, listen: false);
+    final shopService = Provider.of<ShopService>(context, listen: false);
+    
     await clientService.loadClients();
+    await shopService.loadShops();
+    
     if (mounted) {
       setState(() {
         _clients = clientService.clients;
+        _availableShops = shopService.shops;
+        
         // Re-synchroniser le client présélectionné avec la liste chargée
         if (widget.preselectedClient != null && widget.preselectedClient!.id != null) {
           _selectedClient = _clients.firstWhere(
@@ -368,9 +378,56 @@ class _RetraitDialogState extends State<RetraitDialog> {
             ),
             SizedBox(height: fieldSpacing),
             
-            // 4. Mode de paiement
+            // 4. Shop de destination *
             Text(
-              '4. Mode de paiement *',
+              '4. Shop de destination *',
+              style: TextStyle(
+                fontSize: labelFontSize,
+                fontWeight: FontWeight.bold,
+                color: Colors.orange,
+              ),
+            ),
+            SizedBox(height: isMobile ? 8 : 12),
+            
+            DropdownButtonFormField<ShopModel>(
+              value: _selectedShopDestination,
+              isExpanded: true,
+              decoration: InputDecoration(
+                labelText: 'Shop de destination',
+                border: const OutlineInputBorder(),
+                prefixIcon: Icon(Icons.store, size: ResponsiveDialogUtils.getIconSize(context)),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: isMobile ? 12 : 16,
+                  vertical: isMobile ? 12 : 16,
+                ),
+              ),
+              items: _availableShops.map((shop) {
+                return DropdownMenuItem<ShopModel>(
+                  value: shop,
+                  child: Text(
+                    '${shop.designation} - ID: ${shop.id}',
+                    style: TextStyle(fontSize: isMobile ? 14 : 16),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+              }).toList(),
+              onChanged: (ShopModel? value) {
+                setState(() {
+                  _selectedShopDestination = value;
+                });
+              },
+              validator: (value) {
+                if (value == null) {
+                  return 'Veuillez sélectionner un shop de destination';
+                }
+                return null;
+              },
+            ),
+            SizedBox(height: fieldSpacing),
+            
+            // 5. Mode de paiement
+            Text(
+              '5. Mode de paiement *',
               style: TextStyle(
                 fontSize: labelFontSize,
                 fontWeight: FontWeight.bold,
@@ -441,9 +498,9 @@ class _RetraitDialogState extends State<RetraitDialog> {
             ),
             SizedBox(height: fieldSpacing),
             
-            // 5. Observation
+            // 6. Observation
             Text(
-              '5. Observation *',
+              '6. Observation *',
               style: TextStyle(
                 fontSize: labelFontSize,
                 fontWeight: FontWeight.bold,
@@ -527,6 +584,17 @@ class _RetraitDialogState extends State<RetraitDialog> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Shop destination:'),
+                      Text(
+                        _selectedShopDestination?.designation ?? 'Non sélectionné',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                 ),
 
                   // Add CodeOps preview
                   if (_selectedClient != null && _montantController.text.isNotEmpty)
@@ -613,7 +681,12 @@ class _RetraitDialogState extends State<RetraitDialog> {
         shop = null;
       }
       
-      // Créer l'opération de retrait
+      // Validation: Shop destination requis
+      if (_selectedShopDestination == null) {
+        throw Exception('Veuillez sélectionner un shop de destination');
+      }
+      
+      // Créer l'opération de retrait avec shop destination
       final operation = OperationModel(
         codeOps: '', // Sera généré automatiquement par createOperation
         type: OperationType.retrait,
@@ -628,11 +701,13 @@ class _RetraitDialogState extends State<RetraitDialog> {
         agentId: authService.currentUser?.id ?? 1,
         agentUsername: authService.currentUser?.username,
         shopSourceId: shopId,
-        shopSourceDesignation: shop?.designation, // Récupérer la designation
+        shopSourceDesignation: shop?.designation,
+        shopDestinationId: _selectedShopDestination!.id,
+        shopDestinationDesignation: _selectedShopDestination!.designation,
         statut: OperationStatus.terminee,
         dateOp: _selectedDate,
-        notes: _observationController.text, // Utiliser la vraie observation saisie par l'utilisateur
-        observation: _observationController.text, // Now required
+        notes: _observationController.text,
+        observation: _observationController.text,
       );
 
       // Créer l'opération (cela mettra à jour automatiquement les soldes)

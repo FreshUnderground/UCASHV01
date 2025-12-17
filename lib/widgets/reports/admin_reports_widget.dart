@@ -5,10 +5,7 @@ import 'report_filters_widget.dart';
 import 'mouvements_caisse_report.dart';
 import '../rapportcloture.dart';
 import 'historique_clotures_report.dart';
-import 'credits_inter_shops_report.dart';
 import 'commissions_report.dart';
-import 'dettes_intershop_report.dart';
-
 import 'admin_flot_report.dart';
 import 'company_net_position_report.dart';
 import '../../utils/responsive_utils.dart';
@@ -39,8 +36,6 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
         Tab(icon: const Icon(Icons.receipt_long), text: l10n.closure),
         Tab(icon: const Icon(Icons.list_alt), text: l10n.closures),
         Tab(icon: const Icon(Icons.monetization_on), text: l10n.commissionsReport),
-        Tab(icon: const Icon(Icons.swap_horiz), text: l10n.credits),
-        Tab(icon: const Icon(Icons.account_balance_wallet), text: l10n.debts),
         Tab(icon: const Icon(Icons.local_shipping), text: l10n.flot),
       ];
     } else {
@@ -50,8 +45,6 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
         Tab(icon: const Icon(Icons.receipt_long), text: l10n.dailyClosure),
         Tab(icon: const Icon(Icons.list_alt), text: l10n.closureHistory),
         Tab(icon: const Icon(Icons.monetization_on), text: l10n.commissionsReport),
-        Tab(icon: const Icon(Icons.swap_horiz), text: l10n.interShopCredits),
-        Tab(icon: const Icon(Icons.account_balance_wallet), text: l10n.interShopDebts),
         Tab(icon: const Icon(Icons.local_shipping), text: l10n.flotMovements),
       ];
     }
@@ -271,10 +264,10 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
                 child: TabBarView(
                   controller: _tabController,
                   children: [
-                    // Situation Nette Entreprise
+                    // Tab 0: Situation Nette Entreprise
                     const CompanyNetPositionReport(),
                     
-                    // Mouvements de caisse (EXACTEMENT comme l'agent)
+                    // Tab 1: Mouvements de caisse (EXACTEMENT comme l'agent)
                     MouvementsCaisseReport(
                       shopId: _selectedShopId,
                       startDate: _startDate,
@@ -282,7 +275,7 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
                       showAllShops: _selectedShopId == null,
                     ),
                     
-                    // Clôture journalière (EXACTEMENT comme l'agent)
+                    // Tab 2: Clôture journalière (EXACTEMENT comme l'agent)
                     _selectedShopId != null
                       ? RapportCloture(
                           shopId: _selectedShopId!,
@@ -290,14 +283,14 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
                         )
                       : _buildSelectShopMessage(l10n),
                     
-                    // Historique des clôtures
+                    // Tab 3: Historique des clôtures
                     HistoriqueCloturesReport(
                       shopId: _selectedShopId,
                       startDate: _startDate,
                       endDate: _endDate,
                     ),
                     
-                    // Commissions
+                    // Tab 4: Commissions
                     CommissionsReport(
                       shopId: _selectedShopId,
                       startDate: _startDate,
@@ -305,21 +298,7 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
                       showAllShops: _selectedShopId == null,
                     ),
                     
-                    // Crédits inter-shops
-                    CreditsInterShopsReport(
-                      shopId: _selectedShopId,
-                      startDate: _startDate,
-                      endDate: _endDate,
-                    ),
-                    
-                    // Dettes Intershop
-                    DettesIntershopReport(
-                      shopId: _selectedShopId,
-                      startDate: _startDate,
-                      endDate: _endDate,
-                    ),
-                    
-                    // Mouvements FLOT
+                    // Tab 5: Mouvements FLOT
                     AdminFlotReport(
                       shopId: _selectedShopId,
                       startDate: _startDate,

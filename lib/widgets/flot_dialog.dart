@@ -4,6 +4,7 @@ import '../models/operation_model.dart';
 import '../services/flot_service.dart';
 import '../services/shop_service.dart';
 import '../services/auth_service.dart';
+import '../utils/currency_utils.dart';
 
 /// Dialog pour créer ou mettre à jour un FLOT
 class FlotDialog extends StatefulWidget {
@@ -27,6 +28,7 @@ class _FlotDialogState extends State<FlotDialog> {
   
   int? _selectedShopDestinationId;
   ModePaiement _selectedModePaiement = ModePaiement.cash;
+  String _selectedCurrency = CurrencyUtils.defaultCurrency; // USD par défaut
   
   bool _isLoading = false;
   String? _errorMessage;
@@ -43,6 +45,7 @@ class _FlotDialogState extends State<FlotDialog> {
     
     _selectedShopDestinationId = widget.flot?.shopDestinationId;
     _selectedModePaiement = widget.flot?.modePaiement ?? ModePaiement.cash;
+    _selectedCurrency = widget.flot?.devise ?? CurrencyUtils.defaultCurrency;
   }
 
   @override
@@ -154,7 +157,7 @@ class _FlotDialogState extends State<FlotDialog> {
                       decoration: InputDecoration(
                         hintText: 'Entrez le montant',
                         prefixIcon: const Icon(Icons.attach_money, color: Colors.blue),
-                        suffixText: 'USD',
+                        suffixText: _selectedCurrency,
                         suffixStyle: const TextStyle(
                           fontWeight: FontWeight.bold,
                           color: Colors.blue,

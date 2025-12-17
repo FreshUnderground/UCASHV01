@@ -95,20 +95,25 @@ class ModernTransactionCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
-                            '\$${transaction.montantCash.toStringAsFixed(2)}',
+                            '${transaction.montantCash.toStringAsFixed(2)}',
                             style: TextStyle(
                               fontSize: isCompact ? 16 : 18,
                               fontWeight: FontWeight.bold,
                               color: statutColor,
                             ),
                           ),
-                          Text(
-                            'Cash',
-                            style: TextStyle(
-                              fontSize: 9,
-                              color: Colors.grey[600],
-                              fontWeight: FontWeight.w500,
-                            ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                transaction.devise,
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: Colors.grey[600],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -149,13 +154,13 @@ class ModernTransactionCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   
-                  // Montants secondaires en ligne
+                  // Montants secondaires en ligne avec devise
                   Row(
                     children: [
-                      _buildCompactAmount('Virtuel', transaction.montantVirtuel, Colors.purple),
+                      _buildCompactAmountWithCurrency('Virtuel', transaction.montantVirtuel, transaction.devise, Colors.purple),
                       const SizedBox(width: 12),
                       if (transaction.frais > 0)
-                        _buildCompactAmount('Frais', transaction.frais, Colors.orange),
+                        _buildCompactAmountWithCurrency('Frais', transaction.frais, transaction.devise, Colors.orange),
                       const Spacer(),
                       // Date compactée
                       Row(
@@ -282,8 +287,8 @@ class ModernTransactionCard extends StatelessWidget {
     );
   }
 
-  /// Widget compact pour afficher un montant secondaire
-  Widget _buildCompactAmount(String label, double amount, Color color) {
+  /// Widget compact pour afficher un montant secondaire avec devise
+  Widget _buildCompactAmountWithCurrency(String label, double amount, String devise, Color color) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -297,14 +302,47 @@ class ModernTransactionCard extends StatelessWidget {
         ),
         const SizedBox(width: 4),
         Text(
-          '\$${amount.toStringAsFixed(2)}',
+          _formatAmountWithCurrency(amount, devise),
           style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w700,
             color: color,
           ),
         ),
+        if (devise == 'CDF') ...[
+          const SizedBox(width: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+            decoration: BoxDecoration(
+              color: Colors.blue[50],
+              borderRadius: BorderRadius.circular(3),
+              border: Border.all(color: Colors.blue[200]!, width: 0.5),
+            ),
+            child: Text(
+              'CDF',
+              style: TextStyle(
+                fontSize: 8,
+                color: Colors.blue[700],
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ],
     );
+  }
+
+  /// Widget compact pour afficher un montant secondaire (legacy)
+  Widget _buildCompactAmount(String label, double amount, Color color) {
+    return _buildCompactAmountWithCurrency(label, amount, 'USD', color);
+  }
+
+  /// Formater un montant avec sa devise
+  String _formatAmountWithCurrency(double amount, String devise) {
+    if (devise == 'CDF') {
+      return '${amount.toStringAsFixed(0)} FC';
+    } else {
+      return '\$${amount.toStringAsFixed(2)}';
+    }
   }
 }

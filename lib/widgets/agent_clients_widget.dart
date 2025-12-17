@@ -13,6 +13,7 @@ import '../models/client_model.dart';
 import '../models/operation_model.dart';
 import '../widgets/simple_transfer_dialog.dart';
 import 'edit_client_dialog.dart';
+import 'initialize_balance_dialog.dart';
 
 class AgentClientsWidget extends StatefulWidget {
   const AgentClientsWidget({super.key});
@@ -1096,6 +1097,16 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
               ],
             ),
           ),
+          const PopupMenuItem(
+            value: 'init_balance',
+            child: Row(
+              children: [
+                Icon(Icons.account_balance_wallet, size: 16, color: Colors.orange),
+                SizedBox(width: 8),
+                Text('Initialiser Solde'),
+              ],
+            ),
+          ),
           PopupMenuItem(
             value: 'toggle_status',
             child: Row(
@@ -1138,6 +1149,9 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
         break;
       case 'transfer':
         _createTransferForClient(client);
+        break;
+      case 'init_balance':
+        _initializeClientBalance(client);
         break;
       case 'toggle_status':
         _toggleClientStatus(client);
@@ -1243,6 +1257,17 @@ class _AgentClientsWidgetState extends State<AgentClientsWidget> {
         ),
       );
     }
+  }
+
+  void _initializeClientBalance(ClientModel client) {
+    showDialog(
+      context: context,
+      builder: (context) => InitializeBalanceDialog(client: client),
+    ).then((result) {
+      if (result == true) {
+        _loadClients();
+      }
+    });
   }
 
   Future<void> _deleteClient(ClientModel client) async {

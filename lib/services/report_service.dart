@@ -1097,6 +1097,217 @@ class ReportService extends ChangeNotifier {
       mouvementsParJour[dateKey]!['nombreOperations']++;
     }
 
+    // NOUVEAU: Traiter les opérations AUTRES SHOP (dépôts et retraits intershop)
+    final autresShopOps = _operations.where((op) => 
+      (op.type == OperationType.depot || op.type == OperationType.retrait) &&
+      op.shopSourceId != null && op.shopDestinationId != null &&
+      op.shopSourceId != op.shopDestinationId && // Opérations intershop uniquement
+      op.devise == 'USD'
+    ).toList();
+    
+    print('🔍 DEBUG DETTES INTERSHOP:');
+    print('📊 Total opérations: ${_operations.length}');
+    print('🏪 Opérations AUTRES SHOP trouvées: ${autresShopOps.length}');
+    for (final op in autresShopOps.take(3)) {
+      print('   - ${op.type.name} ${op.montantNet} USD: Shop ${op.shopSourceId} → Shop ${op.shopDestinationId}');
+    }
+
+    // Traiter les opérations AUTRES SHOP
+    for (final op in autresShopOps) {
+      final shopSource = _shops.firstWhere(
+        (s) => s.id == op.shopSourceId,
+        orElse: () => ShopModel(id: op.shopSourceId ?? 0, designation: 'Shop ${op.shopSourceId}', localisation: ''),
+      );
+      final shopDestination = _shops.firstWhere(
+        (s) => s.id == op.shopDestinationId,
+        orElse: () => ShopModel(id: op.shopDestinationId ?? 0, designation: 'Shop ${op.shopDestinationId}', localisation: ''),
+      );
+      
+      // Si un shop spécifique est sélectionné, filtrer les mouvements
+      if (shopId != null && 
+          op.shopSourceId != shopId && 
+          op.shopDestinationId != shopId) {
+        continue;
+      }
+
+      String typeMouvement;
+      String description;
+      bool isCreance = false;
+
+      // Déterminer le type de mouvement selon la perspective du shop
+      if (shopId == null) {
+        // Vue globale
+        typeMouvement = op.type == OperationType.depot ? 'depot_intershop' : 'retrait_intershop';
+        description = '${op.type.name.toUpperCase()} intershop - ${shopSource.designation} → ${shopDestination.designation}';
+      } else if (op.shopDestinationId == shopId) {
+        // Ce shop a reçu l'opération
+        if (op.type == OperationType.depot) {
+          // Dépôt reçu → CRÉANCE (shop source nous doit)
+          // Car le shop source a fait un dépôt pour son client chez nous
+          typeMouvement = 'depot_recu';
+          description = 'Dépôt reçu - ${shopSource.designation} nous doit ${op.montantNet.toStringAsFixed(2)} USD';
+          isCreance = true;
+          totalCreances += op.montantNet;
+          
+          final autreShopId = op.shopSourceId!;
+          soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + op.montantNet;
+        } else {
+          // Retrait servi → DETTE (on doit au shop source)
+          // Car on a servi un retrait pour un client du shop source
+          typeMouvement = 'retrait_servi';
+          description = 'Retrait servi - Nous devons ${op.montantNet.toStringAsFixed(2)} USD à ${shopSource.designation}';
+          totalDettes += op.montantNet;
+          
+          final autreShopId = op.shopSourceId!;
+          soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - op.montantNet;
+        }
+      } else if (op.shopSourceId == shopId) {
+        // Ce shop a initié l'opération
+        if (op.type == OperationType.depot) {
+          // Dépôt fait → DETTE (on doit au shop destination)
+          // Car on a fait un dépôt pour notre client chez le shop destination
+          typeMouvement = 'depot_fait';
+          description = 'Dépôt fait - Nous devons ${op.montantNet.toStringAsFixed(2)} USD à ${shopDestination.designation}';
+          totalDettes += op.montantNet;
+          
+          final autreShopId = op.shopDestinationId!;
+          soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - op.montantNet;
+        } else {
+          // Retrait fait → CRÉANCE (shop destination nous doit)
+          // Car on a fait un retrait pour notre client depuis le shop destination
+          typeMouvement = 'retrait_fait';
+          description = 'Retrait fait - ${shopDestination.designation} nous doit ${op.montantNet.toStringAsFixed(2)} USD';
+          isCreance = true;
+          totalCreances += op.montantNet;
+          
+          final autreShopId = op.shopDestinationId!;
+          soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + op.montantNet;
+        }
+      } else {
+        continue; // Not relevant for the selected shop
+      }
+
+      final mouvement = {
+        'date': op.dateOp,
+        'shopSource': shopSource.designation,
+        'shopDestination': shopDestination.designation,
+        'montant': op.montantNet,
+        'commission': op.commission,
+        'typeMouvement': typeMouvement,
+        'description': description,
+        'isCreance': isCreance,
+        'clientNom': op.clientNom ?? op.destinataire ?? 'Client inconnu',
+      };
+
+      mouvements.add(mouvement);
+
+      // Agréger par jour
+      final dateKey = op.dateOp.toIso8601String().split('T')[0];
+      if (!mouvementsParJour.containsKey(dateKey)) {
+        mouvementsParJour[dateKey] = {
+          'date': dateKey,
+          'creances': 0.0,
+          'dettes': 0.0,
+          'solde': 0.0,
+          'nombreOperations': 0,
+        };
+      }
+
+      if (isCreance || shopId == null) {
+        mouvementsParJour[dateKey]!['creances'] += op.montantNet;
+      }
+      if (!isCreance || shopId == null) {
+        mouvementsParJour[dateKey]!['dettes'] += op.montantNet;
+      }
+      mouvementsParJour[dateKey]!['nombreOperations']++;
+    }
+
+    // NOUVEAU: Traiter les opérations administratives (solde par partenaire)
+    final operationsAdministratives = _operations.where((op) => 
+      op.isAdministrative &&
+      (op.type == OperationType.depot || op.type == OperationType.retrait) &&
+      op.devise == 'USD'
+    ).toList();
+    
+    print('🔧 Opérations administratives trouvées: ${operationsAdministratives.length}');
+    for (final op in operationsAdministratives.take(3)) {
+      print('   - ${op.type.name} ${op.montantNet} USD: ${op.clientNom ?? op.destinataire} (Shop ${op.shopSourceId})');
+    }
+
+    // Traiter les opérations administratives (initialisations de soldes)
+    for (final op in operationsAdministratives) {
+      // Pour les opérations administratives, shopSourceId contient l'ID du shop concerné
+      final shopConcerne = _shops.firstWhere(
+        (s) => s.id == op.shopSourceId,
+        orElse: () => ShopModel(id: op.shopSourceId ?? 0, designation: 'Shop ${op.shopSourceId}', localisation: ''),
+      );
+      
+      // Si un shop spécifique est sélectionné, filtrer les mouvements
+      if (shopId != null && op.shopSourceId != shopId) {
+        continue;
+      }
+
+      String typeMouvement;
+      String description;
+      bool isCreance = false;
+
+      // Les opérations administratives représentent des soldes initialisés
+      if (shopId == null) {
+        // Vue globale
+        typeMouvement = op.type == OperationType.depot ? 'solde_credit_initialise' : 'solde_dette_initialise';
+        description = 'Solde ${op.type == OperationType.depot ? 'crédit' : 'dette'} initialisé - ${op.clientNom ?? op.destinataire ?? 'Client inconnu'} (${shopConcerne.designation})';
+      } else {
+        // Vue spécifique au shop
+        if (op.type == OperationType.depot) {
+          // Dépôt administratif → créance (client nous doit)
+          typeMouvement = 'solde_credit_initialise';
+          description = 'Solde crédit initialisé - ${op.clientNom ?? op.destinataire ?? 'Client inconnu'} nous doit ${op.montantNet.toStringAsFixed(2)} USD';
+          isCreance = true;
+          totalCreances += op.montantNet;
+        } else {
+          // Retrait administratif → dette (on doit au client)
+          typeMouvement = 'solde_dette_initialise';
+          description = 'Solde dette initialisé - Nous devons ${op.montantNet.toStringAsFixed(2)} USD à ${op.clientNom ?? op.destinataire ?? 'Client inconnu'}';
+          totalDettes += op.montantNet;
+        }
+      }
+
+      final mouvement = {
+        'date': op.dateOp,
+        'shopSource': shopConcerne.designation,
+        'shopDestination': shopConcerne.designation, // Même shop pour les initialisations
+        'montant': op.montantNet,
+        'commission': 0.0, // Pas de commission pour les initialisations
+        'typeMouvement': typeMouvement,
+        'description': description,
+        'isCreance': isCreance,
+        'clientNom': op.clientNom ?? op.destinataire ?? 'Client inconnu',
+        'isAdministrative': true,
+      };
+
+      mouvements.add(mouvement);
+
+      // Agréger par jour
+      final dateKey = op.dateOp.toIso8601String().split('T')[0];
+      if (!mouvementsParJour.containsKey(dateKey)) {
+        mouvementsParJour[dateKey] = {
+          'date': dateKey,
+          'creances': 0.0,
+          'dettes': 0.0,
+          'solde': 0.0,
+          'nombreOperations': 0,
+        };
+      }
+
+      if (isCreance || shopId == null) {
+        mouvementsParJour[dateKey]!['creances'] += op.montantNet;
+      }
+      if (!isCreance || shopId == null) {
+        mouvementsParJour[dateKey]!['dettes'] += op.montantNet;
+      }
+      mouvementsParJour[dateKey]!['nombreOperations']++;
+    }
+
     // Traiter les flots avec la logique du rapport de clôture
     for (final flot in flots) {
       if (flot.shopDestinationId == null || flot.devise != 'USD') continue;
@@ -1227,6 +1438,15 @@ class ReportService extends ChangeNotifier {
 
     // Trier les jours par date décroissante pour l'affichage
     joursListe.sort((a, b) => (b['date'] as String).compareTo(a['date'] as String));
+    
+    print('📈 Total mouvements générés: ${mouvements.length}');
+    print('📅 Jours avec activité: ${joursListe.length}');
+    if (mouvements.isNotEmpty) {
+      print('🔍 Premiers mouvements:');
+      for (final m in mouvements.take(5)) {
+        print('   - ${m['typeMouvement']}: ${m['description']}');
+      }
+    }
 
     // Convertir les soldes par shop en format compatible avec l'interface
     final Map<int, Map<String, dynamic>> soldesParShopFormatted = {};
