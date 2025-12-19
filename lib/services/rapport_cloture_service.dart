@@ -3,6 +3,7 @@ import '../models/rapport_cloture_model.dart';
 import '../models/operation_model.dart';
 import '../models/shop_model.dart';
 import '../models/flot_model.dart' as flot_model;
+import '../models/triangular_debt_settlement_model.dart';
 import '../models/cloture_caisse_model.dart';
 import '../models/cloture_virtuelle_par_sim_model.dart';
 import '../models/compte_special_model.dart';
@@ -60,6 +61,9 @@ class RapportClotureService {
       
       // 6. Calculer les dettes/créances inter-shops
       final comptesShops = await _getComptesShops(shopId, dateRapport);
+      
+      // 6.5. NOUVEAU: Calculer les règlements triangulaires de dettes impliquant ce shop
+      final triangularSettlements = await _getTriangularSettlements(shopId, dateRapport);
       
       // 6.5. Calculer les comptes spéciaux (FRAIS et DÉPENSE)
       final comptesSpeciaux = await _calculerComptesSpeciaux(shopId, dateRapport, operations);
@@ -142,6 +146,7 @@ class RapportClotureService {
         // Comptes inter-shops
         shopsNousDoivent: comptesShops['nousDoivent']!,
         shopsNousDevons: comptesShops['nousDevons']!,
+        triangularSettlements: triangularSettlements,
         
         // NOUVEAU: Comptes spéciaux (FRAIS uniquement)
         soldeFraisAnterieur: soldeFraisAnterieur,
@@ -782,6 +787,27 @@ class RapportClotureService {
       }
     }
     
+    // TRAITEMENT DES RÈGLEMENTS TRIANGULAIRES DE DETTES
+    // Logique: Shop A doit à Shop C, Shop A paie Shop B pour le compte de Shop C
+    // Impact: Dette de Shop A à Shop C diminue, Dette de Shop B à Shop C augmente
+    final triangularSettlements = await LocalDB.instance.getAllTriangularDebtSettlements();
+    
+    for (final settlement in triangularSettlements) {
+      final debtorId = settlement.shopDebtorId;
+      final intermediaryId = settlement.shopIntermediaryId;
+      final creditorId = settlement.shopCreditorId;
+      final amount = settlement.montant;
+      
+      // Appliquer les impacts seulement si le shop courant est impliqué
+      if (shopId == creditorId) {
+        // Pour le créancier (Shop C): 
+        // - La dette de Shop A diminue (moins d'argent qu'on nous doit)
+        // - La dette de Shop B augmente (plus d'argent qu'on nous doit)
+        soldesParShop[debtorId] = (soldesParShop[debtorId] ?? 0.0) - amount; // Dette diminue
+        soldesParShop[intermediaryId] = (soldesParShop[intermediaryId] ?? 0.0) + amount; // Dette augmente
+      }
+    }
+    
     // Debug integration info masked
     
     // Séparer en créances (solde > 0) et dettes (solde < 0)
@@ -830,7 +856,72 @@ class RapportClotureService {
       'nousDevons': shopsNousDevons,
     };
   }
-
+    
+  /// NOUVEAU: Récupérer les règlements triangulaires de dettes impliquant ce shop
+  /// pour affichage dans le rapport de clôture
+  Future<List<TriangularSettlementResume>> _getTriangularSettlements(int shopId, DateTime dateRapport) async {
+    debugPrint('🔺 === RÉCUPÉRATION RÈGLEMENTS TRIANGULAIRES POUR SHOP $shopId ===');
+      
+    final allSettlements = await LocalDB.instance.getAllTriangularDebtSettlements();
+    final shops = await LocalDB.instance.getAllShops();
+    final shopsMap = {for (var shop in shops) shop.id!: shop};
+    
+    // Filtrer par date (seulement les règlements de la journée du rapport)
+    final dateDebut = DateTime(dateRapport.year, dateRapport.month, dateRapport.day);
+    final dateFin = DateTime(dateRapport.year, dateRapport.month, dateRapport.day, 23, 59, 59);
+    
+    final settlementsDuJour = allSettlements.where((settlement) {
+      return settlement.dateReglement.isAfter(dateDebut.subtract(const Duration(seconds: 1))) && 
+             settlement.dateReglement.isBefore(dateFin.add(const Duration(seconds: 1)));
+    }).toList();
+      
+    final List<TriangularSettlementResume> result = [];
+      
+    for (final settlement in settlementsDuJour) {
+      // Vérifier si le règlement concerne ce shop (débiteur, intermédiaire ou créancier)
+      if (settlement.shopDebtorId == shopId || 
+          settlement.shopIntermediaryId == shopId || 
+          settlement.shopCreditorId == shopId) {
+          
+        // Déterminer le rôle du shop courant
+        String role;
+        String impact;
+          
+        if (settlement.shopDebtorId == shopId) {
+          role = 'debtor'; // Débiteur
+          impact = 'diminue'; // Sa dette diminue
+        } else if (settlement.shopIntermediaryId == shopId) {
+          role = 'intermediary'; // Intermédiaire
+          impact = 'augmente'; // Sa dette augmente
+        } else {
+          role = 'creditor'; // Créancier
+          impact = 'aucun'; // Pas d'impact direct sur sa dette
+        }
+          
+        result.add(TriangularSettlementResume(
+          settlementId: settlement.id!,
+          reference: settlement.reference,
+          shopDebtorDesignation: settlement.shopDebtorDesignation,
+          shopIntermediaryDesignation: settlement.shopIntermediaryDesignation,
+          shopCreditorDesignation: settlement.shopCreditorDesignation,
+          montant: settlement.montant,
+          devise: settlement.devise,
+          dateReglement: settlement.dateReglement,
+          roleDuShopCourant: role,
+          impactSurDette: impact,
+          notes: settlement.notes,
+        ));
+          
+        debugPrint('   🔺 Règlement trouvé: ${settlement.reference} - Rôle: $role - Impact: $impact');
+      }
+    }
+      
+    debugPrint('   🔺 Nombre de règlements triangulaires trouvés: ${result.length}');
+    debugPrint('🔺 === FIN RÉCUPÉRATION RÈGLEMENTS TRIANGULAIRES ===');
+      
+    return result;
+  }
+    
   /// Calculer les comptes spéciaux (FRAIS et DÉPENSE)
   /// IMPORTANT: Les frais affichés sont UNIQUEMENT les frais encaissés sur les transferts que nous avons servis
   Future<Map<String, dynamic>> _calculerComptesSpeciaux(int shopId, DateTime dateRapport, List<OperationModel>? providedOperations) async {

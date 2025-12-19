@@ -3,7 +3,7 @@
 // À utiliser si 'localhost' ne fonctionne pas
 
 // Paramètres de base
-$dbName = 'inves2504808_1n6a7b';
+$dbName = 'inves2504808_6oor7p';
 $dbUser = 'inves2504808';
 $dbPass = '31nzzasdnh';
 

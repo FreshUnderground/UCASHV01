@@ -3,6 +3,7 @@ import 'package:flutter/scheduler.dart';
 import '../models/operation_model.dart';
 import '../models/shop_model.dart';
 import '../models/flot_model.dart' as flot_model;
+import '../models/triangular_debt_settlement_model.dart';
 import 'local_db.dart';
 import 'agent_service.dart';
 
@@ -645,6 +646,35 @@ class ReportService extends ChangeNotifier {
         // = L'AUTRE SHOP a donné de l'argent, donc Nous que Devons à L'AUTRE SHOP
         final sourceId = flot.shopSourceId;
         dettesParShop[sourceId] = (dettesParShop[sourceId] ?? 0) + flot.montant;
+      }
+    }
+    
+    // TRAITEMENT DES RÈGLEMENTS TRIANGULAIRES DE DETTES
+    // Logique: Shop A doit à Shop C, Shop A paie Shop B pour le compte de Shop C
+    // Impact: Dette de Shop A à Shop C diminue, Dette de Shop B à Shop C augmente
+    final triangularSettlements = await LocalDB.instance.getAllTriangularDebtSettlements();
+    
+    for (final settlement in triangularSettlements) {
+      final debtorId = settlement.shopDebtorId;
+      final intermediaryId = settlement.shopIntermediaryId;
+      final creditorId = settlement.shopCreditorId;
+      final amount = settlement.montant;
+      
+      // Appliquer les impacts seulement si le shop courant est impliqué
+      if (shopId == creditorId) {
+        // Pour le créancier (Shop C): 
+        // - La dette de Shop A diminue (moins d'argent qu'on nous doit)
+        // - La dette de Shop B augmente (plus d'argent qu'on nous doit)
+        dettesParShop[debtorId] = (dettesParShop[debtorId] ?? 0) - amount; // Dette diminue
+        dettesParShop[intermediaryId] = (dettesParShop[intermediaryId] ?? 0) + amount; // Dette augmente
+      } else if (shopId == debtorId) {
+        // Pour le débiteur (Shop A):
+        // Sa dette envers le créancier diminue
+        creancesParShop[creditorId] = (creancesParShop[creditorId] ?? 0) - amount; // Moins d'argent qu'on doit
+      } else if (shopId == intermediaryId) {
+        // Pour l'intermédiaire (Shop B):
+        // Sa dette envers le créancier augmente
+        dettesParShop[creditorId] = (dettesParShop[creditorId] ?? 0) + amount; // Plus d'argent qu'on doit
       }
     }
     

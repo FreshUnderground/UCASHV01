@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class SimpleSyncTest {
-  static const String testUrl = 'https://mahanaimeservice.investee-group.com/server/api/test_final.php';
+  static const String testUrl = 'https://mahanaim.investee-group.com/server/api/test_final.php';
   
   static Future<bool> testCORS() async {
     try {

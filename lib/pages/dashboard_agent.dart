@@ -19,6 +19,7 @@ import '../widgets/sync_monitor_widget.dart';
 import '../widgets/virtual_transactions_widget.dart' as virtual_widget;
 import '../widgets/language_selector.dart';
 import '../widgets/agent_deletion_validation_widget.dart';
+import '../widgets/agent_triangular_debt_settlement_widget.dart';
 import '../widgets/reports/dettes_intershop_report.dart';
 import '../widgets/cloture_required_dialog.dart';
 import '../services/deletion_service.dart';
@@ -44,6 +45,7 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
     'Frais',
     'VIRTUEL',
     'Dettes Intershop',
+    'Regul.', // Règlement Triangulaire
     'Suppressions',
   ];
 
@@ -55,6 +57,7 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
     Icons.account_balance,
     Icons.mobile_friendly,
     Icons.swap_horiz,
+    Icons.change_circle, // NEW - Triangular settlement icon
     Icons.delete_sweep,
   ];
 
@@ -933,7 +936,7 @@ Widget _buildMainContent() {
   final isMobile = size.width <= 768;
 
   // Widgets qui gèrent leur propre layout (ne pas les mettre dans SingleChildScrollView)
-  final widgetsWithOwnLayout = [0, 1, 2, 3, 4, 5, 6, 7]; // Opérations, Validations, Rapports, FLOT, Frais, VIRTUEL, Dettes, Suppressions
+  final widgetsWithOwnLayout = [0, 1, 2, 3, 4, 5, 6, 7, 8]; // Opérations, Validations, Rapports, FLOT, Frais, VIRTUEL, Dettes, Règl. Triangulaire, Suppressions
 
   Widget content = switch (_selectedIndex) {
     0 => _buildOperationsContent(),   // Opérations
@@ -943,7 +946,8 @@ Widget _buildMainContent() {
     4 => _buildFraisContent(),        // Frais
     5 => _buildVirtuelContent(),      // VIRTUEL
     6 => _buildDettesIntershopContent(), // Dettes Intershop
-    7 => const AgentDeletionValidationWidget(), // Suppressions
+    7 => const AgentTriangularDebtSettlementWidget(), // Règlement Triangulaire
+    8 => const AgentDeletionValidationWidget(), // Suppressions
     _ => _buildOperationsContent(),
   };
 

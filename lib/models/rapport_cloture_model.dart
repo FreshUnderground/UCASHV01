@@ -56,6 +56,9 @@ class RapportClotureModel {
   final List<CompteShopResume> shopsNousDoivent;
   final List<CompteShopResume> shopsNousDevons;
   
+  // NOUVEAU: Règlements triangulaires de dettes
+  final List<TriangularSettlementResume> triangularSettlements;
+  
   // NOUVEAU: Comptes spéciaux (FRAIS et DÉPENSE)
   final double soldeFraisAnterieur;       // NOUVEAU: Solde FRAIS antérieur (jour précédent)
   final double retraitsFraisDuJour;      // Retraits FRAIS du jour
@@ -153,6 +156,7 @@ class RapportClotureModel {
     required this.clientsNousDevons,
     required this.shopsNousDoivent,
     required this.shopsNousDevons,
+    required this.triangularSettlements,
     this.soldeFraisAnterieur = 0.0,
     this.retraitsFraisDuJour = 0.0,
     this.commissionsFraisDuJour = 0.0,
@@ -253,6 +257,7 @@ class RapportClotureModel {
       'clients_nous_devons': clientsNousDevons.map((c) => c.toJson()).toList(),
       'shops_nous_doivent': shopsNousDoivent.map((s) => s.toJson()).toList(),
       'shops_nous_devons': shopsNousDevons.map((s) => s.toJson()).toList(),
+      'triangular_settlements': triangularSettlements.map((t) => t.toJson()).toList(),
       'flots_recus_details': flotsRecusDetails.map((f) => f.toJson()).toList(), // Maintenant gérés comme operations
       'flots_recus_groupes': flotsRecusGroupes, // Map<String, double> - Maintenant gérés comme operations
       'flots_envoyes': flotsEnvoyes.map((f) => f.toJson()).toList(), // Maintenant gérés comme operations
@@ -332,6 +337,53 @@ class CompteShopResume {
       'designation': designation,
       'localisation': localisation,
       'montant': montant,
+    };
+  }
+}
+
+/// Résumé d'un règlement triangulaire pour le rapport de clôture
+/// Affiche les détails des régularisations de dettes triangulaires
+/// où le shop courant est impliqué (débiteur, intermédiaire ou créancier)
+class TriangularSettlementResume {
+  final int settlementId;
+  final String reference;
+  final String shopDebtorDesignation;
+  final String shopIntermediaryDesignation;
+  final String shopCreditorDesignation;
+  final double montant;
+  final String devise;
+  final DateTime dateReglement;
+  final String roleDuShopCourant; // 'debtor', 'intermediary', ou 'creditor'
+  final String impactSurDette; // 'diminue', 'augmente', ou 'aucun'
+  final String? notes;
+
+  TriangularSettlementResume({
+    required this.settlementId,
+    required this.reference,
+    required this.shopDebtorDesignation,
+    required this.shopIntermediaryDesignation,
+    required this.shopCreditorDesignation,
+    required this.montant,
+    required this.devise,
+    required this.dateReglement,
+    required this.roleDuShopCourant,
+    required this.impactSurDette,
+    this.notes,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'settlement_id': settlementId,
+      'reference': reference,
+      'shop_debtor_designation': shopDebtorDesignation,
+      'shop_intermediary_designation': shopIntermediaryDesignation,
+      'shop_creditor_designation': shopCreditorDesignation,
+      'montant': montant,
+      'devise': devise,
+      'date_reglement': dateReglement.toIso8601String(),
+      'role_du_shop_courant': roleDuShopCourant,
+      'impact_sur_dette': impactSurDette,
+      'notes': notes,
     };
   }
 }

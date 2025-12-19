@@ -30,6 +30,7 @@ import 'services/conflict_notification_service.dart';
 import 'services/conflict_logging_service.dart';
 import 'services/currency_service.dart';
 import 'services/credit_virtuel_service.dart'; // Add this import
+import 'services/retenue_service.dart';
 import 'pages/login_page.dart';
 import 'pages/agent_login_page.dart';
 import 'pages/client_login_page.dart';
@@ -147,6 +148,9 @@ class _UCashAppState extends State<UCashApp> {
         }),
         RatesService.instance.loadRatesAndCommissions().then((_) {
           _updateLoadingState('Finalisation...', 0.9);
+        }),
+        RetenueService.instance.loadRetenues().then((_) {
+          debugPrint('✅ RetenueService initialisé');
         }),
       ]);
       

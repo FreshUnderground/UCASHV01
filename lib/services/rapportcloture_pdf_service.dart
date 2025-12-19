@@ -233,6 +233,88 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                     ], PdfColors.purple700),
                     pw.SizedBox(height: 8),
                     
+                    // NOUVEAU: Règlements Triangulaires de Dettes
+                    if (rapport.triangularSettlements.isNotEmpty)
+                      _buildSection('10. REGULARISATION', [
+                        pw.Text('${rapport.triangularSettlements.length} règlement(s)', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold)),
+                        pw.Divider(),
+                        ...rapport.triangularSettlements.map((s) {
+                          // Déterminer le texte selon le rôle
+                          String roleText;
+                          switch (s.roleDuShopCourant) {
+                            case 'debtor':
+                              roleText = 'Débiteur';
+                              break;
+                            case 'intermediary':
+                              roleText = 'Intermédiaire';
+                              break;
+                            case 'creditor':
+                              roleText = 'Créancier';
+                              break;
+                            default:
+                              roleText = 'Inconnu';
+                          }
+                          
+                          // Déterminer le texte selon l'impact
+                          String impactText;
+                          switch (s.impactSurDette) {
+                            case 'diminue':
+                              impactText = 'Dette diminue';
+                              break;
+                            case 'augmente':
+                              impactText = 'Dette augmente';
+                              break;
+                            case 'aucun':
+                              impactText = 'Pas d\'impact';
+                              break;
+                            default:
+                              impactText = 'Inconnu';
+                          }
+                          
+                          return pw.Column(
+                            children: [
+                              pw.Row(
+                                children: [
+                                  pw.Expanded(
+                                    flex: 2,
+                                    child: pw.Text('${s.reference}', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+                                  ),
+                                  pw.Expanded(
+                                    flex: 1,
+                                    child: pw.Text('${NumberFormat('#,##0.00').format(s.montant)} ${s.devise}', style: pw.TextStyle(fontSize: 8)),
+                                  ),
+                                ],
+                              ),
+                              pw.SizedBox(height: 2),
+                              pw.Row(
+                                children: [
+                                  pw.Expanded(
+                                    flex: 3,
+                                    child: pw.Text('${s.shopDebtorDesignation} → ${s.shopIntermediaryDesignation} → ${s.shopCreditorDesignation}', style: pw.TextStyle(fontSize: 7, color: PdfColors.grey)),
+                                  ),
+                                ],
+                              ),
+                              pw.SizedBox(height: 2),
+                              pw.Row(
+                                children: [
+                                  pw.Expanded(
+                                    flex: 1,
+                                    child: pw.Text('Rôle: $roleText', style: pw.TextStyle(fontSize: 7)),
+                                  ),
+                                  pw.Expanded(
+                                    flex: 1,
+                                    child: pw.Text('Impact: $impactText', style: pw.TextStyle(fontSize: 7)),
+                                  ),
+                                ],
+                              ),
+                              pw.SizedBox(height: 4),
+                              pw.Divider(),
+                            ],
+                          );
+                        }),
+                      ], PdfColors.blue700),
+                    pw.SizedBox(height: 8),
+                    
                     // NOUVEAU: Section AUTRES SHOP (opérations où nous sommes destinataires)
                     if (rapport.autresShopServis > 0 || rapport.autresShopDepots > 0)
                       _buildSection('10. AUTRES SHOP', [

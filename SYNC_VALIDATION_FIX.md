@@ -5,7 +5,7 @@
 ### Original Error
 ```
 ⚠️ sims: Données invalides pour ID 1764354094342 - ignorées
-POST https://mahanaimeservice.investee-group.com/server/api/sync/sims/upload.php 500 (Internal Server Error)
+POST https://mahanaim.investee-group.com/server/api/sync/sims/upload.php 500 (Internal Server Error)
 ❌ Erreur upload sims: Exception: Erreur HTTP 500
 ```
 

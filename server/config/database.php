@@ -4,7 +4,7 @@
 
 // Paramètres de connexion
 define('DB_HOST', '91.216.107.185');
-define('DB_NAME', 'inves2504808_1n6a7b');
+define('DB_NAME', 'inves2504808_6oor7p');
 define('DB_USER', 'inves2504808');
 define('DB_PASS', '31nzzasdnh');
 

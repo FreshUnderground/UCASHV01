@@ -20,6 +20,7 @@ import '../models/retrait_virtuel_model.dart';
 import '../models/cloture_virtuelle_model.dart';
 import '../models/depot_client_model.dart';
 import '../models/credit_virtuel_model.dart';
+import '../models/triangular_debt_settlement_model.dart';
 
 class LocalDB {
   static final LocalDB _instance = LocalDB._internal();
@@ -2974,5 +2975,143 @@ class LocalDB {
     final prefs = await database;
     await prefs.remove('credit_virtuel_$creditId');
     debugPrint('🗑️ Crédit virtuel supprimé: $creditId');
+  }
+
+  // === CRUD RÈGLEMENTS TRIANGULAIRES ===
+  
+  /// Sauvegarder un règlement triangulaire
+  Future<TriangularDebtSettlementModel> saveTriangularDebtSettlement(TriangularDebtSettlementModel settlement) async {
+    final prefs = await database;
+    final settlementId = settlement.id ?? await _generateSequentialId('triangular_settlement_');
+    final updatedSettlement = settlement.copyWith(id: settlementId);
+    final key = 'triangular_settlement_$settlementId';
+    
+    debugPrint('💾 Sauvegarde règlement triangulaire: $key');
+    await prefs.setString(key, jsonEncode(updatedSettlement.toJson()));
+    
+    final saved = prefs.getString(key);
+    if (saved != null) {
+      debugPrint('✅ Règlement triangulaire sauvegardé: ${updatedSettlement.reference}');
+    } else {
+      debugPrint('❌ Échec de la sauvegarde du règlement triangulaire');
+    }
+    
+    return updatedSettlement;
+  }
+
+  /// Mettre à jour un règlement triangulaire
+  Future<bool> updateTriangularDebtSettlement(TriangularDebtSettlementModel settlement) async {
+    if (settlement.id == null) throw Exception('Settlement ID is required for update');
+    
+    final prefs = await database;
+    final key = 'triangular_settlement_${settlement.id}';
+    
+    debugPrint('🔄 Mise à jour règlement triangulaire: $key');
+    await prefs.setString(key, jsonEncode(settlement.toJson()));
+    
+    final updated = prefs.getString(key);
+    if (updated != null) {
+      debugPrint('✅ Règlement triangulaire mis à jour: ${settlement.reference}');
+      return true;
+    } else {
+      debugPrint('❌ Échec de la mise à jour du règlement triangulaire');
+      return false;
+    }
+  }
+
+  /// Récupérer tous les règlements triangulaires
+  Future<List<TriangularDebtSettlementModel>> getAllTriangularDebtSettlements({
+    int? shopId,
+    DateTime? dateDebut,
+    DateTime? dateFin,
+  }) async {
+    final prefs = await database;
+    final settlements = <TriangularDebtSettlementModel>[];
+    
+    final keys = prefs.getKeys();
+    debugPrint('🔍 [LocalDB] getAllTriangularDebtSettlements - Found ${keys.where((k) => k.startsWith('triangular_settlement_')).length} settlement keys');
+    
+    for (String key in keys) {
+      if (key.startsWith('triangular_settlement_')) {
+        try {
+          final settlementData = prefs.getString(key);
+          if (settlementData != null) {
+            final settlement = TriangularDebtSettlementModel.fromJson(jsonDecode(settlementData));
+            
+            // Appliquer les filtres
+            bool matches = true;
+            
+            if (shopId != null && 
+                settlement.shopDebtorId != shopId && 
+                settlement.shopIntermediaryId != shopId && 
+                settlement.shopCreditorId != shopId) {
+              matches = false;
+            }
+            
+            if (dateDebut != null && settlement.dateReglement.isBefore(dateDebut)) {
+              matches = false;
+            }
+            
+            if (dateFin != null && settlement.dateReglement.isAfter(dateFin)) {
+              matches = false;
+            }
+            
+            if (matches) {
+              settlements.add(settlement);
+            }
+          }
+        } catch (e) {
+          debugPrint('⚠️ Erreur chargement règlement triangulaire $key: $e');
+        }
+      }
+    }
+    
+    debugPrint('📊 [LocalDB] getAllTriangularDebtSettlements returning ${settlements.length} settlements');
+    
+    // Trier par date (plus récents en premier)
+    settlements.sort((a, b) => b.dateReglement.compareTo(a.dateReglement));
+    return settlements;
+  }
+
+  /// Récupérer un règlement triangulaire par ID
+  Future<TriangularDebtSettlementModel?> getTriangularDebtSettlementById(int settlementId) async {
+    final prefs = await database;
+    final settlementData = prefs.getString('triangular_settlement_$settlementId');
+    if (settlementData != null) {
+      return TriangularDebtSettlementModel.fromJson(jsonDecode(settlementData));
+    }
+    return null;
+  }
+
+  /// Récupérer un règlement triangulaire par référence
+  Future<TriangularDebtSettlementModel?> getTriangularDebtSettlementByReference(String reference) async {
+    final prefs = await database;
+    final keys = prefs.getKeys();
+    
+    final normalizedReference = reference.trim().toUpperCase();
+    
+    for (String key in keys) {
+      if (key.startsWith('triangular_settlement_')) {
+        try {
+          final settlementData = prefs.getString(key);
+          if (settlementData != null) {
+            final settlement = TriangularDebtSettlementModel.fromJson(jsonDecode(settlementData));
+            if (settlement.reference == normalizedReference) {
+              return settlement;
+            }
+          }
+        } catch (e) {
+          debugPrint('⚠️ Erreur lecture règlement triangulaire $key: $e');
+        }
+      }
+    }
+    return null;
+  }
+
+  /// Supprimer un règlement triangulaire
+  Future<void> deleteTriangularDebtSettlement(int settlementId) async {
+    final prefs = await database;
+    await prefs.remove('triangular_settlement_$settlementId');
+    debugPrint('🗑️ Règlement triangulaire supprimé: $settlementId');
   }
 }

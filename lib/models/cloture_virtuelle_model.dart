@@ -264,3 +264,4 @@ class ClotureVirtuelleModel {
         'captures: $nombreCaptures, servies: $nombreServies, soldeSIMs: \$${soldeTotalSims.toStringAsFixed(2)})';
   }
 }
+

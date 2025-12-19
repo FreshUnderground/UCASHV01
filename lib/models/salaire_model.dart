@@ -1,0 +1,362 @@
+import 'dart:convert';
+
+// Modèle pour l'historique des paiements d'un salaire
+class PaiementSalaireModel {
+  final DateTime datePaiement;
+  final double montant;
+  final String? modePaiement;
+  final String? agentPaiement;
+  final String? notes;
+
+  PaiementSalaireModel({
+    required this.datePaiement,
+    required this.montant,
+    this.modePaiement,
+    this.agentPaiement,
+    this.notes,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'datePaiement': datePaiement.toIso8601String(),
+    'montant': montant,
+    'modePaiement': modePaiement,
+    'agentPaiement': agentPaiement,
+    'notes': notes,
+  };
+
+  factory PaiementSalaireModel.fromJson(Map<String, dynamic> json) {
+    return PaiementSalaireModel(
+      datePaiement: DateTime.parse(json['datePaiement']),
+      montant: (json['montant'] as num).toDouble(),
+      modePaiement: json['modePaiement'],
+      agentPaiement: json['agentPaiement'],
+      notes: json['notes'],
+    );
+  }
+}
+
+class SalaireModel {
+  final int? id;
+  final String reference;
+  final int personnelId;
+  final String? personnelNom;
+  final int mois;
+  final int annee;
+  final String periode;
+  
+  final double salaireBase;
+  final double primeTransport;
+  final double primeLogement;
+  final double primeFonction;
+  final double autresPrimes;
+  final double heuresSupplementaires;
+  final double bonus;
+  
+  // Avantages en nature (RDC)
+  final double avantageNatureLogement;
+  final double avantageNatureVoiture;
+  final double autresAvantagesNature;
+  
+  // Suppléments RDC
+  final double supplementWeekend; // Travail week-end
+  final double supplementJoursFeries; // Travail jours fériés
+  final double allocationsFamiliales; // Selon nombre d'enfants
+  
+  final double avancesDeduites;
+  final double creditsDeduits;
+  final double impots; // IPR - Impôt Professionnel sur Rémunération
+  final double cotisationCnss; // Cotisation INSS
+  final double autresDeductions;
+  final double retenueDisciplinaire; // Sanctions
+  final double retenueAbsences; // Absences non justifiées
+  
+  final double salaireBrut;
+  final double totalDeductions;
+  final double salaireNet;
+  final double netImposable; // Net imposable pour déclaration fiscale
+  
+  final String devise;
+  final DateTime? datePaiement;
+  final String modePaiement;
+  final String statut;
+  final double montantPaye;
+  final String? notes;
+  final String? agentPaiement;
+  
+  // Historique des paiements (stocké en JSON dans la BDD)
+  final String? historiquePaiementsJson;
+  
+  final DateTime? lastModifiedAt;
+  final String? lastModifiedBy;
+  final DateTime? createdAt;
+  final bool isSynced;
+  final DateTime? syncedAt;
+
+  SalaireModel({
+    this.id,
+    required this.reference,
+    required this.personnelId,
+    this.personnelNom,
+    required this.mois,
+    required this.annee,
+    required this.periode,
+    this.salaireBase = 0.0,
+    this.primeTransport = 0.0,
+    this.primeLogement = 0.0,
+    this.primeFonction = 0.0,
+    this.autresPrimes = 0.0,
+    this.heuresSupplementaires = 0.0,
+    this.bonus = 0.0,
+    this.avantageNatureLogement = 0.0,
+    this.avantageNatureVoiture = 0.0,
+    this.autresAvantagesNature = 0.0,
+    this.supplementWeekend = 0.0,
+    this.supplementJoursFeries = 0.0,
+    this.allocationsFamiliales = 0.0,
+    this.avancesDeduites = 0.0,
+    this.creditsDeduits = 0.0,
+    this.impots = 0.0,
+    this.cotisationCnss = 0.0,
+    this.autresDeductions = 0.0,
+    this.retenueDisciplinaire = 0.0,
+    this.retenueAbsences = 0.0,
+    double? salaireBrut,
+    double? totalDeductions,
+    double? salaireNet,
+    double? netImposable,
+    this.devise = 'USD',
+    this.datePaiement,
+    this.modePaiement = 'Especes',
+    this.statut = 'En_Attente',
+    this.montantPaye = 0.0,
+    this.notes,
+    this.agentPaiement,
+    this.historiquePaiementsJson,
+    this.lastModifiedAt,
+    this.lastModifiedBy,
+    this.createdAt,
+    this.isSynced = false,
+    this.syncedAt,
+  })  : salaireBrut = salaireBrut ?? (salaireBase + primeTransport + primeLogement + primeFonction + autresPrimes + heuresSupplementaires + bonus + avantageNatureLogement + avantageNatureVoiture + autresAvantagesNature + supplementWeekend + supplementJoursFeries + allocationsFamiliales),
+        totalDeductions = totalDeductions ?? (avancesDeduites + creditsDeduits + impots + cotisationCnss + autresDeductions + retenueDisciplinaire + retenueAbsences),
+        salaireNet = salaireNet ?? ((salaireBrut ?? (salaireBase + primeTransport + primeLogement + primeFonction + autresPrimes + heuresSupplementaires + bonus + avantageNatureLogement + avantageNatureVoiture + autresAvantagesNature + supplementWeekend + supplementJoursFeries + allocationsFamiliales)) - (totalDeductions ?? (avancesDeduites + creditsDeduits + impots + cotisationCnss + autresDeductions + retenueDisciplinaire + retenueAbsences))),
+        netImposable = netImposable ?? ((salaireBrut ?? 0) - cotisationCnss);
+
+  double get montantRestant => salaireNet - montantPaye;
+  double get pourcentagePaye => salaireNet > 0 ? (montantPaye / salaireNet * 100) : 0;
+  
+  // Parser l'historique des paiements depuis JSON
+  List<PaiementSalaireModel> get historiquePaiements {
+    if (historiquePaiementsJson == null || historiquePaiementsJson!.isEmpty) {
+      return [];
+    }
+    try {
+      final List<dynamic> jsonList = json.decode(historiquePaiementsJson!);
+      return jsonList.map((json) => PaiementSalaireModel.fromJson(json)).toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  factory SalaireModel.fromJson(Map<String, dynamic> json) {
+    return SalaireModel(
+      id: json['id'],
+      reference: json['reference'] ?? '',
+      personnelId: json['personnel_id'] ?? 0,
+      personnelNom: json['personnel_nom'],
+      mois: json['mois'] ?? 1,
+      annee: json['annee'] ?? DateTime.now().year,
+      periode: json['periode'] ?? '',
+      salaireBase: json['salaire_base'] != null ? double.tryParse(json['salaire_base'].toString()) ?? 0.0 : 0.0,
+      primeTransport: json['prime_transport'] != null ? double.tryParse(json['prime_transport'].toString()) ?? 0.0 : 0.0,
+      primeLogement: json['prime_logement'] != null ? double.tryParse(json['prime_logement'].toString()) ?? 0.0 : 0.0,
+      primeFonction: json['prime_fonction'] != null ? double.tryParse(json['prime_fonction'].toString()) ?? 0.0 : 0.0,
+      autresPrimes: json['autres_primes'] != null ? double.tryParse(json['autres_primes'].toString()) ?? 0.0 : 0.0,
+      heuresSupplementaires: json['heures_supplementaires'] != null ? double.tryParse(json['heures_supplementaires'].toString()) ?? 0.0 : 0.0,
+      bonus: json['bonus'] != null ? double.tryParse(json['bonus'].toString()) ?? 0.0 : 0.0,
+      avantageNatureLogement: json['avantage_nature_logement'] != null ? double.tryParse(json['avantage_nature_logement'].toString()) ?? 0.0 : 0.0,
+      avantageNatureVoiture: json['avantage_nature_voiture'] != null ? double.tryParse(json['avantage_nature_voiture'].toString()) ?? 0.0 : 0.0,
+      autresAvantagesNature: json['autres_avantages_nature'] != null ? double.tryParse(json['autres_avantages_nature'].toString()) ?? 0.0 : 0.0,
+      supplementWeekend: json['supplement_weekend'] != null ? double.tryParse(json['supplement_weekend'].toString()) ?? 0.0 : 0.0,
+      supplementJoursFeries: json['supplement_jours_feries'] != null ? double.tryParse(json['supplement_jours_feries'].toString()) ?? 0.0 : 0.0,
+      allocationsFamiliales: json['allocations_familiales'] != null ? double.tryParse(json['allocations_familiales'].toString()) ?? 0.0 : 0.0,
+      avancesDeduites: json['avances_deduites'] != null ? double.tryParse(json['avances_deduites'].toString()) ?? 0.0 : 0.0,
+      creditsDeduits: json['credits_deduits'] != null ? double.tryParse(json['credits_deduits'].toString()) ?? 0.0 : 0.0,
+      impots: json['impots'] != null ? double.tryParse(json['impots'].toString()) ?? 0.0 : 0.0,
+      cotisationCnss: json['cotisation_cnss'] != null ? double.tryParse(json['cotisation_cnss'].toString()) ?? 0.0 : 0.0,
+      autresDeductions: json['autres_deductions'] != null ? double.tryParse(json['autres_deductions'].toString()) ?? 0.0 : 0.0,
+      retenueDisciplinaire: json['retenue_disciplinaire'] != null ? double.tryParse(json['retenue_disciplinaire'].toString()) ?? 0.0 : 0.0,
+      retenueAbsences: json['retenue_absences'] != null ? double.tryParse(json['retenue_absences'].toString()) ?? 0.0 : 0.0,
+      salaireBrut: json['salaire_brut'] != null ? double.tryParse(json['salaire_brut'].toString()) ?? 0.0 : null,
+      totalDeductions: json['total_deductions'] != null ? double.tryParse(json['total_deductions'].toString()) ?? 0.0 : null,
+      salaireNet: json['salaire_net'] != null ? double.tryParse(json['salaire_net'].toString()) ?? 0.0 : null,
+      netImposable: json['net_imposable'] != null ? double.tryParse(json['net_imposable'].toString()) ?? 0.0 : null,
+      devise: json['devise'] ?? 'USD',
+      datePaiement: json['date_paiement'] != null ? DateTime.parse(json['date_paiement']) : null,
+      modePaiement: json['mode_paiement'] ?? 'Especes',
+      statut: json['statut'] ?? 'En_Attente',
+      montantPaye: json['montant_paye'] != null ? double.tryParse(json['montant_paye'].toString()) ?? 0.0 : 0.0,
+      notes: json['notes'],
+      agentPaiement: json['agent_paiement'],
+      historiquePaiementsJson: json['historique_paiements_json'],
+      lastModifiedAt: json['last_modified_at'] != null ? DateTime.parse(json['last_modified_at']) : null,
+      lastModifiedBy: json['last_modified_by'],
+      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
+      isSynced: json['is_synced'] == 1 || json['is_synced'] == true,
+      syncedAt: json['synced_at'] != null ? DateTime.parse(json['synced_at']) : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'reference': reference,
+      'personnel_id': personnelId,
+      'personnel_nom': personnelNom,
+      'mois': mois,
+      'annee': annee,
+      'periode': periode,
+      'salaire_base': salaireBase,
+      'prime_transport': primeTransport,
+      'prime_logement': primeLogement,
+      'prime_fonction': primeFonction,
+      'autres_primes': autresPrimes,
+      'heures_supplementaires': heuresSupplementaires,
+      'bonus': bonus,
+      'avantage_nature_logement': avantageNatureLogement,
+      'avantage_nature_voiture': avantageNatureVoiture,
+      'autres_avantages_nature': autresAvantagesNature,
+      'supplement_weekend': supplementWeekend,
+      'supplement_jours_feries': supplementJoursFeries,
+      'allocations_familiales': allocationsFamiliales,
+      'avances_deduites': avancesDeduites,
+      'credits_deduits': creditsDeduits,
+      'impots': impots,
+      'cotisation_cnss': cotisationCnss,
+      'autres_deductions': autresDeductions,
+      'retenue_disciplinaire': retenueDisciplinaire,
+      'retenue_absences': retenueAbsences,
+      'salaire_brut': salaireBrut,
+      'total_deductions': totalDeductions,
+      'salaire_net': salaireNet,
+      'net_imposable': netImposable,
+      'devise': devise,
+      'date_paiement': datePaiement?.toString().split(' ')[0],
+      'mode_paiement': modePaiement,
+      'statut': statut,
+      'montant_paye': montantPaye,
+      'notes': notes,
+      'agent_paiement': agentPaiement,
+      'historique_paiements_json': historiquePaiementsJson,
+      'last_modified_at': lastModifiedAt?.toIso8601String(),
+      'last_modified_by': lastModifiedBy,
+      'created_at': createdAt?.toIso8601String(),
+      'is_synced': isSynced ? 1 : 0,
+      'synced_at': syncedAt?.toIso8601String(),
+    };
+  }
+
+  SalaireModel copyWith({
+    int? id,
+    String? reference,
+    int? personnelId,
+    String? personnelNom,
+    int? mois,
+    int? annee,
+    String? periode,
+    double? salaireBase,
+    double? primeTransport,
+    double? primeLogement,
+    double? primeFonction,
+    double? autresPrimes,
+    double? heuresSupplementaires,
+    double? bonus,
+    double? avantageNatureLogement,
+    double? avantageNatureVoiture,
+    double? autresAvantagesNature,
+    double? supplementWeekend,
+    double? supplementJoursFeries,
+    double? allocationsFamiliales,
+    double? avancesDeduites,
+    double? creditsDeduits,
+    double? impots,
+    double? cotisationCnss,
+    double? autresDeductions,
+    double? retenueDisciplinaire,
+    double? retenueAbsences,
+    double? salaireBrut,
+    double? totalDeductions,
+    double? salaireNet,
+    double? netImposable,
+    String? devise,
+    DateTime? datePaiement,
+    String? modePaiement,
+    String? statut,
+    double? montantPaye,
+    String? notes,
+    String? agentPaiement,
+    String? historiquePaiementsJson,
+    DateTime? lastModifiedAt,
+    String? lastModifiedBy,
+    DateTime? createdAt,
+    bool? isSynced,
+    DateTime? syncedAt,
+  }) {
+    return SalaireModel(
+      id: id ?? this.id,
+      reference: reference ?? this.reference,
+      personnelId: personnelId ?? this.personnelId,
+      personnelNom: personnelNom ?? this.personnelNom,
+      mois: mois ?? this.mois,
+      annee: annee ?? this.annee,
+      periode: periode ?? this.periode,
+      salaireBase: salaireBase ?? this.salaireBase,
+      primeTransport: primeTransport ?? this.primeTransport,
+      primeLogement: primeLogement ?? this.primeLogement,
+      primeFonction: primeFonction ?? this.primeFonction,
+      autresPrimes: autresPrimes ?? this.autresPrimes,
+      heuresSupplementaires: heuresSupplementaires ?? this.heuresSupplementaires,
+      bonus: bonus ?? this.bonus,
+      avantageNatureLogement: avantageNatureLogement ?? this.avantageNatureLogement,
+      avantageNatureVoiture: avantageNatureVoiture ?? this.avantageNatureVoiture,
+      autresAvantagesNature: autresAvantagesNature ?? this.autresAvantagesNature,
+      supplementWeekend: supplementWeekend ?? this.supplementWeekend,
+      supplementJoursFeries: supplementJoursFeries ?? this.supplementJoursFeries,
+      allocationsFamiliales: allocationsFamiliales ?? this.allocationsFamiliales,
+      avancesDeduites: avancesDeduites ?? this.avancesDeduites,
+      creditsDeduits: creditsDeduits ?? this.creditsDeduits,
+      impots: impots ?? this.impots,
+      cotisationCnss: cotisationCnss ?? this.cotisationCnss,
+      autresDeductions: autresDeductions ?? this.autresDeductions,
+      retenueDisciplinaire: retenueDisciplinaire ?? this.retenueDisciplinaire,
+      retenueAbsences: retenueAbsences ?? this.retenueAbsences,
+      salaireBrut: salaireBrut ?? this.salaireBrut,
+      totalDeductions: totalDeductions ?? this.totalDeductions,
+      salaireNet: salaireNet ?? this.salaireNet,
+      netImposable: netImposable ?? this.netImposable,
+      devise: devise ?? this.devise,
+      datePaiement: datePaiement ?? this.datePaiement,
+      modePaiement: modePaiement ?? this.modePaiement,
+      statut: statut ?? this.statut,
+      montantPaye: montantPaye ?? this.montantPaye,
+      notes: notes ?? this.notes,
+      agentPaiement: agentPaiement ?? this.agentPaiement,
+      historiquePaiementsJson: historiquePaiementsJson ?? this.historiquePaiementsJson,
+      lastModifiedAt: lastModifiedAt ?? this.lastModifiedAt,
+      lastModifiedBy: lastModifiedBy ?? this.lastModifiedBy,
+      createdAt: createdAt ?? this.createdAt,
+      isSynced: isSynced ?? this.isSynced,
+      syncedAt: syncedAt ?? this.syncedAt,
+    );
+  }
+
+  static String generateReference() {
+    final now = DateTime.now();
+    final timestamp = now.millisecondsSinceEpoch;
+    return 'SAL-${now.year}${now.month.toString().padLeft(2, '0')}-$timestamp';
+  }
+
+  static String generatePeriode(int mois, int annee) {
+    return '${mois.toString().padLeft(2, '0')}/$annee';
+  }
+}

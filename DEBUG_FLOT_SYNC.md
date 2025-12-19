@@ -18,7 +18,7 @@ Les FLOTs s'enregistrent localement avec `type = flotShopToShop` mais ne se sync
 
 ```bash
 # Ouvrir dans un navigateur
-https://mahanaimeservice.investee-group.com/server/migrate_flot_shop_to_shop.php
+https://mahanaim.investee-group.com/server/migrate_flot_shop_to_shop.php
 ```
 
 **OU exécuter manuellement:**
@@ -133,7 +133,7 @@ Conversion: type_index=7 -> type=flotShopToShop
             };
 
             try {
-                const response = await fetch('https://mahanaimeservice.investee-group.com/server/api/sync/operations/upload.php', {
+                const response = await fetch('https://mahanaim.investee-group.com/server/api/sync/operations/upload.php', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

@@ -299,6 +299,8 @@ Future<pw.Document> genererClotureVirtuellePDF(
           pw.SizedBox(height: 10),
         ],
         
+        pw.SizedBox(height: 10),
+        
         // === RÉSUMÉ FINANCIER ===
         pw.Container(
           padding: const pw.EdgeInsets.all(10),

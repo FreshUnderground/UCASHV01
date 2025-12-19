@@ -40,6 +40,8 @@ import '../widgets/partner_net_position_widget.dart';
 import '../widgets/reports/dettes_intershop_report.dart';
 import '../widgets/admin_flot_dialog.dart';
 import '../widgets/admin_initialization_widget.dart';
+import '../widgets/gestion_personnel_widget.dart';
+import '../widgets/rapport_paiements_mensuels_widget.dart';
 
 class DashboardAdminPage extends StatefulWidget {
   const DashboardAdminPage({super.key});
@@ -72,6 +74,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
     'Validations Admin',      // 12
     'Corbeille',              // 13
     'Initialisation',         // 14
+    'Personnel',              // 15 - ✅ NOUVEAU
   ];
 
   final List<IconData> _menuIcons = [
@@ -90,6 +93,7 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
     Icons.how_to_reg,             // 12 - Validations Admin
     Icons.restore_from_trash,     // 13
     Icons.settings_suggest,       // 14 - Initialisation
+    Icons.badge,                  // 15 - Personnel
   ];
 
   @override
@@ -566,7 +570,9 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
       case 13:
         return _isSyncingTrash ? _buildSyncingIndicator('Chargement de la corbeille...') : const TrashBinWidget(showAll: true);
       case 14:
-        return const AdminInitializationWidget();  // Initialisation
+                return const AdminInitializationWidget();  // Initialisation
+      case 15:
+        return _buildPersonnelManagement();  // Personnel
       default:
         return _buildDashboardContent();
     }
@@ -1577,5 +1583,10 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
         ],
       ),
     );
+  }
+
+  // Personnel Management Widget
+  Widget _buildPersonnelManagement() {
+    return const GestionPersonnelWidget();
   }
 }

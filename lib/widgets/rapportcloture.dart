@@ -931,6 +931,125 @@ class _RapportClotureState extends State<RapportCloture> {
         ),
         const SizedBox(height: 16),
 
+        // NOUVEAU: Règlements Triangulaires de Dettes
+        if (rapport.triangularSettlements.isNotEmpty)
+          _buildSection(
+            '🔺 REGULARISATION',
+            [
+              DataTable(
+                columnSpacing: 8,
+                horizontalMargin: 8,
+                columns: const [
+                  DataColumn(label: Text('Réf', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  DataColumn(label: Text('Montant', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  DataColumn(label: Text('Rôle', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                  DataColumn(label: Text('Impact', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                ],
+                rows: rapport.triangularSettlements.map((settlement) {
+                  // Déterminer l'icône et la couleur selon le rôle
+                  IconData roleIcon;
+                  Color roleColor;
+                  String roleText;
+                  
+                  switch (settlement.roleDuShopCourant) {
+                    case 'debtor':
+                      roleIcon = Icons.arrow_downward;
+                      roleColor = Colors.green;
+                      roleText = 'Débiteur';
+                      break;
+                    case 'intermediary':
+                      roleIcon = Icons.swap_horiz;
+                      roleColor = Colors.orange;
+                      roleText = 'Intermédiaire';
+                      break;
+                    case 'creditor':
+                      roleIcon = Icons.account_balance;
+                      roleColor = Colors.blue;
+                      roleText = 'Créancier';
+                      break;
+                    default:
+                      roleIcon = Icons.help;
+                      roleColor = Colors.grey;
+                      roleText = 'Inconnu';
+                  }
+                  
+                  // Déterminer l'icône et la couleur selon l'impact
+                  IconData impactIcon;
+                  Color impactColor;
+                  String impactText;
+                  
+                  switch (settlement.impactSurDette) {
+                    case 'diminue':
+                      impactIcon = Icons.arrow_downward;
+                      impactColor = Colors.green;
+                      impactText = 'Dette diminue';
+                      break;
+                    case 'augmente':
+                      impactIcon = Icons.arrow_upward;
+                      impactColor = Colors.red;
+                      impactText = 'Dette augmente';
+                      break;
+                    case 'aucun':
+                      impactIcon = Icons.remove;
+                      impactColor = Colors.grey;
+                      impactText = 'Pas d\'impact';
+                      break;
+                    default:
+                      impactIcon = Icons.help;
+                      impactColor = Colors.grey;
+                      impactText = 'Inconnu';
+                  }
+                  
+                  return DataRow(
+                    cells: [
+                      DataCell(
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(settlement.reference, style: const TextStyle(fontSize: 11)),
+                            Text(
+                              '${settlement.shopDebtorDesignation} → ${settlement.shopCreditorDesignation}',
+                              style: const TextStyle(fontSize: 9, color: Colors.grey),
+                            ),
+                            if (settlement.notes != null && settlement.notes!.isNotEmpty)
+                              Text(
+                                '${settlement.notes}',
+                                style: const TextStyle(fontSize: 9, fontStyle: FontStyle.italic, color: Colors.grey),
+                              ),
+                          ],
+                        ),
+                      ),
+                      DataCell(
+                        Text('${NumberFormat('#,##0.00').format(settlement.montant)} ${settlement.devise}'),
+                      ),
+                      DataCell(
+                        Row(
+                          children: [
+                            Icon(roleIcon, size: 16, color: roleColor),
+                            const SizedBox(width: 4),
+                            Text(roleText, style: TextStyle(color: roleColor, fontSize: 11)),
+                          ],
+                        ),
+                      ),
+                      DataCell(
+                        Row(
+                          children: [
+                            Icon(impactIcon, size: 16, color: impactColor),
+                            const SizedBox(width: 4),
+                            Text(impactText, style: TextStyle(color: impactColor, fontSize: 11)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ],
+            Colors.blue,
+          ),
+        
+        const SizedBox(height: 16),
+
         if (rapport.autresShopServis > 0 || rapport.autresShopDepots > 0)
           _buildSection(
             '1️⃣1️⃣ AUTRES SHOP',

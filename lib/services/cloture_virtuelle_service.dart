@@ -305,6 +305,10 @@ class ClotureVirtuelleService {
         'soldeTotalVirtuel': soldeTotalVirtuel,
         'cashDuAuxClients': cashDuAuxClients,
         'fraisTotalJournee': fraisTotalJournee,
+        
+        // NOUVEAU: Règlements triangulaires de dettes (VIDE pour les clôtures virtuelles)
+        'triangularSettlements': [],
+        
         // CASH
         'cashSortiCaptures': cashSortiCaptures,
         'cashEntrantRetraitsRembourses': cashEntrantRetraitsRembourses,
