@@ -1,12 +1,15 @@
 import 'dart:convert';
 
-// Modèle pour l'historique des paiements d'un salaire
+// Modèle pour l'historique des paiements d'un salaire et des avances
 class PaiementSalaireModel {
   final DateTime datePaiement;
   final double montant;
   final String? modePaiement;
   final String? agentPaiement;
   final String? notes;
+  final String type; // 'salaire', 'avance', 'remboursement_avance'
+  final String? referenceAvance; // Référence de l'avance si applicable
+  final bool isDeduction; // true si c'est une déduction (remboursement avance)
 
   PaiementSalaireModel({
     required this.datePaiement,
@@ -14,6 +17,9 @@ class PaiementSalaireModel {
     this.modePaiement,
     this.agentPaiement,
     this.notes,
+    this.type = 'salaire',
+    this.referenceAvance,
+    this.isDeduction = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -22,6 +28,9 @@ class PaiementSalaireModel {
     'modePaiement': modePaiement,
     'agentPaiement': agentPaiement,
     'notes': notes,
+    'type': type,
+    'referenceAvance': referenceAvance,
+    'isDeduction': isDeduction,
   };
 
   factory PaiementSalaireModel.fromJson(Map<String, dynamic> json) {
@@ -31,7 +40,76 @@ class PaiementSalaireModel {
       modePaiement: json['modePaiement'],
       agentPaiement: json['agentPaiement'],
       notes: json['notes'],
+      type: json['type'] ?? 'salaire',
+      referenceAvance: json['referenceAvance'],
+      isDeduction: json['isDeduction'] ?? false,
     );
+  }
+
+  /// Créer un paiement d'avance
+  factory PaiementSalaireModel.avance({
+    required DateTime dateAvance,
+    required double montant,
+    required String referenceAvance,
+    String? modePaiement,
+    String? agentPaiement,
+    String? notes,
+  }) {
+    return PaiementSalaireModel(
+      datePaiement: dateAvance,
+      montant: montant,
+      modePaiement: modePaiement ?? 'Especes',
+      agentPaiement: agentPaiement,
+      notes: notes,
+      type: 'avance',
+      referenceAvance: referenceAvance,
+      isDeduction: false,
+    );
+  }
+
+  /// Créer un remboursement d'avance (déduction)
+  factory PaiementSalaireModel.remboursementAvance({
+    required DateTime dateRemboursement,
+    required double montant,
+    required String referenceAvance,
+    String? notes,
+  }) {
+    return PaiementSalaireModel(
+      datePaiement: dateRemboursement,
+      montant: montant,
+      modePaiement: 'Deduction',
+      agentPaiement: 'Système',
+      notes: notes ?? 'Remboursement avance automatique',
+      type: 'remboursement_avance',
+      referenceAvance: referenceAvance,
+      isDeduction: true,
+    );
+  }
+
+  /// Obtenir l'icône selon le type
+  String get typeIcon {
+    switch (type) {
+      case 'avance':
+        return '💰';
+      case 'remboursement_avance':
+        return '↩️';
+      case 'salaire':
+      default:
+        return '💵';
+    }
+  }
+
+  /// Obtenir la description du type
+  String get typeDescription {
+    switch (type) {
+      case 'avance':
+        return 'Avance sur salaire';
+      case 'remboursement_avance':
+        return 'Remboursement avance';
+      case 'salaire':
+      default:
+        return 'Paiement salaire';
+    }
   }
 }
 
@@ -152,10 +230,36 @@ class SalaireModel {
     }
     try {
       final List<dynamic> jsonList = json.decode(historiquePaiementsJson!);
-      return jsonList.map((json) => PaiementSalaireModel.fromJson(json)).toList();
+      return jsonList.map((json) => PaiementSalaireModel.fromJson(json)).toList()
+        ..sort((a, b) => b.datePaiement.compareTo(a.datePaiement)); // Trier par date décroissante
     } catch (e) {
       return [];
     }
+  }
+
+  /// Obtenir seulement les paiements de salaire
+  List<PaiementSalaireModel> get paiementsSalaire {
+    return historiquePaiements.where((p) => p.type == 'salaire').toList();
+  }
+
+  /// Obtenir seulement les avances
+  List<PaiementSalaireModel> get avancesRecues {
+    return historiquePaiements.where((p) => p.type == 'avance').toList();
+  }
+
+  /// Obtenir seulement les remboursements d'avances
+  List<PaiementSalaireModel> get remboursementsAvances {
+    return historiquePaiements.where((p) => p.type == 'remboursement_avance').toList();
+  }
+
+  /// Calculer le total des avances reçues
+  double get totalAvancesRecues {
+    return avancesRecues.fold<double>(0.0, (sum, p) => sum + p.montant);
+  }
+
+  /// Calculer le total des remboursements d'avances
+  double get totalRemboursementsAvances {
+    return remboursementsAvances.fold<double>(0.0, (sum, p) => sum + p.montant);
   }
 
   factory SalaireModel.fromJson(Map<String, dynamic> json) {
@@ -358,5 +462,156 @@ class SalaireModel {
 
   static String generatePeriode(int mois, int annee) {
     return '${mois.toString().padLeft(2, '0')}/$annee';
+  }
+
+  /// Recalcule automatiquement le salaire avec de nouveaux bonus/avantages
+  static SalaireModel recalculateWithBonusAndAdvantages({
+    required SalaireModel salaire,
+    double? newBonus,
+    double? newAvantageNatureLogement,
+    double? newAvantageNatureVoiture,
+    double? newAutresAvantagesNature,
+    double? newHeuresSupplementaires,
+    double? newSupplementWeekend,
+    double? newSupplementJoursFeries,
+    double? newAllocationsFamiliales,
+  }) {
+    return salaire.copyWith(
+      bonus: newBonus,
+      avantageNatureLogement: newAvantageNatureLogement,
+      avantageNatureVoiture: newAvantageNatureVoiture,
+      autresAvantagesNature: newAutresAvantagesNature,
+      heuresSupplementaires: newHeuresSupplementaires,
+      supplementWeekend: newSupplementWeekend,
+      supplementJoursFeries: newSupplementJoursFeries,
+      allocationsFamiliales: newAllocationsFamiliales,
+      lastModifiedAt: DateTime.now(),
+      isSynced: false, // Marquer comme non synchronisé
+    );
+  }
+
+  /// Calcule le total des avantages (bonus + avantages en nature + suppléments)
+  double get totalAvantages => bonus + avantageNatureLogement + avantageNatureVoiture + 
+      autresAvantagesNature + heuresSupplementaires + supplementWeekend + 
+      supplementJoursFeries + allocationsFamiliales;
+
+  /// Calcule le salaire de base avec primes (sans avantages variables)
+  double get salaireBaseAvecPrimes => salaireBase + primeTransport + primeLogement + 
+      primeFonction + autresPrimes;
+
+  /// Recalcule tous les montants avec les valeurs actuelles
+  SalaireModel recalculateAmounts() {
+    final newSalaireBrut = salaireBase + primeTransport + primeLogement + primeFonction + 
+        autresPrimes + heuresSupplementaires + bonus + avantageNatureLogement + 
+        avantageNatureVoiture + autresAvantagesNature + supplementWeekend + 
+        supplementJoursFeries + allocationsFamiliales;
+    
+    final newTotalDeductions = avancesDeduites + creditsDeduits + impots + cotisationCnss + 
+        autresDeductions + retenueDisciplinaire + retenueAbsences;
+    
+    final newSalaireNet = newSalaireBrut - newTotalDeductions;
+    final newNetImposable = newSalaireBrut - cotisationCnss;
+
+    return copyWith(
+      salaireBrut: newSalaireBrut,
+      totalDeductions: newTotalDeductions,
+      salaireNet: newSalaireNet,
+      netImposable: newNetImposable,
+      lastModifiedAt: DateTime.now(),
+      isSynced: false,
+    );
+  }
+
+  /// Vérifie si le salaire a des avantages variables
+  bool get hasVariableAdvantages => bonus > 0 || avantageNatureLogement > 0 || 
+      avantageNatureVoiture > 0 || autresAvantagesNature > 0 || heuresSupplementaires > 0 ||
+      supplementWeekend > 0 || supplementJoursFeries > 0 || allocationsFamiliales > 0;
+
+  /// Détail des avantages sous forme de texte
+  String get advantagesDetails {
+    List<String> details = [];
+    if (bonus > 0) {
+      details.add('Bonus: ${bonus.toStringAsFixed(2)} $devise');
+    }
+    if (avantageNatureLogement > 0) {
+      details.add('Avantage logement: ${avantageNatureLogement.toStringAsFixed(2)} $devise');
+    }
+    if (avantageNatureVoiture > 0) {
+      details.add('Avantage voiture: ${avantageNatureVoiture.toStringAsFixed(2)} $devise');
+    }
+    if (autresAvantagesNature > 0) {
+      details.add('Autres avantages: ${autresAvantagesNature.toStringAsFixed(2)} $devise');
+    }
+    if (heuresSupplementaires > 0) {
+      details.add('Heures supp: ${heuresSupplementaires.toStringAsFixed(2)} $devise');
+    }
+    if (supplementWeekend > 0) {
+      details.add('Supplément weekend: ${supplementWeekend.toStringAsFixed(2)} $devise');
+    }
+    if (supplementJoursFeries > 0) {
+      details.add('Supplément jours fériés: ${supplementJoursFeries.toStringAsFixed(2)} $devise');
+    }
+    if (allocationsFamiliales > 0) {
+      details.add('Allocations familiales: ${allocationsFamiliales.toStringAsFixed(2)} $devise');
+    }
+    return details.join(', ');
+  }
+
+  /// Ajouter une avance à l'historique
+  SalaireModel ajouterAvanceAHistorique({
+    required DateTime dateAvance,
+    required double montantAvance,
+    required String referenceAvance,
+    String? agentAvance,
+    String? notesAvance,
+  }) {
+    final historique = List<PaiementSalaireModel>.from(historiquePaiements);
+    
+    // Ajouter l'avance
+    historique.add(PaiementSalaireModel.avance(
+      dateAvance: dateAvance,
+      montant: montantAvance,
+      referenceAvance: referenceAvance,
+      agentPaiement: agentAvance,
+      notes: notesAvance,
+    ));
+    
+    // Convertir en JSON
+    final historiqueJson = json.encode(
+      historique.map((p) => p.toJson()).toList()
+    );
+    
+    return copyWith(
+      historiquePaiementsJson: historiqueJson,
+      lastModifiedAt: DateTime.now(),
+    );
+  }
+
+  /// Ajouter un remboursement d'avance à l'historique
+  SalaireModel ajouterRemboursementAvanceAHistorique({
+    required DateTime dateRemboursement,
+    required double montantRembourse,
+    required String referenceAvance,
+    String? notes,
+  }) {
+    final historique = List<PaiementSalaireModel>.from(historiquePaiements);
+    
+    // Ajouter le remboursement
+    historique.add(PaiementSalaireModel.remboursementAvance(
+      dateRemboursement: dateRemboursement,
+      montant: montantRembourse,
+      referenceAvance: referenceAvance,
+      notes: notes,
+    ));
+    
+    // Convertir en JSON
+    final historiqueJson = json.encode(
+      historique.map((p) => p.toJson()).toList()
+    );
+    
+    return copyWith(
+      historiquePaiementsJson: historiqueJson,
+      lastModifiedAt: DateTime.now(),
+    );
   }
 }

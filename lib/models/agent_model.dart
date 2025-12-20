@@ -2,6 +2,7 @@ class AgentModel {
   final int? id;
   final String username;
   final String password;
+  final String? matricule;  // Matricule auto-généré mais modifiable
   final int? shopId;
   final String? shopDesignation;  // Nom du shop pour affichage
   final String? nom;
@@ -16,6 +17,7 @@ class AgentModel {
     this.id,
     required this.username,
     required this.password,
+    this.matricule,
     this.shopId,
     this.shopDesignation,
     this.nom,
@@ -32,6 +34,7 @@ class AgentModel {
       id: json['id'],
       username: json['username'],
       password: json['password'],
+      matricule: json['matricule'],
       shopId: json['shop_id'] ?? json['shopId'], // Support des deux formats
       shopDesignation: json['shop_designation'] ?? json['shopDesignation'],
       nom: json['nom'],
@@ -49,6 +52,7 @@ class AgentModel {
       'id': id,
       'username': username,
       'password': password,
+      'matricule': matricule,
       'shop_id': shopId,
       'shop_designation': shopDesignation,
       'nom': nom,
@@ -65,6 +69,7 @@ class AgentModel {
     int? id,
     String? username,
     String? password,
+    String? matricule,
     int? shopId,
     String? shopDesignation,
     String? nom,
@@ -79,6 +84,7 @@ class AgentModel {
       id: id ?? this.id,
       username: username ?? this.username,
       password: password ?? this.password,
+      matricule: matricule ?? this.matricule,
       shopId: shopId ?? this.shopId,
       shopDesignation: shopDesignation ?? this.shopDesignation,
       nom: nom ?? this.nom,

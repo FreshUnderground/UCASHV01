@@ -145,6 +145,7 @@ class PersonnelService extends ChangeNotifier {
   }
 
   /// Supprimer un employé (soft delete - mettre statut Demissionne)
+  /// Cette suppression sera synchronisée sur tous les appareils
   Future<void> deletePersonnel(int id) async {
     try {
       final prefs = await LocalDB.instance.database;
@@ -161,15 +162,21 @@ class PersonnelService extends ChangeNotifier {
       final updatedPersonnel = personnel.copyWith(
         statut: 'Demissionne',
         lastModifiedAt: DateTime.now(),
-        isSynced: false,
+        isSynced: false, // Marquer pour synchronisation
       );
 
       await prefs.setString(key, jsonEncode(updatedPersonnel.toJson()));
       
+      // Marquer pour suppression définitive après sync
+      await _markForDeletion(id, 'personnel');
+      
+      // Déclencher synchronisation immédiate
+      await _triggerImmediateSync();
+      
       // Recharger
       await loadPersonnel(forceRefresh: true);
       
-      debugPrint('✅ Personnel supprimé (soft): ${personnel.nomComplet}');
+      debugPrint('✅ Personnel supprimé (soft) et marqué pour sync: ${personnel.nomComplet}');
     } catch (e) {
       debugPrint('❌ Erreur suppression personnel: $e');
       rethrow;
@@ -177,16 +184,191 @@ class PersonnelService extends ChangeNotifier {
   }
 
   /// Supprimer définitivement un employé
+  /// Cette méthode ne doit être appelée qu'après synchronisation
   Future<void> hardDeletePersonnel(int id) async {
     try {
       final prefs = await LocalDB.instance.database;
+      
+      // Supprimer l'enregistrement principal
       await prefs.remove('personnel_$id');
+      
+      // Supprimer le marqueur de suppression
+      await prefs.remove('deletion_personnel_$id');
+      
+      // Supprimer les données liées (salaires, avances, retenues)
+      await _deleteRelatedData(id);
       
       await loadPersonnel(forceRefresh: true);
       debugPrint('✅ Personnel supprimé définitivement: ID $id');
     } catch (e) {
       debugPrint('❌ Erreur suppression définitive: $e');
       rethrow;
+    }
+  }
+  
+  /// Marquer un enregistrement pour suppression après synchronisation
+  Future<void> _markForDeletion(int id, String type) async {
+    try {
+      final prefs = await LocalDB.instance.database;
+      final deletionRecord = {
+        'id': id,
+        'type': type,
+        'marked_at': DateTime.now().toIso8601String(),
+        'synced': false,
+      };
+      
+      await prefs.setString('deletion_${type}_$id', jsonEncode(deletionRecord));
+      debugPrint('🗑️ Marqué pour suppression: $type ID $id');
+    } catch (e) {
+      debugPrint('❌ Erreur marquage suppression: $e');
+    }
+  }
+  
+  /// Déclencher une synchronisation immédiate
+  Future<void> _triggerImmediateSync() async {
+    try {
+      // Marquer simplement pour synchronisation - le service de sync se chargera du reste
+      // lors de la prochaine synchronisation automatique
+      debugPrint('🔄 Marqué pour synchronisation lors du prochain cycle');
+      
+      // Optionnel: déclencher une notification pour forcer la sync
+      await _notifySyncRequired();
+    } catch (e) {
+      debugPrint('❌ Erreur notification sync: $e');
+      // Ne pas faire échouer la suppression pour autant
+    }
+  }
+  
+  /// Notifier qu'une synchronisation est requise
+  Future<void> _notifySyncRequired() async {
+    try {
+      final prefs = await LocalDB.instance.database;
+      await prefs.setBool('sync_personnel_required', true);
+      await prefs.setString('sync_personnel_required_at', DateTime.now().toIso8601String());
+      debugPrint('📢 Notification sync personnel enregistrée');
+    } catch (e) {
+      debugPrint('⚠️ Erreur notification sync: $e');
+    }
+  }
+  
+  /// Supprimer les données liées à un personnel
+  Future<void> _deleteRelatedData(int personnelId) async {
+    try {
+      final prefs = await LocalDB.instance.database;
+      final keys = prefs.getKeys();
+      
+      // Supprimer salaires
+      for (String key in keys) {
+        if (key.startsWith('salaire_')) {
+          try {
+            final data = prefs.getString(key);
+            if (data != null) {
+              final json = jsonDecode(data);
+              if (json['personnel_id'] == personnelId) {
+                await prefs.remove(key);
+                debugPrint('🗑️ Salaire supprimé: $key');
+              }
+            }
+          } catch (e) {
+            debugPrint('⚠️ Erreur suppression salaire $key: $e');
+          }
+        }
+      }
+      
+      // Supprimer avances
+      for (String key in keys) {
+        if (key.startsWith('avance_personnel_')) {
+          try {
+            final data = prefs.getString(key);
+            if (data != null) {
+              final json = jsonDecode(data);
+              if (json['personnel_id'] == personnelId) {
+                await prefs.remove(key);
+                debugPrint('🗑️ Avance supprimée: $key');
+              }
+            }
+          } catch (e) {
+            debugPrint('⚠️ Erreur suppression avance $key: $e');
+          }
+        }
+      }
+      
+      // Supprimer retenues
+      for (String key in keys) {
+        if (key.startsWith('retenue_personnel_')) {
+          try {
+            final data = prefs.getString(key);
+            if (data != null) {
+              final json = jsonDecode(data);
+              if (json['personnel_id'] == personnelId) {
+                await prefs.remove(key);
+                debugPrint('🗑️ Retenue supprimée: $key');
+              }
+            }
+          } catch (e) {
+            debugPrint('⚠️ Erreur suppression retenue $key: $e');
+          }
+        }
+      }
+      
+      debugPrint('✅ Données liées supprimées pour personnel ID $personnelId');
+    } catch (e) {
+      debugPrint('❌ Erreur suppression données liées: $e');
+    }
+  }
+  
+  /// Obtenir les suppressions en attente de synchronisation
+  Future<List<Map<String, dynamic>>> getPendingDeletions() async {
+    try {
+      final prefs = await LocalDB.instance.database;
+      final keys = prefs.getKeys();
+      final deletions = <Map<String, dynamic>>[];
+      
+      for (String key in keys) {
+        if (key.startsWith('deletion_')) {
+          try {
+            final data = prefs.getString(key);
+            if (data != null) {
+              final deletion = jsonDecode(data);
+              if (deletion['synced'] != true) {
+                deletions.add(deletion);
+              }
+            }
+          } catch (e) {
+            debugPrint('⚠️ Erreur lecture suppression $key: $e');
+          }
+        }
+      }
+      
+      return deletions;
+    } catch (e) {
+      debugPrint('❌ Erreur récupération suppressions: $e');
+      return [];
+    }
+  }
+  
+  /// Marquer une suppression comme synchronisée
+  Future<void> markDeletionAsSynced(int id, String type) async {
+    try {
+      final prefs = await LocalDB.instance.database;
+      final key = 'deletion_${type}_$id';
+      
+      final data = prefs.getString(key);
+      if (data != null) {
+        final deletion = jsonDecode(data);
+        deletion['synced'] = true;
+        deletion['synced_at'] = DateTime.now().toIso8601String();
+        
+        await prefs.setString(key, jsonEncode(deletion));
+        debugPrint('✅ Suppression marquée comme synchronisée: $type ID $id');
+        
+        // Procéder à la suppression définitive
+        if (type == 'personnel') {
+          await hardDeletePersonnel(id);
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ Erreur marquage sync suppression: $e');
     }
   }
 
@@ -326,18 +508,34 @@ class PersonnelService extends ChangeNotifier {
 
   /// Générer un matricule unique
   Future<String> generateMatricule() async {
-    await loadPersonnel();
-    
-    final year = DateTime.now().year.toString().substring(2);
-    int counter = 1;
-    
-    String matricule;
-    do {
-      matricule = 'EMP$year${counter.toString().padLeft(3, '0')}';
-      counter++;
-    } while (_personnel.any((p) => p.matricule == matricule));
-    
-    return matricule;
+    try {
+      await loadPersonnel();
+      
+      final year = DateTime.now().year.toString().substring(2);
+      int counter = 1;
+      const int maxAttempts = 9999; // Limite de sécurité
+      
+      String matricule;
+      do {
+        matricule = 'AG-$year${counter.toString().padLeft(3, '0')}';
+        counter++;
+        
+        // Sécurité pour éviter une boucle infinie
+        if (counter > maxAttempts) {
+          throw Exception('Impossible de générer un matricule unique après $maxAttempts tentatives');
+        }
+      } while (_personnel.any((p) => p.matricule == matricule));
+      
+      debugPrint('✅ Matricule généré: $matricule');
+      return matricule;
+    } catch (e) {
+      debugPrint('❌ Erreur génération matricule: $e');
+      // En cas d'erreur, générer un matricule avec timestamp pour garantir l'unicité
+      final timestamp = DateTime.now().millisecondsSinceEpoch.toString().substring(8);
+      final fallbackMatricule = 'EMP${DateTime.now().year.toString().substring(2)}$timestamp';
+      debugPrint('🔄 Matricule de secours généré: $fallbackMatricule');
+      return fallbackMatricule;
+    }
   }
 
   /// Vérifier si un matricule existe

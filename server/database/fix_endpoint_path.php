@@ -10,7 +10,7 @@ try {
     echo "🔧 Fixing API endpoint path issue...\n\n";
     
     // The app calls this URL:
-    $expectedUrl = 'https://mahanaim.investee-group.com/server/api/sync/deletion_requests/admin_validate.php';
+    $expectedUrl = 'https://mahanaimeservice.investee-group.com/server/api/sync/deletion_requests/admin_validate.php';
     
     // This means the file should be at:
     $expectedPath = '/var/www/mahanaim.investee-group.com/server/api/sync/deletion_requests/admin_validate.php';
@@ -285,7 +285,7 @@ try {
         // Test the endpoint
         echo "\n🧪 Testing the newly created endpoint...\n";
         
-        $testUrl = str_replace('/var/www/mahanaim.investee-group.com/', 'https://mahanaim.investee-group.com/', $targetFile);
+        $testUrl = str_replace('/var/www/mahanaim.investee-group.com/', 'https://mahanaimeservice.investee-group.com/', $targetFile);
         
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $testUrl);

@@ -62,6 +62,9 @@ try {
                 case 'fiches_paie':
                     handleFichePaie($pdo, $entity, $userId, $uploadedCount, $updatedCount);
                     break;
+                case 'retenues_personnel':
+                    handleRetenue($pdo, $entity, $userId, $uploadedCount, $updatedCount);
+                    break;
                 default:
                     throw new Exception("Table inconnue: $tableName");
             }
@@ -558,6 +561,58 @@ function handleFichePaie($pdo, $entity, $userId, &$uploadedCount, &$updatedCount
     ]);
     
     $syncStmt = $pdo->prepare("UPDATE fiches_paie SET is_synced = 1, synced_at = :synced_at WHERE id = :id");
+    $syncStmt->execute([':id' => $entity['id'], ':synced_at' => $entity['synced_at'] ?? date('c')]);
+    
+    $uploadedCount++;
+}
+
+function handleRetenue($pdo, $entity, $userId, &$uploadedCount, &$updatedCount) {
+    // Insérer ou mettre à jour la retenue
+    $stmt = $pdo->prepare("
+        INSERT IGNORE INTO retenues_personnel (
+            id, personnel_id, type_retenue, motif, montant_total, mois_debut, annee_debut,
+            nombre_mois, montant_par_mois, montant_deduit, statut, notes,
+            last_modified_at, last_modified_by, created_at
+        ) VALUES (
+            :id, :personnel_id, :type_retenue, :motif, :montant_total, :mois_debut, :annee_debut,
+            :nombre_mois, :montant_par_mois, :montant_deduit, :statut, :notes,
+            :last_modified_at, :last_modified_by, :created_at
+        )
+        ON DUPLICATE KEY UPDATE
+            personnel_id = VALUES(personnel_id),
+            type_retenue = VALUES(type_retenue),
+            motif = VALUES(motif),
+            montant_total = VALUES(montant_total),
+            mois_debut = VALUES(mois_debut),
+            annee_debut = VALUES(annee_debut),
+            nombre_mois = VALUES(nombre_mois),
+            montant_par_mois = VALUES(montant_par_mois),
+            montant_deduit = VALUES(montant_deduit),
+            statut = VALUES(statut),
+            notes = VALUES(notes),
+            last_modified_at = VALUES(last_modified_at),
+            last_modified_by = VALUES(last_modified_by)
+    ");
+    
+    $stmt->execute([
+        ':id' => $entity['id'],
+        ':personnel_id' => $entity['personnel_id'],
+        ':type_retenue' => $entity['type_retenue'],
+        ':motif' => $entity['motif'] ?? '',
+        ':montant_total' => $entity['montant_total'] ?? 0,
+        ':mois_debut' => $entity['mois_debut'],
+        ':annee_debut' => $entity['annee_debut'],
+        ':nombre_mois' => $entity['nombre_mois'] ?? 1,
+        ':montant_par_mois' => $entity['montant_par_mois'] ?? 0,
+        ':montant_deduit' => $entity['montant_deduit'] ?? 0,
+        ':statut' => $entity['statut'] ?? 'actif',
+        ':notes' => $entity['notes'] ?? null,
+        ':last_modified_at' => $entity['last_modified_at'] ?? date('Y-m-d H:i:s'),
+        ':last_modified_by' => $userId,
+        ':created_at' => $entity['created_at'] ?? date('Y-m-d H:i:s')
+    ]);
+    
+    $syncStmt = $pdo->prepare("UPDATE retenues_personnel SET is_synced = 1, synced_at = :synced_at WHERE id = :id");
     $syncStmt->execute([':id' => $entity['id'], ':synced_at' => $entity['synced_at'] ?? date('c')]);
     
     $uploadedCount++;

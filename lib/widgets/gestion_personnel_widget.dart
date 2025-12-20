@@ -1,18 +1,19 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/personnel_model.dart';
-import '../models/salaire_model.dart';
-import '../models/avance_personnel_model.dart';
-import '../models/credit_personnel_model.dart';
-import '../models/retenue_personnel_model.dart';
 import '../services/personnel_service.dart';
 import '../services/salaire_service.dart';
 import '../services/avance_service.dart';
-import '../services/credit_service.dart';
 import '../services/retenue_service.dart';
+import '../services/credit_service.dart';
+import '../models/personnel_model.dart';
+import '../models/salaire_model.dart';
+import '../models/avance_personnel_model.dart';
+import '../models/retenue_personnel_model.dart';
+import '../models/credit_personnel_model.dart';
 import 'fiche_employe_detail_widget.dart';
-import 'statistics_personnel_widget.dart';
+import 'multi_periodes_salaire_widget.dart';
+import 'personnel_rapport_widget.dart';
 
 class GestionPersonnelWidget extends StatefulWidget {
   const GestionPersonnelWidget({super.key});
@@ -56,6 +57,7 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
   String _searchQuery = '';
   String? _selectedStatut;
   String? _selectedPoste;
+  bool _isGeneratingMatricule = false;
 
   @override
   void initState() {
@@ -104,7 +106,7 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
           children: [
             _buildPersonnelList(),
             _buildAddPersonnel(),
-            const StatisticsPersonnelWidget(),
+            const PersonnelRapportWidget(),
           ],
         ),
       ),
@@ -408,7 +410,7 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
                   icon: Icons.attach_money,
                   label: 'Salaire',
                   color: Colors.green,
-                  onTap: () => _showGenerateSalaireDialog(personnel),
+                  onTap: () => _showSalaireOptionsDialog(personnel),
                 ),
                 const SizedBox(width: 8),
                 _buildActionButton(
@@ -430,6 +432,13 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
                   label: 'Fiche',
                   color: Colors.indigo,
                   onTap: () => _showPersonnelSalaires(personnel),
+                ),
+                const SizedBox(width: 8),
+                _buildActionButton(
+                  icon: Icons.delete_outline,
+                  label: 'Supprimer',
+                  color: Colors.red,
+                  onTap: () => _showDeletePersonnelDialog(personnel),
                 ),
               ],
             ),
@@ -508,11 +517,16 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
       'prenom': TextEditingController(),
       'telephone': TextEditingController(),
       'email': TextEditingController(),
+      'adresse': TextEditingController(),
+      'etatCivil': TextEditingController(),
       'poste': TextEditingController(),
       'salaireBase': TextEditingController(text: '0'),
       'primeTransport': TextEditingController(text: '0'),
       'primeLogement': TextEditingController(text: '0'),
     };
+
+    // Le matricule sera généré uniquement si l'utilisateur clique sur le bouton refresh
+    // Pas de génération automatique pour éviter les crashes
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -525,11 +539,31 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
             const SizedBox(height: 16),
             TextFormField(
               controller: controllers['matricule'],
-              decoration: const InputDecoration(
-                labelText: 'Matricule *',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: 'Matricule',
+                hintText: 'Cliquez sur 🔄 pour générer automatiquement',
+                border: const OutlineInputBorder(),
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_isGeneratingMatricule)
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else
+                      IconButton(
+                        icon: const Icon(Icons.refresh),
+                        onPressed: () => _generateMatriculeAutomatiquement(controllers['matricule']!),
+                        tooltip: 'Générer un matricule automatique',
+                      ),
+                  ],
+                ),
+                helperText: 'Optionnel - Format suggéré: EMP24XXX',
               ),
-              validator: (v) => v?.isEmpty ?? true ? 'Requis' : null,
+              // Retirer la validation obligatoire pour éviter les blocages
+              // validator: (v) => v?.isEmpty ?? true ? 'Requis' : null,
             ),
             const SizedBox(height: 12),
             Row(
@@ -573,6 +607,29 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
                 labelText: 'Email',
                 border: OutlineInputBorder(),
               ),
+              keyboardType: TextInputType.emailAddress,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: controllers['adresse'],
+              decoration: const InputDecoration(
+                labelText: 'Adresse',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 2,
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(
+                labelText: 'État Civil',
+                border: OutlineInputBorder(),
+              ),
+              items: ['Célibataire', 'Marié(e)', 'Divorcé(e)', 'Veuf/Veuve']
+                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                  .toList(),
+              onChanged: (value) {
+                controllers['etatCivil']!.text = value ?? '';
+              },
             ),
             const SizedBox(height: 24),
             const Text('Informations Professionnelles', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
@@ -631,13 +688,32 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
                 onPressed: () async {
                   if (formKey.currentState!.validate()) {
                     try {
+                      // Générer un matricule si vide
+                      String matricule = controllers['matricule']!.text.trim();
+                      bool matriculeGenere = false;
+                      
+                      if (matricule.isEmpty) {
+                        try {
+                          matricule = await PersonnelService.instance.generateMatricule();
+                          matriculeGenere = true;
+                          debugPrint('✅ Matricule généré automatiquement: $matricule');
+                        } catch (e) {
+                          // Matricule de secours si la génération échoue
+                          matricule = 'EMP${DateTime.now().year.toString().substring(2)}${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
+                          matriculeGenere = true;
+                          debugPrint('🔄 Matricule de secours généré: $matricule');
+                        }
+                      }
+                      
                       final personnel = PersonnelModel(
-                        matricule: controllers['matricule']!.text,
-                        nom: controllers['nom']!.text,
-                        prenom: controllers['prenom']!.text,
-                        telephone: controllers['telephone']!.text,
-                        email: controllers['email']!.text.isEmpty ? null : controllers['email']!.text,
-                        poste: controllers['poste']!.text,
+                        matricule: matricule,
+                        nom: controllers['nom']!.text.trim(),
+                        prenom: controllers['prenom']!.text.trim(),
+                        telephone: controllers['telephone']!.text.trim(),
+                        email: controllers['email']!.text.trim().isEmpty ? null : controllers['email']!.text.trim(),
+                        adresse: controllers['adresse']!.text.trim().isEmpty ? null : controllers['adresse']!.text.trim(),
+                        etatCivil: controllers['etatCivil']!.text.trim().isEmpty ? 'Celibataire' : controllers['etatCivil']!.text.trim(),
+                        poste: controllers['poste']!.text.trim(),
                         dateEmbauche: DateTime.now(),
                         salaireBase: double.tryParse(controllers['salaireBase']!.text) ?? 0,
                         primeTransport: double.tryParse(controllers['primeTransport']!.text) ?? 0,
@@ -648,12 +724,36 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
 
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Agent créé avec succès')),
+                          SnackBar(
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Employé ${personnel.nomComplet} ajouté avec succès',
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                if (matriculeGenere) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Matricule généré: $matricule',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            backgroundColor: Colors.green,
+                            duration: const Duration(seconds: 4),
+                          ),
                         );
+                        
                         _tabController.animateTo(0);
                         for (var controller in controllers.values) {
                           controller.clear();
                         }
+                        controllers['salaireBase']!.text = '0';
+                        controllers['primeTransport']!.text = '0';
+                        controllers['primeLogement']!.text = '0';
                       }
                     } catch (e) {
                       if (mounted) {
@@ -678,6 +778,132 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
     );
   }
 
+  /// Générer automatiquement un matricule unique
+  Future<void> _generateMatriculeAutomatiquement(TextEditingController controller) async {
+    if (_isGeneratingMatricule) return;
+    
+    setState(() {
+      _isGeneratingMatricule = true;
+    });
+    
+    try {
+      debugPrint('🔄 Début génération matricule automatique');
+      
+      // Vérifier que le service est disponible
+      if (PersonnelService.instance == null) {
+        throw Exception('Service Personnel non disponible');
+      }
+      
+      final matricule = await PersonnelService.instance.generateMatricule()
+          .timeout(const Duration(seconds: 10)); // Timeout de sécurité
+      
+      if (matricule.isEmpty) {
+        throw Exception('Matricule vide généré');
+      }
+      
+      controller.text = matricule;
+      debugPrint('✅ Matricule généré avec succès: $matricule');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Matricule généré: $matricule'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('❌ Erreur génération matricule UI: $e');
+      
+      // Générer un matricule de secours en cas d'échec total
+      final fallbackMatricule = 'EMP${DateTime.now().year.toString().substring(2)}${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
+      controller.text = fallbackMatricule;
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Erreur génération matricule',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  'Matricule de secours généré: $fallbackMatricule',
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isGeneratingMatricule = false;
+        });
+      }
+    }
+  }
+
+  /// Afficher les options de paiement de salaire
+  void _showSalaireOptionsDialog(PersonnelModel personnel) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Options de Paiement - ${personnel.nomComplet}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.calendar_today, color: Colors.green),
+              title: const Text('Paiement Mensuel'),
+              subtitle: const Text('Payer un mois spécifique'),
+              onTap: () {
+                Navigator.pop(context);
+                _showGenerateSalaireDialog(personnel);
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.date_range, color: Colors.blue),
+              title: const Text('Paiement Multi-Périodes'),
+              subtitle: const Text('Payer plusieurs mois en une fois'),
+              onTap: () {
+                Navigator.pop(context);
+                _showMultiPeriodesSalaireDialog(personnel);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Dialog pour paiement multi-périodes
+  void _showMultiPeriodesSalaireDialog(PersonnelModel personnel) {
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: Text('Paiement Multi-Périodes - ${personnel.nomComplet}'),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 500,
+              child: MultiPeriodesSalaireWidget(personnel: personnel),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   void _showGenerateSalaireDialog(PersonnelModel personnel) {
     final now = DateTime.now();
     int selectedMonth = now.month;
@@ -690,32 +916,28 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
     double totalArrieres = 0;
     double netAPayer = 0;
 
-    // Fonction pour calculer les déductions
+    // Fonction pour calculer les déductions et le salaire brut/net
     Future<bool> calculateDeductions() async {
       // Vérifier si un salaire existe déjà pour cette période
       await SalaireService.instance.loadSalaires(forceRefresh: true);
-      final salaireExistant = SalaireService.instance.salaires.firstWhere(
-        (s) => s.personnelId == personnel.id && 
-               s.mois == selectedMonth && 
-               s.annee == selectedYear,
-        orElse: () => SalaireModel(
-          reference: '',
-          personnelId: 0,
-          personnelNom: '',
-          mois: 0,
-          annee: 0,
-          periode: '',
-          statut: '',
-        ),
-      );
+      SalaireModel? salaireExistant;
+      try {
+        salaireExistant = SalaireService.instance.salaires.firstWhere(
+          (s) => s.personnelId == personnel.id && 
+                 s.mois == selectedMonth && 
+                 s.annee == selectedYear,
+        );
+      } catch (e) {
+        salaireExistant = null;
+      }
       
       // Bloquer seulement si le salaire est TOTALEMENT payé
-      if (salaireExistant.reference.isNotEmpty && salaireExistant.statut == 'Paye') {
+      if (salaireExistant != null && salaireExistant.reference.isNotEmpty && salaireExistant.statut == 'Paye') {
         return false; // Salaire existe et est totalement payé
       }
       
       // Si partiellement payé, pré-remplir avec le montant restant
-      if (salaireExistant.reference.isNotEmpty && salaireExistant.statut == 'Paye_Partiellement') {
+      if (salaireExistant != null && salaireExistant.reference.isNotEmpty && salaireExistant.statut == 'Paye_Partiellement') {
         totalArrieres = salaireExistant.montantRestant;
       }
       
@@ -739,19 +961,25 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
           .toList();
       totalArrieres = salairesImpayes.fold<double>(0.0, (sum, s) => sum + s.montantRestant);
       
-      // Calculer le net à payer
-      netAPayer = personnel.salaireTotal + 
-                  (double.tryParse(heuresSupController.text) ?? 0) +
-                  (double.tryParse(bonusController.text) ?? 0) -
-                  avancesDeduites -
-                  retenuesDeduites;
+      return true; // OK, peut continuer
+    }
+    
+    // Fonction pour recalculer le salaire brut/net en temps réel
+    void recalculateSalaire() {
+      final heuresSup = double.tryParse(heuresSupController.text) ?? 0;
+      final bonusAmount = double.tryParse(bonusController.text) ?? 0;
+      
+      // Calcul du salaire brut (salaire base + primes + heures sup + bonus)
+      final salaireBrut = personnel.salaireTotal + heuresSup + bonusAmount;
+      
+      // Calcul des déductions totales
+      final totalDeductions = avancesDeduites + retenuesDeduites;
+      
+      // Calcul du net à payer
+      netAPayer = salaireBrut - totalDeductions;
       
       // Auto-remplir montant servis avec net à payer
-      if (montantServisController.text.isEmpty) {
-        montantServisController.text = netAPayer.toStringAsFixed(2);
-      }
-      
-      return true; // OK, peut continuer
+      montantServisController.text = netAPayer.toStringAsFixed(2);
     }
 
     showDialog(
@@ -830,6 +1058,47 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
                   ),
                   const SizedBox(height: 16),
                   
+                  // Affichage du calcul automatique
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.blue[200]!),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.calculate, color: Colors.blue[700], size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              'CALCUL AUTOMATIQUE',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue[900],
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        _buildCalculRow('Salaire Base + Primes', '${personnel.salaireTotal.toStringAsFixed(2)} USD'),
+                        _buildCalculRow('Heures Supplémentaires', '${(double.tryParse(heuresSupController.text) ?? 0).toStringAsFixed(2)} USD'),
+                        _buildCalculRow('Bonus', '${(double.tryParse(bonusController.text) ?? 0).toStringAsFixed(2)} USD'),
+                        const Divider(),
+                        _buildCalculRow('SALAIRE BRUT', '${(personnel.salaireTotal + (double.tryParse(heuresSupController.text) ?? 0) + (double.tryParse(bonusController.text) ?? 0)).toStringAsFixed(2)} USD', isBold: true, color: Colors.green[700]),
+                        const SizedBox(height: 8),
+                        _buildCalculRow('Avances Déduites', '-${avancesDeduites.toStringAsFixed(2)} USD', color: Colors.red[600]),
+                        _buildCalculRow('Retenues', '-${retenuesDeduites.toStringAsFixed(2)} USD', color: Colors.red[600]),
+                        const Divider(),
+                        _buildCalculRow('NET À PAYER', '${netAPayer.toStringAsFixed(2)} USD', isBold: true, color: Colors.blue[700]),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  
                   // Heures supplémentaires et Bonus sur la même ligne
                   Row(
                     children: [
@@ -841,8 +1110,14 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
                             border: OutlineInputBorder(),
                             suffixText: 'USD',
                             isDense: true,
+                            helperText: 'Recalcul automatique du brut/net',
                           ),
                           keyboardType: TextInputType.number,
+                          onChanged: (value) {
+                            setState(() {
+                              recalculateSalaire();
+                            });
+                          },
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -854,8 +1129,14 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
                             border: OutlineInputBorder(),
                             suffixText: 'USD',
                             isDense: true,
+                            helperText: 'Recalcul automatique du brut/net',
                           ),
                           keyboardType: TextInputType.number,
+                          onChanged: (value) {
+                            setState(() {
+                              recalculateSalaire();
+                            });
+                          },
                         ),
                       ),
                     ],
@@ -1043,23 +1324,19 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
                   try {
                     // Vérifier si c'est un complément de paiement ou nouvelle génération
                     await SalaireService.instance.loadSalaires(forceRefresh: true);
-                    final salaireExistant = SalaireService.instance.salaires.firstWhere(
-                      (s) => s.personnelId == personnel.id && 
-                             s.mois == selectedMonth && 
-                             s.annee == selectedYear,
-                      orElse: () => SalaireModel(
-                        reference: '',
-                        personnelId: 0,
-                        personnelNom: '',
-                        mois: 0,
-                        annee: 0,
-                        periode: '',
-                        statut: '',
-                      ),
-                    );
+                    SalaireModel? salaireExistant;
+                    try {
+                      salaireExistant = SalaireService.instance.salaires.firstWhere(
+                        (s) => s.personnelId == personnel.id && 
+                               s.mois == selectedMonth && 
+                               s.annee == selectedYear,
+                      );
+                    } catch (e) {
+                      salaireExistant = null;
+                    }
                     
                     // Validation AVANT de fermer le dialog
-                    if (salaireExistant.reference.isNotEmpty) {
+                    if (salaireExistant != null && salaireExistant.reference.isNotEmpty) {
                       if (salaireExistant.statut == 'Paye') {
                         // Salaire déjà entièrement payé - autoriser un nouveau paiement pour un mois différent
                         // (ceci est normalement géré par la sélection du mois/année)
@@ -1122,12 +1399,14 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
                     }
                     
                     // Validation OK - fermer le dialog
-                    Navigator.pop(context);
+                    if (mounted) {
+                      Navigator.pop(context);
+                    }
                     
-                    SalaireModel salaire;
+                    SalaireModel? salaireResult;
                     bool isComplement = false;
                     
-                    if (salaireExistant.reference.isNotEmpty && salaireExistant.statut == 'Paye_Partiellement') {
+                    if (salaireExistant != null && salaireExistant.reference.isNotEmpty && salaireExistant.statut == 'Paye_Partiellement') {
                       // Complément de paiement sur salaire existant
                       isComplement = true;
                       final nouveauMontantPaye = salaireExistant.montantPaye + montantServis;
@@ -1148,7 +1427,7 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
                         historique.map((p) => p.toJson()).toList()
                       );
                       
-                      salaire = salaireExistant.copyWith(
+                      salaireResult = salaireExistant.copyWith(
                         montantPaye: nouveauMontantPaye,
                         statut: nouveauMontantPaye >= salaireNet ? 'Paye' : 'Paye_Partiellement',
                         datePaiement: DateTime.now(),
@@ -1157,33 +1436,42 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
                       );
                       
                       // Sauvegarder le salaire mis à jour dans LocalDB
-                      await SalaireService.instance.updateSalaire(salaire);
+                      await SalaireService.instance.updateSalaire(salaireResult);
                       
                       // Enregistrer les déductions de retenues (seulement pour le complément)
-                      if (retenuesDeduites > 0) {
-                        final retenuesActives = RetenueService.instance.getRetenuesActivesParPeriode(
-                          personnelId: personnel.id!,
-                          mois: selectedMonth,
-                          annee: selectedYear,
-                        );
-                        for (final retenue in retenuesActives) {
-                          final montantADeduire = retenue.getMontantPourPeriode(selectedMonth, selectedYear);
-                          if (montantADeduire > 0) {
-                            await RetenueService.instance.enregistrerDeduction(
-                              retenueId: retenue.id!,
-                              montantDeduit: montantADeduire,
-                            );
+                      try {
+                        if (retenuesDeduites > 0) {
+                          final retenuesActives = RetenueService.instance.getRetenuesActivesParPeriode(
+                            personnelId: personnel.id!,
+                            mois: selectedMonth,
+                            annee: selectedYear,
+                          );
+                          for (final retenue in retenuesActives) {
+                            final montantADeduire = retenue.getMontantPourPeriode(selectedMonth, selectedYear);
+                            if (montantADeduire > 0) {
+                              await RetenueService.instance.enregistrerDeduction(
+                                retenueId: retenue.id!,
+                                montantDeduit: montantADeduire,
+                              );
+                            }
                           }
                         }
+                      } catch (e) {
+                        debugPrint('⚠️ Erreur enregistrement retenues: $e');
+                        // Ne pas faire échouer le paiement pour les retenues
                       }
                     } else {
                       // Nouvelle génération de salaire
-                      salaire = await SalaireService.instance.genererSalaireMensuel(
+                      final heuresSup = double.tryParse(heuresSupController.text) ?? 0;
+                      final bonusAmount = double.tryParse(bonusController.text) ?? 0;
+                      
+                      final salaireGenere = await SalaireService.instance.genererSalaireMensuel(
                         personnelId: personnel.id!,
                         mois: selectedMonth,
                         annee: selectedYear,
-                        heuresSupplementaires: double.tryParse(heuresSupController.text) ?? 0,
-                        bonus: double.tryParse(bonusController.text) ?? 0,
+                        heuresSupplementaires: heuresSup,
+                        bonus: bonusAmount,
+                        notes: 'Généré avec heures sup: ${heuresSup.toStringAsFixed(2)} USD, bonus: ${bonusAmount.toStringAsFixed(2)} USD',
                       );
                       
                       // Créer l'historique avec le premier paiement
@@ -1200,10 +1488,9 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
                       );
                       
                       // Mettre à jour avec le montant servis
-                      final salaireNet = salaire.salaireNet;
-                      final salaireAvecPaiement = salaire.copyWith(
+                      final salaireAvecPaiement = salaireGenere.copyWith(
                         montantPaye: montantServis,
-                        statut: montantServis >= salaireNet ? 'Paye' : 'Paye_Partiellement',
+                        statut: montantServis >= salaireGenere.salaireNet ? 'Paye' : 'Paye_Partiellement',
                         datePaiement: DateTime.now(),
                         historiquePaiementsJson: historiqueJson,
                         lastModifiedAt: DateTime.now(),
@@ -1211,36 +1498,40 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
                       
                       // Sauvegarder le salaire mis à jour dans LocalDB
                       await SalaireService.instance.updateSalaire(salaireAvecPaiement);
-                      salaire = salaireAvecPaiement;
+                      salaireResult = salaireAvecPaiement;
                       
                       // Enregistrer les déductions de retenues
-                      if (retenuesDeduites > 0) {
-                        final retenuesActives = RetenueService.instance.getRetenuesActivesParPeriode(
-                          personnelId: personnel.id!,
-                          mois: selectedMonth,
-                          annee: selectedYear,
-                        );
-                        for (final retenue in retenuesActives) {
-                          final montantADeduire = retenue.getMontantPourPeriode(selectedMonth, selectedYear);
-                          if (montantADeduire > 0) {
-                            await RetenueService.instance.enregistrerDeduction(
-                              retenueId: retenue.id!,
-                              montantDeduit: montantADeduire,
-                            );
+                      try {
+                        if (retenuesDeduites > 0) {
+                          final retenuesActives = RetenueService.instance.getRetenuesActivesParPeriode(
+                            personnelId: personnel.id!,
+                            mois: selectedMonth,
+                            annee: selectedYear,
+                          );
+                          for (final retenue in retenuesActives) {
+                            final montantADeduire = retenue.getMontantPourPeriode(selectedMonth, selectedYear);
+                            if (montantADeduire > 0) {
+                              await RetenueService.instance.enregistrerDeduction(
+                                retenueId: retenue.id!,
+                                montantDeduit: montantADeduire,
+                              );
+                            }
                           }
                         }
+                      } catch (e) {
+                        debugPrint('⚠️ Erreur enregistrement retenues: $e');
+                        // Ne pas faire échouer le paiement pour les retenues
                       }
                     }
                     
                     // Message de confirmation
-                    final salaireNet = salaire.salaireNet;
-                    final arriereRestant = salaire.montantRestant;
+                    final arriereRestant = salaireResult?.montantRestant ?? 0;
                     
                     if (mounted) {
                       String message;
                       if (isComplement) {
                         message = 'Complément payé: ${montantServis.toStringAsFixed(2)} USD\n';
-                        message += 'Total payé: ${salaire.montantPaye.toStringAsFixed(2)} USD';
+                        message += 'Total payé: ${salaireResult?.montantPaye.toStringAsFixed(2) ?? '0.00'} USD';
                       } else {
                         message = 'Salaire généré: ${montantServis.toStringAsFixed(2)} USD payé';
                       }
@@ -1256,12 +1547,30 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
                           duration: const Duration(seconds: 4),
                         ),
                       );
+                      
+                      // Réinitialiser les contrôleurs du dialog
+                      heuresSupController.clear();
+                      bonusController.clear();
+                      montantServisController.clear();
                     }
                   } catch (e) {
+                    debugPrint('❌ Erreur génération salaire: $e');
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Erreur: $e')),
+                        SnackBar(
+                          content: Text('Erreur lors du paiement: ${e.toString()}'),
+                          backgroundColor: Colors.red,
+                          duration: const Duration(seconds: 6),
+                        ),
                       );
+                    }
+                  } finally {
+                    // Recharger les données pour éviter les incohérences
+                    try {
+                      await SalaireService.instance.loadSalaires(forceRefresh: true);
+                      await PersonnelService.instance.loadPersonnel(forceRefresh: true);
+                    } catch (e) {
+                      debugPrint('⚠️ Erreur rechargement données: $e');
                     }
                   }
                 },
@@ -1733,6 +2042,35 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
     );
   }
 
+  /// Construire une ligne de calcul pour l'affichage
+  Widget _buildCalculRow(String label, String value, {bool isBold = false, Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+              color: color ?? Colors.black87,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+              color: color ?? Colors.black87,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+
   void _showPersonnelSalaires(PersonnelModel personnel) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -1742,6 +2080,182 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
         ),
       ),
     );
+  }
+
+  /// Afficher le dialog de confirmation de suppression
+  void _showDeletePersonnelDialog(PersonnelModel personnel) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.warning, color: Colors.red[700]),
+            const SizedBox(width: 8),
+            const Text('Confirmer la suppression'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Êtes-vous sûr de vouloir supprimer cet employé ?',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey[300]!),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    personnel.nomComplet,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 4),
+                  Text('Matricule: ${personnel.matricule}'),
+                  Text('Poste: ${personnel.poste}'),
+                  Text('Téléphone: ${personnel.telephone}'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange[300]!),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.orange[700], size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Information importante',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange[700],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    '• Cette action changera le statut à "Démissionné"\n'
+                    '• Les données seront synchronisées sur tous les appareils\n'
+                    '• La suppression définitive aura lieu après synchronisation\n'
+                    '• Toutes les données liées (salaires, avances, retenues) seront également supprimées',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _deletePersonnel(personnel);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red[700],
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Supprimer un employé avec synchronisation
+  Future<void> _deletePersonnel(PersonnelModel personnel) async {
+    try {
+      // Afficher un indicateur de chargement
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Suppression en cours...'),
+            ],
+          ),
+        ),
+      );
+
+      // Effectuer la suppression
+      await PersonnelService.instance.deletePersonnel(personnel.id!);
+
+      // Fermer l'indicateur de chargement
+      if (mounted) {
+        Navigator.pop(context);
+      }
+
+      // Afficher le message de succès
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${personnel.nomComplet} supprimé',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const Text(
+                        'Synchronisation en cours sur tous les appareils',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.green[700],
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      // Fermer l'indicateur de chargement si ouvert
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+
+      // Afficher l'erreur
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors de la suppression: $e'),
+            backgroundColor: Colors.red[700],
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildDetailRow(String label, String value) {

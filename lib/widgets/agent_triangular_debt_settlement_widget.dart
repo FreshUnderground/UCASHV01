@@ -69,12 +69,71 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
     
     if (agentShopId == null) {
       return const Center(
-        child: Text('Erreur: Shop de l\'agent non trouvé'),
+        child: Padding(
+          padding: EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, size: 64, color: Colors.red),
+              SizedBox(height: 16),
+              Text(
+                'Erreur: Shop de l\'agent non trouvé',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Seuls les agents assignés à un shop peuvent accéder à cette fonctionnalité.',
+                style: TextStyle(color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
       );
     }
 
     return Consumer<ShopService>(
       builder: (context, shopService, child) {
+        // Vérifier si les shops sont en cours de chargement
+        if (shopService.isLoading) {
+          return const Scaffold(
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Chargement des shops...'),
+                ],
+              ),
+            ),
+          );
+        }
+        
+        // Vérifier si la liste des shops est vide
+        if (shopService.shops.isEmpty) {
+          return Scaffold(
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.warning, size: 64, color: Colors.orange),
+                  const SizedBox(height: 16),
+                  const Text('Aucun shop disponible'),
+                  const SizedBox(height: 8),
+                  ElevatedButton(
+                    onPressed: () async {
+                      await shopService.loadShops();
+                    },
+                    child: const Text('Recharger'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        
         final agentShop = shopService.shops.firstWhere(
           (s) => s.id == agentShopId,
           orElse: () => ShopModel(
@@ -232,6 +291,30 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
 
   Widget _buildImpactSummary(ShopModel agentShop, int agentShopId) {
     final montant = _montantController.text;
+    
+    // Vérifier si les shops requis sont sélectionnés
+    if (_otherShopA == null || _shopCreditor == null) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.grey.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.withOpacity(0.3)),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.info_outline, color: Colors.grey),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Sélectionnez les shops pour voir l\'impact du règlement',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     
     // Déterminer les 3 shops selon le type
     final ShopModel shopA, shopB, shopC;

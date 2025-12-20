@@ -31,7 +31,7 @@ $testData = [
 ];
 
 // URL de l'endpoint
-$url = 'https://mahanaim.investee-group.com/server/api/sync/comptes_speciaux/upload.php';
+$url = 'https://mahanaimeservice.investee-group.com/server/api/sync/comptes_speciaux/upload.php';
 
 // Configuration de la requête
 $options = [

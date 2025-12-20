@@ -60,7 +60,7 @@ php test_admin_validate_request.php
 Or use curl directly:
 ```bash
 curl -X POST \
-  https://mahanaim.investee-group.com/server/api/sync/deletion_requests/admin_validate.php \
+  https://mahanaimeservice.investee-group.com/server/api/sync/deletion_requests/admin_validate.php \
   -H 'Content-Type: application/json' \
   -d '{
     "code_ops": "251212115644101",

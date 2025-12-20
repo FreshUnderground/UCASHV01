@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'services/auth_service.dart';
+import 'services/agent_auth_service.dart';
 import 'services/language_service.dart';
 import 'services/local_db.dart';
 import 'services/shop_service.dart';
@@ -200,6 +201,7 @@ class _UCashAppState extends State<UCashApp> {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthService()),
+        ChangeNotifierProvider(create: (_) => AgentAuthService()),
         ChangeNotifierProvider(create: (_) => LanguageService.instance),
         ChangeNotifierProvider(create: (_) => ShopService.instance),
         ChangeNotifierProvider(create: (_) => AgentService.instance),

@@ -22,6 +22,7 @@ class _EditAgentDialogState extends State<EditAgentDialog> {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _matriculeController = TextEditingController();
   final _nomController = TextEditingController();
   final _telephoneController = TextEditingController();
   
@@ -39,6 +40,7 @@ class _EditAgentDialogState extends State<EditAgentDialog> {
     final l10n = AppLocalizations.of(context)!;
     _usernameController.text = widget.agent.username;
     _passwordController.text = widget.agent.password;
+    _matriculeController.text = widget.agent.matricule ?? '';
     _nomController.text = widget.agent.nom ?? '';
     _telephoneController.text = widget.agent.telephone ?? '';
     _isActive = widget.agent.isActive;
@@ -63,6 +65,7 @@ class _EditAgentDialogState extends State<EditAgentDialog> {
   void dispose() {
     _usernameController.dispose();
     _passwordController.dispose();
+    _matriculeController.dispose();
     _nomController.dispose();
     _telephoneController.dispose();
     super.dispose();
@@ -154,6 +157,33 @@ class _EditAgentDialogState extends State<EditAgentDialog> {
                           }
                           if (value.length < 6) {
                             return l10n.passwordMinLength;
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      // Matricule
+                      TextFormField(
+                        controller: _matriculeController,
+                        decoration: InputDecoration(
+                          labelText: 'Matricule',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.badge),
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.refresh),
+                            tooltip: 'Générer un nouveau matricule',
+                            onPressed: () {
+                              _generateMatricule();
+                            },
+                          ),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Le matricule est requis';
+                          }
+                          if (value.trim().length < 3) {
+                            return 'Le matricule doit contenir au moins 3 caractères';
                           }
                           return null;
                         },
@@ -329,6 +359,15 @@ class _EditAgentDialogState extends State<EditAgentDialog> {
     );
   }
 
+  // Générer un matricule automatique
+  void _generateMatricule() {
+    final agentService = Provider.of<AgentService>(context, listen: false);
+    final matricule = agentService.generateMatricule(shopId: _selectedShop?.id);
+    setState(() {
+      _matriculeController.text = matricule;
+    });
+  }
+
   Future<void> _handleSubmit() async {
     final l10n = AppLocalizations.of(context)!;
     if (!_formKey.currentState!.validate()) return;
@@ -354,6 +393,7 @@ class _EditAgentDialogState extends State<EditAgentDialog> {
       final updatedAgent = widget.agent.copyWith(
         username: _usernameController.text.trim(),
         password: _passwordController.text,
+        matricule: _matriculeController.text.trim(),
         shopId: _selectedShop!.id!,
         nom: _nomController.text.trim().isEmpty ? null : _nomController.text.trim(),
         telephone: _telephoneController.text.trim().isEmpty ? null : _telephoneController.text.trim(),

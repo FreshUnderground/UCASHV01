@@ -63,10 +63,48 @@ class AgentService extends ChangeNotifier {
     _setLoading(false);
   }
 
+  // Générer un matricule automatique
+  String generateMatricule({int? shopId}) {
+    final now = DateTime.now();
+    final year = now.year.toString().substring(2); // Derniers 2 chiffres de l'année
+    final month = now.month.toString().padLeft(2, '0');
+    final day = now.day.toString().padLeft(2, '0');
+    final shopCode = shopId?.toString().padLeft(2, '0') ?? '00';
+    final randomSuffix = (DateTime.now().millisecondsSinceEpoch % 1000).toString().padLeft(3, '0');
+    
+    return 'AGT$year$month$day$shopCode$randomSuffix';
+  }
+
+  // Vérifier si un matricule existe déjà
+  Future<bool> _matriculeExists(String matricule) async {
+    final existingAgents = await LocalDB.instance.getAllAgents();
+    return existingAgents.any((agent) => agent.matricule == matricule);
+  }
+
+  // Générer un matricule unique
+  Future<String> generateUniqueMatricule({int? shopId}) async {
+    String matricule;
+    int attempts = 0;
+    const maxAttempts = 10;
+    
+    do {
+      matricule = generateMatricule(shopId: shopId);
+      attempts++;
+      if (attempts > maxAttempts) {
+        // Si trop de tentatives, ajouter un timestamp pour garantir l'unicité
+        matricule = '${generateMatricule(shopId: shopId)}${DateTime.now().millisecondsSinceEpoch % 100}';
+        break;
+      }
+    } while (await _matriculeExists(matricule));
+    
+    return matricule;
+  }
+
   // Créer un nouvel agent
   Future<bool> createAgent({
     required String username,
     required String password,
+    String? matricule, // Matricule optionnel, sera généré si non fourni
     int? shopId,
     String role = 'AGENT',
   }) async {
@@ -79,6 +117,9 @@ class AgentService extends ChangeNotifier {
         return false;
       }
 
+      // Générer un matricule si non fourni
+      String finalMatricule = matricule ?? await generateUniqueMatricule(shopId: shopId);
+
       // Récupérer le nom du shop pour le shop_designation (seulement si shopId est fourni)
       String? shopDesignation;
       if (shopId != null) {
@@ -90,6 +131,7 @@ class AgentService extends ChangeNotifier {
       final newAgent = AgentModel(
         username: username,
         password: password, // En production, hasher le mot de passe
+        matricule: finalMatricule,
         shopId: shopId,
         shopDesignation: shopDesignation,
         createdAt: DateTime.now(),

@@ -275,6 +275,70 @@ class SalaireService extends ChangeNotifier {
     }
   }
 
+  /// Recalculer un salaire avec de nouveaux bonus/avantages
+  Future<SalaireModel?> recalculateSalaireWithBonusAndAdvantages({
+    required SalaireModel salaire,
+    double? newBonus,
+    double? newAvantageNatureLogement,
+    double? newAvantageNatureVoiture,
+    double? newAutresAvantagesNature,
+    double? newHeuresSupplementaires,
+    double? newSupplementWeekend,
+    double? newSupplementJoursFeries,
+    double? newAllocationsFamiliales,
+    String? modifiedBy,
+  }) async {
+    _setLoading(true);
+    try {
+      debugPrint('🔄 [SalaireService] Recalcul salaire...');
+      debugPrint('   ID: ${salaire.id}');
+      debugPrint('   Référence: ${salaire.reference}');
+      debugPrint('   Ancien bonus: ${salaire.bonus}');
+      debugPrint('   Nouveau bonus: ${newBonus ?? salaire.bonus}');
+      debugPrint('   Anciens avantages logement: ${salaire.avantageNatureLogement}');
+      debugPrint('   Nouveaux avantages logement: ${newAvantageNatureLogement ?? salaire.avantageNatureLogement}');
+      
+      // Utiliser la méthode statique de recalcul du modèle
+      final recalculatedSalaire = SalaireModel.recalculateWithBonusAndAdvantages(
+        salaire: salaire,
+        newBonus: newBonus,
+        newAvantageNatureLogement: newAvantageNatureLogement,
+        newAvantageNatureVoiture: newAvantageNatureVoiture,
+        newAutresAvantagesNature: newAutresAvantagesNature,
+        newHeuresSupplementaires: newHeuresSupplementaires,
+        newSupplementWeekend: newSupplementWeekend,
+        newSupplementJoursFeries: newSupplementJoursFeries,
+        newAllocationsFamiliales: newAllocationsFamiliales,
+      ).copyWith(
+        lastModifiedBy: modifiedBy,
+        isSynced: false, // Marquer comme non synchronisé
+      );
+      
+      // Recalculer tous les montants avec les nouvelles valeurs
+      final finalSalaire = recalculatedSalaire.recalculateAmounts();
+      
+      debugPrint('   Salaire brut recalculé: ${finalSalaire.salaireBrut}');
+      debugPrint('   Total déductions: ${finalSalaire.totalDeductions}');
+      debugPrint('   Salaire net final: ${finalSalaire.salaireNet}');
+      debugPrint('   Total avantages: ${finalSalaire.totalAvantages}');
+      
+      // Sauvegarder le salaire recalculé
+      await updateSalaire(finalSalaire);
+      debugPrint('✅ [SalaireService] Salaire recalculé et sauvegardé');
+      
+      _setLoading(false);
+      _setError(null);
+      
+      return finalSalaire;
+    } catch (e) {
+      final errorMsg = 'Erreur recalcul salaire: $e';
+      debugPrint('❌ [SalaireService] $errorMsg');
+      _setLoading(false);
+      _setError(errorMsg);
+      return null;
+    }
+  }
+
   /// Nettoyer les doublons de salaires dans LocalDB
   Future<void> cleanDuplicateSalaires() async {
     try {
@@ -515,6 +579,234 @@ class SalaireService extends ChangeNotifier {
     }
 
     return rapports;
+  }
+
+  /// Générer et payer plusieurs mois de salaire en une seule opération
+  Future<List<SalaireModel>> genererEtPayerSalaireMultiPeriodes({
+    required int personnelId,
+    required List<Map<String, int>> periodes, // [{"mois": 1, "annee": 2024}, ...]
+    required double montantTotalServi,
+    double heuresSupplementaires = 0,
+    double bonus = 0,
+    String? notes,
+  }) async {
+    try {
+      // Charger le personnel
+      await PersonnelService.instance.loadPersonnel();
+      final personnel = PersonnelService.instance.personnel
+          .firstWhere((p) => p.id == personnelId);
+      
+      List<SalaireModel> salairesGeneres = [];
+      double montantTotalCalcule = 0;
+      
+      // 1. Générer tous les salaires pour les périodes demandées
+      for (final periode in periodes) {
+        final mois = periode['mois']!;
+        final annee = periode['annee']!;
+        
+        // Vérifier si le salaire existe déjà
+        await loadSalaires(forceRefresh: true);
+        SalaireModel? salaireExistant;
+        try {
+          salaireExistant = _salaires.firstWhere(
+            (s) => s.personnelId == personnelId && s.mois == mois && s.annee == annee,
+          );
+        } catch (e) {
+          salaireExistant = null;
+        }
+        
+        // Si le salaire existe et est totalement payé, ignorer
+        if (salaireExistant != null && salaireExistant.statut == 'Paye') {
+          debugPrint('⚠️ Salaire $mois/$annee déjà payé, ignoré');
+          continue;
+        }
+        
+        // Générer le salaire pour cette période
+        final salaire = await genererSalaireMensuel(
+          personnelId: personnelId,
+          mois: mois,
+          annee: annee,
+          heuresSupplementaires: heuresSupplementaires,
+          bonus: bonus,
+          notes: notes,
+        );
+        
+        salairesGeneres.add(salaire);
+        montantTotalCalcule += salaire.salaireNet;
+      }
+      
+      if (salairesGeneres.isEmpty) {
+        throw Exception('Aucun salaire à générer (tous déjà payés)');
+      }
+      
+      // 2. Répartir le montant servi proportionnellement
+      final ratio = montantTotalServi / montantTotalCalcule;
+      List<SalaireModel> salairesFinaux = [];
+      
+      for (final salaire in salairesGeneres) {
+        final montantPourCeSalaire = salaire.salaireNet * ratio;
+        
+        // Créer l'historique de paiement
+        final historique = [PaiementSalaireModel(
+          datePaiement: DateTime.now(),
+          montant: montantPourCeSalaire,
+          modePaiement: 'Especes',
+          agentPaiement: 'Admin',
+          notes: 'Paiement multi-périodes (${periodes.length} mois)',
+        )];
+        
+        final historiqueJson = jsonEncode(
+          historique.map((p) => p.toJson()).toList()
+        );
+        
+        // Mettre à jour le salaire avec le paiement
+        final salaireAvecPaiement = salaire.copyWith(
+          montantPaye: montantPourCeSalaire,
+          statut: montantPourCeSalaire >= salaire.salaireNet ? 'Paye' : 'Paye_Partiellement',
+          datePaiement: DateTime.now(),
+          historiquePaiementsJson: historiqueJson,
+          notes: '${salaire.notes ?? ''} | Paiement groupé ${periodes.length} mois'.trim(),
+          lastModifiedAt: DateTime.now(),
+        );
+        
+        // Sauvegarder
+        await updateSalaire(salaireAvecPaiement);
+        salairesFinaux.add(salaireAvecPaiement);
+      }
+      
+      await loadSalaires(forceRefresh: true);
+      
+      debugPrint('✅ Paiement multi-périodes généré: ${salairesFinaux.length} salaires, total: ${montantTotalServi.toStringAsFixed(2)} USD');
+      return salairesFinaux;
+      
+    } catch (e) {
+      debugPrint('❌ Erreur génération multi-périodes: $e');
+      rethrow;
+    }
+  }
+  
+  /// Calculer le montant total pour plusieurs périodes
+  Future<Map<String, dynamic>> calculerMontantTotalMultiPeriodes({
+    required int personnelId,
+    required List<Map<String, int>> periodes,
+    double heuresSupplementaires = 0,
+    double bonus = 0,
+  }) async {
+    try {
+      // Charger le personnel
+      await PersonnelService.instance.loadPersonnel();
+      final personnel = PersonnelService.instance.personnel
+          .firstWhere((p) => p.id == personnelId);
+      
+      double montantTotalBrut = 0;
+      double montantTotalNet = 0;
+      double totalAvances = 0;
+      double totalRetenues = 0;
+      List<Map<String, dynamic>> detailsPeriodes = [];
+      
+      for (final periode in periodes) {
+        final mois = periode['mois']!;
+        final annee = periode['annee']!;
+        
+        // Calculer les déductions pour cette période
+        final avancesDeduites = await AvanceService.instance.calculerDeductionMensuelle(
+          personnelId,
+          mois,
+          annee,
+        );
+        
+        final retenuesDeduites = RetenueService.instance.calculerTotalRetenuesPourPeriode(
+          personnelId: personnelId,
+          mois: mois,
+          annee: annee,
+        );
+        
+        // Calculer brut et net pour cette période
+        final salaireBrut = personnel.salaireTotal + heuresSupplementaires + bonus;
+        final salaireNet = salaireBrut - avancesDeduites - retenuesDeduites;
+        
+        montantTotalBrut += salaireBrut;
+        montantTotalNet += salaireNet;
+        totalAvances += avancesDeduites;
+        totalRetenues += retenuesDeduites;
+        
+        detailsPeriodes.add({
+          'mois': mois,
+          'annee': annee,
+          'periode': '${mois.toString().padLeft(2, '0')}/$annee',
+          'salaireBrut': salaireBrut,
+          'salaireNet': salaireNet,
+          'avancesDeduites': avancesDeduites,
+          'retenuesDeduites': retenuesDeduites,
+        });
+      }
+      
+      return {
+        'montantTotalBrut': montantTotalBrut,
+        'montantTotalNet': montantTotalNet,
+        'totalAvances': totalAvances,
+        'totalRetenues': totalRetenues,
+        'nombrePeriodes': periodes.length,
+        'detailsPeriodes': detailsPeriodes,
+      };
+      
+    } catch (e) {
+      debugPrint('❌ Erreur calcul multi-périodes: $e');
+      rethrow;
+    }
+  }
+  
+  /// Obtenir les périodes disponibles pour un personnel (non payées)
+  Future<List<Map<String, dynamic>>> getPeriodesDisponibles(int personnelId) async {
+    await loadSalaires(forceRefresh: true);
+    
+    List<Map<String, dynamic>> periodesDisponibles = [];
+    final now = DateTime.now();
+    
+    // Générer les 12 derniers mois
+    for (int i = 11; i >= 0; i--) {
+      final date = DateTime(now.year, now.month - i, 1);
+      final mois = date.month;
+      final annee = date.year;
+      
+      // Vérifier si le salaire existe et son statut
+      final salaireExistant = _salaires.where(
+        (s) => s.personnelId == personnelId && s.mois == mois && s.annee == annee,
+      ).firstOrNull;
+      
+      String statut;
+      if (salaireExistant == null) {
+        statut = 'Non généré';
+      } else if (salaireExistant.statut == 'Paye') {
+        statut = 'Payé';
+      } else if (salaireExistant.statut == 'Paye_Partiellement') {
+        statut = 'Partiellement payé';
+      } else {
+        statut = 'En attente';
+      }
+      
+      periodesDisponibles.add({
+        'mois': mois,
+        'annee': annee,
+        'periode': '${mois.toString().padLeft(2, '0')}/$annee',
+        'nomMois': _getMonthName(mois),
+        'statut': statut,
+        'peutEtrePaye': statut != 'Payé',
+        'montantPaye': salaireExistant?.montantPaye ?? 0.0,
+        'montantRestant': salaireExistant?.montantRestant ?? 0.0,
+      });
+    }
+    
+    return periodesDisponibles;
+  }
+  
+  /// Obtenir le nom du mois
+  String _getMonthName(int month) {
+    const months = [
+      '', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+      'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+    ];
+    return months[month];
   }
 
   /// Nettoyer le cache

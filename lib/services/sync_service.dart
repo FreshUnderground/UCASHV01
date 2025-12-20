@@ -36,6 +36,7 @@ import '../config/app_config.dart';
 import '../config/sync_config.dart';
 import 'conflict_notification_service.dart';
 import 'conflict_logging_service.dart';
+import 'personnel_sync_service.dart';
 
 /// Service de synchronisation bidirectionnelle avec gestion des conflits
 class SyncService {
@@ -64,9 +65,12 @@ class SyncService {
   // Timer pour la synchronisation automatique périodique
   Timer? _autoSyncTimer;
   Timer? _flotsOpsAutoSyncTimer; // Timer spécifique pour flots et opérations
+  Timer? _slowSyncTimer; // Timer pour synchronisation lente (personnel, etc.)
   static Duration get _autoSyncInterval => const Duration(minutes: 2);
+  static Duration get _slowSyncInterval => SyncConfig.slowSyncInterval; // 10 minutes
   DateTime? _lastSyncTime;
   DateTime? _lastFlotsOpsSyncTime; // Dernière sync flots/ops
+  DateTime? _lastSlowSyncTime; // Dernière sync lente
   
   // File d'attente pour les données en attente de synchronisation (mode offline)
   // Ajout de la priorité pour une meilleure gestion
@@ -278,6 +282,10 @@ class SyncService {
       // Démarrer aussi la sync spécialisée FLOTS & OPERATIONS
       startFlotsOpsAutoSync();
       debugPrint('🚀⏰ Synchronisation auto FLOTS & OPERATIONS activée (intervalle: ${_autoSyncInterval.inSeconds}s)');
+      
+      // Démarrer la sync lente PERSONNEL (toutes les 10 minutes)
+      startSlowSync();
+      debugPrint('🐢⏰ Synchronisation lente PERSONNEL activée (intervalle: ${_slowSyncInterval.inMinutes} min)');
     }
     
     debugPrint('✅ Service de synchronisation initialisé (auto-sync: ${_isAutoSyncEnabled ? "ON" : "OFF"})');
@@ -306,6 +314,12 @@ class SyncService {
           startFlotsOpsAutoSync();
           debugPrint('🚀⏰ Redémarrage synchronisation FLOTS & OPERATIONS');
         }
+        
+        // Redémarrer aussi la sync lente PERSONNEL
+        if (_slowSyncTimer == null) {
+          startSlowSync();
+          debugPrint('🐢⏰ Redémarrage synchronisation lente PERSONNEL');
+        }
       }
     }
     
@@ -325,6 +339,10 @@ class SyncService {
       if (_flotsOpsAutoSyncTimer != null) {
         stopFlotsOpsAutoSync();
         debugPrint('⏸️ Auto-sync FLOTS/OPS arrêté (mode offline)');
+      }
+      if (_slowSyncTimer != null) {
+        stopSlowSync();
+        debugPrint('⏸️ Auto-sync PERSONNEL (lent) arrêté (mode offline)');
       }
       _updateStatus(SyncStatus.offline);
     }
@@ -3489,6 +3507,62 @@ class SyncService {
       debugPrint('⏸️ Arrêt synchronisation auto FLOTS & OPERATIONS');
       _flotsOpsAutoSyncTimer?.cancel();
       _flotsOpsAutoSyncTimer = null;
+    }
+  }
+  
+  /// ========== SYNCHRONISATION LENTE (PERSONNEL) ==========
+  /// Démarre la synchronisation automatique pour les données de personnel
+  /// Intervalle: toutes les 10 minutes (plus lent car moins critique)
+  void startSlowSync() {
+    stopSlowSync(); // Arrêter tout timer existant
+    
+    debugPrint('🐢⏰ Démarrage synchronisation lente PERSONNEL (intervalle: ${_slowSyncInterval.inMinutes} min)');
+    debugPrint('🔍 État: isAutoSyncEnabled=$_isAutoSyncEnabled, isOnline=$_isOnline, isSyncing=$_isSyncing');
+    
+    _slowSyncTimer = Timer.periodic(_slowSyncInterval, (timer) async {
+      debugPrint('⏰ [SLOW SYNC] Timer déclenché...');
+      
+      if (_isAutoSyncEnabled && !_isSyncing && _isOnline) {
+        debugPrint('🔄 [🕒 ${DateTime.now().toIso8601String()}] Sync lente PERSONNEL');
+        
+        await syncPersonnelData();
+        
+        _lastSlowSyncTime = DateTime.now();
+      } else {
+        debugPrint('⏸️ Sync lente ignorée (conditions non remplies)');
+      }
+    });
+  }
+  
+  /// Arrête la synchronisation lente
+  void stopSlowSync() {
+    if (_slowSyncTimer != null) {
+      debugPrint('⏸️ Arrêt synchronisation lente PERSONNEL');
+      _slowSyncTimer?.cancel();
+      _slowSyncTimer = null;
+    }
+  }
+  
+  /// Synchronise les données de personnel (méthode spécialisée)
+  /// Utile pour une sync lente toutes les 10 minutes
+  Future<void> syncPersonnelData() async {
+    if (_isSyncing) {
+      debugPrint('⚠️ Synchronisation déjà en cours, ignoré');
+      return;
+    }
+    
+    try {
+      debugPrint('🐢 Début sync lente PERSONNEL...');
+      
+      final result = await PersonnelSyncService.instance.syncPersonnelData();
+      
+      if (result) {
+        debugPrint('✅ Sync PERSONNEL terminée avec succès');
+      } else {
+        debugPrint('⚠️ Sync PERSONNEL terminée avec erreurs');
+      }
+    } catch (e) {
+      debugPrint('❌ Erreur lors de la sync PERSONNEL: $e');
     }
   }
   

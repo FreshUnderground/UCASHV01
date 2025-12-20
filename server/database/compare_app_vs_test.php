@@ -16,12 +16,12 @@ try {
     $db = $pdo;
     
     echo "=== TEST SCRIPT CALL (WORKING) ===\n";
-    echo "URL: https://mahanaim.investee-group.com/server/database/test_admin_validation_ui.php\n";
+    echo "URL: https://mahanaimeservice.investee-group.com/server/database/test_admin_validation_ui.php\n";
     echo "Method: Direct PHP execution\n";
     echo "Payload: Hardcoded in script\n\n";
     
     echo "=== APP API CALL (FAILING) ===\n";
-    echo "URL: https://mahanaim.investee-group.com/server/api/sync/deletion_requests/admin_validate.php\n";
+    echo "URL: https://mahanaimeservice.investee-group.com/server/api/sync/deletion_requests/admin_validate.php\n";
     echo "Method: HTTP POST from Flutter app\n";
     echo "Content-Type: application/json\n\n";
     
@@ -112,7 +112,7 @@ try {
     if (file_exists($apiEndpoint)) {
         // Test with cURL to simulate app behavior
         $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, 'https://mahanaim.investee-group.com/server/api/sync/deletion_requests/admin_validate.php');
+        curl_setopt($ch, CURLOPT_URL, 'https://mahanaimeservice.investee-group.com/server/api/sync/deletion_requests/admin_validate.php');
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, $appPayload);
         curl_setopt($ch, CURLOPT_HTTPHEADER, [

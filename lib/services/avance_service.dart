@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../models/avance_personnel_model.dart';
+import '../models/salaire_model.dart';
 import 'local_db.dart';
+import 'salaire_service.dart';
 
 class AvanceService extends ChangeNotifier {
   static final AvanceService _instance = AvanceService._internal();
@@ -77,7 +79,11 @@ class AvanceService extends ChangeNotifier {
         isSynced: false,
       );
 
-      await prefs.setString('avance_$id', jsonEncode(newAvance.toJson()));
+      await prefs.setString('avance_personnel_$id', jsonEncode(newAvance.toJson()));
+      
+      // Ajouter l'avance à l'historique des paiements du salaire correspondant
+      await _ajouterAvanceAHistoriqueSalaire(newAvance);
+      
       await loadAvances(forceRefresh: true);
       
       debugPrint('✅ Avance créée: ${newAvance.montant} pour personnel ${newAvance.personnelId}');
@@ -186,11 +192,104 @@ class AvanceService extends ChangeNotifier {
         isSynced: false,
       );
 
-      await prefs.setString('avance_${avance.id}', jsonEncode(avanceUpdate.toJson()));
+      await prefs.setString('avance_personnel_${avance.id}', jsonEncode(avanceUpdate.toJson()));
+      
+      // Ajouter le remboursement à l'historique des paiements
+      await _ajouterRemboursementAHistoriqueSalaire(
+        personnelId: personnelId,
+        mois: mois,
+        annee: annee,
+        montantRembourse: deduction,
+        referenceAvance: avance.reference,
+      );
+      
       reste -= deduction;
     }
 
     await loadAvances(forceRefresh: true);
+  }
+
+  /// Ajouter une avance à l'historique des paiements du salaire correspondant
+  Future<void> _ajouterAvanceAHistoriqueSalaire(AvancePersonnelModel avance) async {
+    try {
+      // Charger les salaires pour trouver celui de la période correspondante
+      await SalaireService.instance.loadSalaires(forceRefresh: true);
+      
+      // Chercher le salaire de la période de l'avance
+      SalaireModel? salaireCorrespondant;
+      try {
+        salaireCorrespondant = SalaireService.instance.salaires.firstWhere(
+          (s) => s.personnelId == avance.personnelId && 
+                 s.mois == avance.moisAvance && 
+                 s.annee == avance.anneeAvance,
+        );
+      } catch (e) {
+        // Pas de salaire trouvé pour cette période, on peut ignorer
+        debugPrint('ℹ️ Aucun salaire trouvé pour la période ${avance.moisAvance}/${avance.anneeAvance}');
+        return;
+      }
+      
+      // Ajouter l'avance à l'historique du salaire
+      final salaireAvecAvance = salaireCorrespondant.ajouterAvanceAHistorique(
+        dateAvance: avance.dateAvance,
+        montantAvance: avance.montant,
+        referenceAvance: avance.reference,
+        agentAvance: avance.accordePar,
+        notesAvance: avance.motif,
+      );
+      
+      // Sauvegarder le salaire mis à jour
+      await SalaireService.instance.updateSalaire(salaireAvecAvance);
+      
+      debugPrint('✅ Avance ${avance.reference} ajoutée à l\'historique du salaire ${salaireCorrespondant.reference}');
+    } catch (e) {
+      debugPrint('⚠️ Erreur lors de l\'ajout de l\'avance à l\'historique: $e');
+      // Ne pas faire échouer la création de l'avance pour autant
+    }
+  }
+  
+  /// Ajouter un remboursement d'avance à l'historique des paiements
+  Future<void> _ajouterRemboursementAHistoriqueSalaire({
+    required int personnelId,
+    required int mois,
+    required int annee,
+    required double montantRembourse,
+    required String referenceAvance,
+  }) async {
+    try {
+      // Charger les salaires pour trouver celui de la période correspondante
+      await SalaireService.instance.loadSalaires(forceRefresh: true);
+      
+      // Chercher le salaire de la période du remboursement
+      SalaireModel? salaireCorrespondant;
+      try {
+        salaireCorrespondant = SalaireService.instance.salaires.firstWhere(
+          (s) => s.personnelId == personnelId && 
+                 s.mois == mois && 
+                 s.annee == annee,
+        );
+      } catch (e) {
+        // Pas de salaire trouvé pour cette période, on peut ignorer
+        debugPrint('ℹ️ Aucun salaire trouvé pour la période $mois/$annee');
+        return;
+      }
+      
+      // Ajouter le remboursement à l'historique du salaire
+      final salaireAvecRemboursement = salaireCorrespondant.ajouterRemboursementAvanceAHistorique(
+        dateRemboursement: DateTime.now(),
+        montantRembourse: montantRembourse,
+        referenceAvance: referenceAvance,
+        notes: 'Remboursement automatique avance $referenceAvance',
+      );
+      
+      // Sauvegarder le salaire mis à jour
+      await SalaireService.instance.updateSalaire(salaireAvecRemboursement);
+      
+      debugPrint('✅ Remboursement avance $referenceAvance ajouté à l\'historique du salaire ${salaireCorrespondant.reference}');
+    } catch (e) {
+      debugPrint('⚠️ Erreur lors de l\'ajout du remboursement à l\'historique: $e');
+      // Ne pas faire échouer le remboursement pour autant
+    }
   }
 
   /// Nettoyer le cache

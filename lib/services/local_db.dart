@@ -21,6 +21,7 @@ import '../models/cloture_virtuelle_model.dart';
 import '../models/depot_client_model.dart';
 import '../models/credit_virtuel_model.dart';
 import '../models/triangular_debt_settlement_model.dart';
+import '../models/multi_month_payment_model.dart';
 
 class LocalDB {
   static final LocalDB _instance = LocalDB._internal();
@@ -3113,5 +3114,160 @@ class LocalDB {
     final prefs = await database;
     await prefs.remove('triangular_settlement_$settlementId');
     debugPrint('🗑️ Règlement triangulaire supprimé: $settlementId');
+  }
+
+  // === CRUD PAIEMENTS MULTI-MOIS ===
+  
+  /// Sauvegarder un paiement multi-mois
+  Future<MultiMonthPaymentModel> saveMultiMonthPayment(MultiMonthPaymentModel payment) async {
+    final prefs = await database;
+    final paymentId = payment.id ?? await _generateSequentialId('multi_month_payment_');
+    final updatedPayment = payment.copyWith(
+      id: paymentId,
+      lastModifiedAt: DateTime.now(),
+    );
+    
+    final jsonData = updatedPayment.toJson();
+    final key = 'multi_month_payment_$paymentId';
+    
+    debugPrint('💾 Sauvegarde paiement multi-mois: $key');
+    debugPrint('📄 Données: ${jsonEncode(jsonData)}');
+    
+    await prefs.setString(key, jsonEncode(jsonData));
+    
+    // Vérifier que la sauvegarde a fonctionné
+    final saved = prefs.getString(key);
+    if (saved != null) {
+      debugPrint('✅ Paiement multi-mois sauvegardé avec succès dans SharedPreferences');
+    } else {
+      debugPrint('❌ Échec de la sauvegarde dans SharedPreferences');
+    }
+    
+    return updatedPayment;
+  }
+
+  /// Mettre à jour un paiement multi-mois
+  Future<void> updateMultiMonthPayment(MultiMonthPaymentModel payment) async {
+    if (payment.id == null) throw Exception('Payment ID is required for update');
+    
+    // Forcer la mise à jour en marquant lastModifiedAt
+    final updatedPayment = payment.copyWith(
+      lastModifiedAt: DateTime.now(),
+    );
+    
+    debugPrint('🔄 [LocalDB] Mise à jour paiement multi-mois ID: ${payment.id}, Référence: ${payment.reference}');
+    await saveMultiMonthPayment(updatedPayment);
+    
+    // Vérifier immédiatement que la mise à jour a été faite
+    final prefs = await database;
+    final saved = prefs.getString('multi_month_payment_${payment.id}');
+    if (saved != null) {
+      final savedData = jsonDecode(saved);
+      debugPrint('✅ [LocalDB] Paiement multi-mois mis à jour - Référence: ${savedData['reference']}');
+    }
+  }
+
+  /// Supprimer un paiement multi-mois
+  Future<void> deleteMultiMonthPayment(int paymentId) async {
+    final prefs = await database;
+    await prefs.remove('multi_month_payment_$paymentId');
+    debugPrint('🗑️ Paiement multi-mois supprimé: $paymentId');
+  }
+
+  /// Récupérer tous les paiements multi-mois avec filtres optionnels
+  Future<List<MultiMonthPaymentModel>> getAllMultiMonthPayments({
+    int? shopId,
+    DateTime? dateDebut,
+    DateTime? dateFin,
+    MultiMonthPaymentStatus? statut,
+    String? serviceType,
+  }) async {
+    final prefs = await database;
+    final payments = <MultiMonthPaymentModel>[];
+    
+    final keys = prefs.getKeys();
+    for (String key in keys) {
+      if (key.startsWith('multi_month_payment_')) {
+        try {
+          final paymentData = prefs.getString(key);
+          if (paymentData != null) {
+            final paymentJson = jsonDecode(paymentData);
+            
+            // Vérifier que les champs obligatoires sont présents
+            if (paymentJson['id'] != null && 
+                paymentJson['reference'] != null) {
+              final payment = MultiMonthPaymentModel.fromJson(paymentJson);
+              
+              // Appliquer les filtres
+              bool includePayment = true;
+              
+              if (shopId != null && payment.shopId != shopId) {
+                includePayment = false;
+              }
+              
+              if (statut != null && payment.statut != statut) {
+                includePayment = false;
+              }
+              
+              if (serviceType != null && payment.serviceType != serviceType) {
+                includePayment = false;
+              }
+              
+              if (dateDebut != null && payment.dateCreation.isBefore(dateDebut)) {
+                includePayment = false;
+              }
+              
+              if (dateFin != null && payment.dateCreation.isAfter(dateFin)) {
+                includePayment = false;
+              }
+              
+              if (includePayment) {
+                payments.add(payment);
+              }
+            } else {
+              // Supprimer les données corrompues
+              await prefs.remove(key);
+            }
+          }
+        } catch (e) {
+          // En cas d'erreur de parsing, supprimer la donnée corrompue
+          await prefs.remove(key);
+          debugPrint('⚠️ Erreur parsing paiement multi-mois $key: $e');
+        }
+      }
+    }
+    
+    // Trier par date de création (plus récent en premier)
+    payments.sort((a, b) => b.dateCreation.compareTo(a.dateCreation));
+    
+    return payments;
+  }
+
+  /// Récupérer un paiement multi-mois par ID
+  Future<MultiMonthPaymentModel?> getMultiMonthPaymentById(int paymentId) async {
+    final prefs = await database;
+    final paymentData = prefs.getString('multi_month_payment_$paymentId');
+    
+    if (paymentData != null) {
+      try {
+        final paymentJson = jsonDecode(paymentData);
+        return MultiMonthPaymentModel.fromJson(paymentJson);
+      } catch (e) {
+        debugPrint('⚠️ Erreur parsing paiement multi-mois ID $paymentId: $e');
+        return null;
+      }
+    }
+    
+    return null;
+  }
+
+  /// Récupérer un paiement multi-mois par référence
+  Future<MultiMonthPaymentModel?> getMultiMonthPaymentByReference(String reference) async {
+    final allPayments = await getAllMultiMonthPayments();
+    try {
+      return allPayments.firstWhere((payment) => payment.reference == reference);
+    } catch (e) {
+      return null;
+    }
   }
 }

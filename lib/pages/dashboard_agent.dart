@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/agent_model.dart';
+import '../services/agent_auth_service.dart';
 import '../services/auth_service.dart';
 import '../services/sync_service.dart';
 import '../services/operation_service.dart';
@@ -22,8 +24,32 @@ import '../widgets/agent_deletion_validation_widget.dart';
 import '../widgets/agent_triangular_debt_settlement_widget.dart';
 import '../widgets/reports/dettes_intershop_report.dart';
 import '../widgets/cloture_required_dialog.dart';
-import '../services/deletion_service.dart';
+
 import '../services/connectivity_service.dart';
+
+class TrianglePainter extends CustomPainter {
+  final Color color;
+
+  const TrianglePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final path = Path();
+    path.moveTo(0, 0);
+    path.lineTo(size.width, size.height / 2);
+    path.lineTo(0, size.height);
+    path.close();
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
 
 class DashboardAgentPage extends StatefulWidget {
   const DashboardAgentPage({super.key});
@@ -48,6 +74,33 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
     'Regul.', // Règlement Triangulaire
     'Suppressions',
   ];
+
+  // Index constants for easier maintenance
+  static const int MENU_INDEX_OPERATIONS = 0;
+  static const int MENU_INDEX_VALIDATIONS = 1;
+  static const int MENU_INDEX_REPORTS = 2;
+  static const int MENU_INDEX_FLOT = 3;
+  static const int MENU_INDEX_FRAIS = 4;
+  static const int MENU_INDEX_VIRTUEL = 5;
+  static const int MENU_INDEX_DETTES_INTERSHOP = 6;
+  static const int MENU_INDEX_TRIANGULAR = 7;
+  static const int MENU_INDEX_SUPPRESSIONS = 8;
+
+  // Liste des menus visibles (filtrée selon l'agent)
+  List<int> _getVisibleMenuIndices(AgentModel? currentAgent) {
+    final visibleMenus = <int>[];
+    
+    // Tous les menus sont visibles par défaut
+    for (int i = 0; i < _menuItems.length; i++) {
+      // Masquer le menu triangulaire si l'agent n'a pas de shopId
+      if (i == MENU_INDEX_TRIANGULAR && (currentAgent?.shopId == null)) {
+        continue; // Skip this menu
+      }
+      visibleMenus.add(i);
+    }
+    
+    return visibleMenus;
+  }
 
   final List<IconData> _menuIcons = [
     Icons.account_balance_wallet,
@@ -278,20 +331,6 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
     return false; // Accès refusé
   }
   
-  // Handler de sélection de menu avec vérification de clôture
-  Future<void> _selectMenuItem(int index) async {
-    final canAccess = await _verifierAccesMenu(index);
-    if (canAccess && mounted) {
-      // Si c'est le menu Rapports (index 2), synchroniser d'abord si connecté
-      if (index == 2) {
-        await _syncBeforeCloture();
-      }
-      setState(() {
-        _selectedIndex = index;
-      });
-    }
-  }
-
   /// Synchroniser les données avant d'accéder aux rapports/clôtures
   /// Seulement si la connexion internet est disponible
   Future<void> _syncBeforeCloture() async {
@@ -536,6 +575,19 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      // Triangle indicateur de sélection
+                      if (true)
+                        Positioned(
+                          right: 0,
+                          top: 0,
+                          bottom: 0,
+                          child: CustomPaint(
+                            size: const Size(10, 20),
+                            painter: const TrianglePainter(
+                              color: Color(0xFF38a169),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -623,60 +675,143 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
             ),
           ),
           Expanded(
-            child: ListView.builder(
-              itemCount: _menuItems.length,
-              itemBuilder: (context, index) {
-                return ListTile(
-                    leading: Icon(_menuIcons[index]),
-                    title: Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            _menuItems[index],
-                            style: TextStyle(fontSize: isMobile ? 13 : 14),
-                            overflow: TextOverflow.ellipsis,
-                          ),
+            child: Consumer<AgentAuthService>(
+              builder: (context, agentAuthService, child) {
+                final visibleMenuIndices = _getVisibleMenuIndices(agentAuthService.currentAgent);
+                
+                return ListView.builder(
+                  itemCount: visibleMenuIndices.length,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  itemBuilder: (context, index) {
+                    final actualIndex = visibleMenuIndices[index];
+                    final isSelected = _selectedIndex == actualIndex;
+                    
+                    return Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isSelected ? const Color(0xFF48bb78).withOpacity(0.1) : null,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: ListTile(
+                        leading: Icon(
+                          _menuIcons[actualIndex],
+                          color: isSelected ? const Color(0xFF38a169) : Colors.grey[600],
                         ),
-                        if (index == 1) // Index 1 = Validations
-                          _buildValidationBadge(),
-                        // Indicateur de clôture requise pour menus bloqués
-                        if ((index == 0 || index == 1 || index == 3) && 
-                            _joursNonClotures != null && 
-                            _joursNonClotures!.isNotEmpty)
-                          Container(
-                            margin: const EdgeInsets.only(left: 4),
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.red,
-                              borderRadius: BorderRadius.circular(10),
+                        title: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                _menuItems[actualIndex],
+                                style: TextStyle(
+                                  color: isSelected ? const Color(0xFF38a169) : Colors.grey[800],
+                                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                            child: const Icon(Icons.lock, color: Colors.white, size: 12),
-                          ),
-                      ],
-                    ),
-                    selected: _selectedIndex == index,
-                    selectedTileColor: Colors.green[50],
-                    onTap: () async {
-                      final canAccess = await _verifierAccesMenu(index);
-                      if (canAccess && mounted) {
-                        Navigator.pop(context);
-                        // Si c'est le menu Rapports (index 2), synchroniser d'abord
-                        if (index == 2) {
-                          await _syncBeforeCloture();
-                        }
-                        if (mounted) {
-                          setState(() {
-                            _selectedIndex = index;
-                          });
-                        }
-                      }
-                    },
-                  );
+                            if (actualIndex == 1) // Index 1 = Validations
+                              _buildValidationBadge(),
+                            // Indicateur de clôture requise pour menus bloqués
+                            if ((actualIndex == 0 || actualIndex == 1 || actualIndex == 3) && 
+                                _joursNonClotures != null && 
+                                _joursNonClotures!.isNotEmpty)
+                              Container(
+                                margin: const EdgeInsets.only(left: 4),
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.red,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(Icons.lock, color: Colors.white, size: 12),
+                              ),
+                          ],
+                        ),
+                        onTap: () async {
+                          final canAccess = await _verifierAccesMenu(actualIndex);
+                          if (canAccess && mounted) {
+                            // Si c'est le menu Rapports (index 2), synchroniser d'abord
+                            if (actualIndex == 2) {
+                              await _syncBeforeCloture();
+                            }
+                            if (mounted) {
+                              setState(() {
+                                _selectedIndex = actualIndex;
+                              });
+                            }
+                          }
+                        },
+                      ),
+                    );
+                  },
+                );
               },
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildBottomNavigation() {
+    final bottomNavItems = [
+      {'index': 0, 'icon': _menuIcons[0], 'label': _menuItems[0]}, // Opérations
+      {'index': 1, 'icon': _menuIcons[1], 'label': _menuItems[1]}, // Validations
+      {'index': 2, 'icon': _menuIcons[2], 'label': _menuItems[2]}, // Rapports
+      {'index': 3, 'icon': _menuIcons[3], 'label': _menuItems[3]}, // FLOT
+    ];
+
+    return BottomNavigationBar(
+      currentIndex: (() {
+        final index = bottomNavItems.indexWhere((item) => item['index'] == _selectedIndex);
+        if (index == -1) {
+          debugPrint('⚠️ [BottomNav] _selectedIndex $_selectedIndex non trouvé dans bottomNavItems, defaulting to 0');
+          return 0;
+        }
+        return index;
+      })(),
+      onTap: (bottomIndex) async {
+        final targetIndex = bottomNavItems[bottomIndex]['index'] as int;
+        final canAccess = await _verifierAccesMenu(targetIndex);
+        if (canAccess && mounted) {
+          if (targetIndex == 2) {
+            await _syncBeforeCloture();
+          }
+          if (mounted) {
+            setState(() {
+              _selectedIndex = targetIndex;
+            });
+          }
+        }
+      },
+      type: BottomNavigationBarType.fixed,
+      selectedItemColor: const Color(0xFF48bb78),
+      unselectedItemColor: Colors.grey,
+      selectedFontSize: 12,
+      unselectedFontSize: 11,
+      items: bottomNavItems.map((item) {
+        final index = item['index'] as int;
+        return BottomNavigationBarItem(
+          icon: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Icon(item['icon'] as IconData),
+              if (index == 1) // Index 1 = Validations
+                Positioned(
+                  right: -8,
+                  top: -4,
+                  child: _buildValidationBadge(),
+                ),
+              if (index == 3) // Index 3 = FLOT
+                Positioned(
+                  right: -8,
+                  top: -4,
+                  child: _buildFlotBadge(),
+                ),
+            ],
+          ),
+          label: item['label'] as String,
+        );
+      }).toList(),
     );
   }
 
@@ -731,138 +866,79 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
             ),
           ),
           Expanded(
-            child: ListView.builder(
-              itemCount: _menuItems.length,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              itemBuilder: (context, index) {
-                final isSelected = _selectedIndex == index;
-                return Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isSelected ? const Color(0xFF48bb78).withOpacity(0.1) : null,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: ListTile(
-                    leading: Icon(
-                      _menuIcons[index],
-                      color: isSelected ? const Color(0xFF38a169) : Colors.grey[600],
-                    ),
-                    title: Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            _menuItems[index],
-                            style: TextStyle(
-                              color: isSelected ? const Color(0xFF38a169) : Colors.grey[800],
-                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
+            child: Consumer<AgentAuthService>(
+              builder: (context, agentAuthService, child) {
+                final visibleMenuIndices = _getVisibleMenuIndices(agentAuthService.currentAgent);
+                
+                return ListView.builder(
+                  itemCount: visibleMenuIndices.length,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  itemBuilder: (context, index) {
+                    final actualIndex = visibleMenuIndices[index];
+                    final isSelected = _selectedIndex == actualIndex;
+                    return Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isSelected ? const Color(0xFF48bb78).withOpacity(0.1) : null,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: ListTile(
+                        leading: Icon(
+                          _menuIcons[actualIndex],
+                          color: isSelected ? const Color(0xFF38a169) : Colors.grey[600],
                         ),
-                        if (index == 1) // Index 1 = Validations
-                          _buildValidationBadge(),
-                        // Indicateur de clôture requise pour menus bloqués
-                        if ((index == 0 || index == 1 || index == 3) && 
-                            _joursNonClotures != null && 
-                            _joursNonClotures!.isNotEmpty)
-                          Container(
-                            margin: const EdgeInsets.only(left: 4),
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.red,
-                              borderRadius: BorderRadius.circular(10),
+                        title: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                _menuItems[actualIndex],
+                                style: TextStyle(
+                                  color: isSelected ? const Color(0xFF38a169) : Colors.grey[800],
+                                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                            child: const Icon(Icons.lock, color: Colors.white, size: 12),
-                          ),
-                      ],
-                    ),
-                    onTap: () async {
-                      final canAccess = await _verifierAccesMenu(index);
-                      if (canAccess && mounted) {
-                        // Si c'est le menu Rapports (index 2), synchroniser d'abord
-                        if (index == 2) {
-                          await _syncBeforeCloture();
-                        }
-                        if (mounted) {
-                          setState(() {
-                            _selectedIndex = index;
-                          });
-                        }
-                      }
-                    },
-                  ),
+                            if (actualIndex == 1) // Index 1 = Validations
+                              _buildValidationBadge(),
+                            // Indicateur de clôture requise pour menus bloqués
+                            if ((actualIndex == 0 || actualIndex == 1 || actualIndex == 3) && 
+                                _joursNonClotures != null && 
+                                _joursNonClotures!.isNotEmpty)
+                              Container(
+                                margin: const EdgeInsets.only(left: 4),
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.red,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(Icons.lock, color: Colors.white, size: 12),
+                              ),
+                          ],
+                        ),
+                        onTap: () async {
+                          final canAccess = await _verifierAccesMenu(actualIndex);
+                          if (canAccess && mounted) {
+                            // Si c'est le menu Rapports (index 2), synchroniser d'abord
+                            if (actualIndex == 2) {
+                              await _syncBeforeCloture();
+                            }
+                            if (mounted) {
+                              setState(() {
+                                _selectedIndex = actualIndex;
+                              });
+                            }
+                          }
+                        },
+                      ),
+                    );
+                  },
                 );
               },
             ),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildBottomNavigation() {
-    // Bottom navigation avec seulement 4 items: Operations, Validation, Rapports, FLOT
-    final bottomNavItems = [
-      {'index': 0, 'icon': _menuIcons[0], 'label': _menuItems[0]}, // Opérations
-      {'index': 1, 'icon': _menuIcons[1], 'label': _menuItems[1]}, // Validations
-      {'index': 2, 'icon': _menuIcons[2], 'label': _menuItems[2]}, // Rapports
-      {'index': 3, 'icon': _menuIcons[3], 'label': _menuItems[3]}, // FLOT
-    ];
-
-    return BottomNavigationBar(
-      currentIndex: (() {
-        final index = bottomNavItems.indexWhere((item) => item['index'] == _selectedIndex);
-        // Si _selectedIndex n'est pas dans bottomNavItems, retourner 0 (Opérations)
-        if (index == -1) {
-          debugPrint('⚠️ [BottomNav] _selectedIndex $_selectedIndex non trouvé dans bottomNavItems, defaulting to 0');
-          return 0;
-        }
-        return index;
-      })(),
-      onTap: (bottomIndex) async {
-        final targetIndex = bottomNavItems[bottomIndex]['index'] as int;
-        final canAccess = await _verifierAccesMenu(targetIndex);
-        if (canAccess && mounted) {
-          // Si c'est le menu Rapports (index 2), synchroniser d'abord
-          if (targetIndex == 2) {
-            await _syncBeforeCloture();
-          }
-          if (mounted) {
-            setState(() {
-              _selectedIndex = targetIndex;
-            });
-          }
-        }
-      },
-      type: BottomNavigationBarType.fixed,
-      selectedItemColor: const Color(0xFF48bb78),
-      unselectedItemColor: Colors.grey,
-      selectedFontSize: 12,
-      unselectedFontSize: 11,
-      items: bottomNavItems.map((item) {
-        final index = item['index'] as int;
-        return BottomNavigationBarItem(
-          icon: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Icon(item['icon'] as IconData),
-              if (index == 1) // Index 1 = Validations
-                Positioned(
-                  right: -8,
-                  top: -4,
-                  child: _buildValidationBadge(),
-                ),
-              if (index == 3) // Index 3 = FLOT
-                Positioned(
-                  right: -8,
-                  top: -4,
-                  child: _buildFlotBadge(),
-                ),
-            ],
-          ),
-          label: item['label'] as String,
-        );
-      }).toList(),
     );
   }
 
@@ -934,9 +1010,6 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
 Widget _buildMainContent() {
   final size = MediaQuery.of(context).size;
   final isMobile = size.width <= 768;
-
-  // Widgets qui gèrent leur propre layout (ne pas les mettre dans SingleChildScrollView)
-  final widgetsWithOwnLayout = [0, 1, 2, 3, 4, 5, 6, 7, 8]; // Opérations, Validations, Rapports, FLOT, Frais, VIRTUEL, Dettes, Règl. Triangulaire, Suppressions
 
   Widget content = switch (_selectedIndex) {
     0 => _buildOperationsContent(),   // Opérations

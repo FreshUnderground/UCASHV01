@@ -35,6 +35,7 @@ class _AgentReportsWidgetState extends State<AgentReportsWidget> with SingleTick
     {'icon': Icons.account_balance, 'text': 'Caisse'},
     {'icon': Icons.lock, 'text': 'Clôtures'},
     {'icon': Icons.percent, 'text': 'Frais'},
+    {'icon': Icons.compare_arrows, 'text': 'Dettes Bil.'},
   ];
 
   @override

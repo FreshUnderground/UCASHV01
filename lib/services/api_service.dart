@@ -222,24 +222,29 @@ class ApiService {
   // Vérification de la connectivité serveur
   static Future<bool> checkServerConnectivity() async {
     try {
-      // Test simple : essayer de contacter localhost
+      // Utiliser l'URL de l'API configurée dans app_config.dart
+      final apiBaseUrl = await AppConfig.getApiBaseUrl();
+      
+      // Extraire l'URL de base (protocole + domaine) sans le path
+      // Ex: https://mahanaimeservice.investee-group.com/server/api -> https://mahanaimeservice.investee-group.com
+      final uri = Uri.parse(apiBaseUrl);
+      final baseServerUrl = '${uri.scheme}://${uri.host}';
+      
+      debugPrint('📡 Test de connectivité: $baseServerUrl');
+      
       final response = await http.get(
-        Uri.parse('http://localhost/'),
+        Uri.parse(baseServerUrl),
         headers: _getHeaders(),
-      ).timeout(const Duration(seconds: 2));
+      ).timeout(const Duration(seconds: 5));
 
-      // Si localhost répond (même 404), le serveur web est accessible
+      // Si le serveur répond (même 404), il est accessible
       final isAccessible = response.statusCode >= 200 && response.statusCode < 500;
-      debugPrint('📡 Test localhost: ${isAccessible ? "✅ OK" : "❌ KO"} (${response.statusCode})');
+      debugPrint('📡 Serveur API ${isAccessible ? "✅ ACCESSIBLE" : "❌ INACCESSIBLE"} ($baseServerUrl - ${response.statusCode})');
       return isAccessible;
     } catch (e) {
       final errorStr = e.toString();
-      debugPrint('📡 Localhost non accessible: $errorStr');
-      
-      // Forcer le retour true si on est en développement
-      // Car MySQL peut être accessible même si localhost ne répond pas via HTTP
-      debugPrint('🔧 Mode développement: Considérer MySQL comme accessible');
-      return true; // Forcer true pour le développement
+      debugPrint('📡 Serveur API non accessible: $errorStr');
+      return false; // Retourner false si le serveur n'est pas accessible
     }
   }
 

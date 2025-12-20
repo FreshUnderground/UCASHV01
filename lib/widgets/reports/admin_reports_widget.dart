@@ -27,7 +27,7 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
   int? _selectedShopId;
 
   List<Tab> _buildTabs(BuildContext context, bool isMobile) {
-    final l10n = AppLocalizations.of(context)!;
+    final l10n = AppLocalizations.of(context);
     
     if (isMobile) {
       return [
@@ -37,6 +37,7 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
         Tab(icon: const Icon(Icons.list_alt), text: l10n.closures),
         Tab(icon: const Icon(Icons.monetization_on), text: l10n.commissionsReport),
         Tab(icon: const Icon(Icons.local_shipping), text: l10n.flot),
+        Tab(icon: const Icon(Icons.compare_arrows), text: 'Dettes Bil.'),
       ];
     } else {
       return [
@@ -46,6 +47,7 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
         Tab(icon: const Icon(Icons.list_alt), text: l10n.closureHistory),
         Tab(icon: const Icon(Icons.monetization_on), text: l10n.commissionsReport),
         Tab(icon: const Icon(Icons.local_shipping), text: l10n.flotMovements),
+        Tab(icon: const Icon(Icons.compare_arrows), text: 'Dettes Bilatérales'),
       ];
     }
   }
@@ -77,7 +79,7 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
   Widget build(BuildContext context) {
     final isMobile = context.isSmallScreen;
     final isTablet = context.screenType == ScreenType.tablet;
-    final l10n = AppLocalizations.of(context)!;
+    final l10n = AppLocalizations.of(context);
     
     // Return loading indicator if TabController not initialized
     if (_tabController == null) {
@@ -377,7 +379,7 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.store, color: Colors.white, size: 12),
+                const Icon(Icons.store, color: Colors.white, size: 12),
                 const SizedBox(width: 4),
                 Text(
                   _selectedShopId == null ? l10n.allShops : l10n.shopSelected,

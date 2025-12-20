@@ -27,11 +27,11 @@ Future<void> main() async {
   print('\n🔍 Test 2: HTTP server connectivity');
   final urlsToTest = [
     'http://localhost',
-    'https://mahanaim.investee-group.com',
-    'https://mahanaim.investee-group.com/server',
-    'https://mahanaim.investee-group.com/server/api',
-    'https://mahanaim.investee-group.com/server/api/sync',
-    'https://mahanaim.investee-group.com/server/api/sync/ping.php',
+    'https://mahanaimeservice.investee-group.com',
+    'https://mahanaimeservice.investee-group.com/server',
+    'https://mahanaimeservice.investee-group.com/server/api',
+    'https://mahanaimeservice.investee-group.com/server/api/sync',
+    'https://mahanaimeservice.investee-group.com/server/api/sync/ping.php',
   ];
   
   for (String url in urlsToTest) {
@@ -47,8 +47,8 @@ Future<void> main() async {
   // Test 3: Specific sync endpoints
   print('\n🔍 Test 3: Specific sync endpoints');
   final syncEndpoints = [
-    'https://mahanaim.investee-group.com/server/api/sync/ping.php',
-    'https://mahanaim.investee-group.com/server/api/sync/operations/changes.php?limit=1',
+    'https://mahanaimeservice.investee-group.com/server/api/sync/ping.php',
+    'https://mahanaimeservice.investee-group.com/server/api/sync/operations/changes.php?limit=1',
   ];
   
   for (String url in syncEndpoints) {
@@ -70,7 +70,7 @@ Future<void> main() async {
   
   // Test 4: POST request to upload endpoint
   print('\n🔍 Test 4: POST request to upload endpoint');
-  final uploadUrl = 'https://mahanaim.investee-group.com/server/api/sync/operations/upload.php';
+  final uploadUrl = 'https://mahanaimeservice.investee-group.com/server/api/sync/operations/upload.php';
   try {
     print('📡 Testing POST to $uploadUrl...');
     final response = await http.post(

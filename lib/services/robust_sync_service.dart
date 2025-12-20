@@ -154,7 +154,7 @@ class RobustSyncService {
     final startTime = DateTime.now();
     
     debugPrint('🚀 ${isInitial ? "[INITIAL]" : ""} FAST SYNC - Début');
-    debugPrint('   Tables critiques: operations, flots, clients, comptes_speciaux, sims, virtual_transactions, audit_log, reconciliations');
+    debugPrint('   Tables critiques: operations, flots, clients, comptes_speciaux, sims, virtual_transactions, audit_log, reconciliations, triangular_debt_settlements');
     
     int successCount = 0;
     int errorCount = 0;
@@ -299,6 +299,19 @@ class RobustSyncService {
       } else {
         errorCount++;
         errors.add('reconciliations');
+      }
+      
+      // ========== ÉTAPE 10: SYNC RÈGLEMENTS TRIANGULAIRES DE DETTES ==========
+      if (await _syncWithRetry('triangular_debt_settlements', () async {
+        debugPrint('  🔺 Upload RÈGLEMENTS TRIANGULAIRES...');
+        await _syncService.uploadTableData('triangular_debt_settlements', 'auto_fast_sync', 'admin');
+        debugPrint('  📥 Download RÈGLEMENTS TRIANGULAIRES...');
+        await _syncService.downloadTableData('triangular_debt_settlements', 'auto_fast_sync', 'admin');
+      })) {
+        successCount++;
+      } else {
+        errorCount++;
+        errors.add('triangular_debt_settlements');
       }
       
       _lastFastSync = DateTime.now();
@@ -464,6 +477,24 @@ class RobustSyncService {
     _failureCount = 0;
     _lastFailureTime = null;
     debugPrint('✅ Circuit breaker RESET after successful operation');
+  }
+  
+  /// Manually reset circuit breaker (public method for UI)
+  void resetCircuitBreaker() {
+    _resetCircuitBreaker();
+    debugPrint('🔧 Circuit breaker manually RESET by user');
+  }
+  
+  /// Get circuit breaker state (public method for UI)
+  Map<String, dynamic> getCircuitBreakerState() {
+    return {
+      'isOpen': _circuitBreakerOpen,
+      'failureCount': _failureCount,
+      'maxThreshold': _maxFailureThreshold,
+      'lastFailureTime': _lastFailureTime?.toIso8601String(),
+      'timeoutMinutes': _circuitBreakerTimeout.inMinutes,
+      'canRetry': !_isCircuitBreakerOpen(),
+    };
   }
   
   /// Records a failure and opens circuit breaker if threshold exceeded
@@ -640,6 +671,13 @@ class RobustSyncService {
     debugPrint('🔄 Synchronisation manuelle déclenchée');
     await _performSlowSync(isInitial: true);
     await _performFastSync(isInitial: true);
+  }
+  
+  /// Force synchronisation even if circuit breaker is open (resets it first)
+  Future<void> forceSyncNow() async {
+    debugPrint('⚡ FORCE synchronisation - resetting circuit breaker first');
+    resetCircuitBreaker();
+    await syncNow();
   }
 
   /// Active/désactive la synchronisation

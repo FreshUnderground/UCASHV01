@@ -15,7 +15,7 @@ import '../services/rapport_cloture_service.dart';
 import '../models/operation_model.dart';
 import '../models/shop_model.dart';
 import '../models/agent_model.dart';
-import '../services/printer_service.dart';
+
 import '../utils/auto_print_helper.dart';
 
 import 'transfer_destination_dialog.dart';
@@ -39,44 +39,6 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
   bool _showFiltersAndStats = false; // Contrôle l'affichage des stats et filtres (masqué par défaut)
   String _categoryFilter = 'all'; // all, pending, my_transfers, my_withdrawals, my_served, my_deposits, my_flots
   // ❌ REMOVED: bool _includeFlots - FLOT operations now ONLY visible in 'my_flots' category
-
-  // Calculer les statistiques du shop (cash en caisse) DEPUIS DONNEES LOCALES MULTI-DEVISES
-  Map<String, dynamic> _getShopStats(ShopService shopService, int shopId) {
-    
-    // UTILISE LES DONNEES LOCALES (shops deja charges dans le service)
-    final currentShop = shopService.shops.firstWhere(
-      (shop) => shop.id == shopId,
-      orElse: () => ShopModel(designation: 'Inconnu', localisation: ''),
-    );
-
-    // CALCUL REEL: Capital total devise principale (USD)
-    final capitalTotalUSD = currentShop.capitalCash + currentShop.capitalAirtelMoney + 
-                           currentShop.capitalMPesa + currentShop.capitalOrangeMoney;
-    
-    // CALCUL REEL: Capital total devise secondaire (CDF ou UGX)
-    final capitalTotalDevise2 = (currentShop.capitalCashDevise2 ?? 0) + 
-                                (currentShop.capitalAirtelMoneyDevise2 ?? 0) + 
-                                (currentShop.capitalMPesaDevise2 ?? 0) + 
-                                (currentShop.capitalOrangeMoneyDevise2 ?? 0);
-
-    return {
-      // Devise principale (USD)
-      'cashDisponible': currentShop.capitalCash,
-      'airtelMoney': currentShop.capitalAirtelMoney,
-      'mPesa': currentShop.capitalMPesa,
-      'orangeMoney': currentShop.capitalOrangeMoney,
-      'capitalTotal': capitalTotalUSD,
-      // Devise secondaire (CDF ou UGX)
-      'devisePrincipale': currentShop.devisePrincipale,
-      'deviseSecondaire': currentShop.deviseSecondaire,
-      'cashDisponibleDevise2': currentShop.capitalCashDevise2 ?? 0,
-      'airtelMoneyDevise2': currentShop.capitalAirtelMoneyDevise2 ?? 0,
-      'mPesaDevise2': currentShop.capitalMPesaDevise2 ?? 0,
-      'orangeMoneyDevise2': currentShop.capitalOrangeMoneyDevise2 ?? 0,
-      'capitalTotalDevise2': capitalTotalDevise2,
-      'hasDeviseSecondaire': currentShop.hasDeviseSecondaire,
-    };
-  }
 
   @override
   void initState() {
@@ -908,138 +870,6 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
   //   );
   // }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
-    final size = MediaQuery.of(context).size;
-    final isMobile = size.width <= 768;
-    final isSmallMobile = size.width < 600;
-    
-    return Container(
-      padding: EdgeInsets.all(isMobile ? 6 : 12),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [color.withOpacity(0.1), color.withOpacity(0.05)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(isMobile ? 10 : 12),
-        border: Border.all(color: color.withOpacity(0.3), width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.1),
-            blurRadius: isMobile ? 4 : 8,
-            offset: Offset(0, isMobile ? 1 : 2),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, color: color, size: isMobile ? 20 : 28),
-          SizedBox(height: isMobile ? 3 : 6),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              value,
-              style: TextStyle(
-                fontSize: isSmallMobile ? 13 : (isMobile ? 14 : 18),
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-              maxLines: 1,
-            ),
-          ),
-          SizedBox(height: isMobile ? 2 : 3),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: isSmallMobile ? 9 : (isMobile ? 10 : 11),
-              color: Colors.grey[700],
-              fontWeight: FontWeight.w500,
-            ),
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Card pour affichage multi-devises
-  Widget _buildMultiDeviseCard(String title, double montantUSD, double montantCDF, IconData icon, Color color) {
-    final size = MediaQuery.of(context).size;
-    final isMobile = size.width <= 768;
-    final isSmallMobile = size.width < 600;
-    
-    return Container(
-      padding: EdgeInsets.all(isMobile ? 6 : 12),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [color.withOpacity(0.1), color.withOpacity(0.05)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(isMobile ? 10 : 12),
-        border: Border.all(color: color.withOpacity(0.3), width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.1),
-            blurRadius: isMobile ? 4 : 8,
-            offset: Offset(0, isMobile ? 1 : 2),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, color: color, size: isMobile ? 20 : 28),
-          SizedBox(height: isMobile ? 2 : 4),
-          // USD
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              '${montantUSD.toStringAsFixed(0)} \$',
-              style: TextStyle(
-                fontSize: isSmallMobile ? 12 : (isMobile ? 13 : 16),
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-              maxLines: 1,
-            ),
-          ),
-          // CDF
-          if (montantCDF > 0)
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                '${montantCDF.toStringAsFixed(0)} FC',
-                style: TextStyle(
-                  fontSize: isSmallMobile ? 10 : (isMobile ? 11 : 14),
-                  fontWeight: FontWeight.w600,
-                  color: color.withOpacity(0.8),
-                ),
-                maxLines: 1,
-              ),
-            ),
-          SizedBox(height: isMobile ? 2 : 3),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: isSmallMobile ? 9 : (isMobile ? 10 : 11),
-              color: Colors.grey[700],
-              fontWeight: FontWeight.w500,
-            ),
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildOperationsList() {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 768;
@@ -1577,7 +1407,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
       
       // Utiliser AutoPrintHelper au lieu de la méthode native qui ne marche pas
       if (mounted) {
-        final success = await AutoPrintHelper.autoPrintWithDialog(
+await AutoPrintHelper.autoPrintWithDialog(
           context: context,
           operation: enrichedOperation,
           shop: shop,
@@ -1587,26 +1417,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
         
       }
     } catch (e) {
-
-    }
-  }
-  
-  String _getOperationTypeText(OperationType type) {
-    switch (type) {
-      case OperationType.depot:
-        return '📥 Dépôt';
-      case OperationType.retrait:
-        return '📤 Retrait';
-      case OperationType.transfertNational:
-        return '🔄 Transfert National';
-      case OperationType.transfertInternationalSortant:
-        return '🌍 Transfert International Sortant';
-      case OperationType.transfertInternationalEntrant:
-        return '🌍 Transfert International Entrant';
-      case OperationType.virement:
-        return '💸 Virement';
-      default:
-        return 'Opération';
+      // Silently ignore printing errors
     }
   }
 
@@ -1958,7 +1769,6 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
     // Get shop names for FLOT operations
     String? shopSourceName;
     String? shopDestinationName;
-    String? flotDirectionInfo;
     
     if (operation.type == OperationType.virement) {
       // For FLOT (virement), get both source and destination shops
@@ -1976,17 +1786,6 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
           orElse: () => ShopModel(designation: 'Shop #${operation.shopDestinationId}', localisation: ''),
         );
         shopDestinationName = destShop.designation;
-      }
-      
-      // Determine direction based on current shop
-      final currentUser = authService.currentUser;
-      final isCurrentShopSource = currentUser?.shopId != null && operation.shopSourceId == currentUser!.shopId;
-      final isCurrentShopDestination = currentUser?.shopId != null && operation.shopDestinationId == currentUser!.shopId;
-      
-      if (isCurrentShopSource && shopDestinationName != null) {
-        flotDirectionInfo = 'Envoyé vers: $shopDestinationName';
-      } else if (isCurrentShopDestination && shopSourceName != null) {
-        flotDirectionInfo = 'Reçu de: $shopSourceName';
       }
     }
     

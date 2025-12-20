@@ -16,15 +16,17 @@ class _CreateAgentDialogState extends State<CreateAgentDialog> {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _matriculeController = TextEditingController();
   ShopModel? _selectedShop;
   bool _obscurePassword = true;
 
   @override
   void initState() {
     super.initState();
-    // Charger les shops au démarrage
+    // Charger les shops au démarrage et générer un matricule automatiquement
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<ShopService>(context, listen: false).loadShops();
+      _generateMatricule();
     });
   }
 
@@ -32,6 +34,7 @@ class _CreateAgentDialogState extends State<CreateAgentDialog> {
   void dispose() {
     _usernameController.dispose();
     _passwordController.dispose();
+    _matriculeController.dispose();
     super.dispose();
   }
 
@@ -102,6 +105,36 @@ class _CreateAgentDialogState extends State<CreateAgentDialog> {
                         password: value ?? '',
                         shopId: _selectedShop?.id,
                       );
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Champ Matricule avec génération automatique
+                  TextFormField(
+                    controller: _matriculeController,
+                    decoration: InputDecoration(
+                      labelText: 'Matricule',
+                      hintText: 'Généré automatiquement ou saisissez manuellement',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      prefixIcon: const Icon(Icons.badge),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.refresh),
+                        tooltip: 'Générer un nouveau matricule',
+                        onPressed: () {
+                          _generateMatricule();
+                        },
+                      ),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Le matricule est requis';
+                      }
+                      if (value.trim().length < 3) {
+                        return 'Le matricule doit contenir au moins 3 caractères';
+                      }
+                      return null;
                     },
                   ),
                   const SizedBox(height: 16),
@@ -217,6 +250,15 @@ class _CreateAgentDialogState extends State<CreateAgentDialog> {
     );
   }
 
+  // Générer un matricule automatique
+  void _generateMatricule() {
+    final agentService = Provider.of<AgentService>(context, listen: false);
+    final matricule = agentService.generateMatricule(shopId: _selectedShop?.id);
+    setState(() {
+      _matriculeController.text = matricule;
+    });
+  }
+
   Future<void> _handleSubmit() async {
     final l10n = AppLocalizations.of(context)!;
     if (!_formKey.currentState!.validate()) return;
@@ -237,6 +279,7 @@ class _CreateAgentDialogState extends State<CreateAgentDialog> {
     final success = await agentService.createAgent(
       username: _usernameController.text.trim(),
       password: _passwordController.text.trim(),
+      matricule: _matriculeController.text.trim(),
       shopId: _selectedShop!.id!,
     );
 

@@ -652,7 +652,16 @@ class ReportService extends ChangeNotifier {
     // TRAITEMENT DES RÈGLEMENTS TRIANGULAIRES DE DETTES
     // Logique: Shop A doit à Shop C, Shop A paie Shop B pour le compte de Shop C
     // Impact: Dette de Shop A à Shop C diminue, Dette de Shop B à Shop C augmente
-    final triangularSettlements = await LocalDB.instance.getAllTriangularDebtSettlements();
+    
+    // IMPORTANT: Filtrer les règlements selon la période du rapport
+    final allTriangularSettlements = await LocalDB.instance.getAllTriangularDebtSettlements();
+    final triangularSettlements = allTriangularSettlements.where((settlement) {
+      // Si startDate est null, inclure tous les règlements jusqu'à endDate
+      // Si endDate est null, inclure tous les règlements depuis startDate
+      final afterStart = startDate == null || settlement.dateReglement.isAfter(startDate.subtract(const Duration(seconds: 1)));
+      final beforeEnd = endDate == null || settlement.dateReglement.isBefore(endDate.add(const Duration(days: 1)));
+      return afterStart && beforeEnd;
+    }).toList();
     
     for (final settlement in triangularSettlements) {
       final debtorId = settlement.shopDebtorId;
@@ -668,13 +677,18 @@ class ReportService extends ChangeNotifier {
         dettesParShop[debtorId] = (dettesParShop[debtorId] ?? 0) - amount; // Dette diminue
         dettesParShop[intermediaryId] = (dettesParShop[intermediaryId] ?? 0) + amount; // Dette augmente
       } else if (shopId == debtorId) {
-        // Pour le débiteur (Shop A):
-        // Sa dette envers le créancier diminue
-        creancesParShop[creditorId] = (creancesParShop[creditorId] ?? 0) - amount; // Moins d'argent qu'on doit
+        // Pour le débiteur (Shop A / KAMPALA):
+        // - Notre dette envers le créancier (DURBA) diminue
+        // - L'intermédiaire (DWEMBE) nous doit moins (a payé pour nous)
+        // IMPACT NET = 0 (échange dette contre créance)
+        dettesParShop[creditorId] = (dettesParShop[creditorId] ?? 0) - amount; // Notre dette envers DURBA diminue
+        creancesParShop[intermediaryId] = (creancesParShop[intermediaryId] ?? 0) - amount; // DWEMBE nous doit moins
       } else if (shopId == intermediaryId) {
-        // Pour l'intermédiaire (Shop B):
-        // Sa dette envers le créancier augmente
-        dettesParShop[creditorId] = (dettesParShop[creditorId] ?? 0) + amount; // Plus d'argent qu'on doit
+        // Pour l'intermédiaire (Shop B / DWEMBE):
+        // - Notre dette envers KAMPALA (débiteur) diminue
+        // - Notre dette envers DURBA (créancier) augmente
+        dettesParShop[debtorId] = (dettesParShop[debtorId] ?? 0) - amount; // Notre dette envers le débiteur diminue
+        dettesParShop[creditorId] = (dettesParShop[creditorId] ?? 0) + amount; // Notre dette envers le créancier augmente
       }
     }
     

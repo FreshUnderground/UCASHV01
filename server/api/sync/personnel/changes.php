@@ -31,17 +31,18 @@ try {
     $allChanges = [];
     
     // ========================================================================
-    // 1. PERSONNEL
+    // 1. PERSONNEL (incluant les suppressions)
     // ========================================================================
     $sql = "SELECT * FROM personnel WHERE 1=1";
     $params = [];
     
     if ($since && !empty($since) && $since !== '2020-01-01T00:00:00.000') {
-        $sql .= " AND last_modified_at > :since";
+        $sql .= " AND (last_modified_at > :since OR deleted_at > :since_deleted)";
         $params[':since'] = $since;
+        $params[':since_deleted'] = $since;
     }
     
-    $sql .= " ORDER BY last_modified_at ASC LIMIT :limit";
+    $sql .= " ORDER BY COALESCE(deleted_at, last_modified_at) ASC LIMIT :limit";
     $stmt = $pdo->prepare($sql);
     
     foreach ($params as $key => $value) {
@@ -53,11 +54,16 @@ try {
     $personnel = $stmt->fetchAll(PDO::FETCH_ASSOC);
     foreach ($personnel as $p) {
         $p['_table'] = 'personnel';
+        // Marquer les suppressions
+        if (!empty($p['deleted_at'])) {
+            $p['_deleted'] = true;
+            $p['_deleted_at'] = $p['deleted_at'];
+        }
         $allChanges[] = $p;
     }
     
     // ========================================================================
-    // 2. SALAIRES
+    // 2. SALAIRES (incluant les suppressions)
     // ========================================================================
     $sql = "SELECT s.*, p.nom AS personnel_nom, p.prenom AS personnel_prenom 
             FROM salaires s
@@ -66,11 +72,12 @@ try {
     $params = [];
     
     if ($since && !empty($since) && $since !== '2020-01-01T00:00:00.000') {
-        $sql .= " AND s.last_modified_at > :since";
+        $sql .= " AND (s.last_modified_at > :since OR s.deleted_at > :since_deleted)";
         $params[':since'] = $since;
+        $params[':since_deleted'] = $since;
     }
     
-    $sql .= " ORDER BY s.last_modified_at ASC LIMIT :limit";
+    $sql .= " ORDER BY COALESCE(s.deleted_at, s.last_modified_at) ASC LIMIT :limit";
     $stmt = $pdo->prepare($sql);
     
     foreach ($params as $key => $value) {
@@ -82,11 +89,16 @@ try {
     $salaires = $stmt->fetchAll(PDO::FETCH_ASSOC);
     foreach ($salaires as $s) {
         $s['_table'] = 'salaires';
+        // Marquer les suppressions
+        if (!empty($s['deleted_at'])) {
+            $s['_deleted'] = true;
+            $s['_deleted_at'] = $s['deleted_at'];
+        }
         $allChanges[] = $s;
     }
     
     // ========================================================================
-    // 3. AVANCES
+    // 3. AVANCES (incluant les suppressions)
     // ========================================================================
     $sql = "SELECT a.*, p.nom AS personnel_nom, p.prenom AS personnel_prenom 
             FROM avances_personnel a
@@ -95,11 +107,12 @@ try {
     $params = [];
     
     if ($since && !empty($since) && $since !== '2020-01-01T00:00:00.000') {
-        $sql .= " AND a.last_modified_at > :since";
+        $sql .= " AND (a.last_modified_at > :since OR a.deleted_at > :since_deleted)";
         $params[':since'] = $since;
+        $params[':since_deleted'] = $since;
     }
     
-    $sql .= " ORDER BY a.last_modified_at ASC LIMIT :limit";
+    $sql .= " ORDER BY COALESCE(a.deleted_at, a.last_modified_at) ASC LIMIT :limit";
     $stmt = $pdo->prepare($sql);
     
     foreach ($params as $key => $value) {
@@ -111,6 +124,11 @@ try {
     $avances = $stmt->fetchAll(PDO::FETCH_ASSOC);
     foreach ($avances as $a) {
         $a['_table'] = 'avances_personnel';
+        // Marquer les suppressions
+        if (!empty($a['deleted_at'])) {
+            $a['_deleted'] = true;
+            $a['_deleted_at'] = $a['deleted_at'];
+        }
         $allChanges[] = $a;
     }
     
@@ -170,7 +188,42 @@ try {
     }
     
     // ========================================================================
-    // 6. FICHES DE PAIE
+    // 6. RETENUES PERSONNEL (incluant les suppressions)
+    // ========================================================================
+    $sql = "SELECT r.*, p.nom AS personnel_nom, p.prenom AS personnel_prenom 
+            FROM retenues_personnel r
+            LEFT JOIN personnel p ON r.personnel_id = p.id
+            WHERE 1=1";
+    $params = [];
+    
+    if ($since && !empty($since) && $since !== '2020-01-01T00:00:00.000') {
+        $sql .= " AND (r.last_modified_at > :since OR r.deleted_at > :since_deleted)";
+        $params[':since'] = $since;
+        $params[':since_deleted'] = $since;
+    }
+    
+    $sql .= " ORDER BY COALESCE(r.deleted_at, r.last_modified_at) ASC LIMIT :limit";
+    $stmt = $pdo->prepare($sql);
+    
+    foreach ($params as $key => $value) {
+        $stmt->bindValue($key, $value);
+    }
+    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->execute();
+    
+    $retenues = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($retenues as $r) {
+        $r['_table'] = 'retenues_personnel';
+        // Marquer les suppressions
+        if (!empty($r['deleted_at'])) {
+            $r['_deleted'] = true;
+            $r['_deleted_at'] = $r['deleted_at'];
+        }
+        $allChanges[] = $r;
+    }
+    
+    // ========================================================================
+    // 7. FICHES DE PAIE
     // ========================================================================
     $sql = "SELECT * FROM fiches_paie WHERE 1=1";
     $params = [];
@@ -202,7 +255,7 @@ try {
     error_log("✅ Changements trouvés: " . count($allChanges) . " (Personnel: " . count($personnel) . 
               ", Salaires: " . count($salaires) . ", Avances: " . count($avances) . 
               ", Crédits: " . count($credits) . ", Remb: " . count($remboursements) . 
-              ", Fiches: " . count($fiches) . ")");
+              ", Retenues: " . count($retenues) . ", Fiches: " . count($fiches) . ")");
     
     echo json_encode([
         'success' => true,
@@ -214,6 +267,7 @@ try {
             'avances' => count($avances),
             'credits' => count($credits),
             'remboursements' => count($remboursements),
+            'retenues' => count($retenues),
             'fiches_paie' => count($fiches)
         ]
     ]);

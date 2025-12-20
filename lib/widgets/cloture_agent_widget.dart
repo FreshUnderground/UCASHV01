@@ -69,6 +69,7 @@ class _ClotureAgentWidgetState extends State<ClotureAgentWidget> {
     }
   }
 
+
   Future<void> _cloturerJournee() async {
     if (!mounted) return;
     

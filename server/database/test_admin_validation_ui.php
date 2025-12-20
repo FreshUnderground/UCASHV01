@@ -42,7 +42,7 @@ try {
     // Test the exact API endpoint that the app calls
     echo "🧪 Testing admin validation API endpoint...\n";
     
-    $apiUrl = 'https://mahanaim.investee-group.com/server/api/sync/deletion_requests/admin_validate.php';
+    $apiUrl = 'https://mahanaimeservice.investee-group.com/server/api/sync/deletion_requests/admin_validate.php';
     
     $postData = json_encode([
         'code_ops' => '251211225322019',

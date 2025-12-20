@@ -790,7 +790,18 @@ class RapportClotureService {
     // TRAITEMENT DES RÈGLEMENTS TRIANGULAIRES DE DETTES
     // Logique: Shop A doit à Shop C, Shop A paie Shop B pour le compte de Shop C
     // Impact: Dette de Shop A à Shop C diminue, Dette de Shop B à Shop C augmente
-    final triangularSettlements = await LocalDB.instance.getAllTriangularDebtSettlements();
+    
+    // IMPORTANT: Filtrer les règlements par date du rapport pour éviter les doublons
+    final dateDebut = DateTime(dateRapport.year, dateRapport.month, dateRapport.day);
+    final dateFin = dateDebut.add(const Duration(days: 1));
+    
+    final allTriangularSettlements = await LocalDB.instance.getAllTriangularDebtSettlements();
+    final triangularSettlements = allTriangularSettlements.where((settlement) {
+      return settlement.dateReglement.isAfter(dateDebut.subtract(const Duration(seconds: 1))) &&
+             settlement.dateReglement.isBefore(dateFin);
+    }).toList();
+    
+    debugPrint('🔺 Règlements triangulaires du jour: ${triangularSettlements.length}');
     
     for (final settlement in triangularSettlements) {
       final debtorId = settlement.shopDebtorId;
@@ -798,13 +809,37 @@ class RapportClotureService {
       final creditorId = settlement.shopCreditorId;
       final amount = settlement.montant;
       
-      // Appliquer les impacts seulement si le shop courant est impliqué
+      // Appliquer les impacts pour tous les rôles impliqués
+      // Configuration pour votre cas spécifique:
+      // - Shop A (debtor): KAMPALA (doit à DURBA)
+      // - Shop B (intermediary): DWEMBE (doit à KAMPALA) 
+      // - Shop C (creditor): DURBA (est dû par KAMPALA)
+      // - Montant: 20,000 USD (utiliser la dette de DWEMBE pour payer la dette de KAMPALA)
+      
       if (shopId == creditorId) {
-        // Pour le créancier (Shop C): 
-        // - La dette de Shop A diminue (moins d'argent qu'on nous doit)
-        // - La dette de Shop B augmente (plus d'argent qu'on nous doit)
-        soldesParShop[debtorId] = (soldesParShop[debtorId] ?? 0.0) - amount; // Dette diminue
-        soldesParShop[intermediaryId] = (soldesParShop[intermediaryId] ?? 0.0) + amount; // Dette augmente
+        // Pour le créancier (DURBA): 
+        // - La dette de KAMPALA envers DURBA diminue de 20,000
+        // - La dette de DWEMBE envers DURBA augmente de 20,000
+        soldesParShop[debtorId] = (soldesParShop[debtorId] ?? 0.0) - amount; // Dette de KAMPALA diminue
+        soldesParShop[intermediaryId] = (soldesParShop[intermediaryId] ?? 0.0) + amount; // Dette de DWEMBE augmente
+        debugPrint('   RÈGLEMENT TRIANGULAIRE (CRÉANCIER): Dette KAMPALA -$amount, Dette DWEMBE +$amount');
+      } else if (shopId == debtorId) {
+        // Pour le débiteur (KAMPALA):
+        // - Sa dette envers le créancier (DURBA) diminue de 49,000 → solde AUGMENTE
+        // - L'intermédiaire (DWEMBE) nous doit moins (a payé pour nous) → solde DIMINUE
+        // IMPACT NET = 0 (échange dette contre créance)
+        soldesParShop[creditorId] = (soldesParShop[creditorId] ?? 0.0) + amount; // Dette envers DURBA diminue
+        soldesParShop[intermediaryId] = (soldesParShop[intermediaryId] ?? 0.0) - amount; // DWEMBE nous doit moins
+        debugPrint('   RÈGLEMENT TRIANGULAIRE (DÉBITEUR): Dette envers ${shopsMap[creditorId]?.designation ?? creditorId} diminue (+$amount), Créance sur ${shopsMap[intermediaryId]?.designation ?? intermediaryId} diminue (-$amount)');
+      } else if (shopId == intermediaryId) {
+        // Pour l'intermédiaire (DWEMBE):
+        // - La dette envers KAMPALA diminue (DWEMBE devait à KAMPALA, maintenant moins)
+        // - La dette envers DURBA augmente (DWEMBE doit maintenant à DURBA)
+        // Logique: Pour diminuer une dette, on AUGMENTE le solde (moins négatif)
+        //          Pour augmenter une dette, on DIMINUE le solde (plus négatif)
+        soldesParShop[debtorId] = (soldesParShop[debtorId] ?? 0.0) + amount; // Dette envers KAMPALA diminue (solde augmente)
+        soldesParShop[creditorId] = (soldesParShop[creditorId] ?? 0.0) - amount; // Dette envers DURBA augmente (solde diminue)
+        debugPrint('   RÈGLEMENT TRIANGULAIRE (INTERMÉDIAIRE): Dette envers ${shopsMap[debtorId]?.designation ?? debtorId} diminue (+$amount), Dette envers ${shopsMap[creditorId]?.designation ?? creditorId} augmente (-$amount)');
       }
     }
     

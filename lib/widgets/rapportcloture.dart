@@ -896,35 +896,201 @@ class _RapportClotureState extends State<RapportCloture> {
         _buildSection(
           '🔟 SOLDE PAR PARTENAIRE',
           [
-            // Afficher chaque partenaire avec son solde
             if (rapport.soldeParPartenaire.isEmpty)
               const Text(
                 'Aucune opération partenaire trouvée',
                 style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey),
               )
-            else
-              ...rapport.soldeParPartenaire.entries.map((entry) {
-                final solde = entry.value;
-                final color = solde > 0 ? Colors.red : solde < 0 ? Colors.green : Colors.grey;
+            else ...[
+              // CRÉANCES (Soldes positifs - Clients qui nous doivent)
+              (() {
+                final creances = rapport.soldeParPartenaire.entries
+                    .where((entry) => entry.value > 0)
+                    .toList();
+                
+                if (creances.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+                
                 return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildClientRowWithSign(
-                      entry.key, // Nom du partenaire (via shop)
-                      solde,
-                      color,
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.red.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.account_balance_wallet, color: Colors.red, size: 16),
+                          const SizedBox(width: 8),
+                          Text(
+                            'CRÉANCES (${creances.length})',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '${creances.fold(0.0, (sum, entry) => sum + entry.value).toStringAsFixed(2)} USD',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(height: 8),
+                    ...creances.map((entry) => _buildClientRowWithSign(
+                      entry.key,
+                      entry.value,
+                      Colors.red,
+                    )).toList(),
                   ],
                 );
-              }).toList(),
-            
-            // Ajouter le total de la section
-            if (rapport.soldeParPartenaire.isNotEmpty) ...[
-              const Divider(),
-              (() {
-                final totalSolde = rapport.soldeParPartenaire.values.fold(0.0, (sum, solde) => sum + solde);
-                final color = totalSolde > 0 ? Colors.red : totalSolde < 0 ? Colors.green : Colors.grey;
-                return _buildTotalRow('SOLDE NET PARTENAIRES', totalSolde, color: color, bold: true);
               }()),
+              
+              const SizedBox(height: 16),
+              
+              // DETTES (Soldes négatifs - Clients à qui nous devons)
+              (() {
+                final dettes = rapport.soldeParPartenaire.entries
+                    .where((entry) => entry.value < 0)
+                    .toList();
+                
+                if (dettes.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+                
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.green.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.money_off, color: Colors.green, size: 16),
+                          const SizedBox(width: 8),
+                          Text(
+                            'DETTES (${dettes.length})',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '${dettes.fold(0.0, (sum, entry) => sum + entry.value.abs()).toStringAsFixed(2)} USD',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ...dettes.map((entry) => _buildClientRowWithSign(
+                      entry.key,
+                      entry.value,
+                      Colors.green,
+                    )).toList(),
+                  ],
+                );
+              }()),
+              
+              // Soldes neutres (exactement 0)
+              (() {
+                final neutres = rapport.soldeParPartenaire.entries
+                    .where((entry) => entry.value == 0)
+                    .toList();
+                
+                if (neutres.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+                
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.balance, color: Colors.grey, size: 16),
+                          const SizedBox(width: 8),
+                          Text(
+                            'SOLDES NEUTRES (${neutres.length})',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ...neutres.map((entry) => _buildClientRowWithSign(
+                      entry.key,
+                      entry.value,
+                      Colors.grey,
+                    )).toList(),
+                  ],
+                );
+              }()),
+              
+              // Total net de la section
+              if (rapport.soldeParPartenaire.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                const Divider(thickness: 2),
+                (() {
+                  final totalSolde = rapport.soldeParPartenaire.values.fold(0.0, (sum, solde) => sum + solde);
+                  final color = totalSolde > 0 ? Colors.red : totalSolde < 0 ? Colors.green : Colors.grey;
+                  final totalCreances = rapport.soldeParPartenaire.values.where((v) => v > 0).fold(0.0, (sum, v) => sum + v);
+                  final totalDettes = rapport.soldeParPartenaire.values.where((v) => v < 0).fold(0.0, (sum, v) => sum + v.abs());
+                  
+                  return Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Total Créances:', style: TextStyle(fontSize: 12, color: Colors.red)),
+                          Text('${totalCreances.toStringAsFixed(2)} USD', style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.w500)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Total Dettes:', style: TextStyle(fontSize: 12, color: Colors.green)),
+                          Text('${totalDettes.toStringAsFixed(2)} USD', style: const TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.w500)),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      _buildTotalRow('SOLDE NET PARTENAIRES', totalSolde, color: color, bold: true),
+                    ],
+                  );
+                }()),
+              ],
             ],
           ],
           Colors.blue,

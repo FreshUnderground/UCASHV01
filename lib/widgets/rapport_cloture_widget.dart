@@ -825,11 +825,59 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
           ),
         const SizedBox(height: 16),
         
+        // NOUVEAU: Section RÈGLEMENTS TRIANGULAIRES DE DETTES
+        if (rapport.triangularSettlements.isNotEmpty) ...[
+          _buildSection(
+            '🔺 RÈGLEMENTS TRIANGULAIRES',
+            [
+              Text(
+                '${rapport.triangularSettlements.length} règlement(s) triangulaire(s)',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              ...rapport.triangularSettlements.map((settlement) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${settlement.shopDebtorDesignation} → ${settlement.shopIntermediaryDesignation} → ${settlement.shopCreditorDesignation}',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        Text(
+                          '${settlement.montant.toStringAsFixed(2)} ${settlement.devise}',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Ref: ${settlement.reference} - ${DateFormat('dd/MM/yyyy HH:mm').format(settlement.dateReglement)}',
+                      style: const TextStyle(fontSize: 10, color: Colors.grey),
+                    ),
+                    if (settlement.notes != null && settlement.notes!.isNotEmpty)
+                      Text(
+                        'Notes: ${settlement.notes}',
+                        style: const TextStyle(fontSize: 10, fontStyle: FontStyle.italic),
+                      ),
+                  ],
+                ),
+              )),
+            ],
+            Colors.deepOrange,
+          ),
+          const SizedBox(height: 16),
+        ],
+
         // NOUVEAU: Section SOLDE PAR PARTENAIRE (depot - retrait où nous sommes destination)
         // Cette section apparaît TOUJOURS, indépendamment des autres sections
         _buildSection(
-          '🔟 SOLDE PAR PARTENAIRE',
-          [
+          '🔟 SOLDE PAR PARTENAIRE',          [
             // DEBUG: Afficher le nombre d'entrées pour diagnostic
             Text(
               'DEBUG: ${rapport.soldeParPartenaire.length} entrées trouvées',

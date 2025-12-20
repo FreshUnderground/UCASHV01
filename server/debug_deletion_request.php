@@ -67,7 +67,7 @@ try {
 
 echo "\nTo manually test admin validation, you can run:\n";
 echo "curl -X POST \\\n";
-echo "  https://mahanaim.investee-group.com/server/api/sync/deletion_requests/admin_validate.php \\\n";
+echo "  https://mahanaimeservice.investee-group.com/server/api/sync/deletion_requests/admin_validate.php \\\n";
 echo "  -H 'Content-Type: application/json' \\\n";
 echo "  -d '{\n";
 echo "    \"code_ops\": \"251212115644101\",\n";

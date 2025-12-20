@@ -149,7 +149,7 @@ try {
     
     // Test the endpoint directly
     echo "\n🧪 Testing endpoint accessibility:\n";
-    $endpointUrl = 'https://mahanaim.investee-group.com/server/api/sync/deletion_requests/admin_validate.php';
+    $endpointUrl = 'https://mahanaimeservice.investee-group.com/server/api/sync/deletion_requests/admin_validate.php';
     
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $endpointUrl);
