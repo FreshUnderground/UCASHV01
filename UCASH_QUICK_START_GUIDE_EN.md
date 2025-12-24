@@ -139,7 +139,7 @@ UCASH is a comprehensive money transfer and financial management application sup
 - **CDF Transactions:** Secondary currency for virtual operations
 - **Exchange Rates:** Automatically applied based on current rates
 - **Currency Display:** 
-  - Cash amounts: Always "Cash USD"
+  - Cash amounts: Always "USD"
   - Virtual amounts: Show original currency (USD/CDF)
 
 ### Synchronization

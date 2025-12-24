@@ -33,23 +33,49 @@ class SimService extends ChangeNotifier {
       
       final allSims = await LocalDB.instance.getAllSims(shopId: shopId);
       
-      // CRITICAL: Remove duplicates by ID to prevent dropdown assertion errors
+      // CRITICAL: Remove duplicates by ID AND numero to prevent dropdown assertion errors
       // AND validate SIM data to prevent invalid SIMs from causing sync errors
-      final simsMap = <int, SimModel>{};
+      final simsMapById = <int, SimModel>{};
+      final simsMapByNumero = <String, SimModel>{};
       int invalidSimCount = 0;
+      int duplicateIdCount = 0;
+      int duplicateNumeroCount = 0;
+      
       for (var sim in allSims) {
         // Validation: Check that SIM has valid data
         if (sim.id != null && sim.numero.isNotEmpty && sim.shopId > 0) {
-          simsMap[sim.id!] = sim; // Keep the last occurrence if duplicates
+          // Check for duplicate ID
+          if (simsMapById.containsKey(sim.id!)) {
+            duplicateIdCount++;
+            foundation.debugPrint('⚠️ SIM avec ID dupliqué ignorée: ID=${sim.id}, Numéro="${sim.numero}"');
+            continue;
+          }
+          
+          // Check for duplicate numero
+          if (simsMapByNumero.containsKey(sim.numero)) {
+            duplicateNumeroCount++;
+            foundation.debugPrint('⚠️ SIM avec numéro dupliqué ignorée: ID=${sim.id}, Numéro="${sim.numero}"');
+            continue;
+          }
+          
+          // Add to both maps for uniqueness validation
+          simsMapById[sim.id!] = sim;
+          simsMapByNumero[sim.numero] = sim;
         } else {
           invalidSimCount++;
-          foundation.debugPrint('⚠️ SIM ignorée: ID=${sim.id}, Numéro="${sim.numero}", Shop=${sim.shopId}');
+          foundation.debugPrint('⚠️ SIM invalide ignorée: ID=${sim.id}, Numéro="${sim.numero}", Shop=${sim.shopId}');
         }
       }
-      _sims = simsMap.values.toList();
+      _sims = simsMapById.values.toList();
       
       if (invalidSimCount > 0) {
         foundation.debugPrint('⚠️ $invalidSimCount SIMs invalides ignorées');
+      }
+      if (duplicateIdCount > 0) {
+        foundation.debugPrint('⚠️ $duplicateIdCount SIMs avec ID dupliqué ignorées');
+      }
+      if (duplicateNumeroCount > 0) {
+        foundation.debugPrint('⚠️ $duplicateNumeroCount SIMs avec numéro dupliqué ignorées');
       }
       
       foundation.debugPrint('📊 [SimService.loadSims] Résultats:');
@@ -431,13 +457,37 @@ class SimService extends ChangeNotifier {
       final totalRetraitsCdf = retraitsCdf.fold<double>(0, (sum, retrait) => sum + retrait.montant);
       final totalRetraitsUsd = retraitsUsd.fold<double>(0, (sum, retrait) => sum + retrait.montant);
       
-      // FORMULE CORRECTE par devise: Solde = Initial + Captures - Retraits
-      final soldeCdf = sim.soldeInitialCdf + totalCapturesCdf - totalRetraitsCdf;
-      final soldeUsd = sim.soldeInitialUsd + totalCapturesUsd - totalRetraitsUsd;
+      // 3. Obtenir les échanges virtuels pour cette SIM
+      final echangesVirtuels = await LocalDB.instance.getAllVirtualExchanges();
+      
+      // Échanges ENTRANTS (cette SIM reçoit du crédit) - uniquement les validés
+      final echangesEntrants = echangesVirtuels
+          .where((e) => e.simDestination == sim.numero && e.statut.name == 'valide')
+          .toList();
+      
+      // Échanges SORTANTS (cette SIM donne du crédit) - uniquement les validés
+      final echangesSortants = echangesVirtuels
+          .where((e) => e.simSource == sim.numero && e.statut.name == 'valide')
+          .toList();
+      
+      // Séparer par devise
+      final echangesEntrantsCdf = echangesEntrants.where((e) => e.devise == 'CDF').toList();
+      final echangesEntrantsUsd = echangesEntrants.where((e) => e.devise == 'USD').toList();
+      final echangesSortantsCdf = echangesSortants.where((e) => e.devise == 'CDF').toList();
+      final echangesSortantsUsd = echangesSortants.where((e) => e.devise == 'USD').toList();
+      
+      final totalEchangesEntrantsCdf = echangesEntrantsCdf.fold<double>(0, (sum, e) => sum + e.montant);
+      final totalEchangesEntrantsUsd = echangesEntrantsUsd.fold<double>(0, (sum, e) => sum + e.montant);
+      final totalEchangesSortantsCdf = echangesSortantsCdf.fold<double>(0, (sum, e) => sum + e.montant);
+      final totalEchangesSortantsUsd = echangesSortantsUsd.fold<double>(0, (sum, e) => sum + e.montant);
+      
+      // FORMULE CORRECTE par devise: Solde = Initial + Captures - Retraits + Échanges Entrants - Échanges Sortants
+      final soldeCdf = sim.soldeInitialCdf + totalCapturesCdf - totalRetraitsCdf + totalEchangesEntrantsCdf - totalEchangesSortantsCdf;
+      final soldeUsd = sim.soldeInitialUsd + totalCapturesUsd - totalRetraitsUsd + totalEchangesEntrantsUsd - totalEchangesSortantsUsd;
       
       foundation.debugPrint('💰 [SIM Solde Auto] ${sim.numero}:');
-      foundation.debugPrint('   CDF: Initial=${sim.soldeInitialCdf} + Captures=$totalCapturesCdf - Retraits=$totalRetraitsCdf = $soldeCdf');
-      foundation.debugPrint('   USD: Initial=${sim.soldeInitialUsd} + Captures=$totalCapturesUsd - Retraits=$totalRetraitsUsd = $soldeUsd');
+      foundation.debugPrint('   CDF: Initial=${sim.soldeInitialCdf} + Captures=$totalCapturesCdf - Retraits=$totalRetraitsCdf + Échanges Entrants=$totalEchangesEntrantsCdf - Échanges Sortants=$totalEchangesSortantsCdf = $soldeCdf');
+      foundation.debugPrint('   USD: Initial=${sim.soldeInitialUsd} + Captures=$totalCapturesUsd - Retraits=$totalRetraitsUsd + Échanges Entrants=$totalEchangesEntrantsUsd - Échanges Sortants=$totalEchangesSortantsUsd = $soldeUsd');
       
       return {
         'CDF': soldeCdf,

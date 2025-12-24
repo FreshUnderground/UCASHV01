@@ -1211,7 +1211,7 @@ class ReportService extends ChangeNotifier {
           // Dépôt fait → DETTE (on doit au shop destination)
           // Car on a fait un dépôt pour notre client chez le shop destination
           typeMouvement = 'depot_fait';
-          description = 'Dépôt fait - Nous devons ${op.montantNet.toStringAsFixed(2)} USD à ${shopDestination.designation}';
+          description = 'Dépôt fait  ${op.montantNet.toStringAsFixed(2)} USD à ${shopDestination.designation}';
           totalDettes += op.montantNet;
           
           final autreShopId = op.shopDestinationId!;

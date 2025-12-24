@@ -163,15 +163,30 @@ class VirtualTransactionSyncService extends ChangeNotifier {
     }
   }
 
-  /// Télécharger les transactions virtuelles depuis le serveur
+  /// Télécharger les transactions virtuelles OPTIMISÉES depuis le serveur
+  /// OPTIMISATION: Filtrage intelligent par statut et date:
+  /// - EN ATTENTE: Toutes (peu importe la date)
+  /// - VALIDÉES: Seulement hier et aujourd'hui
+  /// - ANNULÉES: Seulement aujourd'hui
   Future<void> _downloadServerTransactions() async {
     try {
-      debugPrint('📥 Téléchargement des transactions virtuelles depuis le serveur...');
+      debugPrint('📥 Téléchargement OPTIMISÉ des transactions virtuelles...');
       
-      final lastSync = _lastSyncTime?.toIso8601String() ?? '2020-01-01T00:00:00.000';
-      final url = '${await AppConfig.getApiBaseUrl()}/api/virtual-transactions?shop_id=$_shopId&since=$lastSync';
+      final baseUrl = await AppConfig.getApiBaseUrl();
+      final queryParams = <String, String>{
+        'shop_id': _shopId.toString(),
+        'filter_mode': 'smart',     // Active le filtrage intelligent
+        'pending_all': 'true',      // Toutes les transactions en attente
+        'served_days': '4',         // Transactions validées: 4 derniers jours
+        'cancelled_days': '1',      // Transactions annulées: aujourd'hui seulement
+      };
       
-      debugPrint('   📡 Requête GET: $url');
+      final url = Uri.parse('$baseUrl/api/virtual-transactions/optimized').replace(
+        queryParameters: queryParams,
+      ).toString();
+      
+      debugPrint('   📡 Requête GET OPTIMISÉE: $url');
+      debugPrint('   🎯 Filtrage: EN ATTENTE (toutes) + VALIDÉES (4j) + ANNULÉES (1j)');
       
       final response = await http.get(
         Uri.parse(url),
@@ -212,7 +227,7 @@ class VirtualTransactionSyncService extends ChangeNotifier {
         }
         
         debugPrint('   ➕ $newCount nouvelles transactions');
-        debugPrint('   🔄 $updatedCount transactions mises à jour');
+        debugPrint('   � $updatedCount transactions mises à jour');
       } else {
         throw Exception('Erreur serveur: ${response.statusCode} - ${response.body}');
       }

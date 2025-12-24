@@ -138,7 +138,7 @@ Future<pw.Document> _generateListePaiePdf(int mois, int annee, String statut) as
                 ),
                 children: [
                   _buildTableCell('${index + 1}'),
-                  _buildTableCell(s.personnelNom ?? 'Personnel ${s.personnelId}'),
+                  _buildTableCell(s.personnelNom ?? 'Personnel ${s.personnelMatricule}'),
                   _buildTableCell(s.statut ?? '-'),
                   _buildTableCell('${s.salaireBrut.toStringAsFixed(2)}'),
                   _buildTableCell('${s.totalDeductions.toStringAsFixed(2)}'),
@@ -376,7 +376,7 @@ Future<pw.Document> _generateRapportAvancesPdf(int mois, int annee) async {
             ),
             ...avances.map((a) => pw.TableRow(
               children: [
-                _buildTableCell(a.personnelNom ?? 'Personnel ${a.personnelId}'),
+                _buildTableCell(a.personnelNom ?? 'Personnel ${a.personnelMatricule}'),
                 _buildTableCell(DateFormat('dd/MM/yyyy').format(a.dateAvance)),
                 _buildTableCell('${a.montant.toStringAsFixed(2)}'),
                 _buildTableCell('${a.montantRembourse.toStringAsFixed(2)}', color: PdfColors.green900),
@@ -507,7 +507,7 @@ Future<pw.Document> _generateRapportArrieresPdf(int mois, int annee) async {
                 ),
                 children: [
                   _buildTableCell('${index + 1}'),
-                  _buildTableCell(s.personnelNom ?? 'Personnel ${s.personnelId}'),
+                  _buildTableCell(s.personnelNom ?? 'Personnel ${s.personnelMatricule}'),
                   _buildTableCell('${s.salaireNet.toStringAsFixed(2)}'),
                   _buildTableCell('${s.montantPaye.toStringAsFixed(2)}', color: PdfColors.green900),
                   _buildTableCell('${s.montantRestant.toStringAsFixed(2)}', color: PdfColors.red900),
@@ -663,7 +663,7 @@ pw.Widget _buildEmployeePaiementDetail(SalaireModel salaire) {
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
             pw.Text(
-              salaire.personnelNom ?? 'Personnel ${salaire.personnelId}',
+              salaire.personnelNom ?? 'Personnel ${salaire.personnelMatricule}',
               style: pw.TextStyle(
                 fontSize: 10,
                 fontWeight: pw.FontWeight.bold,

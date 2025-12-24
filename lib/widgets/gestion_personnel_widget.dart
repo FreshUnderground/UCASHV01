@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/personnel_service.dart';
@@ -6,6 +5,7 @@ import '../services/salaire_service.dart';
 import '../services/avance_service.dart';
 import '../services/retenue_service.dart';
 import '../services/credit_service.dart';
+import '../services/personnel_sync_service.dart';
 import '../models/personnel_model.dart';
 import '../models/salaire_model.dart';
 import '../models/avance_personnel_model.dart';
@@ -13,7 +13,7 @@ import '../models/retenue_personnel_model.dart';
 import '../models/credit_personnel_model.dart';
 import 'fiche_employe_detail_widget.dart';
 import 'multi_periodes_salaire_widget.dart';
-import 'personnel_rapport_widget.dart';
+import 'statistics_personnel_widget.dart';
 
 class GestionPersonnelWidget extends StatefulWidget {
   const GestionPersonnelWidget({super.key});
@@ -58,6 +58,7 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
   String? _selectedStatut;
   String? _selectedPoste;
   bool _isGeneratingMatricule = false;
+  bool _isSyncing = false;
 
   @override
   void initState() {
@@ -68,13 +69,71 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
 
   @override
   void dispose() {
-    _tabController.dispose();
-    _searchController.dispose();
+    // Disposer les controllers avec protection
+    try {
+      _tabController.dispose();
+    } catch (e) {
+      debugPrint('⚠️ _tabController déjà disposé: $e');
+    }
+    
+    try {
+      _searchController.dispose();
+    } catch (e) {
+      debugPrint('⚠️ _searchController déjà disposé: $e');
+    }
+    
     super.dispose();
   }
 
   Future<void> _loadPersonnel() async {
     await PersonnelService.instance.loadPersonnel(forceRefresh: true);
+  }
+
+  /// Synchroniser manuellement les données du personnel
+  Future<void> _syncPersonnelData() async {
+    if (_isSyncing) return;
+
+    setState(() {
+      _isSyncing = true;
+    });
+
+    try {
+      final result = await PersonnelSyncService.instance.syncPersonnelData(forceFullSync: false);
+      
+      if (result) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Synchronisation du personnel terminée avec succès'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        // Recharger les données après sync
+        await _loadPersonnel();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('❌ Erreur lors de la synchronisation du personnel'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Erreur: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSyncing = false;
+        });
+      }
+    }
   }
 
   @override
@@ -84,6 +143,22 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
       preferredSize: const Size.fromHeight(75),
       child:  AppBar(
         backgroundColor: Colors.blue[700],
+        actions: [
+          IconButton(
+            onPressed: _isSyncing ? null : _syncPersonnelData,
+            icon: _isSyncing 
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                )
+              : const Icon(Icons.sync, color: Colors.white),
+            tooltip: _isSyncing ? 'Synchronisation en cours...' : 'Synchroniser le personnel',
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.white,
@@ -106,7 +181,7 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
           children: [
             _buildPersonnelList(),
             _buildAddPersonnel(),
-            const PersonnelRapportWidget(),
+            const StatisticsPersonnelWidget(),
           ],
         ),
       ),
@@ -827,9 +902,9 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Erreur génération matricule',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 Text(
                   'Matricule de secours généré: $fallbackMatricule',
@@ -915,53 +990,60 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
     double retenuesDeduites = 0;
     double totalArrieres = 0;
     double netAPayer = 0;
+    bool isLoading = true;
+    bool canProceed = true;
 
     // Fonction pour calculer les déductions et le salaire brut/net
     Future<bool> calculateDeductions() async {
-      // Vérifier si un salaire existe déjà pour cette période
-      await SalaireService.instance.loadSalaires(forceRefresh: true);
-      SalaireModel? salaireExistant;
       try {
-        salaireExistant = SalaireService.instance.salaires.firstWhere(
-          (s) => s.personnelId == personnel.id && 
-                 s.mois == selectedMonth && 
-                 s.annee == selectedYear,
+        // Vérifier si un salaire existe déjà pour cette période
+        await SalaireService.instance.loadSalaires(forceRefresh: true);
+        SalaireModel? salaireExistant;
+        try {
+          salaireExistant = SalaireService.instance.salaires.firstWhere(
+            (s) => s.personnelMatricule == personnel.matricule && 
+                   s.mois == selectedMonth && 
+                   s.annee == selectedYear,
+          );
+        } catch (e) {
+          salaireExistant = null;
+        }
+        
+        // Bloquer seulement si le salaire est TOTALEMENT payé
+        if (salaireExistant != null && salaireExistant.reference.isNotEmpty && salaireExistant.statut == 'Paye') {
+          return false; // Salaire existe et est totalement payé
+        }
+        
+        // Si partiellement payé, pré-remplir avec le montant restant
+        if (salaireExistant != null && salaireExistant.reference.isNotEmpty && salaireExistant.statut == 'Paye_Partiellement') {
+          totalArrieres = salaireExistant.montantRestant;
+        }
+        
+        // Calculer les avances
+        avancesDeduites = await AvanceService.instance.calculerDeductionMensuelleByMatricule(
+          personnel.matricule,
+          selectedMonth,
+          selectedYear,
         );
+        
+        // Calculer les retenues
+        retenuesDeduites = RetenueService.instance.calculerTotalRetenuesPourPeriodeMatricule(
+          personnelMatricule: personnel.matricule,
+          mois: selectedMonth,
+          annee: selectedYear,
+        );
+        
+        // Calculer les arriérés (salaires impayés)
+        final salairesImpayes = SalaireService.instance.salaires
+            .where((s) => s.personnelMatricule == personnel.matricule && s.montantRestant > 0)
+            .toList();
+        totalArrieres = salairesImpayes.fold<double>(0.0, (sum, s) => sum + s.montantRestant);
+        
+        return true; // OK, peut continuer
       } catch (e) {
-        salaireExistant = null;
+        debugPrint('❌ Erreur calcul déductions: $e');
+        return true; // Continuer même en cas d'erreur
       }
-      
-      // Bloquer seulement si le salaire est TOTALEMENT payé
-      if (salaireExistant != null && salaireExistant.reference.isNotEmpty && salaireExistant.statut == 'Paye') {
-        return false; // Salaire existe et est totalement payé
-      }
-      
-      // Si partiellement payé, pré-remplir avec le montant restant
-      if (salaireExistant != null && salaireExistant.reference.isNotEmpty && salaireExistant.statut == 'Paye_Partiellement') {
-        totalArrieres = salaireExistant.montantRestant;
-      }
-      
-      // Calculer les avances
-      avancesDeduites = await AvanceService.instance.calculerDeductionMensuelle(
-        personnel.id!,
-        selectedMonth,
-        selectedYear,
-      );
-      
-      // Calculer les retenues
-      retenuesDeduites = RetenueService.instance.calculerTotalRetenuesPourPeriode(
-        personnelId: personnel.id!,
-        mois: selectedMonth,
-        annee: selectedYear,
-      );
-      
-      // Calculer les arriérés (salaires impayés)
-      final salairesImpayes = SalaireService.instance.salaires
-          .where((s) => s.personnelId == personnel.id && s.montantRestant > 0)
-          .toList();
-      totalArrieres = salairesImpayes.fold<double>(0.0, (sum, s) => sum + s.montantRestant);
-      
-      return true; // OK, peut continuer
     }
     
     // Fonction pour recalculer le salaire brut/net en temps réel
@@ -980,32 +1062,72 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
       
       // Auto-remplir montant servis avec net à payer
       montantServisController.text = netAPayer.toStringAsFixed(2);
+      
+      debugPrint('🔄 Recalcul salaire: Brut=${salaireBrut.toStringAsFixed(2)}, Déductions=${totalDeductions.toStringAsFixed(2)}, Net=${netAPayer.toStringAsFixed(2)}');
     }
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) {
-          // Charger les déductions au changement de mois/année
-          calculateDeductions().then((canProceed) {
-            if (context.mounted) {
-              if (!canProceed) {
-                // Salaire existe déjà et est totalement payé
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'SALAIRE DÉJÀ TOTALEMENT PAYÉ POUR ${_getMonthName(selectedMonth).toUpperCase()} ${selectedYear}',
-                    ),
-                    backgroundColor: Colors.red,
-                    duration: const Duration(seconds: 3),
-                  ),
-                );
-              } else {
-                setState(() {});
+          // Initialiser les données au premier affichage
+          if (isLoading) {
+            calculateDeductions().then((result) {
+              if (mounted) {
+                setState(() {
+                  canProceed = result;
+                  isLoading = false;
+                  if (canProceed) {
+                    recalculateSalaire();
+                  }
+                });
+                
+                if (!canProceed) {
+                  // Salaire existe déjà et est totalement payé
+                  Future.delayed(Duration.zero, () {
+                    if (mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'SALAIRE DÉJÀ TOTALEMENT PAYÉ POUR ${_getMonthName(selectedMonth).toUpperCase()} ${selectedYear}',
+                          ),
+                          backgroundColor: Colors.red,
+                          duration: const Duration(seconds: 3),
+                        ),
+                      );
+                    }
+                  });
+                }
               }
-            }
-          });
+            }).catchError((e) {
+              debugPrint('❌ Erreur initialisation dialog: $e');
+              if (mounted) {
+                setState(() {
+                  isLoading = false;
+                  canProceed = true;
+                });
+              }
+            });
+          }
+
+          // Afficher loading pendant l'initialisation
+          if (isLoading) {
+            return const AlertDialog(
+              title: Text('Chargement...'),
+              content: SizedBox(
+                height: 100,
+                child: Center(
+                  child: CircularProgressIndicator(),
+                ),
+              ),
+            );
+          }
+
+          // Ne pas afficher le dialog si on ne peut pas procéder
+          if (!canProceed) {
+            return const SizedBox.shrink();
+          }
 
           return AlertDialog(
             title: Text('Générer Salaire - ${personnel.nomComplet}'),
@@ -1031,7 +1153,19 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
                             );
                           }).toList(),
                           onChanged: (value) {
-                            setState(() => selectedMonth = value!);
+                            setState(() {
+                              selectedMonth = value!;
+                              // Recalculer les déductions quand le mois change
+                              calculateDeductions().then((_) {
+                                if (mounted) {
+                                  setState(() {
+                                    recalculateSalaire();
+                                  });
+                                }
+                              }).catchError((e) {
+                                debugPrint('❌ Erreur recalcul mois: $e');
+                              });
+                            });
                           },
                         ),
                       ),
@@ -1050,7 +1184,19 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
                             );
                           }).toList(),
                           onChanged: (value) {
-                            setState(() => selectedYear = value!);
+                            setState(() {
+                              selectedYear = value!;
+                              // Recalculer les déductions quand l'année change
+                              calculateDeductions().then((_) {
+                                if (mounted) {
+                                  setState(() {
+                                    recalculateSalaire();
+                                  });
+                                }
+                              }).catchError((e) {
+                                debugPrint('❌ Erreur recalcul année: $e');
+                              });
+                            });
                           },
                         ),
                       ),
@@ -1309,249 +1455,75 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
               ),
               ElevatedButton(
                 onPressed: () async {
-                  final montantServis = double.tryParse(montantServisController.text);
-                  
-                  if (montantServis == null || montantServis < 0) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Montant servis invalide'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                    return;
-                  }
-                  
                   try {
-                    // Vérifier si c'est un complément de paiement ou nouvelle génération
-                    await SalaireService.instance.loadSalaires(forceRefresh: true);
-                    SalaireModel? salaireExistant;
-                    try {
-                      salaireExistant = SalaireService.instance.salaires.firstWhere(
-                        (s) => s.personnelId == personnel.id && 
-                               s.mois == selectedMonth && 
-                               s.annee == selectedYear,
-                      );
-                    } catch (e) {
-                      salaireExistant = null;
-                    }
+                    final montantServis = double.tryParse(montantServisController.text);
                     
-                    // Validation AVANT de fermer le dialog
-                    if (salaireExistant != null && salaireExistant.reference.isNotEmpty) {
-                      if (salaireExistant.statut == 'Paye') {
-                        // Salaire déjà entièrement payé - autoriser un nouveau paiement pour un mois différent
-                        // (ceci est normalement géré par la sélection du mois/année)
-                        if (montantServis > netAPayer) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Le montant payé (${montantServis.toStringAsFixed(2)}) ne peut pas dépasser le net à payer (${netAPayer.toStringAsFixed(2)})'
-                              ),
-                              backgroundColor: Colors.red,
-                              duration: const Duration(seconds: 4),
-                            ),
-                          );
-                          return;
-                        }
-                      } else if (salaireExistant.statut == 'Paye_Partiellement') {
-                        // Complément de paiement - valider contre le montant restant
-                        final montantRestant = salaireExistant.montantRestant;
-                        if (montantServis > montantRestant) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Le montant payé (${montantServis.toStringAsFixed(2)}) ne peut pas dépasser le reste à payer (${montantRestant.toStringAsFixed(2)})'
-                              ),
-                              backgroundColor: Colors.red,
-                              duration: const Duration(seconds: 4),
-                            ),
-                          );
-                          return;
-                        }
-                      } else {
-                        // Salaire existe mais pas encore payé - valider contre le net à payer
-                        if (montantServis > netAPayer) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Le montant payé (${montantServis.toStringAsFixed(2)}) ne peut pas dépasser le net à payer (${netAPayer.toStringAsFixed(2)})'
-                              ),
-                              backgroundColor: Colors.red,
-                              duration: const Duration(seconds: 4),
-                            ),
-                          );
-                          return;
-                        }
-                      }
-                    } else {
-                      // Nouvelle génération - valider contre le net à payer
-                      if (montantServis > netAPayer) {
+                    if (montantServis == null || montantServis < 0) {
+                      if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Le montant payé (${montantServis.toStringAsFixed(2)}) ne peut pas dépasser le net à payer (${netAPayer.toStringAsFixed(2)})'
-                            ),
+                          const SnackBar(
+                            content: Text('Montant servis invalide'),
                             backgroundColor: Colors.red,
-                            duration: const Duration(seconds: 4),
                           ),
                         );
-                        return;
                       }
+                      return;
                     }
                     
-                    // Validation OK - fermer le dialog
+                    // Fermer le dialog immédiatement pour éviter les problèmes de contexte
                     if (mounted) {
                       Navigator.pop(context);
                     }
                     
-                    SalaireModel? salaireResult;
-                    bool isComplement = false;
-                    
-                    if (salaireExistant != null && salaireExistant.reference.isNotEmpty && salaireExistant.statut == 'Paye_Partiellement') {
-                      // Complément de paiement sur salaire existant
-                      isComplement = true;
-                      final nouveauMontantPaye = salaireExistant.montantPaye + montantServis;
-                      final salaireNet = salaireExistant.salaireNet;
-                      
-                      // Ajouter ce paiement à l'historique
-                      final historique = List<PaiementSalaireModel>.from(salaireExistant.historiquePaiements);
-                      historique.add(PaiementSalaireModel(
-                        datePaiement: DateTime.now(),
-                        montant: montantServis,
-                        modePaiement: 'Especes',
-                        agentPaiement: 'Admin',
-                        notes: isComplement ? 'Paiement complémentaire' : 'Paiement initial',
-                      ));
-                      
-                      // Convertir l'historique en JSON
-                      final historiqueJson = jsonEncode(
-                        historique.map((p) => p.toJson()).toList()
-                      );
-                      
-                      salaireResult = salaireExistant.copyWith(
-                        montantPaye: nouveauMontantPaye,
-                        statut: nouveauMontantPaye >= salaireNet ? 'Paye' : 'Paye_Partiellement',
-                        datePaiement: DateTime.now(),
-                        historiquePaiementsJson: historiqueJson,
-                        lastModifiedAt: DateTime.now(),
-                      );
-                      
-                      // Sauvegarder le salaire mis à jour dans LocalDB
-                      await SalaireService.instance.updateSalaire(salaireResult);
-                      
-                      // Enregistrer les déductions de retenues (seulement pour le complément)
-                      try {
-                        if (retenuesDeduites > 0) {
-                          final retenuesActives = RetenueService.instance.getRetenuesActivesParPeriode(
-                            personnelId: personnel.id!,
-                            mois: selectedMonth,
-                            annee: selectedYear,
-                          );
-                          for (final retenue in retenuesActives) {
-                            final montantADeduire = retenue.getMontantPourPeriode(selectedMonth, selectedYear);
-                            if (montantADeduire > 0) {
-                              await RetenueService.instance.enregistrerDeduction(
-                                retenueId: retenue.id!,
-                                montantDeduit: montantADeduire,
-                              );
-                            }
-                          }
-                        }
-                      } catch (e) {
-                        debugPrint('⚠️ Erreur enregistrement retenues: $e');
-                        // Ne pas faire échouer le paiement pour les retenues
-                      }
-                    } else {
-                      // Nouvelle génération de salaire
-                      final heuresSup = double.tryParse(heuresSupController.text) ?? 0;
-                      final bonusAmount = double.tryParse(bonusController.text) ?? 0;
-                      
-                      final salaireGenere = await SalaireService.instance.genererSalaireMensuel(
-                        personnelId: personnel.id!,
-                        mois: selectedMonth,
-                        annee: selectedYear,
-                        heuresSupplementaires: heuresSup,
-                        bonus: bonusAmount,
-                        notes: 'Généré avec heures sup: ${heuresSup.toStringAsFixed(2)} USD, bonus: ${bonusAmount.toStringAsFixed(2)} USD',
-                      );
-                      
-                      // Créer l'historique avec le premier paiement
-                      final historique = [PaiementSalaireModel(
-                        datePaiement: DateTime.now(),
-                        montant: montantServis,
-                        modePaiement: 'Especes',
-                        agentPaiement: 'Admin',
-                        notes: 'Paiement initial',
-                      )];
-                      
-                      final historiqueJson = jsonEncode(
-                        historique.map((p) => p.toJson()).toList()
-                      );
-                      
-                      // Mettre à jour avec le montant servis
-                      final salaireAvecPaiement = salaireGenere.copyWith(
-                        montantPaye: montantServis,
-                        statut: montantServis >= salaireGenere.salaireNet ? 'Paye' : 'Paye_Partiellement',
-                        datePaiement: DateTime.now(),
-                        historiquePaiementsJson: historiqueJson,
-                        lastModifiedAt: DateTime.now(),
-                      );
-                      
-                      // Sauvegarder le salaire mis à jour dans LocalDB
-                      await SalaireService.instance.updateSalaire(salaireAvecPaiement);
-                      salaireResult = salaireAvecPaiement;
-                      
-                      // Enregistrer les déductions de retenues
-                      try {
-                        if (retenuesDeduites > 0) {
-                          final retenuesActives = RetenueService.instance.getRetenuesActivesParPeriode(
-                            personnelId: personnel.id!,
-                            mois: selectedMonth,
-                            annee: selectedYear,
-                          );
-                          for (final retenue in retenuesActives) {
-                            final montantADeduire = retenue.getMontantPourPeriode(selectedMonth, selectedYear);
-                            if (montantADeduire > 0) {
-                              await RetenueService.instance.enregistrerDeduction(
-                                retenueId: retenue.id!,
-                                montantDeduit: montantADeduire,
-                              );
-                            }
-                          }
-                        }
-                      } catch (e) {
-                        debugPrint('⚠️ Erreur enregistrement retenues: $e');
-                        // Ne pas faire échouer le paiement pour les retenues
-                      }
-                    }
-                    
-                    // Message de confirmation
-                    final arriereRestant = salaireResult?.montantRestant ?? 0;
-                    
+                    // Afficher un indicateur de chargement
                     if (mounted) {
-                      String message;
-                      if (isComplement) {
-                        message = 'Complément payé: ${montantServis.toStringAsFixed(2)} USD\n';
-                        message += 'Total payé: ${salaireResult?.montantPaye.toStringAsFixed(2) ?? '0.00'} USD';
-                      } else {
-                        message = 'Salaire généré: ${montantServis.toStringAsFixed(2)} USD payé';
-                      }
-                      
-                      if (arriereRestant > 0) {
-                        message += '\nArriéré: ${arriereRestant.toStringAsFixed(2)} USD';
-                      }
-                      
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(message),
-                          backgroundColor: arriereRestant > 0 ? Colors.orange : Colors.green,
-                          duration: const Duration(seconds: 4),
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (context) => const AlertDialog(
+                          content: Row(
+                            children: [
+                              CircularProgressIndicator(),
+                              SizedBox(width: 16),
+                              Text('Génération du paiement...'),
+                            ],
+                          ),
                         ),
                       );
-                      
-                      // Réinitialiser les contrôleurs du dialog
-                      heuresSupController.clear();
-                      bonusController.clear();
-                      montantServisController.clear();
+                    }
+                    // Générer le salaire simplement
+                    final heuresSup = double.tryParse(heuresSupController.text) ?? 0;
+                    final bonusAmount = double.tryParse(bonusController.text) ?? 0;
+                    
+                    final salaireGenere = await SalaireService.instance.genererSalaireMensuel(
+                      personnelMatricule: personnel.matricule,
+                      mois: selectedMonth,
+                      annee: selectedYear,
+                      heuresSupplementaires: heuresSup,
+                      bonus: bonusAmount,
+                    );
+                    
+                    final salaireAvecPaiement = salaireGenere.copyWith(
+                      montantPaye: montantServis,
+                      statut: montantServis >= salaireGenere.salaireNet ? 'Paye' : 'Paye_Partiellement',
+                      datePaiement: DateTime.now(),
+                    );
+                    
+                    await SalaireService.instance.updateSalaire(salaireAvecPaiement);
+                    
+                    // Fermer loading
+                    if (mounted && Navigator.canPop(context)) {
+                      Navigator.pop(context);
+                    }
+                    
+                    // Message succès
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Paiement généré: ${montantServis.toStringAsFixed(2)} USD'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
                     }
                   } catch (e) {
                     debugPrint('❌ Erreur génération salaire: $e');
@@ -1731,11 +1703,11 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
                 // Montant demandé
                 TextField(
                   controller: montantController,
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     labelText: 'Montant Demandé *',
-                    border: const OutlineInputBorder(),
+                    border: OutlineInputBorder(),
                     suffixText: 'USD',
-                    prefixIcon: const Icon(Icons.request_quote),
+                    prefixIcon: Icon(Icons.request_quote),
                     helperText: 'Montant à rembourser',
                   ),
                   keyboardType: TextInputType.number,
@@ -1850,12 +1822,12 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
                 // Vérifier si le mois visé par l'avance est déjà payé
                 await SalaireService.instance.loadSalaires(forceRefresh: true);
                 final salaireExistant = SalaireService.instance.salaires.firstWhere(
-                  (s) => s.personnelId == personnel.id && 
+                  (s) => s.personnelMatricule == personnel.matricule && 
                          s.mois == selectedMonth && 
                          s.annee == selectedYear,
                   orElse: () => SalaireModel(
                     reference: '',
-                    personnelId: 0,
+                    personnelMatricule: '',
                     personnelNom: '',
                     mois: 0,
                     annee: 0,
@@ -1884,7 +1856,7 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
                 try {
                   final avance = AvancePersonnelModel(
                     reference: 'AV${DateTime.now().millisecondsSinceEpoch}',
-                    personnelId: personnel.id!,
+                    personnelMatricule: personnel.matricule,
                     montant: montant,
                     dateAvance: DateTime.now(),
                     moisAvance: selectedMonth,
@@ -1993,7 +1965,7 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
                 final mensualite = dureeMois > 0 ? totalARembourser / dureeMois : montant;
                 final credit = CreditPersonnelModel(
                   reference: 'CR${DateTime.now().millisecondsSinceEpoch}',
-                  personnelId: personnel.id!,
+                  personnelMatricule: personnel.matricule,
                   montantCredit: montant,
                   tauxInteret: tauxInteret,
                   dateOctroi: DateTime.now(),
@@ -2098,7 +2070,7 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            const Text(
               'Êtes-vous sûr de vouloir supprimer cet employé ?',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
@@ -2150,10 +2122,10 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    '• Cette action changera le statut à "Démissionné"\n'
-                    '• Les données seront synchronisées sur tous les appareils\n'
-                    '• La suppression définitive aura lieu après synchronisation\n'
-                    '• Toutes les données liées (salaires, avances, retenues) seront également supprimées',
+                    '• Cette action supprimera définitivement l\'agent\n'
+                    '• Toutes les données liées (salaires, avances, retenues) seront également supprimées\n'
+                    '• Cette action est irréversible\n'
+                    '• Assurez-vous d\'avoir sauvegardé les données importantes',
                     style: TextStyle(fontSize: 13),
                   ),
                 ],
@@ -2201,7 +2173,7 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
       );
 
       // Effectuer la suppression
-      await PersonnelService.instance.deletePersonnel(personnel.id!);
+      await PersonnelService.instance.deletePersonnel(personnel.matricule);
 
       // Fermer l'indicateur de chargement
       if (mounted) {
@@ -2226,7 +2198,7 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                       const Text(
-                        'Synchronisation en cours sur tous les appareils',
+                        'Agent supprimé définitivement',
                         style: TextStyle(fontSize: 12),
                       ),
                     ],
@@ -2441,7 +2413,7 @@ class _EmployesTabState extends State<EmployesTab> with SingleTickerProviderStat
                 await RetenueService.instance.createRetenue(
                   RetenuePersonnelModel(
                     reference: RetenuePersonnelModel.generateReference(),
-                    personnelId: personnel.id!,
+                    personnelMatricule: personnel.matricule,
                     personnelNom: personnel.nomComplet,
                     type: typeController.text,
                     montantTotal: montantTotal,

@@ -126,7 +126,7 @@ git commit -m "Fix: Amélioration gestion erreurs endpoint comptes_speciaux uplo
 git push origin main
 
 # Sur le serveur
-ssh user@mahanaim.investee-group.com
+ssh user@mahanaimeservice.investee-group.com
 cd /path/to/ucash
 git pull
 ```
@@ -134,7 +134,7 @@ git pull
 **Option B: Via FTP/SFTP**
 
 1. Ouvrez FileZilla ou WinSCP
-2. Connectez-vous à `mahanaim.investee-group.com`
+2. Connectez-vous à `mahanaimeservice.investee-group.com`
 3. Uploadez `server/api/sync/comptes_speciaux/upload.php` vers `/server/api/sync/comptes_speciaux/upload.php`
 
 **Option C: Via le panneau de contrôle d'hébergement**

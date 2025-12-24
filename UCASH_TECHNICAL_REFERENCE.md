@@ -27,6 +27,33 @@ UCASH is built on a hybrid architecture combining local SQLite databases with ce
 
 ---
 
+## Système de Gestion des Dettes Intershops
+
+### Vue d'Ensemble
+Le système UCASH implémente un mécanisme sophistiqué de gestion des dettes intershops basé sur une logique bidirectionnelle qui traite tous les flux financiers entre shops pour calculer automatiquement les créances et dettes.
+
+### Composants Principaux
+- **Service de Calcul**: `rapport_cloture_service.dart` - Algorithmes de calcul des dettes
+- **Modèle de Données**: `rapport_cloture_model.dart` - Structure des données de dettes
+- **Interface**: `rapportcloture.dart` - Affichage détaillé des positions inter-shops
+- **Règlements Triangulaires**: Système avancé de compensation de dettes circulaires
+
+### Types de Flux Traités
+1. **Transferts**: Logique bidirectionnelle (montant brut)
+2. **Flots**: Quatre scénarios (en attente/validés, envoyés/reçus)
+3. **Opérations Cross-Shop**: Retraits et dépôts inter-shops
+4. **Règlements Triangulaires**: Compensation automatique des dettes circulaires
+
+### Calcul de la Situation Nette
+```
+Capital Net = Cash Disponible + Créances Inter-Shops - Dettes Inter-Shops 
+              - Solde Frais - Transferts En Attente + Solde Net Partenaires
+```
+
+**Documentation Complète**: Voir `DETTES_INTERSHOPS_DOCUMENTATION.md` pour les détails techniques complets.
+
+---
+
 ## Database Schema
 
 ### Core Tables
@@ -208,7 +235,7 @@ class CurrencyService {
 ```
 
 ### Display Rules
-- **Cash Amounts**: Always display as "Cash USD"
+- **Cash Amounts**: Always display as "USD"
 - **Virtual Amounts**: Display in original currency
 - **Mixed Transactions**: Show currency breakdown
 - **Conversion**: Automatic based on current rates

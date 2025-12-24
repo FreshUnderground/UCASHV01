@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Triangular Upload</title>
+</head>
+<body>
+    <h1>Test Triangular Debt Settlements</h1>
+    <button onclick="testUpload()">Test Upload</button>
+    <div id="result"></div>
+
+    <script>
+        async function testUpload() {
+            const data = {
+                "entities": [{
+                    "id": 1,
+                    "reference": "TRI20251221-83194",
+                    "shop_debtor_id": 1765124856371,
+                    "shop_debtor_designation": "shop kampala",
+                    "shop_intermediary_id": 1765485299073,
+                    "shop_intermediary_designation": "SHOP BUTEMBO",
+                    "shop_creditor_id": 1765124945851,
+                    "shop_creditor_designation": "shop kisangani",
+                    "montant": 7000,
+                    "devise": "USD",
+                    "date_reglement": "2025-12-21T07:36:23.194",
+                    "mode_paiement": null,
+                    "notes": null,
+                    "agent_id": 0,
+                    "agent_username": "admin",
+                    "created_at": "2025-12-21T07:36:23.194",
+                    "last_modified_at": "2025-12-21T07:36:23.194",
+                    "last_modified_by": "agent_0",
+                    "is_synced": 0,
+                    "synced_at": "2025-12-21T07:36:42.548",
+                    "entity_type": "triangular_debt_settlement",
+                    "sync_version": 1
+                }],
+                "user_id": "admin",
+                "timestamp": new Date().toISOString()
+            };
+
+            try {
+                const response = await fetch('https://mahanaimeservice.investee-group.com/server/api/sync/triangular_debt_settlements/upload.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.text();
+                document.getElementById('result').innerHTML = `
+                    <h3>Status: ${response.status}</h3>
+                    <pre>${result}</pre>
+                `;
+                console.log('Response:', response.status, result);
+            } catch (error) {
+                document.getElementById('result').innerHTML = `<h3>Error: ${error.message}</h3>`;
+                console.error('Error:', error);
+            }
+        }
+    </script>
+</body>
+</html>

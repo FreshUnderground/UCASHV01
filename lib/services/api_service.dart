@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/user_model.dart';
@@ -29,8 +30,9 @@ class ApiService {
   // Authentification
   static Future<Map<String, dynamic>?> login(String username, String password) async {
     try {
+      final url = await baseUrl;
       final response = await http.post(
-        Uri.parse('$baseUrl/auth/login'),
+        Uri.parse('$url/auth/login'),
         headers: _getHeaders(),
         body: jsonEncode({
           'username': username,
@@ -43,7 +45,16 @@ class ApiService {
       } else {
         throw Exception('Erreur de connexion: ${response.statusCode}');
       }
+    } on SocketException {
+      throw Exception('Pas de connexion internet');
+    } on HttpException {
+      throw Exception('Erreur HTTP - Vérifiez l\'URL du serveur');
+    } on FormatException {
+      throw Exception('Réponse serveur invalide');
     } catch (e) {
+      if (e.toString().contains('CORS')) {
+        throw Exception('Erreur CORS - Contactez l\'administrateur');
+      }
       throw Exception('Erreur réseau: $e');
     }
   }
@@ -51,8 +62,9 @@ class ApiService {
   // Récupérer les agents
   static Future<List<UserModel>> getAgents() async {
     try {
+      final url = await baseUrl;
       final response = await http.get(
-        Uri.parse('$baseUrl/agents'),
+        Uri.parse('$url/agents'),
         headers: defaultHeaders,
       ).timeout(timeout);
 
@@ -62,7 +74,16 @@ class ApiService {
       } else {
         throw Exception('Erreur lors de la récupération des agents');
       }
+    } on SocketException {
+      throw Exception('Pas de connexion internet');
+    } on HttpException {
+      throw Exception('Erreur HTTP - Vérifiez l\'URL du serveur');
+    } on FormatException {
+      throw Exception('Réponse serveur invalide');
     } catch (e) {
+      if (e.toString().contains('CORS')) {
+        throw Exception('Erreur CORS - Contactez l\'administrateur');
+      }
       throw Exception('Erreur réseau: $e');
     }
   }
@@ -70,8 +91,9 @@ class ApiService {
   // Récupérer les comptes
   static Future<List<UserModel>> getComptes() async {
     try {
+      final url = await baseUrl;
       final response = await http.get(
-        Uri.parse('$baseUrl/comptes'),
+        Uri.parse('$url/comptes'),
         headers: defaultHeaders,
       ).timeout(timeout);
 
@@ -85,7 +107,16 @@ class ApiService {
       } else {
         throw Exception('Erreur lors de la récupération des comptes');
       }
+    } on SocketException {
+      throw Exception('Pas de connexion internet');
+    } on HttpException {
+      throw Exception('Erreur HTTP - Vérifiez l\'URL du serveur');
+    } on FormatException {
+      throw Exception('Réponse serveur invalide');
     } catch (e) {
+      if (e.toString().contains('CORS')) {
+        throw Exception('Erreur CORS - Contactez l\'administrateur');
+      }
       throw Exception('Erreur réseau: $e');
     }
   }

@@ -33,6 +33,7 @@ import 'cloture_virtuelle_par_sim_widget.dart';
 import 'modern_transaction_card.dart';
 import 'pdf_viewer_dialog.dart';
 import 'flot_management_widget.dart';
+import 'virtual_exchange_widget.dart';
 import '../utils/currency_utils.dart';
 
 
@@ -96,7 +97,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this); // 5 tabs: Captures, Flots, Dépôt, Crédit, Rapport
+    _tabController = TabController(length: 6, vsync: this); // 6 tabs: Captures, Flots, Dépôt, Crédit, Échanges, Rapport
     // Initialiser la date à aujourd'hui pour le filtre Vue d'ensemble
     _selectedDate = DateTime.now();
     // Charger les données APRÈS le build initial pour éviter setState() during build
@@ -117,11 +118,43 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
 
   @override
   void dispose() {
-    _tabController.dispose();
-    _searchController.dispose();
-    _flotSearchController.dispose();
-    _depotSearchController.dispose();
-    _listeTransactionsSearchController.dispose();
+    // Disposer tous les controllers avec protection
+    try {
+      _tabController.dispose();
+    } catch (e) {
+      debugPrint('⚠️ _tabController déjà disposé: $e');
+    }
+    
+    try {
+      _searchController.dispose();
+    } catch (e) {
+      debugPrint('⚠️ _searchController déjà disposé: $e');
+    }
+    
+    try {
+      _flotSearchController.dispose();
+    } catch (e) {
+      debugPrint('⚠️ _flotSearchController déjà disposé: $e');
+    }
+    
+    try {
+      _depotSearchController.dispose();
+    } catch (e) {
+      debugPrint('⚠️ _depotSearchController déjà disposé: $e');
+    }
+    
+    try {
+      _listeTransactionsSearchController.dispose();
+    } catch (e) {
+      debugPrint('⚠️ _listeTransactionsSearchController déjà disposé: $e');
+    }
+    
+    try {
+      _creditSearchController.dispose();
+    } catch (e) {
+      debugPrint('⚠️ _creditSearchController déjà disposé: $e');
+    }
+    
     super.dispose();
   }
 
@@ -673,6 +706,10 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                   text: 'Crédit',
                 ),
                 Tab(
+                  icon: Icon(Icons.swap_horiz, size: isMobile ? 18 : 22),
+                  text: 'Échanges',
+                ),
+                Tab(
                   icon: Icon(Icons.analytics, size: isMobile ? 18 : 22),
                   text: 'Rapport',
                 ),
@@ -829,6 +866,7 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                 _buildFlotTab(),
                 _buildDepotTab(),
                 _buildCreditVirtuelTab(),
+                _buildEchangesTab(),
                 _buildRapportTab(),
               ],
             ),
@@ -3905,6 +3943,11 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
     );
   }
 
+  /// Onglet Échanges Virtuels - Transfert de crédit entre SIMs
+  Widget _buildEchangesTab() {
+    return const VirtualExchangeWidget();
+  }
+
   /// Onglet rapport avec sous-onglets (par SIM et Frais)
   Widget _buildRapportTab() {
     return DefaultTabController(
@@ -4217,8 +4260,8 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
           servicesDuJour = servicesDuJour
               .where((t) => 
                 t.dateValidation != null &&
-                (t.dateValidation!.isAtSameMomentAs(startOfDay) || t.dateValidation!.isAfter(startOfDay)) &&
-                (t.dateValidation!.isAtSameMomentAs(endOfDay) || t.dateValidation!.isBefore(endOfDay)))
+                t.dateValidation!.isAfter(startOfDay.subtract(const Duration(milliseconds: 1))) &&
+                t.dateValidation!.isBefore(endOfDay.add(const Duration(milliseconds: 1))))
               .toList();
         }
         
@@ -4411,14 +4454,16 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
           .fold<double>(0, (sum, c) => sum + c.montantRestant);
         final creditsEnRetard = creditsVirtuels.where((c) => c.estEnRetard).length;
 
-        // Statistiques par opérateur
-        final Map<String, Map<String, dynamic>> statsParOperateur = {};
+        // Statistiques par opérateur avec soldes USD/CDF séparés
+        final statsParOperateur = <String, Map<String, dynamic>>{};
         for (var sim in sims) {
           final operateur = sim.operateur;
           if (!statsParOperateur.containsKey(operateur)) {
             statsParOperateur[operateur] = {
               'nombre_sims': 0,
               'solde_total': 0.0,
+              'solde_usd': 0.0,
+              'solde_cdf': 0.0,
               'transactions': 0,
               'frais': 0.0,
             };
@@ -4426,8 +4471,16 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
           statsParOperateur[operateur]!['nombre_sims'] += 1;
           statsParOperateur[operateur]!['solde_total'] += sim.soldeActuel;
 
+          // Calculer les soldes USD/CDF pour cette SIM
           final simCaptures = capturesDuJour.where((t) => t.simNumero == sim.numero).toList();
           final simServices = servicesDuJour.where((t) => t.simNumero == sim.numero).toList();
+          
+          // Soldes par devise basés sur les transactions validées
+          final capturesUSD = simServices.where((t) => t.devise == 'USD').fold<double>(0, (sum, t) => sum + t.montantVirtuel);
+          final capturesCDF = simServices.where((t) => t.devise == 'CDF').fold<double>(0, (sum, t) => sum + t.montantVirtuel);
+          
+          statsParOperateur[operateur]!['solde_usd'] += capturesUSD;
+          statsParOperateur[operateur]!['solde_cdf'] += capturesCDF;
           statsParOperateur[operateur]!['transactions'] += simCaptures.length;
           statsParOperateur[operateur]!['frais'] += simServices.fold<double>(0, (sum, t) => sum + t.frais);
         }
@@ -4531,13 +4584,13 @@ class _VirtualTransactionsWidgetState extends State<VirtualTransactionsWidget> w
                       builder: (BuildContext context, depotsSnapshot) {
                         var depots = depotsSnapshot.data ?? [];
                         
-                        // Filtrer par date unique (DATE ENREGISTREMENT)
+                        // Filtrer par date unique (DATE DEPOT)
                         if (_selectedDate != null) {
                           final startOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day, 0, 0, 0);
                           final endOfDay = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day, 23, 59, 59);
                           depots = depots.where((d) => 
-                            (d.dateDepot.isAtSameMomentAs(startOfDay) || d.dateDepot.isAfter(startOfDay)) &&
-                            (d.dateDepot.isAtSameMomentAs(endOfDay) || d.dateDepot.isBefore(endOfDay))).toList();
+                            d.dateDepot.isAfter(startOfDay.subtract(const Duration(milliseconds: 1))) &&
+                            d.dateDepot.isBefore(endOfDay.add(const Duration(milliseconds: 1)))).toList();
                         }
                         // Filtrer par SIM
                         if (_selectedSimFilter != null) {
@@ -5333,62 +5386,185 @@ const SizedBox(height: 16),
                                                 ),
                                               )
                                             else ...[
-                                              ...soldeParPartenaire.entries.map((entry) {
-                                                final partenaire = entry.key;
-                                                final solde = entry.value;
-                                                final color = solde > 0 
-                                                  ? Colors.red[700] 
-                                                  : solde < 0 
-                                                    ? Colors.green[700] 
-                                                    : Colors.grey[700];
-                                                final status = solde > 0 
-                                                  ? 'NOUS DEVONS' 
-                                                  : solde < 0 
-                                                    ? 'NOUS DOIT' 
-                                                    : 'ÉQUILIBRÉ';
+                                              // Grouper par créances et dettes
+                                              () {
+                                                final creances = soldeParPartenaire.entries.where((e) => e.value > 0).toList();
+                                                final dettes = soldeParPartenaire.entries.where((e) => e.value < 0).toList();
+                                                final equilibres = soldeParPartenaire.entries.where((e) => e.value == 0).toList();
                                                 
-                                                return Padding(
-                                                  padding: const EdgeInsets.only(bottom: 8),
-                                                  child: Row(
-                                                    children: [
-                                                      Expanded(
-                                                        child: Text(
-                                                          partenaire,
-                                                          style: const TextStyle(
-                                                            fontSize: 13,
-                                                            fontWeight: FontWeight.w500,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      const SizedBox(width: 8),
+                                                return Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    // CRÉANCES (Nous devons)
+                                                    if (creances.isNotEmpty) ...[
                                                       Container(
-                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                                                         decoration: BoxDecoration(
-                                                          color: color!.withOpacity(0.1),
-                                                          borderRadius: BorderRadius.circular(4),
+                                                          color: Colors.red.shade50,
+                                                          borderRadius: BorderRadius.circular(8),
+                                                          border: Border.all(color: Colors.red.shade200),
                                                         ),
-                                                        child: Text(
-                                                          status,
-                                                          style: TextStyle(
-                                                            fontSize: 10,
-                                                            fontWeight: FontWeight.bold,
-                                                            color: color,
-                                                          ),
+                                                        child: Column(
+                                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                                          children: [
+                                                            Row(
+                                                              children: [
+                                                                Icon(Icons.arrow_upward, color: Colors.red.shade700, size: 16),
+                                                                const SizedBox(width: 8),
+                                                                Text(
+                                                                  'CRÉANCES',
+                                                                  style: TextStyle(
+                                                                    fontSize: 12,
+                                                                    fontWeight: FontWeight.bold,
+                                                                    color: Colors.red.shade700,
+                                                                  ),
+                                                                ),
+                                                                const Spacer(),
+                                                                Text(
+                                                                  '+${creances.fold<double>(0, (sum, e) => sum + e.value).toStringAsFixed(2)} USD',
+                                                                  style: TextStyle(
+                                                                    fontSize: 12,
+                                                                    fontWeight: FontWeight.bold,
+                                                                    color: Colors.red.shade700,
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                            const SizedBox(height: 8),
+                                                            ...creances.map((entry) => Padding(
+                                                              padding: const EdgeInsets.only(left: 24, bottom: 4),
+                                                              child: Row(
+                                                                children: [
+                                                                  Expanded(
+                                                                    child: Text(
+                                                                      entry.key,
+                                                                      style: const TextStyle(fontSize: 11),
+                                                                    ),
+                                                                  ),
+                                                                  Text(
+                                                                    '+${entry.value.toStringAsFixed(2)} USD',
+                                                                    style: TextStyle(
+                                                                      fontSize: 11,
+                                                                      fontWeight: FontWeight.w600,
+                                                                      color: Colors.red.shade600,
+                                                                    ),
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                            )),
+                                                          ],
                                                         ),
                                                       ),
-                                                      const SizedBox(width: 8),
-                                                      Text(
-                                                        '${solde >= 0 ? '+' : ''}${solde.toStringAsFixed(2)} USD',
-                                                        style: TextStyle(
-                                                          fontSize: 13,
-                                                          fontWeight: FontWeight.bold,
-                                                          color: color,
+                                                      const SizedBox(height: 12),
+                                                    ],
+                                                    
+                                                    // DETTES (Ils nous doivent)
+                                                    if (dettes.isNotEmpty) ...[
+                                                      Container(
+                                                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.green.shade50,
+                                                          borderRadius: BorderRadius.circular(8),
+                                                          border: Border.all(color: Colors.green.shade200),
+                                                        ),
+                                                        child: Column(
+                                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                                          children: [
+                                                            Row(
+                                                              children: [
+                                                                Icon(Icons.arrow_downward, color: Colors.green.shade700, size: 16),
+                                                                const SizedBox(width: 8),
+                                                                Text(
+                                                                  'DETTES',
+                                                                  style: TextStyle(
+                                                                    fontSize: 12,
+                                                                    fontWeight: FontWeight.bold,
+                                                                    color: Colors.green.shade700,
+                                                                  ),
+                                                                ),
+                                                                const Spacer(),
+                                                                Text(
+                                                                  '${dettes.fold<double>(0, (sum, e) => sum + e.value).toStringAsFixed(2)} USD',
+                                                                  style: TextStyle(
+                                                                    fontSize: 12,
+                                                                    fontWeight: FontWeight.bold,
+                                                                    color: Colors.green.shade700,
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                            const SizedBox(height: 8),
+                                                            ...dettes.map((entry) => Padding(
+                                                              padding: const EdgeInsets.only(left: 24, bottom: 4),
+                                                              child: Row(
+                                                                children: [
+                                                                  Expanded(
+                                                                    child: Text(
+                                                                      entry.key,
+                                                                      style: const TextStyle(fontSize: 11),
+                                                                    ),
+                                                                  ),
+                                                                  Text(
+                                                                    '${entry.value.toStringAsFixed(2)} USD',
+                                                                    style: TextStyle(
+                                                                      fontSize: 11,
+                                                                      fontWeight: FontWeight.w600,
+                                                                      color: Colors.green.shade600,
+                                                                    ),
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                            )),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 12),
+                                                    ],
+                                                    
+                                                    // ÉQUILIBRÉS (si il y en a)
+                                                    if (equilibres.isNotEmpty) ...[
+                                                      Container(
+                                                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.grey.shade100,
+                                                          borderRadius: BorderRadius.circular(8),
+                                                          border: Border.all(color: Colors.grey.shade300),
+                                                        ),
+                                                        child: Column(
+                                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                                          children: [
+                                                            Row(
+                                                              children: [
+                                                                Icon(Icons.balance, color: Colors.grey.shade700, size: 16),
+                                                                const SizedBox(width: 8),
+                                                                Text(
+                                                                  'ÉQUILIBRÉS (${equilibres.length})',
+                                                                  style: TextStyle(
+                                                                    fontSize: 12,
+                                                                    fontWeight: FontWeight.bold,
+                                                                    color: Colors.grey.shade700,
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                            const SizedBox(height: 8),
+                                                            ...equilibres.map((entry) => Padding(
+                                                              padding: const EdgeInsets.only(left: 24, bottom: 4),
+                                                              child: Text(
+                                                                entry.key,
+                                                                style: TextStyle(
+                                                                  fontSize: 11,
+                                                                  color: Colors.grey.shade600,
+                                                                ),
+                                                              ),
+                                                            )),
+                                                          ],
                                                         ),
                                                       ),
                                                     ],
-                                                  ),
+                                                  ],
                                                 );
-                                              }).toList(),
+                                              }(),
                                               const Divider(),
                                               () {
                                                 final totalSolde = soldeParPartenaire.values.fold(0.0, (sum, solde) => sum + solde);
@@ -5398,7 +5574,7 @@ const SizedBox(height: 16),
                                                     ? Colors.green[700] 
                                                     : Colors.grey[700];
                                                 return _buildFinanceRow(
-                                                  'SOLDE NET PARTENAIRES', 
+                                                  'SOLDE NET ', 
                                                   totalSolde, 
                                                   color!, 
                                                   isBold: true
@@ -5548,8 +5724,10 @@ const SizedBox(height: 16),
                                               final soldeParPartenaire = partenaireSnapshot.data ?? {};
                                               final totalSoldePartenaire = soldeParPartenaire.values.fold(0.0, (sum, solde) => sum + solde);
                                               
-                                              // CAPITAL NET = Cash Disponible + Virtuel Disponible + Shop qui Nous qui Doivent - Shop que Nous que Devons - Non Servi - Solde FRAIS + Solde Net Partenaires
-                                              final capitalNet = cashDisponible + virtuelDisponible + shopsNousDoivent - shopsNousDevons - nonServi - soldeFraisTotal + totalSoldePartenaire;
+                                              // CAPITAL NET = Cash Disponible + Virtuel Disponible + Shop qui Nous qui Doivent - Shop que Nous que Devons - Non Servi - Solde FRAIS - Solde Net Partenaires
+                                              // LOGIQUE PARTENAIRES: Si dettes > créances (totalSoldePartenaire < 0) = on SOUSTRAIT (impact négatif)
+                                              // Si créances > dettes (totalSoldePartenaire > 0) = on SOUSTRAIT aussi (nous devons = impact négatif)
+                                              final capitalNet = cashDisponible + virtuelDisponible + shopsNousDoivent - shopsNousDevons - nonServi - soldeFraisTotal - totalSoldePartenaire;
                                       final isPositif = capitalNet >= 0;
                               
                               return Container(
@@ -5651,7 +5829,7 @@ const SizedBox(height: 16),
                                                 const SizedBox(height: 8),
                                                 _buildFinanceRow('- Solde FRAIS', soldeFraisTotal, Colors.red),
                                                 const SizedBox(height: 8),
-                                                _buildFinanceRow('+ Solde Net Partenaires', totalSoldePartenaire, totalSoldePartenaire >= 0 ? Colors.green : Colors.red),
+                                                _buildFinanceRow('- Solde Net Partenaires', totalSoldePartenaire, totalSoldePartenaire >= 0 ? Colors.red : Colors.green),
                                                                    const SizedBox(height: 16),
                                             // BOUTON PRÉVISUALISATION PDF
                                             ElevatedButton.icon(
@@ -6113,7 +6291,8 @@ const SizedBox(height: 16),
           final tousRetraits = tousRetraitsSim.fold<double>(0, (sum, r) => sum + r.montant);
           final tousDepots = tousDepotsSim.fold<double>(0, (sum, d) => sum + d.montant);
           
-          // Amélioration: Ajouter une vérification de cohérence
+          // FORMULE SIMPLIFIÉE: Captures - Retraits - Dépôts (sans solde antérieur pour éviter async)
+          // Note: Le solde antérieur sera géré dans une future amélioration avec FutureBuilder
           final soldeGlobalCalcule = toutesCaptures - tousRetraits - tousDepots;
           
           // Debugging: Afficher les valeurs de calcul dans la console
@@ -6123,6 +6302,7 @@ const SizedBox(height: 16),
           debugPrint('  Dépôts: \$${tousDepots.toStringAsFixed(2)} (${tousDepotsSim.length} dépôts)');
           debugPrint('  Solde calculé: \$${soldeGlobalCalcule.toStringAsFixed(2)}');
           debugPrint('  Solde BDD: \$${sim.soldeActuel.toStringAsFixed(2)}');
+          debugPrint('  FORMULE: ${toutesCaptures.toStringAsFixed(2)} - ${tousRetraits.toStringAsFixed(2)} - ${tousDepots.toStringAsFixed(2)} = ${soldeGlobalCalcule.toStringAsFixed(2)}');
           debugPrint('---');
 
           simStats[sim.numero] = {
@@ -6149,7 +6329,7 @@ const SizedBox(height: 16),
             'nb_en_attente_cdf': enAttenteCdf.length,
             'nb_en_attente_usd': enAttenteUsd.length,
             'solde_actuel': sim.soldeActuel, // Solde de la BDD (peut être incorrect)
-            'solde_global': soldeGlobalCalcule, // Solde calculé (TOUTES périodes)
+            'solde_global': soldeGlobalCalcule, // Solde calculé (TOUTES périodes) - TODO: Ajouter soldes antérieurs
             'solde_periode': soldePeriode, // Solde calculé pour la période filtrée
             'total_captures_global': toutesCaptures, // Pour le récapitulatif
             'total_retraits_global': tousRetraits, // Pour le récapitulatif
@@ -6288,34 +6468,91 @@ const SizedBox(height: 16),
                       simNumero,
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                     ),
-                    subtitle: Row(
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           sim.operateur,
                           style: const TextStyle(fontSize: 14),
                         ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF48bb78).withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.account_balance_wallet, size: 12, color: Color(0xFF48bb78)),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Cash USD ${stats['solde_global'].toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF48bb78),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            // USD Balance
+                            if (stats['total_virtuel_usd'] > 0)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF48bb78).withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.account_balance_wallet, size: 12, color: Color(0xFF48bb78)),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'USD ${stats['total_virtuel_usd'].toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF48bb78),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ],
-                          ),
+                            if (stats['total_virtuel_usd'] > 0 && stats['total_virtuel_cdf'] > 0)
+                              const SizedBox(width: 8),
+                            // CDF Balance
+                            if (stats['total_virtuel_cdf'] > 0)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.account_balance_wallet, size: 12, color: Colors.blue),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'CDF ${stats['total_virtuel_cdf'].toStringAsFixed(0)}',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.blue,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            // Show zero if no balances
+                            if (stats['total_virtuel_usd'] == 0 && stats['total_virtuel_cdf'] == 0)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.account_balance_wallet, size: 12, color: Colors.grey),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Aucun solde',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
                         ),
                       ],
                     ),
@@ -6357,13 +6594,13 @@ const SizedBox(height: 16),
                                   const SizedBox(height: 12),
                                   _buildSimStatRow('Transactions Total', '${stats['nb_total']}', Icons.receipt_long, Colors.blue),
                                   _buildSimStatRow('Servies', '${stats['nb_validees']}', Icons.check_circle, Colors.green),
-                                  _buildSimStatRow('En Attente', '${stats['nb_en_attente']}', Icons.hourglass_empty, Colors.orange),
+                                  _buildSimStatRowWithEnAttenteBreakdown('En Attente', stats, Icons.hourglass_empty, Colors.orange),
                                   const Divider(height: 16),
                                   _buildSimStatRowWithCurrencyBreakdown('Captures', stats, 'periode', Icons.add_circle, const Color(0xFF48bb78)),
-                                  _buildSimStatRow('Total Retraits', 'Cash USD ${stats['montant_retraits'].toStringAsFixed(2)}', Icons.remove_circle, Colors.red),
-                                  _buildSimStatRow('Total Dépôts', 'Cash USD ${stats['montant_depots_filtre'].toStringAsFixed(2)}', Icons.account_balance, Colors.purple),
+                                  _buildSimStatRow('Total Retraits', 'USD ${stats['montant_retraits'].toStringAsFixed(2)}', Icons.remove_circle, Colors.red),
+                                  _buildSimStatRow('Total Dépôts', 'USD ${stats['montant_depots_filtre'].toStringAsFixed(2)}', Icons.account_balance, Colors.purple),
                                   const Divider(height: 16),
-                                  _buildSimStatRow('Solde Période', 'Cash USD ${stats['solde_periode'].toStringAsFixed(2)}', Icons.trending_up, Colors.blue, isBold: true),
+                                  _buildSimStatRow('Solde Période', 'USD ${stats['solde_periode'].toStringAsFixed(2)}', Icons.trending_up, Colors.blue, isBold: true),
                                 ],
                               ),
                             ),
@@ -6398,10 +6635,10 @@ const SizedBox(height: 16),
                                   ),
                                   const SizedBox(height: 12),
                                   _buildSimStatRowWithCurrencyBreakdown('Total Captures', stats, 'global', Icons.add_circle, Colors.green),
-                                  _buildSimStatRow('Total Retraits', 'Cash USD ${stats['total_retraits_global'].toStringAsFixed(2)}', Icons.remove_circle, Colors.orange),
-                                  _buildSimStatRow('Total Dépôts', 'Cash USD ${stats['total_depots_global'].toStringAsFixed(2)}', Icons.account_balance, Colors.purple),
+                                  _buildSimStatRow('Total Retraits', 'USD ${stats['total_retraits_global'].toStringAsFixed(2)}', Icons.remove_circle, Colors.orange),
+                                  _buildSimStatRow('Total Dépôts', 'USD ${stats['total_depots_global'].toStringAsFixed(2)}', Icons.account_balance, Colors.purple),
                                   const Divider(height: 16),
-                                  _buildSimStatRow('Solde Global', 'Cash USD ${stats['solde_global'].toStringAsFixed(2)}', Icons.account_balance_wallet, const Color(0xFF48bb78), isBold: true),
+                                  _buildSimStatRow('Solde Global', 'USD ${stats['solde_global'].toStringAsFixed(2)}', Icons.account_balance_wallet, const Color(0xFF48bb78), isBold: true),
                                 ],
                               ),
                             ),
@@ -6763,6 +7000,63 @@ const SizedBox(height: 16),
     );
   }
 
+  /// Ligne de statistique avec détail des devises pour les transactions en attente
+  Widget _buildSimStatRowWithEnAttenteBreakdown(String label, Map<String, dynamic> stats, IconData icon, Color color) {
+    final totalCdf = stats['montant_en_attente_cdf'] ?? 0.0;
+    final totalUsd = stats['montant_en_attente_usd'] ?? 0.0;
+    final countCdf = stats['nb_en_attente_cdf'] ?? 0;
+    final countUsd = stats['nb_en_attente_usd'] ?? 0;
+    final totalCount = countCdf + countUsd;
+    
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '$label ($totalCount)',
+              style: const TextStyle(fontSize: 14),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (totalUsd > 0)
+                Text(
+                  'USD ${totalUsd.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                ),
+              if (totalCdf > 0)
+                Text(
+                  'CDF ${totalCdf.toStringAsFixed(0)}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                ),
+              if (totalCdf == 0 && totalUsd == 0)
+                Text(
+                  '0',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Ligne de statistique avec détail des devises pour les captures
   Widget _buildSimStatRowWithCurrencyBreakdown(String label, Map<String, dynamic> stats, String type, IconData icon, Color color) {
     double totalCdf, totalUsd;
@@ -6838,7 +7132,7 @@ const SizedBox(height: 16),
     if (label.contains('Captures')) {
       currencyDisplay = 'Mixed ${value.toStringAsFixed(2)}';
     } else {
-      currencyDisplay = 'Cash USD ${value.toStringAsFixed(2)}';
+      currencyDisplay = 'USD ${value.toStringAsFixed(2)}';
     }
     
     return Container(
@@ -7616,7 +7910,7 @@ const SizedBox(height: 16),
   /// Formater le montant cash avec conversion si nécessaire
   String _formatCashAmount(VirtualTransactionModel transaction) {
     if (transaction.devise == 'CDF') {
-      // Pour les transactions CDF, calculer le cash USD avec le taux actuel
+      // Pour les transactions CDF, calculer le USD avec le taux actuel
       final montantApresCommission = transaction.montantVirtuel - transaction.frais;
       final cashUsd = CurrencyService.instance.convertCdfToUsd(montantApresCommission);
       return '\$${cashUsd.toStringAsFixed(2)} USD (converti de ${montantApresCommission.toStringAsFixed(0)} CDF)';
@@ -7942,11 +8236,11 @@ const SizedBox(height: 16),
         if (op.isAdministrative) {
           // Pour les initialisations administratives, utiliser le nom du client directement
           final clientName = op.clientNom ?? op.destinataire ?? 'Client inconnu';
-          partenaireKey = clientName;
+          partenaireKey = '$clientName';
         } else {
           // Pour les opérations normales, utiliser uniquement le nom du client pour grouper correctement
           final clientName = op.clientNom ?? op.destinataire ?? 'Client inconnu';
-          partenaireKey = clientName;
+          partenaireKey = '$clientName';
         }
         
         soldeParPartenaire[partenaireKey] = (soldeParPartenaire[partenaireKey] ?? 0.0) + op.montantNet;
@@ -7959,11 +8253,11 @@ const SizedBox(height: 16),
         if (op.isAdministrative) {
           // Pour les dettes initialisées administratives, utiliser le nom du client directement
           final clientName = op.clientNom ?? op.destinataire ?? 'Client inconnu';
-          partenaireKey = clientName;
+          partenaireKey = '$clientName';
         } else {
           // Pour les opérations normales, utiliser uniquement le nom du client pour grouper correctement
           final clientName = op.clientNom ?? op.destinataire ?? 'Client inconnu';
-          partenaireKey = clientName;
+          partenaireKey = '$clientName';
         }
         
         soldeParPartenaire[partenaireKey] = (soldeParPartenaire[partenaireKey] ?? 0.0) - op.montantNet;
@@ -8453,7 +8747,9 @@ const SizedBox(height: 16),
                         builder: (context, snapshot) {
                           final sims = simService.sims;
                           return DropdownButtonFormField<String?>(
-                            value: _listeTransactionsSimFilter,
+                            value: sims.any((sim) => sim.numero == _listeTransactionsSimFilter) 
+                                ? _listeTransactionsSimFilter 
+                                : null,
                             decoration: const InputDecoration(
                               labelText: 'SIM',
                               prefixIcon: Icon(Icons.sim_card),
@@ -9302,7 +9598,9 @@ const SizedBox(height: 16),
                     SizedBox(
                       width: 200,
                       child: DropdownButtonFormField<String?>(
-                        value: _creditSimFilter,
+                        value: simService.sims.any((sim) => sim.numero == _creditSimFilter) 
+                            ? _creditSimFilter 
+                            : null,
                         decoration: InputDecoration(
                           labelText: 'SIM',
                           prefixIcon: const Icon(Icons.sim_card, size: 20),
@@ -9454,23 +9752,56 @@ const SizedBox(height: 16),
                   ),
                 ),
                 const SizedBox(height: 12),
-                ...simService.sims.map((sim) => FutureBuilder<double>(
-                  future: CreditVirtuelService.instance.calculateSoldeVirtuelDisponible(sim.numero),
+                ...simService.sims.map((sim) => FutureBuilder<Map<String, double>>(
+                  future: _calculateSoldeVirtuelDisponibleParDevise(sim.numero),
                   builder: (context, snapshot) {
-                    final solde = snapshot.data ?? 0.0;
+                    final soldes = snapshot.data ?? {'USD': 0.0, 'CDF': 0.0};
+                    final soldeUSD = soldes['USD'] ?? 0.0;
+                    final soldeCDF = soldes['CDF'] ?? 0.0;
                     final currencyService = CurrencyService.instance;
                     
                     return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      padding: const EdgeInsets.symmetric(vertical: 6),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('${sim.operateur} (${sim.numero})'),
-                          Text(
-                            currencyService.formatMontant(solde, 'USD'),
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: solde > 0 ? Colors.green : Colors.red,
+                          Expanded(
+                            flex: 2,
+                            child: Text('${sim.operateur} (${sim.numero})'),
+                          ),
+                          Expanded(
+                            flex: 3,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                if (soldeUSD > 0)
+                                  Text(
+                                    currencyService.formatMontant(soldeUSD, 'USD'),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: soldeUSD > 0 ? Colors.green : Colors.red,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                if (soldeCDF > 0)
+                                  Text(
+                                    currencyService.formatMontant(soldeCDF, 'CDF'),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: soldeCDF > 0 ? Colors.blue : Colors.red,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                if (soldeUSD == 0 && soldeCDF == 0)
+                                  Text(
+                                    '0.00',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
                         ],
@@ -9484,6 +9815,54 @@ const SizedBox(height: 16),
         );
       },
     );
+  }
+
+  /// Calculer le solde virtuel disponible par devise pour une SIM
+  Future<Map<String, double>> _calculateSoldeVirtuelDisponibleParDevise(String simNumero) async {
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final shopId = authService.currentUser?.shopId;
+      
+      if (shopId == null) return {'USD': 0.0, 'CDF': 0.0};
+      
+      // Récupérer toutes les transactions pour cette SIM
+      final allTransactions = await LocalDB.instance.getAllVirtualTransactions(shopId: shopId);
+      final simTransactions = allTransactions.where((t) => t.simNumero == simNumero).toList();
+      
+      // Calculer les soldes par devise
+      double soldeUSD = 0.0;
+      double soldeCDF = 0.0;
+      
+      for (var transaction in simTransactions) {
+        if (transaction.statut == VirtualTransactionStatus.validee) {
+          if (transaction.devise == 'USD') {
+            soldeUSD += transaction.montantVirtuel;
+          } else if (transaction.devise == 'CDF') {
+            soldeCDF += transaction.montantVirtuel;
+          }
+        }
+      }
+      
+      // Soustraire les retraits (toujours en USD)
+      final retraits = await LocalDB.instance.getAllRetraitsVirtuels(shopSourceId: shopId);
+      final simRetraits = retraits.where((r) => r.simNumero == simNumero).toList();
+      final totalRetraits = simRetraits.fold<double>(0.0, (sum, r) => sum + r.montant);
+      soldeUSD -= totalRetraits; // Les retraits sont toujours en USD
+      
+      // Soustraire les dépôts clients (toujours en USD)
+      final depots = await LocalDB.instance.getAllDepotsClients(shopId: shopId);
+      final simDepots = depots.where((d) => d.simNumero == simNumero).toList();
+      final totalDepots = simDepots.fold<double>(0.0, (sum, d) => sum + d.montant);
+      soldeUSD -= totalDepots; // Les dépôts sont toujours en USD
+      
+      return {
+        'USD': soldeUSD,
+        'CDF': soldeCDF,
+      };
+    } catch (e) {
+      debugPrint('❌ Erreur calcul solde par devise pour SIM $simNumero: $e');
+      return {'USD': 0.0, 'CDF': 0.0};
+    }
   }
 
   /// Construire une carte de crédit

@@ -461,7 +461,7 @@ class _RapportClotureWidgetState extends State<RapportClotureWidget> {
             _buildCapitalBreakdown('- Shops Nous que Devons', -rapport.totalShopsNousDevons, Colors.purple),
             (() {
               final totalSoldePartenaire = rapport.soldeParPartenaire.values.fold(0.0, (sum, solde) => sum + solde);
-              return _buildCapitalBreakdown('+ Solde Net Partenaires', totalSoldePartenaire, totalSoldePartenaire >= 0 ? Colors.blue : Colors.red);
+              return _buildCapitalBreakdown('+/- Solde Net Partenaires', totalSoldePartenaire, totalSoldePartenaire >= 0 ? Colors.blue : Colors.red);
             }()),
             const SizedBox(height: 8),
             const Divider(thickness: 2),

@@ -57,6 +57,14 @@ This directory contains comprehensive documentation for the UCASH money transfer
   - **Target Audience**: Developers, system administrators
   - **Length**: Technical reference (50+ pages equivalent)
 
+- **[DETTES_INTERSHOPS_DOCUMENTATION.md](./DETTES_INTERSHOPS_DOCUMENTATION.md)**
+  - Complete technical documentation for inter-shop debt management
+  - Calculation algorithms and business logic
+  - Net company position formulas and implementation
+  - Triangular debt settlement system
+  - **Target Audience**: Developers, financial analysts, system architects
+  - **Length**: Comprehensive technical reference (30+ pages equivalent)
+
 ---
 
 ## Documentation Structure

@@ -285,7 +285,7 @@ class _RapportPaiementsMensuelsWidgetState extends State<RapportPaiementsMensuel
             color: statusColor,
           ),
         ),
-        title: Text(salaire.personnelNom ?? 'Personnel ${salaire.personnelId}'),
+        title: Text(salaire.personnelNom ?? 'Personnel ${salaire.personnelMatricule}'),
         subtitle: Text('Net: ${salaire.salaireNet.toStringAsFixed(2)} USD'),
         trailing: Chip(
           label: Text(salaire.statut),

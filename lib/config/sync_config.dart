@@ -21,7 +21,8 @@ class SyncConfig {
   static const Duration retryDelay = Duration(seconds: 30);
   
   /// Timeout pour les requêtes HTTP de sync
-  static const Duration syncTimeout = Duration(seconds: 30);
+  /// Increased for web environment to handle slower network conditions
+  static const Duration syncTimeout = Duration(seconds: 60);
   
   /// ========== DATA CONSISTENCY CONFIGURATION ==========
   

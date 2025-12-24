@@ -154,7 +154,7 @@ class RobustSyncService {
     final startTime = DateTime.now();
     
     debugPrint('🚀 ${isInitial ? "[INITIAL]" : ""} FAST SYNC - Début');
-    debugPrint('   Tables critiques: operations, flots, clients, comptes_speciaux, sims, virtual_transactions, audit_log, reconciliations, triangular_debt_settlements');
+    debugPrint('   Tables critiques: operations, flots, clients, comptes_speciaux, sims, virtual_transactions, retrait_virtuels, credit_virtuels, audit_log, reconciliations, triangular_debt_settlements');
     
     int successCount = 0;
     int errorCount = 0;
@@ -173,6 +173,19 @@ class RobustSyncService {
       } else {
         errorCount++;
         errors.add('queue_depots_retraits');
+      }
+
+            // ========== ÉTAPE 10: SYNC RÈGLEMENTS TRIANGULAIRES DE DETTES ==========
+      if (await _syncWithRetry('triangular_debt_settlements', () async {
+        debugPrint('  🔺 Upload RÈGLEMENTS TRIANGULAIRES...');
+        await _syncService.uploadTableData('triangular_debt_settlements', 'auto_fast_sync', 'admin');
+        debugPrint('  📥 Download RÈGLEMENTS TRIANGULAIRES...');
+        await _syncService.downloadTableData('triangular_debt_settlements', 'auto_fast_sync', 'admin');
+      })) {
+        successCount++;
+      } else {
+        errorCount++;
+        errors.add('triangular_debt_settlements');
       }
       
       // 1.2 Queue Transferts (Autres opérations)
@@ -275,6 +288,19 @@ class RobustSyncService {
         errors.add('virtual_transactions');
       }
       
+      // ========== ÉTAPE 7.1: SYNC RETRAITS VIRTUELS ==========
+      if (await _syncWithRetry('retrait_virtuels', () async {
+        debugPrint('  🔄 Upload RETRAIT_VIRTUELS...');
+        await _syncService.uploadTableData('retrait_virtuels', 'auto_fast_sync', 'admin');
+        debugPrint('  📥 Download RETRAIT_VIRTUELS...');
+        await _syncService.downloadTableData('retrait_virtuels', 'auto_fast_sync', 'admin');
+      })) {
+        successCount++;
+      } else {
+        errorCount++;
+        errors.add('retrait_virtuels');
+      }
+      
       // ========== ÉTAPE 8: SYNC AUDIT LOG ==========
       if (await _syncWithRetry('audit_log', () async {
         debugPrint('  📤 Upload AUDIT LOG...');
@@ -301,18 +327,19 @@ class RobustSyncService {
         errors.add('reconciliations');
       }
       
-      // ========== ÉTAPE 10: SYNC RÈGLEMENTS TRIANGULAIRES DE DETTES ==========
-      if (await _syncWithRetry('triangular_debt_settlements', () async {
-        debugPrint('  🔺 Upload RÈGLEMENTS TRIANGULAIRES...');
-        await _syncService.uploadTableData('triangular_debt_settlements', 'auto_fast_sync', 'admin');
-        debugPrint('  📥 Download RÈGLEMENTS TRIANGULAIRES...');
-        await _syncService.downloadTableData('triangular_debt_settlements', 'auto_fast_sync', 'admin');
+      // ========== ÉTAPE 9.1: SYNC CRÉDITS VIRTUELS ==========
+      if (await _syncWithRetry('credit_virtuels', () async {
+        debugPrint('  💳 Upload CREDIT_VIRTUELS...');
+        await _syncService.uploadTableData('credit_virtuels', 'auto_fast_sync', 'admin');
+        debugPrint('  📥 Download CREDIT_VIRTUELS...');
+        await _syncService.downloadTableData('credit_virtuels', 'auto_fast_sync', 'admin');
       })) {
         successCount++;
       } else {
         errorCount++;
-        errors.add('triangular_debt_settlements');
+        errors.add('credit_virtuels');
       }
+    
       
       _lastFastSync = DateTime.now();
       _fastSyncSuccessCount += successCount;
@@ -678,6 +705,15 @@ class RobustSyncService {
     debugPrint('⚡ FORCE synchronisation - resetting circuit breaker first');
     resetCircuitBreaker();
     await syncNow();
+  }
+
+  /// Force reset circuit breaker and clear failed tables
+  void forceResetCircuitBreaker() {
+    debugPrint('🔧 FORCE RESET circuit breaker and clearing failed tables');
+    _resetCircuitBreaker();
+    _failedFastTables.clear();
+    _failedSlowTables.clear();
+    debugPrint('✅ Circuit breaker reset and failed tables cleared');
   }
 
   /// Active/désactive la synchronisation

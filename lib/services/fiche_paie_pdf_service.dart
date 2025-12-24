@@ -178,11 +178,22 @@ Future<pw.Document> generateBulletinCollectifPdf({
             ),
             // Lignes de données
             ...salaires.map((salaire) {
-              final person = personnelMap[salaire.personnelId];
+              // Chercher le personnel par matricule au lieu de l'ID
+              final person = personnelMap.values.firstWhere(
+                (p) => p.matricule == salaire.personnelMatricule,
+                orElse: () => PersonnelModel(
+                  matricule: salaire.personnelMatricule,
+                  nom: 'Agent',
+                  prenom: 'Inconnu',
+                  telephone: '',
+                  poste: '',
+                  dateEmbauche: DateTime.now(),
+                ),
+              );
               return pw.TableRow(
                 children: [
-                  _buildTableCell(person?.matricule ?? '-'),
-                  _buildTableCell(person?.nomComplet ?? 'Personnel ${salaire.personnelId}'),
+                  _buildTableCell(person.matricule),
+                  _buildTableCell(person.nomComplet),
                   _buildTableCell('${salaire.salaireBrut.toStringAsFixed(2)} \$'),
                   _buildTableCell('${salaire.totalDeductions.toStringAsFixed(2)} \$'),
                   _buildTableCell('${salaire.salaireNet.toStringAsFixed(2)} \$'),

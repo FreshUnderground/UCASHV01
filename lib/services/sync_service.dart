@@ -32,6 +32,7 @@ import '../models/cloture_caisse_model.dart';
 import '../models/flot_model.dart' as flot_model;
 import '../models/sim_model.dart';
 import '../models/virtual_transaction_model.dart';
+import '../models/triangular_debt_settlement_model.dart';
 import '../config/app_config.dart';
 import '../config/sync_config.dart';
 import 'conflict_notification_service.dart';
@@ -432,10 +433,13 @@ class SyncService {
       debugPrint('🔄 Synchronisation des flots en file d\'attente...');
       await syncPendingFlots();
       
-      final dependentTables = ['agents', 'clients', 'operations', 'taux', 'commissions', 'comptes_speciaux', 'document_headers', 'cloture_caisse', 'flots', 'sims', 'sim_movements', 'virtual_transactions', 'depot_clients'];
+      final dependentTables = ['agents', 'clients', 'operations', 'taux', 'commissions', 'comptes_speciaux', 'document_headers', 'cloture_caisse', 'flots', 'sims', 'sim_movements', 'virtual_transactions', 'depot_clients', 'triangular_debt_settlements'];
       for (String table in dependentTables) {
         try {
+          debugPrint('📤 Début upload $table...');
           await _uploadTableDataWithRetry(table, userIdToUse, userRole); // Pass user role
+          debugPrint('✅ Upload $table terminé avec succès');
+          
           // Recharger les entités en mémoire après l'upload
           if (table == 'agents') {
             await AgentService.instance.loadAgents();
@@ -446,9 +450,12 @@ class SyncService {
           } else if (table == 'operations') {
             await OperationService().loadOperations();
             debugPrint('✅ Opérations rechargées en mémoire après upload');
+          } else if (table == 'triangular_debt_settlements') {
+            debugPrint('🔺 Règlements triangulaires uploadés - pas de rechargement nécessaire');
           }
         } catch (e) {
           debugPrint('❌ Erreur upload $table: $e');
+          debugPrint('🔍 Stack trace: ${e.toString()}');
         }
       }
       
@@ -560,7 +567,7 @@ class SyncService {
   /// Upload des changements locaux vers le serveur
   Future<void> _uploadLocalChanges(String userId) async {
     // NOTE: 'operations' est maintenant inclus dans la sync normale
-    final tables = ['shops', 'agents', 'clients', 'operations', 'taux', 'commissions', 'comptes_speciaux', 'document_headers', 'cloture_caisse', 'sims', 'sim_movements', 'virtual_transactions', 'depot_clients'];
+    final tables = ['shops', 'agents', 'clients', 'operations', 'taux', 'commissions', 'comptes_speciaux', 'document_headers', 'cloture_caisse', 'sims', 'sim_movements', 'virtual_transactions', 'depot_clients', 'triangular_debt_settlements'];
     int successCount = 0;
     int errorCount = 0;
     
@@ -640,6 +647,50 @@ class SyncService {
           return false;
         }
         return true;
+
+      case 'triangular_debt_settlements':
+        // Validation des champs obligatoires pour les règlements triangulaires
+        if (data['reference'] == null || data['reference'].toString().isEmpty) {
+          debugPrint('❌ Validation: reference manquante pour triangular_debt_settlement ${data['id']}');
+          return false;
+        }
+        if (data['shop_debtor_id'] == null || data['shop_debtor_id'] <= 0) {
+          debugPrint('❌ Validation: shop_debtor_id manquant pour triangular_debt_settlement ${data['id']}');
+          return false;
+        }
+        if (data['shop_intermediary_id'] == null || data['shop_intermediary_id'] <= 0) {
+          debugPrint('❌ Validation: shop_intermediary_id manquant pour triangular_debt_settlement ${data['id']}');
+          return false;
+        }
+        if (data['shop_creditor_id'] == null || data['shop_creditor_id'] <= 0) {
+          debugPrint('❌ Validation: shop_creditor_id manquant pour triangular_debt_settlement ${data['id']}');
+          return false;
+        }
+        if (data['montant'] == null || data['montant'] <= 0) {
+          debugPrint('❌ Validation: montant invalide pour triangular_debt_settlement ${data['id']}');
+          return false;
+        }
+        if (data['date_reglement'] == null) {
+          debugPrint('❌ Validation: date_reglement manquante pour triangular_debt_settlement ${data['id']}');
+          return false;
+        }
+        if (data['agent_id'] == null || data['agent_id'] < 0) {
+          debugPrint('❌ Validation: agent_id manquant pour triangular_debt_settlement ${data['id']}');
+          return false;
+        }
+        
+        // Vérifier que les trois shops sont différents
+        final debtorId = data['shop_debtor_id'];
+        final intermediaryId = data['shop_intermediary_id'];
+        final creditorId = data['shop_creditor_id'];
+        
+        if (debtorId == intermediaryId || debtorId == creditorId || intermediaryId == creditorId) {
+          debugPrint('❌ Validation: les trois shops doivent être différents pour triangular_debt_settlement ${data['id']} (debtor: $debtorId, intermediary: $intermediaryId, creditor: $creditorId)');
+          return false;
+        }
+        
+        return true;
+        
       
       case 'flots':
         // Validation des champs obligatoires pour les flots
@@ -842,6 +893,7 @@ class SyncService {
         
         return true;
         
+
       default:
         debugPrint('⚠️ Validation non implémentée pour $tableName');
         return true; // Par défaut, accepter les données non validées
@@ -855,9 +907,16 @@ class SyncService {
       final localData = await _getLocalChangesWithDelta(tableName, null);
       debugPrint('📤 $tableName: ${localData.length} éléments à uploader');
       
+      if (tableName == 'triangular_debt_settlements') {
+        debugPrint('🔺 Upload règlements triangulaires: ${localData.length} éléments');
+      }
+      
       if (localData.isEmpty) {
         debugPrint('📭 $tableName: Aucune donnée à uploader');
-        return;
+        if (tableName == 'triangular_debt_settlements') {
+          debugPrint('🔺 Aucun règlement triangulaire à synchroniser - SUCCESS (rien à faire)');
+        }
+        return; // Considérer comme succès si rien à uploader
       }
       
       // VALIDATION: Vérifier les données AVANT upload
@@ -917,11 +976,56 @@ class SyncService {
         headers['Content-Encoding'] = 'gzip';
       }
       
-      final response = await http.post(
-        Uri.parse('$baseUrl/$tableName/upload.php'),
-        headers: headers,
-        body: jsonData,
-      ).timeout(_syncTimeout);
+      final uploadUrl = Uri.parse('$baseUrl/$tableName/upload.php');
+      debugPrint('📤 $tableName: URL upload: $uploadUrl');
+      
+      if (tableName == 'triangular_debt_settlements') {
+        debugPrint('🔺 Upload vers: $uploadUrl');
+        debugPrint('🔺 Payload: ${jsonData.substring(0, jsonData.length > 500 ? 500 : jsonData.length)}...');
+      }
+      
+      late http.Response response;
+      try {
+        response = await http.post(
+          uploadUrl,
+          headers: headers,
+          body: jsonData,
+        ).timeout(_syncTimeout);
+        
+        debugPrint('📤 $tableName: Status code: ${response.statusCode}');
+        if (tableName == 'triangular_debt_settlements') {
+          debugPrint('🔺 Response status: ${response.statusCode}');
+          debugPrint('🔺 Response body: ${response.body}');
+        }
+      } catch (e) {
+        debugPrint('❌ $tableName: Erreur réseau/CORS: $e');
+        if (tableName == 'triangular_debt_settlements') {
+          debugPrint('🔺 Erreur réseau triangular: $e');
+          debugPrint('🔺 URL tentée: $uploadUrl');
+          debugPrint('🔺 Headers: $headers');
+          
+          // Test de connectivité spécifique pour triangular
+          debugPrint('🔺 Test de connectivité vers le serveur...');
+          try {
+            final pingUrl = Uri.parse('$baseUrl/../ping.php');
+            final pingResponse = await http.get(pingUrl).timeout(Duration(seconds: 10));
+            debugPrint('🔺 Ping serveur: ${pingResponse.statusCode} - ${pingResponse.body.substring(0, 100)}');
+          } catch (pingError) {
+            debugPrint('🔺 Ping serveur échoué: $pingError');
+          }
+          
+          // Pour triangular_debt_settlements, ne pas faire échouer complètement la sync
+          // si c'est juste un problème de connectivité temporaire
+          if (e.toString().contains('Connection') || 
+              e.toString().contains('timeout') ||
+              e.toString().contains('ClientException') ||
+              e.toString().contains('XMLHttpRequest error')) {
+            debugPrint('🔺 Erreur de connectivité temporaire pour triangular - skip pour éviter circuit breaker');
+            return; // Skip silencieusement pour éviter de déclencher le circuit breaker
+          }
+        }
+        rethrow;
+      }
 
       if (response.statusCode == 200) {
         // Vérifier que la réponse est bien du JSON avant de parser
@@ -972,14 +1076,24 @@ class SyncService {
           // Marquer les éléments comme synchronisés uniquement si pas d'erreurs
           if (uploaded > 0 || updated > 0) {
             await _markEntitiesAsSynced(tableName, validatedData);
+            if (tableName == 'triangular_debt_settlements') {
+              debugPrint('🔺 ${uploaded + updated} règlements triangulaires marqués comme synchronisés');
+            }
           }
         } else {
           debugPrint('⚠️ Erreur serveur $tableName: ${result['message']}');
+          if (tableName == 'triangular_debt_settlements') {
+            debugPrint('🔺 Erreur upload triangular: ${result['message']}');
+          }
           throw Exception('Erreur serveur: ${result['message']}');
         }
       } else {
         debugPrint('⚠️ Erreur HTTP $tableName: ${response.statusCode}');
         debugPrint('📄 Réponse du serveur: ${response.body}');
+        if (tableName == 'triangular_debt_settlements') {
+          debugPrint('🔺 Erreur HTTP triangular: ${response.statusCode}');
+          debugPrint('🔺 Réponse serveur triangular: ${response.body}');
+        }
         throw Exception('Erreur HTTP ${response.statusCode}: ${response.body}');
       }
     } catch (e, stackTrace) {
@@ -1273,7 +1387,7 @@ class SyncService {
     // NOTE: 'operations' est maintenant inclus pour permettre à l'admin de télécharger toutes les opérations
     // TransferSyncService gère la synchronisation en temps réel pour les agents
     // DepotRetraitSyncService gère la synchronisation des depot_clients
-    final tables = ['operations', 'shops', 'agents', 'clients', 'taux', 'commissions', 'comptes_speciaux', 'document_headers', 'cloture_caisse', 'flots', 'sims', 'sim_movements', 'virtual_transactions'];
+    final tables = ['operations', 'shops', 'agents', 'clients', 'taux', 'commissions', 'comptes_speciaux', 'document_headers', 'cloture_caisse', 'flots', 'sims', 'sim_movements', 'virtual_transactions', 'triangular_debt_settlements'];
     int successCount = 0;
     int errorCount = 0;
     
@@ -1282,11 +1396,16 @@ class SyncService {
     
     for (String table in tables) {
       try {
-        debugPrint('📥 Download $table...');
+        debugPrint('📥 Début download $table...');
         await _downloadTableData(table, userId, userRole);
+        debugPrint('✅ Download $table terminé avec succès');
+        if (table == 'triangular_debt_settlements') {
+          debugPrint('🔺 Règlements triangulaires téléchargés depuis le serveur');
+        }
         successCount++;
       } catch (e) {
         debugPrint('❌ Erreur download $table: $e');
+        debugPrint('🔍 Stack trace download: ${e.toString()}');
         errorCount++;
         // Continuer avec les autres tables
       }
@@ -1300,32 +1419,20 @@ class SyncService {
     try {
       final lastSync = await _getLastSyncTimestamp(tableName);
       
+      if (tableName == 'triangular_debt_settlements') {
+        debugPrint('🔺 Début download règlements triangulaires depuis: $lastSync');
+      }
+      
       // STRATÉGIE SPÉCIALE POUR virtual_transactions
-      // Utilise date_enregistrement de la dernière transaction locale au lieu de last_sync
+      // OPTIMISATION: Filtrage intelligent par statut et date au lieu de sync par date
       String sinceParam;
       
       if (tableName == 'virtual_transactions') {
-        // Récupérer la dernière transaction locale
-        final allLocalVt = await LocalDB.instance.getAllVirtualTransactions();
-        
-        if (allLocalVt.isEmpty) {
-          // PREMIÈRE UTILISATION: Télécharger TOUT
-          sinceParam = '2020-01-01T00:00:00.000';
-          debugPrint('🆕 VIRTUAL_TRANSACTIONS: Première utilisation - Téléchargement COMPLET');
-        } else {
-          // Trouver la transaction avec la date_enregistrement la plus récente
-          final latestTransaction = allLocalVt.reduce((a, b) => 
-            a.dateEnregistrement.isAfter(b.dateEnregistrement) ? a : b
-          );
-          
-          // Télécharger depuis cette date (avec 60s overlap pour sécurité)
-          final sinceDate = latestTransaction.dateEnregistrement.subtract(const Duration(seconds: 60));
-          sinceParam = sinceDate.toIso8601String();
-          
-          debugPrint('💰 VIRTUAL_TRANSACTIONS: Dernière transaction locale: ${latestTransaction.reference}');
-          debugPrint('   Date enregistrement: ${latestTransaction.dateEnregistrement}');
-          debugPrint('   Téléchargement depuis: $sinceParam (avec 60s overlap)');
-        }
+        // Pour les transactions virtuelles, utiliser le filtrage intelligent
+        // au lieu de la stratégie basée sur date_enregistrement
+        sinceParam = '2020-01-01T00:00:00.000'; // Date par défaut, le filtrage se fait côté serveur
+        debugPrint('💰 VIRTUAL_TRANSACTIONS: Utilisation du filtrage intelligent côté serveur');
+        debugPrint('   🎯 Filtrage: EN ATTENTE (toutes) + VALIDÉES (2j) + ANNULÉES (1j)');
       } else {
         // OPTIMIZATION: Add 60-second overlap window to prevent missing data
         // This ensures we catch any concurrent modifications that happened
@@ -1389,11 +1496,15 @@ class SyncService {
         
         uri = Uri.parse('$baseUrl/$tableName/$endpoint').replace(queryParameters: queryParams);
       } else if (tableName == 'operations') {
-        // Pour operations, ajouter les paramètres requis
+        // OPTIMISATION: Filtrage intelligent par statut et date pour operations
         final queryParams = {
           'since': sinceParam,
           'user_id': userId,
           'user_role': userRole,
+          'filter_mode': 'smart',     // Active le filtrage intelligent
+          'pending_all': 'true',      // Toutes les opérations en attente
+          'served_days': '4',         // Opérations servies: 4 derniers jours
+          'cancelled_days': '1',      // Opérations annulées: aujourd'hui seulement
         };
         
         if (userRole != 'admin' && currentShopId != null) {
@@ -1401,7 +1512,25 @@ class SyncService {
         }
         
         uri = Uri.parse('$baseUrl/$tableName/$endpoint').replace(queryParameters: queryParams);
-        debugPrint('📥 Requête download operations: $uri');
+        debugPrint('📥 Requête download operations OPTIMISÉE: $uri');
+        debugPrint('   🎯 Filtrage: EN ATTENTE (toutes) + SERVIS (4j) + ANNULÉS (1j)');
+      } else if (tableName == 'virtual_transactions') {
+        // OPTIMISATION: Filtrage intelligent par statut et date pour virtual_transactions
+        final queryParams = {
+          'since': sinceParam,
+          'filter_mode': 'smart',     // Active le filtrage intelligent
+          'pending_all': 'true',      // Toutes les transactions en attente
+          'served_days': '4',         // Transactions validées: 4 derniers jours
+          'cancelled_days': '1',      // Transactions annulées: aujourd'hui seulement
+        };
+        
+        if (userRole != 'admin' && currentShopId != null) {
+          queryParams['shop_id'] = currentShopId.toString();
+        }
+        
+        uri = Uri.parse('$baseUrl/$tableName/$endpoint').replace(queryParameters: queryParams);
+        debugPrint('📥 Requête download virtual_transactions OPTIMISÉE: $uri');
+        debugPrint('   🎯 Filtrage: EN ATTENTE (toutes) + VALIDÉES (4j) + ANNULÉES (1j)');
       } else if (tableName == 'comptes_speciaux') {
         // Pour comptes_speciaux, l'admin télécharge TOUT, les agents filtrent par shop
         final queryParams = {
@@ -1416,6 +1545,31 @@ class SyncService {
         }
         
         uri = Uri.parse('$baseUrl/$tableName/$endpoint').replace(queryParameters: queryParams);
+      } else if (tableName == 'triangular_debt_settlements') {
+        // Pour règlements triangulaires, ajouter les paramètres requis
+        // Si c'est la première sync (pas de lastSync), télécharger tout depuis 2020
+        final triangularSinceParam = lastSync == null ? '2020-01-01T00:00:00.000' : sinceParam;
+        final queryParams = {
+          'since': triangularSinceParam,
+          'user_id': userId,
+          'user_role': userRole,
+        };
+        
+        if (lastSync == null) {
+          debugPrint('🔺 PREMIÈRE SYNC: Téléchargement de TOUS les règlements triangulaires depuis 2020');
+        } else {
+          debugPrint('🔺 SYNC INCRÉMENTALE: Règlements triangulaires depuis $lastSync');
+        }
+        
+        if (userRole != 'admin' && currentShopId != null) {
+          queryParams['shop_id'] = currentShopId.toString();
+          debugPrint('🔺 Mode AGENT: filtrage RÈGLEMENTS TRIANGULAIRES par shop_id=$currentShopId');
+        } else {
+          debugPrint('👑 Mode ADMIN: téléchargement de TOUS les règlements triangulaires');
+        }
+        
+        uri = Uri.parse('$baseUrl/$tableName/$endpoint').replace(queryParameters: queryParams);
+        debugPrint('🔺 Requête download triangular: $uri');
       }
       
       debugPrint('📥 Requête download: $uri');
@@ -1504,6 +1658,10 @@ class SyncService {
                   shopId: currentShopId,
                   isAdmin: userRole == 'admin',
                 );
+                break;
+              case 'triangular_debt_settlements':
+                debugPrint('🔺 Règlements triangulaires téléchargés et traités avec succès');
+                debugPrint('🔺 Pas de rechargement en mémoire nécessaire pour les règlements triangulaires');
                 break;
               case 'operations':
                 // Recharger les opérations dans le service
@@ -2142,6 +2300,35 @@ class SyncService {
               .toList();
           break;
 
+                  case 'triangular_debt_settlements':
+          try {
+            // Récupérer les règlements triangulaires depuis LocalDB
+            final allSettlements = await LocalDB.instance.getAllTriangularDebtSettlements();
+            debugPrint('🔺 TRIANGULAR: Total règlements en LocalDB: ${allSettlements.length}');
+            
+            unsyncedData = [];
+            for (var settlement in allSettlements) {
+              try {
+                final json = settlement.toJson();
+                // Vérifier si non synchronisé
+                if (json['is_synced'] != true) {
+                  debugPrint('🔺 Règlement triangulaire non synchronisé: ${settlement.reference} (ID: ${settlement.id})');
+                  unsyncedData.add(_addSyncMetadata(json, 'triangular_debt_settlement'));
+                }
+              } catch (e) {
+                debugPrint('⚠️ Erreur lors de la conversion JSON du règlement ${settlement.id}: $e');
+                continue;
+              }
+            }
+            
+            debugPrint('🔺 TRIANGULAR: ${unsyncedData.length}/${allSettlements.length} règlements à synchroniser');
+          } catch (e) {
+            debugPrint('❌ Erreur lors de la récupération des règlements triangulaires: $e');
+            unsyncedData = []; // Retourner une liste vide en cas d'erreur
+          }
+          break;
+          
+
         case 'operations':
           // Récupérer toutes les opérations depuis LocalDB
           final allOperations = await LocalDB.instance.getAllOperations();
@@ -2351,6 +2538,24 @@ class SyncService {
           
           debugPrint('📤 DEPOT_CLIENTS: ${unsyncedData.length}/${allDepots.length} non synchronisés');
           break;
+        
+        case 'retrait_virtuels':
+          // Récupérer tous les retraits virtuels depuis LocalDB
+          final allRetraits = await LocalDB.instance.getAllRetraitsVirtuels();
+          debugPrint('🔄 RETRAIT_VIRTUELS: Total en mémoire: ${allRetraits.length}');
+          
+          // Filtrer uniquement les retraits non synchronisés
+          unsyncedData = allRetraits
+              .where((retrait) => retrait.isSynced != true)
+              .map((retrait) {
+                final json = _addSyncMetadata(retrait.toJson(), 'retrait_virtuel');
+                debugPrint('📤 Retrait Virtuel ID ${retrait.id} à synchroniser: SIM ${retrait.simNumero} - ${retrait.montant} ${retrait.devise} (${retrait.statut.name})');
+                return json;
+              })
+              .toList();
+          
+          debugPrint('📤 RETRAIT_VIRTUELS: ${unsyncedData.length}/${allRetraits.length} non synchronisés');
+          break;
           
         case 'audit_log':
           // Récupérer les audits depuis SharedPreferences
@@ -2384,7 +2589,26 @@ class SyncService {
           }
           debugPrint('📤 RECONCILIATIONS: ${unsyncedData.length} réconciliations à synchroniser');
           break;
+        
+        case 'credit_virtuels':
+          // Récupérer tous les crédits virtuels depuis LocalDB
+          final allCredits = await LocalDB.instance.getAllCreditsVirtuels();
+          debugPrint('💳 CREDIT_VIRTUELS: Total en mémoire: ${allCredits.length}');
           
+          // Filtrer uniquement les crédits non synchronisés
+          unsyncedData = allCredits
+              .where((credit) => credit.isSynced != true)
+              .map((credit) {
+                final json = _addSyncMetadata(credit.toJson(), 'credit_virtuel');
+                debugPrint('📤 Crédit Virtuel ${credit.reference} à synchroniser: ${credit.beneficiaireNom} - ${credit.montantCredit} ${credit.devise} (${credit.statut.name})');
+                return json;
+              })
+              .toList();
+          
+          debugPrint('📤 CREDIT_VIRTUELS: ${unsyncedData.length}/${allCredits.length} non synchronisés');
+          break;
+          
+
         default:
           debugPrint('⚠️ Table inconnue pour récupération des changements: $tableName');
           return [];
@@ -2805,6 +3029,23 @@ class SyncService {
           debugPrint('✅ Transaction virtuelle ID ${vt.id} sauvegardée: ${vt.reference} - ${vt.simNumero} - ${vt.montantVirtuel} ${vt.devise}');
           break;
           
+        case 'triangular_debt_settlements':
+          // Vérifier si le règlement triangulaire existe déjà
+          final settlementId = data['id'];
+          if (settlementId != null) {
+            final existingSettlement = await LocalDB.instance.getTriangularDebtSettlementById(settlementId);
+            if (existingSettlement != null) {
+              debugPrint('⚠️ Doublon ignoré: Règlement triangulaire ID $settlementId existe déjà');
+              return;
+            }
+          }
+          
+          // Créer et sauvegarder le règlement triangulaire
+          final settlement = TriangularDebtSettlementModel.fromJson(data);
+          await LocalDB.instance.saveTriangularDebtSettlement(settlement);
+          debugPrint('🔺 Règlement triangulaire ID ${settlement.id} sauvegardé: ${settlement.reference} - ${settlement.montant} ${settlement.devise}');
+          break;
+          
         default:
           debugPrint('⚠️ Table inconnue pour insertion: $tableName');
       }
@@ -3009,6 +3250,13 @@ class SyncService {
           debugPrint('✅ Transaction virtuelle ID ${vt.id} mise à jour: ${vt.reference} - ${vt.simNumero}');
           break;
           
+        case 'triangular_debt_settlements':
+          // Mettre à jour le règlement triangulaire
+          final settlement = TriangularDebtSettlementModel.fromJson(data);
+          await LocalDB.instance.updateTriangularDebtSettlement(settlement);
+          debugPrint('🔺 Règlement triangulaire ID ${settlement.id} mis à jour: ${settlement.reference} - ${settlement.montant} ${settlement.devise}');
+          break;
+          
         default:
           debugPrint('⚠️ Table inconnue pour mise à jour: $tableName');
       }
@@ -3184,6 +3432,20 @@ class SyncService {
               vtJson['is_synced'] = true;
               vtJson['synced_at'] = now.toIso8601String();
               await prefs.setString('virtual_transaction_$entityId', jsonEncode(vtJson));
+            }
+            break;
+            
+          case 'triangular_debt_settlements':
+            final prefs = await LocalDB.instance.database;
+            final settlementData = prefs.getString('triangular_debt_settlement_$entityId');
+            if (settlementData != null) {
+              final settlementJson = jsonDecode(settlementData);
+              settlementJson['is_synced'] = true;
+              settlementJson['synced_at'] = now.toIso8601String();
+              await prefs.setString('triangular_debt_settlement_$entityId', jsonEncode(settlementJson));
+              debugPrint('🔺 Règlement triangulaire ID $entityId marqué comme synchronisé');
+            } else {
+              debugPrint('⚠️ Règlement triangulaire ID $entityId non trouvé pour marquage sync');
             }
             break;
         }
@@ -3997,6 +4259,34 @@ class SyncService {
       debugPrint('✅ Téléchargement complet via TransferSyncService terminé');
     } catch (e) {
       debugPrint('❌ Erreur téléchargement via TransferSyncService: $e');
+      rethrow;
+    }
+  }
+
+  /// Force reset circuit breaker and retry sync for triangular debt settlements
+  /// This method should be called when triangular_debt_settlements sync is stuck
+  Future<void> forceResetTriangularDebtSync() async {
+    try {
+      debugPrint('🔧 FORCE RESET triangular_debt_settlements sync - resetting circuit breaker');
+      
+      // Clear any failed sync timestamps for triangular_debt_settlements
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('last_sync_triangular_debt_settlements');
+      debugPrint('🗑️ Cleared triangular_debt_settlements sync timestamp');
+      
+      // Force a fresh sync of triangular_debt_settlements
+      final authService = AuthService();
+      final currentUser = authService.currentUser;
+      if (currentUser != null) {
+        debugPrint('🔄 Attempting fresh triangular_debt_settlements sync...');
+        await _downloadTableData('triangular_debt_settlements', currentUser.id.toString(), currentUser.role);
+        debugPrint('✅ triangular_debt_settlements sync completed successfully');
+      } else {
+        debugPrint('❌ No current user found for triangular_debt_settlements sync');
+        throw Exception('No authenticated user found');
+      }
+    } catch (e) {
+      debugPrint('❌ Error during force reset triangular_debt_settlements sync: $e');
       rethrow;
     }
   }

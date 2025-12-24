@@ -24,6 +24,7 @@ import '../widgets/agent_deletion_validation_widget.dart';
 import '../widgets/agent_triangular_debt_settlement_widget.dart';
 import '../widgets/reports/dettes_intershop_report.dart';
 import '../widgets/cloture_required_dialog.dart';
+import '../widgets/help_button_widget.dart';
 
 import '../services/connectivity_service.dart';
 
@@ -117,27 +118,53 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
   @override
   void initState() {
     super.initState();
-    // SyncService is now initialized in main.dart, so we don't need to initialize it here
+    // OPTIMISATION: Initialisation légère et non-bloquante
     
-    // Initialize TransferSyncService with shop ID
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final authService = Provider.of<AuthService>(context, listen: false);
-      final shopId = authService.currentUser?.shopId;
-      
-      if (shopId != null && shopId > 0) {
-        try {
-          // Use the singleton instance from Provider instead of creating a new one
-          final transferSyncService = Provider.of<TransferSyncService>(context, listen: false);
-          await transferSyncService.initialize(shopId);
-          debugPrint('✅ TransferSyncService initialisé pour shop: $shopId');
-        } catch (e) {
-          debugPrint('⚠️ Erreur initialisation TransferSyncService: $e');
+    // Démarrer les initialisations en arrière-plan après le premier frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeServicesAsync();
+    });
+  }
+  
+  /// Initialisation asynchrone et non-bloquante des services
+  /// Permet un affichage rapide du dashboard
+  void _initializeServicesAsync() {
+    // Exécuter toutes les initialisations en arrière-plan
+    Future.delayed(Duration.zero, () async {
+      try {
+        final authService = Provider.of<AuthService>(context, listen: false);
+        final shopId = authService.currentUser?.shopId;
+        
+        // 1. Initialiser TransferSyncService (critique)
+        if (shopId != null && shopId > 0) {
+          try {
+            final transferSyncService = Provider.of<TransferSyncService>(context, listen: false);
+            await transferSyncService.initialize(shopId);
+            debugPrint('✅ TransferSyncService initialisé pour shop: $shopId');
+          } catch (e) {
+            debugPrint('⚠️ Erreur initialisation TransferSyncService: $e');
+          }
         }
-      } else {
-        debugPrint('⚠️ Shop ID non disponible pour initialisation TransferSyncService');
+        
+        // 2. Configurer les notifications de transfert (non-bloquant)
+        _setupTransferNotifications();
+        
+        // 3. Synchronisation des opérations (en arrière-plan)
+        _triggerOperationSyncBackground();
+        
+        // 4. Vérification des clôtures (en arrière-plan)
+        _checkClotureBackground();
+        
+      } catch (e) {
+        debugPrint('⚠️ Erreur initialisation services dashboard: $e');
       }
-      
-      // Démarrer la surveillance des transferts entrants
+    });
+  }
+  
+  /// Configuration des notifications de transfert (non-bloquant)
+  void _setupTransferNotifications() {
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
       final operationService = Provider.of<OperationService>(context, listen: false);
       final transferNotificationService = TransferNotificationService();
       
@@ -180,9 +207,8 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
                 label: 'VOIR',
                 textColor: Colors.white,
                 onPressed: () {
-                  // Naviguer vers l'onglet Validations
                   setState(() {
-                    _selectedIndex = 1; // Index 1 = Validations (Opérations=0, Validations=1, Rapports=2)
+                    _selectedIndex = 1; // Index 1 = Validations
                   });
                 },
               ),
@@ -190,16 +216,35 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
           );
         }
       };
-      
-      // Trigger synchronization of operation data when dashboard opens
-      _triggerOperationSync();
-      
-      // Vérifier les clôtures au démarrage
-      _checkClotureAtStartup();
+    } catch (e) {
+      debugPrint('⚠️ Erreur configuration notifications: $e');
+    }
+  }
+  
+  /// Synchronisation des opérations en arrière-plan (non-bloquante)
+  void _triggerOperationSyncBackground() {
+    Future.delayed(const Duration(seconds: 2), () async {
+      try {
+        final authService = Provider.of<AuthService>(context, listen: false);
+        
+        // Only proceed if user is an agent with a shop ID
+        if (authService.currentUser?.role == 'AGENT' && authService.currentUser?.shopId != null) {
+          final transferSyncService = Provider.of<TransferSyncService>(context, listen: false);
+          debugPrint('🔄 Synchronisation opérations en arrière-plan...');
+          
+          // Force a refresh from API to get latest operation data
+          await transferSyncService.forceRefreshFromAPI();
+          
+          debugPrint('✅ Synchronisation opérations terminée (arrière-plan)');
+        }
+      } catch (e) {
+        debugPrint('⚠️ Erreur sync opérations arrière-plan: $e');
+        // Pas de notification d'erreur pour les syncs en arrière-plan
+      }
     });
   }
   
-  // Function to trigger synchronization of operation data
+  // Function to trigger synchronization of operation data (legacy - kept for compatibility)
   void _triggerOperationSync() async {
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
@@ -240,7 +285,28 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
     }
   }
   
-    // Vérifier les clôtures au démarrage
+  /// Vérification des clôtures en arrière-plan (non-bloquante)
+  void _checkClotureBackground() {
+    Future.delayed(const Duration(seconds: 1), () async {
+      try {
+        final authService = Provider.of<AuthService>(context, listen: false);
+        final shopId = authService.currentUser?.shopId;
+        
+        if (shopId != null && shopId > 0) {
+          final joursNonClotures = await RapportClotureService.instance.verifierAccesMenusAgent(shopId);
+          if (mounted) {
+            setState(() {
+              _joursNonClotures = joursNonClotures;
+            });
+          }
+        }
+      } catch (e) {
+        debugPrint('⚠️ Erreur vérification clôtures arrière-plan: $e');
+      }
+    });
+  }
+  
+  // Vérifier les clôtures au démarrage (legacy - kept for compatibility)
   Future<void> _checkClotureAtStartup() async {
     final authService = Provider.of<AuthService>(context, listen: false);
     final shopId = authService.currentUser?.shopId;
@@ -512,6 +578,10 @@ class _DashboardAgentPageState extends State<DashboardAgentPage> {
       actions: [
         // Sélecteur de langue compact
         const LanguageSelector(compact: true),
+        const SizedBox(width: 8),
+        
+        // Bouton Documentation
+        const AppBarHelpAction(),
         const SizedBox(width: 8),
         
         // Bouton Sync Monitor

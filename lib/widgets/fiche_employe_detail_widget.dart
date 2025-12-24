@@ -75,24 +75,24 @@ class _FicheEmployeDetailWidgetState extends State<FicheEmployeDetailWidget> wit
 
       // Filtrer par employé
       _salaires = SalaireService.instance.salaires
-          .where((s) => s.personnelId == widget.personnel.id)
+          .where((s) => s.personnelMatricule == widget.personnel.matricule)
           .toList()
         ..sort((a, b) => b.annee.compareTo(a.annee) != 0 
             ? b.annee.compareTo(a.annee) 
             : b.mois.compareTo(a.mois));
 
       _avances = AvanceService.instance.avances
-          .where((a) => a.personnelId == widget.personnel.id)
+          .where((a) => a.personnelMatricule == widget.personnel.matricule)
           .toList()
         ..sort((a, b) => b.dateAvance.compareTo(a.dateAvance));
 
       _credits = CreditService.instance.credits
-          .where((c) => c.personnelId == widget.personnel.id)
+          .where((c) => c.personnelMatricule == widget.personnel.matricule)
           .toList()
         ..sort((a, b) => b.dateOctroi.compareTo(a.dateOctroi));
         
       _retenues = RetenueService.instance.retenues
-          .where((r) => r.personnelId == widget.personnel.id)
+          .where((r) => r.personnelMatricule == widget.personnel.matricule)
           .toList()
         ..sort((a, b) => b.dateCreation.compareTo(a.dateCreation));
 

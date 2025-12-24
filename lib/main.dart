@@ -30,7 +30,8 @@ import 'services/deletion_service.dart';
 import 'services/conflict_notification_service.dart';
 import 'services/conflict_logging_service.dart';
 import 'services/currency_service.dart';
-import 'services/credit_virtuel_service.dart'; // Add this import
+import 'services/credit_virtuel_service.dart';
+import 'services/virtual_exchange_service.dart';
 import 'services/retenue_service.dart';
 import 'pages/login_page.dart';
 import 'pages/agent_login_page.dart';
@@ -230,7 +231,8 @@ class _UCashAppState extends State<UCashApp> {
         ChangeNotifierProvider(create: (_) => DeletionService.instance),
         ChangeNotifierProvider(create: (_) => ConflictNotificationService()),
         ChangeNotifierProvider(create: (_) => CurrencyService.instance),
-        ChangeNotifierProvider(create: (_) => CreditVirtuelService.instance), // Add this line
+        ChangeNotifierProvider(create: (_) => CreditVirtuelService.instance),
+        ChangeNotifierProvider(create: (_) => VirtualExchangeService.instance),
         Provider(create: (_) => ConflictLoggingService()),
       ],
       child: Builder(

@@ -2,7 +2,7 @@
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Accept');
+header('Access-Control-Allow-Headers: Content-Type, Accept, content-encoding, Accept-Encoding');
 header('Access-Control-Max-Age: 86400');
 
 // Gestion des requêtes OPTIONS (preflight)

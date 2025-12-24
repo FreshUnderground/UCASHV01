@@ -22,6 +22,7 @@ import '../models/depot_client_model.dart';
 import '../models/credit_virtuel_model.dart';
 import '../models/triangular_debt_settlement_model.dart';
 import '../models/multi_month_payment_model.dart';
+import '../models/virtual_exchange_model.dart';
 
 class LocalDB {
   static final LocalDB _instance = LocalDB._internal();
@@ -3269,5 +3270,182 @@ class LocalDB {
     } catch (e) {
       return null;
     }
+  }
+
+  // ===== GESTION DES ÉCHANGES VIRTUELS =====
+
+  /// Sauvegarder un échange virtuel
+  Future<VirtualExchangeModel> saveVirtualExchange(VirtualExchangeModel exchange) async {
+    final prefs = await database;
+    
+    // Générer un ID si nécessaire
+    final id = exchange.id ?? await _generateSequentialId('virtual_exchange_');
+    
+    final exchangeWithId = exchange.copyWith(id: id);
+    final exchangeJson = jsonEncode(exchangeWithId.toJson());
+    
+    await prefs.setString('virtual_exchange_$id', exchangeJson);
+    
+    debugPrint('💾 Échange virtuel sauvegardé: ID $id, ${exchange.simSource} → ${exchange.simDestination}');
+    return exchangeWithId;
+  }
+
+  /// Mettre à jour un échange virtuel
+  Future<void> updateVirtualExchange(VirtualExchangeModel exchange) async {
+    if (exchange.id == null) {
+      throw Exception('Impossible de mettre à jour un échange sans ID');
+    }
+    
+    final prefs = await database;
+    final exchangeJson = jsonEncode(exchange.toJson());
+    await prefs.setString('virtual_exchange_${exchange.id}', exchangeJson);
+    
+    debugPrint('🔄 Échange virtuel mis à jour: ID ${exchange.id}');
+  }
+
+  /// Supprimer un échange virtuel
+  Future<void> deleteVirtualExchange(int exchangeId) async {
+    final prefs = await database;
+    await prefs.remove('virtual_exchange_$exchangeId');
+    debugPrint('🗑️ Échange virtuel supprimé: ID $exchangeId');
+  }
+
+  /// Récupérer tous les échanges virtuels avec filtres optionnels
+  Future<List<VirtualExchangeModel>> getAllVirtualExchanges({
+    int? shopId,
+    String? simSource,
+    String? simDestination,
+    DateTime? dateDebut,
+    DateTime? dateFin,
+    VirtualExchangeStatus? statut,
+  }) async {
+    final prefs = await database;
+    final keys = prefs.getKeys().where((key) => key.startsWith('virtual_exchange_')).toList();
+    
+    final List<VirtualExchangeModel> exchanges = [];
+    
+    for (final key in keys) {
+      final exchangeData = prefs.getString(key);
+      if (exchangeData != null) {
+        try {
+          final exchangeJson = jsonDecode(exchangeData);
+          if (exchangeJson is Map<String, dynamic>) {
+            final exchange = VirtualExchangeModel.fromJson(exchangeJson);
+            
+            // Appliquer les filtres
+            bool includeExchange = true;
+            
+            if (shopId != null && exchange.shopId != shopId) {
+              includeExchange = false;
+            }
+            
+            if (simSource != null && exchange.simSource != simSource) {
+              includeExchange = false;
+            }
+            
+            if (simDestination != null && exchange.simDestination != simDestination) {
+              includeExchange = false;
+            }
+            
+            if (statut != null && exchange.statut != statut) {
+              includeExchange = false;
+            }
+            
+            if (dateDebut != null && exchange.dateEchange.isBefore(dateDebut)) {
+              includeExchange = false;
+            }
+            
+            if (dateFin != null && exchange.dateEchange.isAfter(dateFin)) {
+              includeExchange = false;
+            }
+            
+            if (includeExchange) {
+              exchanges.add(exchange);
+            }
+          } else {
+            // Supprimer les données corrompues
+            await prefs.remove(key);
+          }
+        } catch (e) {
+          // En cas d'erreur de parsing, supprimer la donnée corrompue
+          await prefs.remove(key);
+          debugPrint('⚠️ Erreur parsing échange virtuel $key: $e');
+        }
+      }
+    }
+    
+    // Trier par date d'échange (plus récent en premier)
+    exchanges.sort((a, b) => b.dateEchange.compareTo(a.dateEchange));
+    
+    return exchanges;
+  }
+
+  /// Récupérer un échange virtuel par ID
+  Future<VirtualExchangeModel?> getVirtualExchangeById(int exchangeId) async {
+    final prefs = await database;
+    final exchangeData = prefs.getString('virtual_exchange_$exchangeId');
+    
+    if (exchangeData != null) {
+      try {
+        final exchangeJson = jsonDecode(exchangeData);
+        return VirtualExchangeModel.fromJson(exchangeJson);
+      } catch (e) {
+        debugPrint('⚠️ Erreur parsing échange virtuel ID $exchangeId: $e');
+        return null;
+      }
+    }
+    
+    return null;
+  }
+
+  /// Récupérer un échange virtuel par référence
+  Future<VirtualExchangeModel?> getVirtualExchangeByReference(String reference) async {
+    final allExchanges = await getAllVirtualExchanges();
+    try {
+      return allExchanges.firstWhere((exchange) => exchange.reference == reference);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Nettoyer les échanges virtuels en double
+  Future<int> cleanDuplicateVirtualExchanges() async {
+    final prefs = await database;
+    final keys = prefs.getKeys().where((key) => key.startsWith('virtual_exchange_')).toList();
+    
+    final Map<String, List<String>> exchangesByReference = {};
+    int duplicatesRemoved = 0;
+    
+    // Grouper par référence
+    for (final key in keys) {
+      final exchangeData = prefs.getString(key);
+      if (exchangeData != null) {
+        try {
+          final exchangeJson = jsonDecode(exchangeData);
+          final reference = exchangeJson['reference'] as String?;
+          if (reference != null && reference.isNotEmpty) {
+            exchangesByReference[reference] ??= [];
+            exchangesByReference[reference]!.add(key);
+          }
+        } catch (e) {
+          // Supprimer les données corrompues
+          await prefs.remove(key);
+          duplicatesRemoved++;
+        }
+      }
+    }
+    
+    // Supprimer les doublons (garder le premier)
+    for (final entry in exchangesByReference.entries) {
+      if (entry.value.length > 1) {
+        // Garder le premier, supprimer les autres
+        for (int i = 1; i < entry.value.length; i++) {
+          await prefs.remove(entry.value[i]);
+          duplicatesRemoved++;
+        }
+      }
+    }
+    
+    return duplicatesRemoved;
   }
 }

@@ -172,7 +172,18 @@ Future<pw.Document> generateRapportPaiementsMensuels({
             ),
             // Données
             ...salaires.map((salaire) {
-              final personnel = personnelMap[salaire.personnelId];
+              // Chercher le personnel par matricule au lieu de l'ID
+              final personnel = personnelMap.values.firstWhere(
+                (p) => p.matricule == salaire.personnelMatricule,
+                orElse: () => PersonnelModel(
+                  matricule: salaire.personnelMatricule,
+                  nom: 'Agent',
+                  prenom: 'Inconnu',
+                  telephone: '',
+                  poste: '',
+                  dateEmbauche: DateTime.now(),
+                ),
+              );
               final indemnites = salaire.primeTransport +
                   salaire.primeLogement +
                   salaire.primeFonction +
@@ -182,7 +193,7 @@ Future<pw.Document> generateRapportPaiementsMensuels({
               
               return pw.TableRow(
                 children: [
-                  _buildTableCell(personnel?.nomComplet ?? 'N/A'),
+                  _buildTableCell(personnel.nomComplet),
                   _buildTableCell('${_getMonthName(salaire.mois)} ${salaire.annee}'),
                   _buildTableCell('${salaire.salaireBase.toStringAsFixed(0)}'),
                   _buildTableCell('${indemnites.toStringAsFixed(0)}'),
@@ -344,10 +355,21 @@ Future<pw.Document> generateRapportAvances({
               ],
             ),
             ...avances.map((avance) {
-              final personnel = personnelMap[avance.personnelId];
+              // Chercher le personnel par matricule au lieu de l'ID
+              final personnel = personnelMap.values.firstWhere(
+                (p) => p.matricule == avance.personnelMatricule,
+                orElse: () => PersonnelModel(
+                  matricule: avance.personnelMatricule,
+                  nom: 'Agent',
+                  prenom: 'Inconnu',
+                  telephone: '',
+                  poste: '',
+                  dateEmbauche: DateTime.now(),
+                ),
+              );
               return pw.TableRow(
                 children: [
-                  _buildTableCell(personnel?.nomComplet ?? 'N/A'),
+                  _buildTableCell(personnel.nomComplet),
                   _buildTableCell(DateFormat('dd/MM/yyyy').format(avance.dateAvance)),
                   _buildTableCell('${_getMonthName(avance.moisAvance)} ${avance.anneeAvance}'),
                   _buildTableCell('${avance.montant.toStringAsFixed(2)} USD'),
@@ -445,13 +467,24 @@ Future<pw.Document> generateRapportArrieres({
               ],
             ),
             ...salairesAvecArrieres.map((salaire) {
-              final personnel = personnelMap[salaire.personnelId];
+              // Chercher le personnel par matricule au lieu de l'ID
+              final personnel = personnelMap.values.firstWhere(
+                (p) => p.matricule == salaire.personnelMatricule,
+                orElse: () => PersonnelModel(
+                  matricule: salaire.personnelMatricule,
+                  nom: 'Agent',
+                  prenom: 'Inconnu',
+                  telephone: '',
+                  poste: '',
+                  dateEmbauche: DateTime.now(),
+                ),
+              );
               return pw.TableRow(
                 decoration: salaire.montantRestant > salaire.salaireNet * 0.5 
                     ? pw.BoxDecoration(color: PdfColors.red50)
                     : null,
                 children: [
-                  _buildTableCell(personnel?.nomComplet ?? 'N/A'),
+                  _buildTableCell(personnel.nomComplet),
                   _buildTableCell('${_getMonthName(salaire.mois)} ${salaire.annee}'),
                   _buildTableCell('${salaire.salaireNet.toStringAsFixed(2)} USD'),
                   _buildTableCell('${salaire.montantPaye.toStringAsFixed(2)} USD'),
@@ -488,16 +521,16 @@ Future<pw.Document> generateListePaie({
   await headerService.initialize();
   final header = headerService.getHeaderOrDefault();
   
-  // Grouper par personnel
-  final Map<int, List<SalaireModel>> salairesByPersonnel = {};
+  // Grouper par personnel (par matricule)
+  final Map<String, List<SalaireModel>> salairesByPersonnel = {};
   for (var salaire in salaires) {
-    salairesByPersonnel.putIfAbsent(salaire.personnelId, () => []).add(salaire);
+    salairesByPersonnel.putIfAbsent(salaire.personnelMatricule, () => []).add(salaire);
   }
   
-  // Grouper avances par personnel
-  final Map<int, List<AvancePersonnelModel>> avancesByPersonnel = {};
+  // Grouper avances par personnel (par matricule)
+  final Map<String, List<AvancePersonnelModel>> avancesByPersonnel = {};
   for (var avance in avances) {
-    avancesByPersonnel.putIfAbsent(avance.personnelId, () => []).add(avance);
+    avancesByPersonnel.putIfAbsent(avance.personnelMatricule, () => []).add(avance);
   }
   
   // Calculer totaux globaux
@@ -527,10 +560,20 @@ Future<pw.Document> generateListePaie({
         ];
         
         // Pour chaque personnel
-        for (var personnelId in salairesByPersonnel.keys) {
-          final personnel = personnelMap[personnelId];
-          final salairesPers = salairesByPersonnel[personnelId]!;
-          final avancesPers = avancesByPersonnel[personnelId] ?? [];
+        for (var personnelMatricule in salairesByPersonnel.keys) {
+          final personnel = personnelMap.values.firstWhere(
+            (p) => p.matricule == personnelMatricule,
+            orElse: () => PersonnelModel(
+              matricule: personnelMatricule,
+              nom: 'Inconnu',
+              prenom: '',
+              telephone: '',
+              poste: '',
+              dateEmbauche: DateTime.now(),
+            ),
+          );
+          final salairesPers = salairesByPersonnel[personnelMatricule]!;
+          final avancesPers = avancesByPersonnel[personnelMatricule] ?? [];
           
           // Calculer totaux pour cet agent
           double totalBase = 0;
@@ -595,15 +638,15 @@ Future<pw.Document> generateListePaie({
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
                         pw.Text(
-                          personnel?.nomComplet ?? 'Agent $personnelId',
+                          '${personnel.nomComplet}',
                           style: pw.TextStyle(
-                            fontSize: 11,
+                            fontSize: 12,
                             fontWeight: pw.FontWeight.bold,
                             color: PdfColors.white,
                           ),
                         ),
                         pw.Text(
-                          personnel?.poste ?? '',
+                          '${personnel.poste}',
                           style: const pw.TextStyle(
                             fontSize: 9,
                             color: PdfColors.white,

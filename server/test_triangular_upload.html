@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Triangular Debt Settlements Upload</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-section h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button.danger {
+            background: #dc3545;
+        }
+        button.danger:hover {
+            background: #c82333;
+        }
+        .result {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        .json-data {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 12px;
+            overflow-x: auto;
+        }
+        input[type="url"] {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔺 Test Triangular Debt Settlements Upload</h1>
+        <p>Ce script teste l'upload des règlements triangulaires directement dans le navigateur.</p>
+        
+        <!-- Configuration URL -->
+        <div class="test-section">
+            <h3>⚙️ Configuration</h3>
+            <label for="apiUrl">URL de l'API:</label>
+            <input type="url" id="apiUrl" value="https://mahanaimeservice.investee-group.com/server/api/sync/triangular_debt_settlements/upload.php">
+            <button onclick="testCORS()">Test CORS (OPTIONS)</button>
+            <div id="corsResult" class="result" style="display:none;"></div>
+        </div>
+
+        <!-- Test avec données réelles -->
+        <div class="test-section">
+            <h3>📤 Test Upload avec Données Réelles</h3>
+            <p>Test avec l'entité exacte du log Flutter:</p>
+            <div class="json-data" id="realDataPreview"></div>
+            <button onclick="testRealUpload()">Upload Données Réelles</button>
+            <div id="realUploadResult" class="result" style="display:none;"></div>
+        </div>
+
+        <!-- Test avec données simplifiées -->
+        <div class="test-section">
+            <h3>🧪 Test Upload avec Données Simplifiées</h3>
+            <p>Test avec des données minimales pour identifier les problèmes:</p>
+            <div class="json-data" id="simpleDataPreview"></div>
+            <button onclick="testSimpleUpload()">Upload Données Simplifiées</button>
+            <div id="simpleUploadResult" class="result" style="display:none;"></div>
+        </div>
+
+        <!-- Test de connectivité -->
+        <div class="test-section">
+            <h3>🌐 Test de Connectivité</h3>
+            <button onclick="testConnectivity()">Test Ping Serveur</button>
+            <button onclick="testDownload()">Test Download (GET)</button>
+            <div id="connectivityResult" class="result" style="display:none;"></div>
+        </div>
+
+        <!-- Logs détaillés -->
+        <div class="test-section">
+            <h3>📋 Logs Détaillés</h3>
+            <button onclick="clearLogs()">Effacer Logs</button>
+            <div id="detailedLogs" class="result info" style="display:block; max-height: 300px; overflow-y: auto;"></div>
+        </div>
+    </div>
+
+    <script>
+        // Données réelles du log Flutter
+        const realEntityData = {
+            "entities": [{
+                "id": 1,
+                "reference": "TRI20251221-83194",
+                "shop_debtor_id": 1765124856371,
+                "shop_debtor_designation": "shop kampala",
+                "shop_intermediary_id": 1765485299073,
+                "shop_intermediary_designation": "SHOP BUTEMBO",
+                "shop_creditor_id": 1765124945851,
+                "shop_creditor_designation": "shop kisangani",
+                "montant": 7000,
+                "devise": "USD",
+                "date_reglement": "2025-12-21T07:36:23.194",
+                "mode_paiement": null,
+                "notes": null,
+                "agent_id": 0,
+                "agent_username": "admin",
+                "created_at": "2025-12-21T07:36:23.194",
+                "last_modified_at": "2025-12-21T07:36:23.194",
+                "last_modified_by": "agent_0",
+                "is_synced": 0,
+                "synced_at": "2025-12-21T07:36:42.548",
+                "entity_type": "triangular_debt_settlement",
+                "sync_version": 1
+            }],
+            "user_id": "admin",
+            "timestamp": new Date().toISOString()
+        };
+
+        // Données simplifiées pour test
+        const simpleEntityData = {
+            "entities": [{
+                "reference": "TEST-" + Date.now(),
+                "shop_debtor_id": 1,
+                "shop_intermediary_id": 2,
+                "shop_creditor_id": 3,
+                "montant": 100,
+                "devise": "USD",
+                "date_reglement": new Date().toISOString(),
+                "agent_username": "test"
+            }],
+            "user_id": "test_user",
+            "timestamp": new Date().toISOString()
+        };
+
+        // Afficher les données dans les previews
+        document.getElementById('realDataPreview').textContent = JSON.stringify(realEntityData, null, 2);
+        document.getElementById('simpleDataPreview').textContent = JSON.stringify(simpleEntityData, null, 2);
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logDiv = document.getElementById('detailedLogs');
+            logDiv.innerHTML += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(`[${type}] ${message}`);
+        }
+
+        function showResult(elementId, message, isSuccess = true) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.className = `result ${isSuccess ? 'success' : 'error'}`;
+            element.textContent = message;
+        }
+
+        function getApiUrl() {
+            return document.getElementById('apiUrl').value;
+        }
+
+        async function testCORS() {
+            const url = getApiUrl();
+            log(`🔍 Test CORS OPTIONS vers: ${url}`);
+            
+            try {
+                const response = await fetch(url, {
+                    method: 'OPTIONS',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                log(`✅ CORS OPTIONS: ${response.status} ${response.statusText}`);
+                log(`📋 Headers reçus: ${JSON.stringify([...response.headers.entries()])}`);
+                
+                showResult('corsResult', 
+                    `CORS Test: ${response.status}\n` +
+                    `Headers: ${JSON.stringify([...response.headers.entries()], null, 2)}`, 
+                    response.ok
+                );
+            } catch (error) {
+                log(`❌ CORS ERROR: ${error.message}`);
+                showResult('corsResult', `CORS Error: ${error.message}`, false);
+            }
+        }
+
+        async function testRealUpload() {
+            const url = getApiUrl();
+            log(`📤 Test upload données réelles vers: ${url}`);
+            
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(realEntityData)
+                });
+                
+                const responseText = await response.text();
+                log(`📥 Response status: ${response.status}`);
+                log(`📥 Response body: ${responseText}`);
+                
+                let result;
+                try {
+                    result = JSON.parse(responseText);
+                } catch (e) {
+                    result = { raw_response: responseText };
+                }
+                
+                showResult('realUploadResult', 
+                    `Status: ${response.status}\n` +
+                    `Response: ${JSON.stringify(result, null, 2)}`, 
+                    response.ok
+                );
+            } catch (error) {
+                log(`❌ Upload ERROR: ${error.message}`);
+                showResult('realUploadResult', `Upload Error: ${error.message}`, false);
+            }
+        }
+
+        async function testSimpleUpload() {
+            const url = getApiUrl();
+            log(`📤 Test upload données simplifiées vers: ${url}`);
+            
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(simpleEntityData)
+                });
+                
+                const responseText = await response.text();
+                log(`📥 Response status: ${response.status}`);
+                log(`📥 Response body: ${responseText}`);
+                
+                let result;
+                try {
+                    result = JSON.parse(responseText);
+                } catch (e) {
+                    result = { raw_response: responseText };
+                }
+                
+                showResult('simpleUploadResult', 
+                    `Status: ${response.status}\n` +
+                    `Response: ${JSON.stringify(result, null, 2)}`, 
+                    response.ok
+                );
+            } catch (error) {
+                log(`❌ Simple Upload ERROR: ${error.message}`);
+                showResult('simpleUploadResult', `Simple Upload Error: ${error.message}`, false);
+            }
+        }
+
+        async function testConnectivity() {
+            const baseUrl = getApiUrl().replace('/upload.php', '');
+            log(`🌐 Test connectivité vers: ${baseUrl}`);
+            
+            // Test ping
+            try {
+                const pingUrl = baseUrl.replace('/sync/triangular_debt_settlements', '/ping.php');
+                log(`📡 Test ping: ${pingUrl}`);
+                
+                const pingResponse = await fetch(pingUrl);
+                const pingText = await pingResponse.text();
+                log(`📡 Ping response: ${pingResponse.status} - ${pingText}`);
+            } catch (error) {
+                log(`❌ Ping ERROR: ${error.message}`);
+            }
+            
+            showResult('connectivityResult', 'Voir les logs détaillés pour les résultats', true);
+        }
+
+        async function testDownload() {
+            const downloadUrl = getApiUrl().replace('/upload.php', '/changes.php') + '?since=2025-01-01&user_id=test&user_role=admin';
+            log(`📥 Test download: ${downloadUrl}`);
+            
+            try {
+                const response = await fetch(downloadUrl);
+                const responseText = await response.text();
+                log(`📥 Download status: ${response.status}`);
+                log(`📥 Download response: ${responseText.substring(0, 500)}...`);
+                
+                showResult('connectivityResult', 
+                    `Download Status: ${response.status}\n` +
+                    `Response: ${responseText.substring(0, 200)}...`, 
+                    response.ok
+                );
+            } catch (error) {
+                log(`❌ Download ERROR: ${error.message}`);
+                showResult('connectivityResult', `Download Error: ${error.message}`, false);
+            }
+        }
+
+        function clearLogs() {
+            document.getElementById('detailedLogs').innerHTML = '';
+            log('🧹 Logs effacés');
+        }
+
+        // Log initial
+        log('🚀 Script de test triangular debt settlements initialisé');
+        log(`🔗 URL configurée: ${getApiUrl()}`);
+    </script>
+</body>
+</html>

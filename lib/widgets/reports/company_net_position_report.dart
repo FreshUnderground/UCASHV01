@@ -608,17 +608,17 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
             CalculationTooltip(
               title: 'Capital NET Formula (RapportClotureService)',
               description: 'Le capital NET représente la position financière réelle de l\'entreprise selon la formule du RapportClotureService',
-              formula: 'Capital NET = Cash Disponible + Shops qui nous doivent - Shops que nous Devons - Frais du Jour - Transferts En Attente + Solde Net Partenaires',
+              formula: 'Capital NET = Cash Disponible + Shops qui nous doivent - Shops que nous Devons - Frais du Jour - Transferts En Attente +/- Solde Net Partenaires',
               components: [
                 'Cash Disponible: Cash physique disponible',
                 'Shops qui nous doivent: Créances inter-shops',
                 'Shops que nous Devons: Dettes inter-shops',
                 'Frais du Jour: Solde du compte FRAIS (Rapport Clôture)',
                 'Transferts En Attente: Transferts non servis',
-                'Solde Net Partenaires: Somme des soldes par partenaire (depot - retrait)',
+                'Solde Net Partenaires: Somme des soldes par partenaire (depot - retrait) - peut être positif ou négatif',
               ],
               child: Text(
-                'Formule: Cash Disponible + Shops qui nous doivent - Shops que nous Devons - Frais du Jour - Transferts En Attente + Solde Net Partenaires',
+                'Formule: Cash Disponible + Shops qui nous doivent - Shops que nous Devons - Frais du Jour - Transferts En Attente +/- Solde Net Partenaires',
                 style: TextStyle(
                   fontSize: isMobile ? 10 : 12,
                   fontStyle: FontStyle.italic,
@@ -806,7 +806,7 @@ class _CompanyNetPositionReportState extends State<CompanyNetPositionReport> {
                             onTap: () => _showTransfertsEnAttenteDetails(context, transfertsEnAttente)),
                         _buildDetailRow('- Frais du Jour (Rapport Clôture)', -fraisDuJour, Colors.deepOrange, isMobile,
                             onTap: () => _showFraisDuJourDetails(context, fraisDuJour, soldeFraisAnterieur, commissionsFraisDuJour, retraitsFraisDuJour)),
-                        _buildDetailRow('+ Solde Net Partenaires', soldePartenaire, soldePartenaire >= 0 ? Colors.blue : Colors.red, isMobile),
+                        _buildDetailRow('+/- Solde Net Partenaires', soldePartenaire, soldePartenaire >= 0 ? Colors.blue : Colors.red, isMobile),
                         const Divider(),
                         _buildDetailRow(
                           '= CAPITAL NET',

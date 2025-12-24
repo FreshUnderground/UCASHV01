@@ -4,6 +4,7 @@ import '../models/avance_personnel_model.dart';
 import '../models/salaire_model.dart';
 import 'local_db.dart';
 import 'salaire_service.dart';
+import 'personnel_service.dart';
 
 class AvanceService extends ChangeNotifier {
   static final AvanceService _instance = AvanceService._internal();
@@ -70,23 +71,24 @@ class AvanceService extends ChangeNotifier {
   Future<AvancePersonnelModel> createAvance(AvancePersonnelModel avance) async {
     try {
       final prefs = await LocalDB.instance.database;
-      final id = DateTime.now().millisecondsSinceEpoch;
+      final reference = AvancePersonnelModel.generateReference();
       
       final newAvance = avance.copyWith(
-        id: id,
+        reference: reference,
         createdAt: DateTime.now(),
         lastModifiedAt: DateTime.now(),
         isSynced: false,
       );
 
-      await prefs.setString('avance_personnel_$id', jsonEncode(newAvance.toJson()));
+      // Utiliser la référence comme clé
+      await prefs.setString('avance_personnel_$reference', jsonEncode(newAvance.toJson()));
       
       // Ajouter l'avance à l'historique des paiements du salaire correspondant
       await _ajouterAvanceAHistoriqueSalaire(newAvance);
       
       await loadAvances(forceRefresh: true);
       
-      debugPrint('✅ Avance créée: ${newAvance.montant} pour personnel ${newAvance.personnelId}');
+      debugPrint('✅ Avance créée: ${newAvance.montant} pour personnel ${newAvance.personnelMatricule}');
       return newAvance;
     } catch (e) {
       debugPrint('❌ Erreur création avance: $e');
@@ -95,27 +97,33 @@ class AvanceService extends ChangeNotifier {
   }
 
   /// Obtenir les avances en cours d'un employé
-  Future<List<AvancePersonnelModel>> getAvancesEnCours(int personnelId) async {
+  Future<List<AvancePersonnelModel>> getAvancesEnCours(String personnelMatricule) async {
     await loadAvances();
     return _avances.where((a) => 
-      a.personnelId == personnelId && a.statut == 'En_Cours'
+      a.personnelMatricule == personnelMatricule && a.statut == 'En_Cours'
     ).toList();
   }
 
-  /// Calculer le total des avances restantes
-  Future<double> getTotalAvancesRestantes(int personnelId) async {
-    final avancesEnCours = await getAvancesEnCours(personnelId);
-    return avancesEnCours.fold<double>(0.0, (sum, a) => sum + a.montantRestant);
+  /// Calculer le montant total des avances en cours pour un employé
+  Future<double> calculerTotalAvancesEnCours(String personnelMatricule) async {
+    final avances = await getAvancesEnCours(personnelMatricule);
+    return avances.fold<double>(0.0, (sum, a) => sum + a.montantRestant);
+  }
+
+  /// Calculer la déduction mensuelle pour un employé (méthode legacy)
+  Future<double> calculerDeductionMensuelle(int personnelId, int mois, int annee) async {
+    // Convertir personnelId en matricule pour utiliser la nouvelle méthode
+    final personnel = await PersonnelService.instance.personnel.firstWhere(
+      (p) => p.id == personnelId,
+      orElse: () => throw Exception('Personnel avec ID $personnelId introuvable')
+    );
+    return await calculerDeductionMensuelleByMatricule(personnel.matricule, mois, annee);
   }
 
   /// Calculer la déduction mensuelle pour un employé
   /// Ne déduit que les avances dont le mois/année correspond ou est antérieur
-  Future<double> calculerDeductionMensuelle(
-    int personnelId, 
-    int mois, 
-    int annee
-  ) async {
-    final avancesEnCours = await getAvancesEnCours(personnelId);
+  Future<double> calculerDeductionMensuelleByMatricule(String personnelMatricule, int mois, int annee) async {
+    final avancesEnCours = await getAvancesEnCours(personnelMatricule);
     double totalDeduction = 0.0;
 
     for (var avance in avancesEnCours) {
@@ -161,49 +169,30 @@ class AvanceService extends ChangeNotifier {
     return (anneeFin - anneeDebut) * 12 + (moisFin - moisDebut);
   }
 
-  /// Enregistrer une déduction mensuelle
-  Future<void> enregistrerDeductionMensuelle(
-    int personnelId,
-    int mois,
-    int annee,
-    double montantDeduit,
-  ) async {
-    final avancesEnCours = await getAvancesEnCours(personnelId);
-    final prefs = await LocalDB.instance.database;
-    
-    double reste = montantDeduit;
+  /// Enregistrer une déduction mensuelle par matricule
+  Future<void> enregistrerDeductionMensuelleByMatricule(String personnelMatricule, int mois, int annee, double montant) async {
+    // Répartir le montant sur les avances en cours
+    final avances = await getAvancesEnCours(personnelMatricule);
+    double montantRestant = montant;
 
-    for (var avance in avancesEnCours) {
-      if (reste <= 0) break;
+    for (var avance in avances) {
+      if (montantRestant <= 0) break;
 
-      final deduction = reste > avance.montantRestant 
+      final deductionPourCetteAvance = montantRestant > avance.montantRestant 
           ? avance.montantRestant 
-          : reste;
+          : montantRestant;
 
-      final nouveauMontantRembourse = avance.montantRembourse + deduction;
-      final nouveauMontantRestant = avance.montant - nouveauMontantRembourse;
-      final nouveauStatut = nouveauMontantRestant <= 0 ? 'Rembourse' : 'En_Cours';
-
-      final avanceUpdate = avance.copyWith(
-        montantRembourse: nouveauMontantRembourse,
-        montantRestant: nouveauMontantRestant,
-        statut: nouveauStatut,
+      final avanceUpdated = avance.copyWith(
+        montantRembourse: avance.montantRembourse + deductionPourCetteAvance,
         lastModifiedAt: DateTime.now(),
         isSynced: false,
       );
 
-      await prefs.setString('avance_personnel_${avance.id}', jsonEncode(avanceUpdate.toJson()));
-      
-      // Ajouter le remboursement à l'historique des paiements
-      await _ajouterRemboursementAHistoriqueSalaire(
-        personnelId: personnelId,
-        mois: mois,
-        annee: annee,
-        montantRembourse: deduction,
-        referenceAvance: avance.reference,
-      );
-      
-      reste -= deduction;
+      // Sauvegarder avec la référence
+      final prefs = await LocalDB.instance.database;
+      await prefs.setString('avance_personnel_${avance.reference}', jsonEncode(avanceUpdated.toJson()));
+
+      montantRestant -= deductionPourCetteAvance;
     }
 
     await loadAvances(forceRefresh: true);
@@ -219,7 +208,7 @@ class AvanceService extends ChangeNotifier {
       SalaireModel? salaireCorrespondant;
       try {
         salaireCorrespondant = SalaireService.instance.salaires.firstWhere(
-          (s) => s.personnelId == avance.personnelId && 
+          (s) => s.personnelMatricule == avance.personnelMatricule && 
                  s.mois == avance.moisAvance && 
                  s.annee == avance.anneeAvance,
         );
@@ -250,7 +239,7 @@ class AvanceService extends ChangeNotifier {
   
   /// Ajouter un remboursement d'avance à l'historique des paiements
   Future<void> _ajouterRemboursementAHistoriqueSalaire({
-    required int personnelId,
+    required String personnelMatricule,
     required int mois,
     required int annee,
     required double montantRembourse,
@@ -264,7 +253,7 @@ class AvanceService extends ChangeNotifier {
       SalaireModel? salaireCorrespondant;
       try {
         salaireCorrespondant = SalaireService.instance.salaires.firstWhere(
-          (s) => s.personnelId == personnelId && 
+          (s) => s.personnelMatricule == personnelMatricule && 
                  s.mois == mois && 
                  s.annee == annee,
         );
@@ -289,6 +278,104 @@ class AvanceService extends ChangeNotifier {
     } catch (e) {
       debugPrint('⚠️ Erreur lors de l\'ajout du remboursement à l\'historique: $e');
       // Ne pas faire échouer le remboursement pour autant
+    }
+  }
+
+  /// Supprimer une avance (soft delete puis sync)
+  Future<void> deleteAvance(String avanceReference) async {
+    try {
+      final prefs = await LocalDB.instance.database;
+      final key = 'avance_personnel_$avanceReference';
+      
+      final jsonString = prefs.getString(key);
+      if (jsonString == null) {
+        throw Exception('Avance avec référence $avanceReference introuvable');
+      }
+
+      final avance = AvancePersonnelModel.fromJson(jsonDecode(jsonString));
+      
+      // Marquer pour suppression avec sync
+      await _markAvanceForDeletion(avanceReference, 'avance_personnel');
+      
+      // Déclencher synchronisation
+      await _triggerAvanceSync();
+      
+      debugPrint('✅ Avance marquée pour suppression: ${avance.montant} USD');
+    } catch (e) {
+      debugPrint('❌ Erreur suppression avance: $e');
+      rethrow;
+    }
+  }
+
+  /// Supprimer définitivement une avance après sync
+  Future<void> hardDeleteAvance(String avanceReference) async {
+    try {
+      final prefs = await LocalDB.instance.database;
+      
+      // Supprimer l'enregistrement principal
+      await prefs.remove('avance_personnel_$avanceReference');
+      
+      // Supprimer le marqueur de suppression
+      await prefs.remove('deletion_avance_personnel_$avanceReference');
+      
+      await loadAvances(forceRefresh: true);
+      debugPrint('✅ Avance supprimée définitivement: Référence $avanceReference');
+    } catch (e) {
+      debugPrint('❌ Erreur suppression définitive avance: $e');
+      rethrow;
+    }
+  }
+
+  /// Marquer une avance pour suppression
+  Future<void> _markAvanceForDeletion(String reference, String type) async {
+    try {
+      final prefs = await LocalDB.instance.database;
+      final deletionRecord = {
+        'reference': reference,
+        'type': type,
+        'marked_at': DateTime.now().toIso8601String(),
+        'synced': false,
+      };
+      
+      await prefs.setString('deletion_${type}_$reference', jsonEncode(deletionRecord));
+      debugPrint('🗑️ Avance marquée pour suppression: $type Référence $reference');
+    } catch (e) {
+      debugPrint('❌ Erreur marquage suppression avance: $e');
+    }
+  }
+
+  /// Déclencher synchronisation des avances
+  Future<void> _triggerAvanceSync() async {
+    try {
+      final prefs = await LocalDB.instance.database;
+      await prefs.setBool('sync_avance_required', true);
+      await prefs.setString('sync_avance_required_at', DateTime.now().toIso8601String());
+      debugPrint('📢 Notification sync avance enregistrée');
+    } catch (e) {
+      debugPrint('⚠️ Erreur notification sync avance: $e');
+    }
+  }
+
+  /// Marquer une suppression d'avance comme synchronisée
+  Future<void> markAvanceDeletionAsSynced(String reference) async {
+    try {
+      final prefs = await LocalDB.instance.database;
+      final key = 'deletion_avance_personnel_$reference';
+      
+      final data = prefs.getString(key);
+      if (data != null) {
+        final deletion = jsonDecode(data);
+        deletion['synced'] = true;
+        deletion['synced_at'] = DateTime.now().toIso8601String();
+        
+        await prefs.setString(key, jsonEncode(deletion));
+        debugPrint('✅ Suppression avance marquée comme synchronisée: Référence $reference');
+        
+        // Procéder à la suppression définitive
+        await hardDeleteAvance(reference);
+      }
+    } catch (e) {
+      debugPrint('❌ Erreur marquage sync suppression avance: $e');
     }
   }
 

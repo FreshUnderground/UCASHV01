@@ -91,10 +91,10 @@ try {
         
         // Test database config path from the endpoint location
         $configPaths = [
-            '/htdocs/mahanaim.investee-group.com/server/config/database.php',
-            '/htdocs/mahanaim.investee-group.com/config/database.php',
-            '/var/www/mahanaim.investee-group.com/server/config/database.php',
-            '/var/www/mahanaim.investee-group.com/config/database.php'
+            '/htdocs/mahanaimeservice.investee-group.com/server/config/database.php',
+            '/htdocs/mahanaimeservice.investee-group.com/config/database.php',
+            '/var/www/mahanaimeservice.investee-group.com/server/config/database.php',
+            '/var/www/mahanaimeservice.investee-group.com/config/database.php'
         ];
         
         foreach ($configPaths as $path) {
@@ -106,9 +106,9 @@ try {
         }
         
         // The endpoint uses: require_once __DIR__ . '/../../../../config/database.php';
-        // From: /htdocs/mahanaim.investee-group.com/server/api/sync/deletion_requests/admin_validate.php
-        // Should resolve to: /htdocs/mahanaim.investee-group.com/config/database.php
-        $expectedConfigPath = '/htdocs/mahanaim.investee-group.com/config/database.php';
+        // From: /htdocs/mahanaimeservice.investee-group.com/server/api/sync/deletion_requests/admin_validate.php
+        // Should resolve to: /htdocs/mahanaimeservice.investee-group.com/config/database.php
+        $expectedConfigPath = '/htdocs/mahanaimeservice.investee-group.com/config/database.php';
         echo "\n🎯 Expected config path: $expectedConfigPath\n";
         
         if (file_exists($expectedConfigPath)) {
@@ -134,8 +134,8 @@ try {
             // Check if we can find it elsewhere
             echo "\n🔍 Searching for database config files...\n";
             $searchPaths = [
-                '/htdocs/mahanaim.investee-group.com/',
-                '/var/www/mahanaim.investee-group.com/',
+                '/htdocs/mahanaimeservice.investee-group.com/',
+                '/var/www/mahanaimeservice.investee-group.com/',
                 __DIR__ . '/../'
             ];
             

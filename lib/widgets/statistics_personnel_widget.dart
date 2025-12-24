@@ -26,7 +26,7 @@ class _StatisticsPersonnelWidgetState extends State<StatisticsPersonnelWidget> w
   // Filtres
   DateTime? _dateDebut;
   DateTime? _dateFin;
-  int? _selectedPersonnelId;
+  String? _selectedPersonnelMatricule;
   int? _selectedMonth;
   int? _selectedYear;
   String _selectedStatut = 'Tous';
@@ -224,8 +224,8 @@ class _StatisticsPersonnelWidgetState extends State<StatisticsPersonnelWidget> w
   Widget _buildPersonnelFilter() {
     return SizedBox(
       width: 250,
-      child: DropdownButtonFormField<int>(
-        value: _selectedPersonnelId,
+      child: DropdownButtonFormField<String?>(
+        value: _selectedPersonnelMatricule,
         decoration: const InputDecoration(
           labelText: 'Agent',
           border: OutlineInputBorder(),
@@ -233,13 +233,13 @@ class _StatisticsPersonnelWidgetState extends State<StatisticsPersonnelWidget> w
           isDense: true,
         ),
         items: [
-          const DropdownMenuItem(value: null, child: Text('Tous les agents')),
-          ..._personnel.map((p) => DropdownMenuItem(
-                value: p.id,
+          const DropdownMenuItem<String?>(value: null, child: Text('Tous les agents')),
+          ..._personnel.map((p) => DropdownMenuItem<String?>(
+                value: p.matricule,
                 child: Text(p.nomComplet),
               )),
         ],
-        onChanged: (value) => setState(() => _selectedPersonnelId = value),
+        onChanged: (value) => setState(() => _selectedPersonnelMatricule = value),
       ),
     );
   }
@@ -271,7 +271,7 @@ class _StatisticsPersonnelWidgetState extends State<StatisticsPersonnelWidget> w
     setState(() {
       _dateDebut = null;
       _dateFin = null;
-      _selectedPersonnelId = null;
+      _selectedPersonnelMatricule = null;
       _selectedMonth = null;
       _selectedYear = null;
       _selectedStatut = 'Tous';
@@ -290,7 +290,7 @@ class _StatisticsPersonnelWidgetState extends State<StatisticsPersonnelWidget> w
       );
       
       // Préparer les données
-      final personnelMap = {for (var p in _personnel) p.id!: p};
+      final personnelMap = {for (var p in _personnel) if (p.id != null) p.id!: p};
       pw.Document pdfDocument;
       String title;
       String fileName;
@@ -312,7 +312,7 @@ class _StatisticsPersonnelWidgetState extends State<StatisticsPersonnelWidget> w
           
         case 1: // Avances
           final avancesFiltered = _avances.where((a) {
-            if (_selectedPersonnelId != null && a.personnelId != _selectedPersonnelId) return false;
+            if (_selectedPersonnelMatricule != null && a.personnelMatricule != _selectedPersonnelMatricule) return false;
             if (_selectedMonth != null && a.moisAvance != _selectedMonth) return false;
             if (_selectedYear != null && a.anneeAvance != _selectedYear) return false;
             return true;
@@ -340,7 +340,7 @@ class _StatisticsPersonnelWidgetState extends State<StatisticsPersonnelWidget> w
         case 3: // Arrières
           final salairesAvecArrieres = _salaires.where((s) {
             if (s.montantRestant <= 0) return false;
-            if (_selectedPersonnelId != null && s.personnelId != _selectedPersonnelId) return false;
+            if (_selectedPersonnelMatricule != null && s.personnelMatricule != _selectedPersonnelMatricule) return false;
             return true;
           }).toList();
           pdfDocument = await generateRapportArrieres(
@@ -405,7 +405,7 @@ class _StatisticsPersonnelWidgetState extends State<StatisticsPersonnelWidget> w
   List<SalaireModel> _applyFilters() {
     return _salaires.where((salaire) {
       // Filtre par personnel
-      if (_selectedPersonnelId != null && salaire.personnelId != _selectedPersonnelId) {
+      if (_selectedPersonnelMatricule != null && salaire.personnelMatricule != _selectedPersonnelMatricule) {
         return false;
       }
       
@@ -725,7 +725,7 @@ class _StatisticsPersonnelWidgetState extends State<StatisticsPersonnelWidget> w
 
   Widget _buildAvancesSalaires() {
     var avancesFiltered = _avances.where((avance) {
-      if (_selectedPersonnelId != null && avance.personnelId != _selectedPersonnelId) return false;
+      if (_selectedPersonnelMatricule != null && avance.personnelMatricule != _selectedPersonnelMatricule) return false;
       if (_selectedMonth != null && avance.moisAvance != _selectedMonth) return false;
       if (_selectedYear != null && avance.anneeAvance != _selectedYear) return false;
       return true;
@@ -799,7 +799,7 @@ class _StatisticsPersonnelWidgetState extends State<StatisticsPersonnelWidget> w
                 ],
                 rows: avancesFiltered.map((avance) {
                   final personnel = _personnel.firstWhere(
-                    (p) => p.id == avance.personnelId,
+                    (p) => p.matricule == avance.personnelMatricule,
                     orElse: () => PersonnelModel(
                       matricule: 'N/A',
                       nom: 'N',
@@ -838,7 +838,7 @@ class _StatisticsPersonnelWidgetState extends State<StatisticsPersonnelWidget> w
   Widget _buildArrieres() {
     final salairesAvecArrieres = _salaires.where((s) {
       if (s.montantRestant <= 0) return false;
-      if (_selectedPersonnelId != null && s.personnelId != _selectedPersonnelId) return false;
+      if (_selectedPersonnelMatricule != null && s.personnelMatricule != _selectedPersonnelMatricule) return false;
       return true;
     }).toList();
     
@@ -932,7 +932,7 @@ class _StatisticsPersonnelWidgetState extends State<StatisticsPersonnelWidget> w
                 ],
                 rows: salairesAvecArrieres.map((salaire) {
                   final personnel = _personnel.firstWhere(
-                    (p) => p.id == salaire.personnelId,
+                    (p) => p.matricule == salaire.personnelMatricule,
                     orElse: () => PersonnelModel(
                       matricule: 'N/A',
                       nom: 'N',
@@ -994,9 +994,9 @@ class _StatisticsPersonnelWidgetState extends State<StatisticsPersonnelWidget> w
     }
     
     // Grouper par personnel
-    final Map<int, List<SalaireModel>> salairesByPersonnel = {};
+    final Map<String, List<SalaireModel>> salairesByPersonnel = {};
     for (var salaire in salairesFiltered) {
-      salairesByPersonnel.putIfAbsent(salaire.personnelId, () => []).add(salaire);
+      salairesByPersonnel.putIfAbsent(salaire.personnelMatricule, () => []).add(salaire);
     }
     
     double grandTotalPaiements = 0;
@@ -1008,15 +1008,15 @@ class _StatisticsPersonnelWidgetState extends State<StatisticsPersonnelWidget> w
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ...salairesByPersonnel.entries.map((entry) {
-            final personnelId = entry.key;
+            final personnelMatricule = entry.key;
             final salairesPers = entry.value;
             
             final personnel = _personnel.firstWhere(
-              (p) => p.id == personnelId,
+              (p) => p.matricule == personnelMatricule,
               orElse: () => PersonnelModel(
-                matricule: 'N/A',
+                matricule: personnelMatricule,
                 nom: 'Agent',
-                prenom: '$personnelId',
+                prenom: 'Inconnu',
                 telephone: '',
                 poste: '',
                 dateEmbauche: DateTime.now(),
@@ -1212,7 +1212,7 @@ class _StatisticsPersonnelWidgetState extends State<StatisticsPersonnelWidget> w
   
   Widget _buildRetenues() {
     var retenuesFiltered = _retenues.where((retenue) {
-      if (_selectedPersonnelId != null && retenue.personnelId != _selectedPersonnelId) return false;
+      if (_selectedPersonnelMatricule != null && retenue.personnelMatricule != _selectedPersonnelMatricule) return false;
       if (_selectedMonth != null && !retenue.isActivePourPeriode(_selectedMonth!, _selectedYear ?? DateTime.now().year)) return false;
       return true;
     }).toList();
@@ -1290,7 +1290,7 @@ class _StatisticsPersonnelWidgetState extends State<StatisticsPersonnelWidget> w
                 ],
                 rows: retenuesFiltered.map((retenue) {
                   final personnel = _personnel.firstWhere(
-                    (p) => p.id == retenue.personnelId,
+                    (p) => p.matricule == retenue.personnelMatricule,
                     orElse: () => PersonnelModel(
                       matricule: 'N/A',
                       nom: 'N',

@@ -16,9 +16,10 @@ class _PersonnelRapportWidgetState extends State<PersonnelRapportWidget> {
   TypePeriodeRapport _periodeSelectionnee = TypePeriodeRapport.moisCourant;
   DateTime _dateReference = DateTime.now();
   List<PersonnelModel> _personnelsDisponibles = [];
-  List<int> _personnelsSelectionnes = [];
+  List<String> _personnelsSelectionnes = [];
   bool _grouperParAgent = true;
   bool _isLoading = false;
+  bool _filtresVisibles = false; // Filtres masqués par défaut
   RapportPaiementsPersonnel? _rapportActuel;
 
   @override
@@ -49,7 +50,7 @@ class _PersonnelRapportWidgetState extends State<PersonnelRapportWidget> {
       final rapport = await PersonnelRapportService.instance.genererRapportPeriodePredefinie(
         typePeriode: _periodeSelectionnee,
         dateReference: _dateReference,
-        personnelIds: _personnelsSelectionnes.isEmpty ? null : _personnelsSelectionnes,
+        personnelMatricules: _personnelsSelectionnes.isEmpty ? null : _personnelsSelectionnes,
         grouperParAgent: _grouperParAgent,
       );
 
@@ -82,7 +83,8 @@ class _PersonnelRapportWidgetState extends State<PersonnelRapportWidget> {
       ),
       body: Column(
         children: [
-          _buildFiltres(),
+          _buildFilterToggle(),
+          if (_filtresVisibles) _buildFiltres(),
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -95,195 +97,261 @@ class _PersonnelRapportWidgetState extends State<PersonnelRapportWidget> {
     );
   }
 
+  Widget _buildFilterToggle() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        border: Border(bottom: BorderSide(color: Colors.grey[300]!)),
+      ),
+      child: Row(
+        children: [
+          const Expanded(
+            child: Text(
+              'Filtres et Options',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+          ),
+          TextButton.icon(
+            onPressed: () {
+              setState(() {
+                _filtresVisibles = !_filtresVisibles;
+              });
+            },
+            icon: Icon(
+              _filtresVisibles ? Icons.expand_less : Icons.expand_more,
+              size: 20,
+            ),
+            label: Text(
+              _filtresVisibles ? 'Masquer' : 'Afficher',
+              style: const TextStyle(fontSize: 14),
+            ),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.indigo,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton.icon(
+            onPressed: _isLoading ? null : _genererRapport,
+            icon: const Icon(Icons.analytics, size: 18),
+            label: const Text('Générer Rapport', style: TextStyle(fontSize: 14)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.indigo,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFiltres() {
     return Container(
+      constraints: const BoxConstraints(maxHeight: 400), // Increased height limit
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.grey[50],
         border: Border(bottom: BorderSide(color: Colors.grey[300]!)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Période', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<TypePeriodeRapport>(
-                      value: _periodeSelectionnee,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: SingleChildScrollView( // Permet le défilement si nécessaire
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min, // Prevent unnecessary expansion
+          children: [
+            // Première ligne: Période et Date de référence
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Période', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      const SizedBox(height: 6),
+                      Container(
+                        constraints: const BoxConstraints(maxHeight: 60),
+                        child: DropdownButtonFormField<TypePeriodeRapport>(
+                          value: _periodeSelectionnee,
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            isDense: true,
+                          ),
+                          isExpanded: true,
+                          items: [
+                            const DropdownMenuItem(
+                              value: TypePeriodeRapport.moisCourant,
+                              child: Text('Mois courant', style: TextStyle(fontSize: 14)),
+                            ),
+                            const DropdownMenuItem(
+                              value: TypePeriodeRapport.derniersMois3,
+                              child: Text('3 derniers mois', style: TextStyle(fontSize: 14)),
+                            ),
+                            const DropdownMenuItem(
+                              value: TypePeriodeRapport.derniersMois6,
+                              child: Text('6 derniers mois', style: TextStyle(fontSize: 14)),
+                            ),
+                            const DropdownMenuItem(
+                              value: TypePeriodeRapport.derniersMois12,
+                              child: Text('12 derniers mois', style: TextStyle(fontSize: 14)),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            setState(() {
+                              _periodeSelectionnee = value!;
+                            });
+                          },
+                        ),
                       ),
-                      items: [
-                        DropdownMenuItem(
-                          value: TypePeriodeRapport.moisCourant,
-                          child: Text('Mois courant'),
-                        ),
-                        DropdownMenuItem(
-                          value: TypePeriodeRapport.derniersMois3,
-                          child: Text('3 derniers mois'),
-                        ),
-                        DropdownMenuItem(
-                          value: TypePeriodeRapport.derniersMois6,
-                          child: Text('6 derniers mois'),
-                        ),
-                        DropdownMenuItem(
-                          value: TypePeriodeRapport.derniersMois12,
-                          child: Text('12 derniers mois'),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        setState(() {
-                          _periodeSelectionnee = value!;
-                        });
-                      },
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Date de référence', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    InkWell(
-                      onTap: () async {
-                        final date = await showDatePicker(
-                          context: context,
-                          initialDate: _dateReference,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime.now(),
-                        );
-                        if (date != null) {
-                          setState(() {
-                            _dateReference = date;
-                          });
-                        }
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Date de référence', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      const SizedBox(height: 6),
+                      InkWell(
+                        onTap: () async {
+                          final date = await showDatePicker(
+                            context: context,
+                            initialDate: _dateReference,
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime.now(),
+                          );
+                          if (date != null) {
+                            setState(() {
+                              _dateReference = date;
+                            });
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.calendar_today, size: 18, color: Colors.grey[600]),
+                              const SizedBox(width: 6),
+                              Text(DateFormat('dd/MM/yyyy').format(_dateReference), style: const TextStyle(fontSize: 14)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Deuxième ligne: Agents et options
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Agents sélectionnés', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      const SizedBox(height: 6),
+                      Container(
+                        height: 150, // Fixed height instead of flexible constraints
                         decoration: BoxDecoration(
                           border: Border.all(color: Colors.grey),
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.calendar_today, size: 20, color: Colors.grey[600]),
-                            const SizedBox(width: 8),
-                            Text(DateFormat('dd/MM/yyyy').format(_dateReference)),
-                          ],
+                        child: _personnelsDisponibles.isEmpty
+                            ? const Padding(
+                                padding: EdgeInsets.all(16),
+                                child: Center(child: Text('Aucun agent disponible', style: TextStyle(fontSize: 14))),
+                              )
+                            : ListView.builder(
+                                itemCount: _personnelsDisponibles.length,
+                                itemBuilder: (context, index) {
+                                  final personnel = _personnelsDisponibles[index];
+                                  final isSelected = _personnelsSelectionnes.contains(personnel.matricule);
+                                  
+                                  return CheckboxListTile(
+                                    dense: true,
+                                    visualDensity: VisualDensity.compact,
+                                    title: Text(
+                                      '${personnel.nom} ${personnel.prenom}',
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                    subtitle: Text(
+                                      personnel.poste,
+                                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                                    ),
+                                    value: isSelected,
+                                    onChanged: (value) {
+                                      setState(() {
+                                        if (value == true) {
+                                          _personnelsSelectionnes.add(personnel.matricule);
+                                        } else {
+                                          _personnelsSelectionnes.remove(personnel.matricule);
+                                        }
+                                      });
+                                    },
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 1,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SwitchListTile(
+                        dense: true,
+                        title: const Text('Grouper par agent', style: TextStyle(fontSize: 14)),
+                        value: _grouperParAgent,
+                        onChanged: (value) {
+                          setState(() {
+                            _grouperParAgent = value;
+                          });
+                        },
+                      ),
+                      if (_personnelsSelectionnes.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Chip(
+                          label: Text(
+                            '${_personnelsSelectionnes.length} sélectionné(s)',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          backgroundColor: Colors.indigo[100],
+                          visualDensity: VisualDensity.compact,
                         ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Agents sélectionnés', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Container(
-                      height: 100,
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: _personnelsDisponibles.isEmpty
-                          ? const Center(child: Text('Aucun agent disponible'))
-                          : ListView.builder(
-                              itemCount: _personnelsDisponibles.length,
-                              itemBuilder: (context, index) {
-                                final personnel = _personnelsDisponibles[index];
-                                final isSelected = _personnelsSelectionnes.contains(personnel.id);
-                                
-                                return CheckboxListTile(
-                                  dense: true,
-                                  title: Text(
-                                    '${personnel.nom} ${personnel.prenom}',
-                                    style: const TextStyle(fontSize: 14),
-                                  ),
-                                  subtitle: Text(
-                                    personnel.poste,
-                                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                                  ),
-                                  value: isSelected,
-                                  onChanged: (value) {
-                                    setState(() {
-                                      if (value == true) {
-                                        _personnelsSelectionnes.add(personnel.id!);
-                                      } else {
-                                        _personnelsSelectionnes.remove(personnel.id);
-                                      }
-                                    });
-                                  },
-                                );
-                              },
-                            ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              Column(
-                children: [
-                  SwitchListTile(
-                    title: const Text('Grouper par agent'),
-                    value: _grouperParAgent,
-                    onChanged: (value) {
-                      setState(() {
-                        _grouperParAgent = value;
-                      });
-                    },
+                        const SizedBox(height: 4),
+                        TextButton(
+                          onPressed: () {
+                            setState(() {
+                              _personnelsSelectionnes.clear();
+                            });
+                          },
+                          child: const Text('Tout désélectionner', style: TextStyle(fontSize: 12)),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            minimumSize: Size.zero,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    onPressed: _isLoading ? null : _genererRapport,
-                    icon: const Icon(Icons.analytics),
-                    label: const Text('Générer Rapport'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.indigo,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          if (_personnelsSelectionnes.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children: [
-                Chip(
-                  label: Text('${_personnelsSelectionnes.length} agent(s) sélectionné(s)'),
-                  backgroundColor: Colors.indigo[100],
-                ),
-                TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _personnelsSelectionnes.clear();
-                    });
-                  },
-                  child: const Text('Tout désélectionner'),
                 ),
               ],
             ),
           ],
-        ],
+        ),
       ),
     );
   }
@@ -338,13 +406,13 @@ class _PersonnelRapportWidgetState extends State<PersonnelRapportWidget> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            const Row(
               children: [
                 Icon(Icons.analytics, color: Colors.indigo),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Text(
                   'Rapport de Paiements Personnel',
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
@@ -525,7 +593,7 @@ class _PersonnelRapportWidgetState extends State<PersonnelRapportWidget> {
     );
   }
 
-  Widget _buildStatistiquesParAgent(Map<int, StatistiquesParAgent> statsParAgent) {
+  Widget _buildStatistiquesParAgent(Map<String, StatistiquesParAgent> statsParAgent) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -648,7 +716,7 @@ class _PersonnelRapportWidgetState extends State<PersonnelRapportWidget> {
                 ],
                 rows: paiements.map((paiement) {
                   final personnel = _personnelsDisponibles.firstWhere(
-                    (p) => p.id == paiement.personnelId,
+                    (p) => p.matricule == paiement.personnelMatricule,
                     orElse: () => PersonnelModel(
                       matricule: 'N/A',
                       nom: 'Inconnu',

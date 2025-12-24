@@ -42,6 +42,12 @@ class TriangularDebtSettlementModel {
   final String? lastModifiedBy;
   final bool isSynced;
   final DateTime? syncedAt;
+  
+  // Champs de suppression (soft delete)
+  final bool isDeleted;
+  final DateTime? deletedAt;
+  final String? deletedBy;
+  final String? deleteReason;
 
   TriangularDebtSettlementModel({
     this.id,
@@ -64,6 +70,10 @@ class TriangularDebtSettlementModel {
     this.lastModifiedBy,
     this.isSynced = false,
     this.syncedAt,
+    this.isDeleted = false,
+    this.deletedAt,
+    this.deletedBy,
+    this.deleteReason,
   });
 
   /// Factory pour créer depuis JSON (base de données locale)
@@ -95,6 +105,10 @@ class TriangularDebtSettlementModel {
       syncedAt: json['synced_at'] != null
           ? DateTime.parse(json['synced_at'] as String)
           : null,
+      isDeleted: (json['is_deleted'] as int?) == 1,
+      deletedAt: json['deleted_at'] != null ? DateTime.parse(json['deleted_at'] as String) : null,
+      deletedBy: json['deleted_by'] as String?,
+      deleteReason: json['delete_reason'] as String?,
     );
   }
 
@@ -121,6 +135,10 @@ class TriangularDebtSettlementModel {
       'last_modified_by': lastModifiedBy,
       'is_synced': isSynced ? 1 : 0,
       'synced_at': syncedAt?.toIso8601String(),
+      'is_deleted': isDeleted ? 1 : 0,
+      'deleted_at': deletedAt?.toIso8601String(),
+      'deleted_by': deletedBy,
+      'delete_reason': deleteReason,
     };
   }
 
@@ -146,6 +164,10 @@ class TriangularDebtSettlementModel {
     String? lastModifiedBy,
     bool? isSynced,
     DateTime? syncedAt,
+    bool? isDeleted,
+    DateTime? deletedAt,
+    String? deletedBy,
+    String? deleteReason,
   }) {
     return TriangularDebtSettlementModel(
       id: id ?? this.id,
@@ -168,6 +190,10 @@ class TriangularDebtSettlementModel {
       lastModifiedBy: lastModifiedBy ?? this.lastModifiedBy,
       isSynced: isSynced ?? this.isSynced,
       syncedAt: syncedAt ?? this.syncedAt,
+      isDeleted: isDeleted ?? this.isDeleted,
+      deletedAt: deletedAt ?? this.deletedAt,
+      deletedBy: deletedBy ?? this.deletedBy,
+      deleteReason: deleteReason ?? this.deleteReason,
     );
   }
 

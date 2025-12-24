@@ -433,7 +433,7 @@ class PersonnelSyncService {
           
           // Marquer les suppressions comme synchronisées
           for (var deletion in deletions) {
-            await _markDeletionAsSynced(deletion['id'], deletion['type']);
+            await _markDeletionAsSynced(deletion['matricule'], deletion['type']);
           }
         } else {
           debugPrint('  ⚠️ Erreur upload suppressions: ${result['message'] ?? 'Erreur inconnue'}');
@@ -459,6 +459,20 @@ class PersonnelSyncService {
           if (data != null) {
             final deletion = jsonDecode(data);
             if (deletion['synced'] != true) {
+              // S'assurer que les bons identifiants sont présents
+              if (deletion['type'] == 'personnel') {
+                // Pour personnel, utiliser matricule
+                if (!deletion.containsKey('matricule')) {
+                  debugPrint('⚠️ Suppression personnel sans matricule: $key');
+                  continue;
+                }
+              } else {
+                // Pour autres (salaires, avances, retenues), utiliser reference
+                if (!deletion.containsKey('reference')) {
+                  debugPrint('⚠️ Suppression ${deletion['type']} sans reference: $key');
+                  continue;
+                }
+              }
               deletions.add(deletion);
             }
           }
@@ -472,10 +486,10 @@ class PersonnelSyncService {
   }
   
   /// Marquer une suppression comme synchronisée
-  Future<void> _markDeletionAsSynced(int id, String type) async {
+  Future<void> _markDeletionAsSynced(String matricule, String type) async {
     try {
       final prefs = await LocalDB.instance.database;
-      final key = 'deletion_${type}_$id';
+      final key = 'deletion_${type}_$matricule';
       
       final data = prefs.getString(key);
       if (data != null) {
@@ -484,10 +498,10 @@ class PersonnelSyncService {
         deletion['synced_at'] = DateTime.now().toIso8601String();
         
         await prefs.setString(key, jsonEncode(deletion));
-        debugPrint('✅ Suppression marquée comme synchronisée: $type ID $id');
+        debugPrint('✅ Suppression marquée comme synchronisée: $type Matricule $matricule');
         
         // Notifier le PersonnelService pour la suppression définitive
-        await _notifyDeletionSynced(id, type);
+        await _notifyDeletionSynced(matricule, type);
       }
     } catch (e) {
       debugPrint('❌ Erreur marquage sync suppression: $e');
@@ -495,11 +509,11 @@ class PersonnelSyncService {
   }
   
   /// Notifier qu'une suppression a été synchronisée
-  Future<void> _notifyDeletionSynced(int id, String type) async {
+  Future<void> _notifyDeletionSynced(String matricule, String type) async {
     try {
       // Importer le PersonnelService de manière sécurisée
       final personnelService = PersonnelService.instance;
-      await personnelService.markDeletionAsSynced(id, type);
+      await personnelService.markDeletionAsSynced(matricule, type);
     } catch (e) {
       debugPrint('⚠️ Erreur notification suppression: $e');
     }
@@ -509,50 +523,57 @@ class PersonnelSyncService {
   Future<void> _handleDeletionFromServer(String tableName, Map<String, dynamic> deletedRecord) async {
     try {
       final prefs = await LocalDB.instance.database;
-      final id = deletedRecord['id'];
       
-      if (id == null) {
-        debugPrint('⚠️ ID manquant pour suppression $tableName');
-        return;
-      }
-      
-      // Déterminer le préfixe de clé basé sur le nom de la table
+      // Pour le personnel, utiliser le matricule, pour les autres utiliser la référence
+      String identifier;
       String keyPrefix;
+      
       switch (tableName) {
         case 'personnel':
+          identifier = deletedRecord['matricule'];
           keyPrefix = 'personnel_';
           break;
         case 'salaires':
+          identifier = deletedRecord['reference'];
           keyPrefix = 'salaire_';
           break;
         case 'avances_personnel':
+          identifier = deletedRecord['reference'];
           keyPrefix = 'avance_personnel_';
           break;
         case 'credits_personnel':
+          identifier = deletedRecord['reference'];
           keyPrefix = 'credit_personnel_';
           break;
         case 'retenues_personnel':
+          identifier = deletedRecord['reference'];
           keyPrefix = 'retenue_personnel_';
           break;
         default:
+          identifier = deletedRecord['id']?.toString() ?? '';
           keyPrefix = '${tableName}_';
       }
       
-      final key = '$keyPrefix$id';
+      if (identifier.isEmpty) {
+        debugPrint('⚠️ Identifiant manquant pour suppression $tableName');
+        return;
+      }
+      
+      final key = '$keyPrefix$identifier';
       
       // Vérifier si l'enregistrement existe localement
       final existingData = prefs.getString(key);
       if (existingData != null) {
         // Supprimer l'enregistrement local
         await prefs.remove(key);
-        debugPrint('🗑️ Suppression propagée: $tableName ID $id');
+        debugPrint('🗑️ Suppression propagée: $tableName Identifiant $identifier');
         
         // Si c'est un personnel, supprimer aussi les données liées
         if (tableName == 'personnel') {
-          await _deleteRelatedDataFromSync(id);
+          await _deleteRelatedDataFromSync(identifier);
         }
       } else {
-        debugPrint('ℹ️ Enregistrement $tableName ID $id déjà supprimé localement');
+        debugPrint('ℹ️ Enregistrement $tableName Identifiant $identifier déjà supprimé localement');
       }
       
     } catch (e) {
@@ -561,7 +582,7 @@ class PersonnelSyncService {
   }
   
   /// Supprimer les données liées lors d'une suppression de personnel via sync
-  Future<void> _deleteRelatedDataFromSync(int personnelId) async {
+  Future<void> _deleteRelatedDataFromSync(String personnelMatricule) async {
     try {
       final prefs = await LocalDB.instance.database;
       final keys = prefs.getKeys();
@@ -573,7 +594,7 @@ class PersonnelSyncService {
             final data = prefs.getString(key);
             if (data != null) {
               final json = jsonDecode(data);
-              if (json['personnel_id'] == personnelId) {
+              if (json['personnel_matricule'] == personnelMatricule) {
                 await prefs.remove(key);
                 debugPrint('🗑️ Salaire supprimé via sync: $key');
               }
@@ -591,7 +612,7 @@ class PersonnelSyncService {
             final data = prefs.getString(key);
             if (data != null) {
               final json = jsonDecode(data);
-              if (json['personnel_id'] == personnelId) {
+              if (json['personnel_matricule'] == personnelMatricule) {
                 await prefs.remove(key);
                 debugPrint('🗑️ Avance supprimée via sync: $key');
               }
@@ -609,7 +630,7 @@ class PersonnelSyncService {
             final data = prefs.getString(key);
             if (data != null) {
               final json = jsonDecode(data);
-              if (json['personnel_id'] == personnelId) {
+              if (json['personnel_matricule'] == personnelMatricule) {
                 await prefs.remove(key);
                 debugPrint('🗑️ Retenue supprimée via sync: $key');
               }
@@ -620,7 +641,7 @@ class PersonnelSyncService {
         }
       }
       
-      debugPrint('✅ Données liées supprimées via sync pour personnel ID $personnelId');
+      debugPrint('✅ Données liées supprimées via sync pour personnel Matricule $personnelMatricule');
     } catch (e) {
       debugPrint('❌ Erreur suppression données liées sync: $e');
     }

@@ -175,7 +175,7 @@ class ClotureVirtuelleParSimService {
     int nombreDepots = depots.length;
     double montantDepots = depots.fold<double>(0.0, (sum, d) => sum + d.montant);
     
-    // === CALCULER SOLDE ACTUEL ===
+    // === CALCULER SOLDES ACTUELS PAR DEVISE ===
     // BUSINESS LOGIC: Solde Actuel = Solde Antérieur + Captures - Servies - Retraits - Dépôts
     // This formula represents the virtual balance evolution for a SIM card:
     // - Starting balance (soldeAnterieur)
@@ -183,7 +183,16 @@ class ClotureVirtuelleParSimService {
     // - Subtract served transactions (servies) - money converted to cash
     // - Subtract withdrawals (retraits) - money given to clients
     // - Subtract client deposits (depots) - virtual to cash conversions
+    
+    // Pour l'instant, on utilise le solde global converti (backward compatibility)
     final soldeActuel = soldeAnterieur + montantCaptures - montantServies - montantRetraits - montantDepots;
+    
+    // TODO: Implémenter la logique de soldes séparés USD/CDF
+    // Pour l'instant, on met des valeurs par défaut
+    final soldeAnterieurUSD = 0.0; // À implémenter: récupérer de la dernière clôture
+    final soldeAnterieurCDF = 0.0; // À implémenter: récupérer de la dernière clôture
+    final soldeActuelUSD = montantCapturesUSD - montantServiesUSD; // Solde USD calculé
+    final soldeActuelCDF = montantCapturesCDF - montantServiesCDF; // Solde CDF calculé
     
     // === CALCULER CASH DISPONIBLE ===
     // Le cash est GLOBAL et sera défini par le widget
@@ -206,6 +215,10 @@ class ClotureVirtuelleParSimService {
       dateCloture: dateCloture,
       soldeAnterieur: soldeAnterieur,
       soldeActuel: soldeActuel,
+      soldeAnterieurUSD: soldeAnterieurUSD,
+      soldeAnterieurCDF: soldeAnterieurCDF,
+      soldeActuelUSD: soldeActuelUSD,
+      soldeActuelCDF: soldeActuelCDF,
       cashDisponible: cashDisponible,
       fraisAnterieur: fraisAnterieur,
       fraisDuJour: fraisDuJour,

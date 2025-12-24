@@ -107,7 +107,7 @@ Ensure the database schema is up to date:
 
 Verify the server can be reached:
 ```bash
-ping mahanaim.investee-group.com
+ping mahanaimeservice.investee-group.com
 ```
 
 ## Common Issues and Fixes

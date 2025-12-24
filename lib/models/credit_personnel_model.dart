@@ -3,7 +3,7 @@ import 'dart:math';
 class CreditPersonnelModel {
   final int? id;
   final String reference;
-  final int personnelId;
+  final String personnelMatricule;
   final String? personnelNom; // Pour affichage
   final double montantCredit;
   final String devise;
@@ -18,6 +18,9 @@ class CreditPersonnelModel {
   final String statut; // 'En_Cours', 'Rembourse', 'En_Retard', 'Annule'
   final int dureeMois; // Durée du crédit en mois
   final double mensualite; // Montant mensuel à rembourser
+  final String modeRemboursement; // 'Mensuel', 'Unique', 'Progressif'
+  final int? moisRemboursement; // Mois de remboursement unique
+  final int? anneeRemboursement; // Année de remboursement unique
   
   final String? motif;
   final String? garanties;
@@ -34,7 +37,7 @@ class CreditPersonnelModel {
   CreditPersonnelModel({
     this.id,
     required this.reference,
-    required this.personnelId,
+    required this.personnelMatricule,
     this.personnelNom,
     required this.montantCredit,
     this.devise = 'USD',
@@ -47,6 +50,9 @@ class CreditPersonnelModel {
     this.statut = 'En_Cours',
     required this.dureeMois,
     double? mensualite,
+    this.modeRemboursement = 'Mensuel',
+    this.moisRemboursement,
+    this.anneeRemboursement,
     this.motif,
     this.garanties,
     this.notes,
@@ -73,6 +79,9 @@ class CreditPersonnelModel {
     return mensualite;
   }
 
+  // Montant mensuel calculé
+  double get montantMensuel => mensualite;
+
   // Montant total à rembourser (capital + intérêts)
   double get montantTotalARembourser => mensualite * dureeMois;
 
@@ -89,7 +98,7 @@ class CreditPersonnelModel {
     return CreditPersonnelModel(
       id: json['id'],
       reference: json['reference'] ?? '',
-      personnelId: json['personnel_id'] ?? 0,
+      personnelMatricule: json['personnel_matricule'] ?? '',
       personnelNom: json['personnel_nom'],
       montantCredit: json['montant_credit'] != null 
           ? double.tryParse(json['montant_credit'].toString()) ?? 0.0 
@@ -118,6 +127,9 @@ class CreditPersonnelModel {
       mensualite: json['mensualite'] != null 
           ? double.tryParse(json['mensualite'].toString()) ?? null 
           : null,
+      modeRemboursement: json['mode_remboursement'] ?? 'Mensuel',
+      moisRemboursement: json['mois_remboursement'],
+      anneeRemboursement: json['annee_remboursement'],
       motif: json['motif'],
       garanties: json['garanties'],
       notes: json['notes'],
@@ -140,7 +152,7 @@ class CreditPersonnelModel {
     return {
       'id': id,
       'reference': reference,
-      'personnel_id': personnelId,
+      'personnel_matricule': personnelMatricule,
       'personnel_nom': personnelNom,
       'montant_credit': montantCredit,
       'devise': devise,
@@ -153,6 +165,9 @@ class CreditPersonnelModel {
       'statut': statut,
       'duree_mois': dureeMois,
       'mensualite': mensualite,
+      'mode_remboursement': modeRemboursement,
+      'mois_remboursement': moisRemboursement,
+      'annee_remboursement': anneeRemboursement,
       'motif': motif,
       'garanties': garanties,
       'notes': notes,
@@ -168,7 +183,7 @@ class CreditPersonnelModel {
   CreditPersonnelModel copyWith({
     int? id,
     String? reference,
-    int? personnelId,
+    String? personnelMatricule,
     String? personnelNom,
     double? montantCredit,
     String? devise,
@@ -181,6 +196,9 @@ class CreditPersonnelModel {
     String? statut,
     int? dureeMois,
     double? mensualite,
+    String? modeRemboursement,
+    int? moisRemboursement,
+    int? anneeRemboursement,
     String? motif,
     String? garanties,
     String? notes,
@@ -194,7 +212,7 @@ class CreditPersonnelModel {
     return CreditPersonnelModel(
       id: id ?? this.id,
       reference: reference ?? this.reference,
-      personnelId: personnelId ?? this.personnelId,
+      personnelMatricule: personnelMatricule ?? this.personnelMatricule,
       personnelNom: personnelNom ?? this.personnelNom,
       montantCredit: montantCredit ?? this.montantCredit,
       devise: devise ?? this.devise,
@@ -207,6 +225,9 @@ class CreditPersonnelModel {
       statut: statut ?? this.statut,
       dureeMois: dureeMois ?? this.dureeMois,
       mensualite: mensualite ?? this.mensualite,
+      modeRemboursement: modeRemboursement ?? this.modeRemboursement,
+      moisRemboursement: moisRemboursement ?? this.moisRemboursement,
+      anneeRemboursement: anneeRemboursement ?? this.anneeRemboursement,
       motif: motif ?? this.motif,
       garanties: garanties ?? this.garanties,
       notes: notes ?? this.notes,

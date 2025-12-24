@@ -1308,7 +1308,7 @@ class _RapportClotureState extends State<RapportCloture> {
             _buildCashRow('- Non Servis', rapport.transfertsEnAttente),
             (() {
               final totalSoldePartenaire = rapport.soldeParPartenaire.values.fold(0.0, (sum, solde) => sum + solde);
-              return _buildCashRow('+ Solde Net Partenaires', totalSoldePartenaire);
+              return _buildCashRow('+/- Solde Net Partenaires', totalSoldePartenaire);
             }()),
             const Divider(thickness: 2, color: Colors.blue),
             _buildTotalRow('= CAPITAL NET', 

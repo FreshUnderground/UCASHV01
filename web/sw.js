@@ -204,7 +204,7 @@ function isStaticResource(url) {
 
 function isAPIRequest(url) {
   // NE GÉRER QUE les requêtes vers le même domaine (localhost ou domaine de l'app)
-  // Ignorer les requêtes vers des API externes (mahanaim.investee-group.com, etc.)
+  // Ignorer les requêtes vers des API externes (mahanaimeservice.investee-group.com, etc.)
   const isLocalAPI = url.origin === self.location.origin;
   const isAPIPath = url.pathname.startsWith('/api/') || 
                     url.pathname.startsWith('/server/') ||

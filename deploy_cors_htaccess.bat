@@ -19,7 +19,7 @@ echo.
 echo INSTRUCTIONS:
 echo.
 echo 1. Connectez-vous a votre serveur via FTP/SFTP ou cPanel
-echo    Serveur: mahanaim.investee-group.com
+echo    Serveur: mahanaimeservice.investee-group.com
 echo.
 echo 2. Uploadez les fichiers suivants:
 echo    - Depuis: c:\laragon1\www\UCASHV01\server\.htaccess

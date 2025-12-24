@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../models/triangular_debt_settlement_model.dart';
 import '../models/shop_model.dart';
+import '../config/app_config.dart';
 import 'local_db.dart';
 
 /// Service pour gérer les règlements triangulaires de dettes inter-shops
@@ -17,6 +20,131 @@ class TriangularDebtSettlementService {
   
   static TriangularDebtSettlementService get instance => _instance;
   
+  /// Supprimer un règlement triangulaire (local puis serveur)
+  Future<bool> deleteTriangularSettlement({
+    required String reference,
+    required String userId,
+    String? deleteReason,
+  }) async {
+    try {
+      debugPrint('🗑️ === SUPPRESSION RÈGLEMENT TRIANGULAIRE ===');
+      debugPrint('   Référence: $reference');
+      debugPrint('   Utilisateur: $userId');
+      
+      // ÉTAPE 1: Suppression locale
+      debugPrint('📱 ÉTAPE 1: Suppression locale...');
+      
+      // Récupérer le règlement existant
+      final settlements = await getAllTriangularSettlements();
+      final settlement = settlements.firstWhere(
+        (s) => s.reference == reference && !s.isDeleted,
+        orElse: () => throw Exception('Règlement non trouvé: $reference'),
+      );
+      
+      // Marquer comme supprimé localement
+      final deletedSettlement = settlement.copyWith(
+        isDeleted: true,
+        deletedAt: DateTime.now(),
+        deletedBy: userId,
+        deleteReason: deleteReason ?? 'Suppression par admin',
+        lastModifiedAt: DateTime.now(),
+        lastModifiedBy: userId,
+        isSynced: false, // Marquer pour synchronisation
+      );
+      
+      // Sauvegarder localement
+      await LocalDB.instance.saveTriangularDebtSettlement(deletedSettlement);
+      debugPrint('✅ Règlement supprimé localement: $reference');
+      
+      // ÉTAPE 2: Suppression serveur
+      debugPrint('🌐 ÉTAPE 2: Suppression serveur...');
+      
+      final success = await _deleteOnServer(reference, userId, deleteReason);
+      if (success) {
+        debugPrint('✅ Règlement supprimé sur serveur: $reference');
+        
+        // Marquer comme synchronisé
+        final syncedSettlement = deletedSettlement.copyWith(
+          isSynced: true,
+          syncedAt: DateTime.now(),
+        );
+        await LocalDB.instance.saveTriangularDebtSettlement(syncedSettlement);
+        
+        debugPrint('🔄 Synchronisation terminée pour: $reference');
+      } else {
+        debugPrint('⚠️ Échec suppression serveur, sera retentée lors du prochain sync');
+      }
+      
+      return true;
+    } catch (e) {
+      debugPrint('❌ Erreur suppression règlement: $e');
+      return false;
+    }
+  }
+
+  /// Supprimer sur le serveur via API
+  Future<bool> _deleteOnServer(String reference, String userId, String? deleteReason) async {
+    try {
+      final baseUrl = await _getApiBaseUrl();
+      final url = '$baseUrl/triangular_debt_settlements/delete.php';
+      
+      final payload = {
+        'reference': reference,
+        'user_id': userId,
+        'user_role': 'admin',
+        'delete_reason': deleteReason ?? 'Suppression par admin',
+      };
+      
+      debugPrint('📤 Envoi requête suppression vers: $url');
+      debugPrint('📤 Payload: $payload');
+      
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode(payload),
+      ).timeout(const Duration(seconds: 30));
+      
+      debugPrint('📥 Response status: ${response.statusCode}');
+      debugPrint('📥 Response body: ${response.body}');
+      
+      if (response.statusCode == 200) {
+        final result = jsonDecode(response.body);
+        return result['success'] == true;
+      }
+      
+      return false;
+    } catch (e) {
+      debugPrint('❌ Erreur API suppression: $e');
+      return false;
+    }
+  }
+
+  /// Obtenir l'URL de base de l'API
+  Future<String> _getApiBaseUrl() async {
+    return await AppConfig.getApiBaseUrl();
+  }
+
+  /// Récupérer tous les règlements (incluant supprimés pour sync)
+  Future<List<TriangularDebtSettlementModel>> getAllTriangularSettlements({
+    bool includeDeleted = false,
+  }) async {
+    final allSettlements = await LocalDB.instance.getAllTriangularDebtSettlements();
+    
+    if (includeDeleted) {
+      return allSettlements;
+    }
+    
+    return allSettlements.where((s) => !s.isDeleted).toList();
+  }
+
+  /// Récupérer les règlements actifs seulement
+  Future<List<TriangularDebtSettlementModel>> getActiveTriangularSettlements() async {
+    return getAllTriangularSettlements(includeDeleted: false);
+  }
+
   /// Créer un nouveau règlement triangulaire et mettre à jour les dettes
   /// 
   /// **Paramètres**:

@@ -116,7 +116,7 @@ class PaiementSalaireModel {
 class SalaireModel {
   final int? id;
   final String reference;
-  final int personnelId;
+  final String personnelMatricule;
   final String? personnelNom;
   final int mois;
   final int annee;
@@ -173,7 +173,7 @@ class SalaireModel {
   SalaireModel({
     this.id,
     required this.reference,
-    required this.personnelId,
+    required this.personnelMatricule,
     this.personnelNom,
     required this.mois,
     required this.annee,
@@ -266,7 +266,7 @@ class SalaireModel {
     return SalaireModel(
       id: json['id'],
       reference: json['reference'] ?? '',
-      personnelId: json['personnel_id'] ?? 0,
+      personnelMatricule: json['personnel_matricule'] ?? '',
       personnelNom: json['personnel_nom'],
       mois: json['mois'] ?? 1,
       annee: json['annee'] ?? DateTime.now().year,
@@ -315,7 +315,7 @@ class SalaireModel {
     return {
       'id': id,
       'reference': reference,
-      'personnel_id': personnelId,
+      'personnel_matricule': personnelMatricule,
       'personnel_nom': personnelNom,
       'mois': mois,
       'annee': annee,
@@ -363,7 +363,7 @@ class SalaireModel {
   SalaireModel copyWith({
     int? id,
     String? reference,
-    int? personnelId,
+    String? personnelMatricule,
     String? personnelNom,
     int? mois,
     int? annee,
@@ -409,7 +409,7 @@ class SalaireModel {
     return SalaireModel(
       id: id ?? this.id,
       reference: reference ?? this.reference,
-      personnelId: personnelId ?? this.personnelId,
+      personnelMatricule: personnelMatricule ?? this.personnelMatricule,
       personnelNom: personnelNom ?? this.personnelNom,
       mois: mois ?? this.mois,
       annee: annee ?? this.annee,

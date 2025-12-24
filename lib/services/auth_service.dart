@@ -1,5 +1,6 @@
 // ignore_for_file: body_might_complete_normally_nullable
 
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
@@ -192,8 +193,8 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  /// Synchroniser les données (agents, shops, frais) et réessayer le login
-  /// Cela permet de récupérer un agent récemment ajouté sur le serveur
+  /// OPTIMISATION #1: Synchronisation ciblée et rapide pour retry login
+  /// Synchronise seulement les agents (plus rapide) avec timeout
   Future<UserModel?> _syncAndRetryLogin(String username, String password) async {
     try {
       // Vérifier si on est en ligne
@@ -203,56 +204,54 @@ class AuthService extends ChangeNotifier {
         return null;
       }
       
-      debugPrint('🔄 Échec login offline - Tentative de synchronisation depuis le SERVEUR...');
-      debugPrint('🔄 Téléchargement des shops, agents et frais depuis le serveur...');
+      debugPrint('🔄 Échec login offline - Sync ciblée pour agent: $username');
       
-      // Synchroniser les données essentielles DEPUIS LE SERVEUR
+      // OPTIMISATION: Sync avec timeout pour éviter les blocages
       try {
         final syncService = SyncService();
         
-        // IMPORTANT: Réinitialiser les timestamps de sync pour forcer un téléchargement COMPLET
-        // Cela permet de récupérer les agents récemment ajoutés qui pourraient être
-        // filtrés par le paramètre 'since'
+        // Réinitialiser seulement le timestamp des agents pour sync ciblée
         final prefs = await SharedPreferences.getInstance();
-        await prefs.remove('last_sync_shops');
         await prefs.remove('last_sync_agents');
-        await prefs.remove('last_sync_commissions');
-        debugPrint('🗑️ Timestamps de sync réinitialisés pour téléchargement COMPLET');
+        debugPrint('🗑️ Timestamp agents réinitialisé pour sync ciblée');
         
-        // IMPORTANT: Télécharger d'abord les SHOPS (car agents dépendent des shops)
-        debugPrint('📥 [1/3] Téléchargement des SHOPS depuis le serveur...');
-        await syncService.downloadTableData('shops', 'login_sync', 'admin');
-        await ShopService.instance.loadShops(forceRefresh: true);
-        debugPrint('✅ ${ShopService.instance.shops.length} shops téléchargés');
+        // Télécharger seulement les AGENTS avec timeout
+        debugPrint('📥 Téléchargement ciblé des AGENTS (timeout 10s)...');
+        await Future.any([
+          syncService.downloadTableData('agents', 'login_sync', 'admin'),
+          Future.delayed(const Duration(seconds: 10), () => throw TimeoutException('Sync timeout')),
+        ]);
         
-        // Puis télécharger les AGENTS
-        debugPrint('📥 [2/3] Téléchargement des AGENTS depuis le serveur...');
-        await syncService.downloadTableData('agents', 'login_sync', 'admin');
         await AgentService.instance.loadAgents(forceRefresh: true);
         debugPrint('✅ ${AgentService.instance.agents.length} agents téléchargés');
         
-        // Télécharger les COMMISSIONS (Frais)
-        debugPrint('📥 [3/3] Téléchargement des COMMISSIONS (Frais) depuis le serveur...');
-        await syncService.downloadTableData('commissions', 'login_sync', 'admin');
-        await RatesService.instance.loadRatesAndCommissions();
-        debugPrint('✅ ${RatesService.instance.commissions.length} commissions téléchargées');
-        
-        debugPrint('✅ Synchronisation depuis le serveur terminée');
-        
-        // Réessayer le login après synchronisation
+        // Réessayer le login immédiatement
         final user = await LocalDB.instance.getAgentByCredentials(username, password);
         
         if (user != null) {
-          debugPrint('✅ Connexion réussie après synchronisation pour: ${user.username}');
+          debugPrint('✅ Connexion réussie après sync ciblée pour: ${user.username}');
+          
+          // OPTIMISATION: Sync shops en arrière-plan seulement (pas de commissions)
+          Future.delayed(const Duration(seconds: 5), () async {
+            try {
+              debugPrint('🔄 Sync arrière-plan: shops seulement...');
+              await prefs.remove('last_sync_shops');
+              
+              await syncService.downloadTableData('shops', 'login_sync', 'admin');
+              await ShopService.instance.loadShops(forceRefresh: true);
+              
+              debugPrint('✅ Sync shops arrière-plan terminée');
+            } catch (e) {
+              debugPrint('⚠️ Erreur sync shops arrière-plan: $e');
+            }
+          });
+          
           return user;
         } else {
-          debugPrint('❌ Agent "$username" toujours non trouvé après synchronisation serveur');
-          // Afficher les agents disponibles pour le débogage
-          final allAgents = await LocalDB.instance.getAllAgents();
-          debugPrint('📋 Agents disponibles: ${allAgents.map((a) => a.username).toList()}');
+          debugPrint('❌ Agent "$username" toujours non trouvé après sync ciblée');
         }
       } catch (syncError) {
-        debugPrint('⚠️ Erreur lors de la synchronisation serveur: $syncError');
+        debugPrint('⚠️ Erreur lors de la sync ciblée: $syncError');
       }
       
       return null;
@@ -523,30 +522,54 @@ class AuthService extends ChangeNotifier {
   }
 
   /// Déclencher une synchronisation automatique après login
-  /// Exécute en arrière-plan pour ne pas bloquer l'interface
+  /// OPTIMISÉ: Synchronisation légère et non-bloquante
   void _triggerPostLoginSync() {
-    // Exécuter la synchronisation en arrière-plan
-    Future.delayed(const Duration(seconds: 1), () async {
+    // Exécuter la synchronisation en arrière-plan avec délai plus long
+    Future.delayed(const Duration(seconds: 3), () async {
       try {
-        debugPrint('🔄 Déclenchement synchronisation post-login...');
+        debugPrint('🔄 Synchronisation post-login optimisée...');
         
-        // Utiliser SyncService directement
+        // OPTIMISATION: Sync seulement les données critiques
         final syncService = SyncService();
-        final result = await syncService.syncAll(
-          userId: _currentUser?.username ?? 'unknown'
-        );
         
-        if (result.success) {
-          debugPrint('✅ Synchronisation post-login réussie');
-          // Rafraîchir les données utilisateur après sync
-          await refreshUserData();
-        } else {
-          debugPrint('⚠️ Synchronisation post-login échouée: ${result.message}');
+        // Sync ciblée - seulement agents et shops (plus rapide)
+        try {
+          await Future.wait([
+            syncService.downloadTableData('agents', 'post_login_sync', _currentUser?.username ?? 'unknown'),
+            syncService.downloadTableData('shops', 'post_login_sync', _currentUser?.username ?? 'unknown'),
+          ], eagerError: false); // Continue même si une sync échoue
+          
+          debugPrint('✅ Synchronisation post-login optimisée terminée');
+          
+          // Rafraîchir seulement si nécessaire (pas de refreshUserData complet)
+          if (_currentUser?.role == 'AGENT') {
+            await _refreshAgentDataLightweight();
+          }
+        } catch (e) {
+          debugPrint('⚠️ Sync post-login partielle: $e');
+          // Continuer même en cas d'erreur partielle
         }
       } catch (e) {
         debugPrint('⚠️ Erreur synchronisation post-login: $e');
       }
     });
+  }
+  
+  /// Rafraîchissement léger des données agent (optimisé)
+  Future<void> _refreshAgentDataLightweight() async {
+    try {
+      if (_currentUser?.role == 'AGENT' && _currentUser?.shopId != null) {
+        // Recharger seulement le shop si nécessaire
+        final updatedShop = await LocalDB.instance.getShopById(_currentUser!.shopId!);
+        if (updatedShop != null && updatedShop != _currentShop) {
+          _currentShop = updatedShop;
+          notifyListeners();
+          debugPrint('✅ Shop mis à jour: ${updatedShop.designation}');
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ Erreur rafraîchissement léger: $e');
+    }
   }
 
   // Méthodes utilitaires privées

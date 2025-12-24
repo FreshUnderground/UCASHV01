@@ -422,7 +422,7 @@ Future<pw.Document> genererRapportCloturePDF(RapportClotureModel rapport, ShopMo
                 _buildRow('- Non Servis', rapport.transfertsEnAttente, color: PdfColors.orange700),
                 (() {
                   final totalSoldePartenaire = rapport.soldeParPartenaire.values.fold(0.0, (sum, solde) => sum + solde);
-                  return _buildRowWithSign('+ Solde Net Partenaires', totalSoldePartenaire, color: totalSoldePartenaire >= 0 ? PdfColors.blue700 : PdfColors.red700);
+                  return _buildRowWithSign('+/- Solde Net Partenaires', totalSoldePartenaire, color: totalSoldePartenaire >= 0 ? PdfColors.blue700 : PdfColors.red700);
                 }()),
                 pw.Divider(thickness: 2, color: PdfColors.blue700),
                 _buildRow('= CAPITAL NET', rapport.capitalNet, color: rapport.capitalNet >= 0 ? PdfColors.blue700 : PdfColors.red700, bold: true),

@@ -8,8 +8,12 @@ class ClotureVirtuelleParSimModel {
   final DateTime dateCloture;
   
   // === SOLDES ===
-  final double soldeAnterieur; // Solde au début de la journée
-  final double soldeActuel; // Solde à la clôture
+  final double soldeAnterieur; // Solde au début de la journée (total converti)
+  final double soldeActuel; // Solde à la clôture (total converti)
+  final double soldeAnterieurUSD; // Solde antérieur USD
+  final double soldeAnterieurCDF; // Solde antérieur CDF
+  final double soldeActuelUSD; // Solde actuel USD
+  final double soldeActuelCDF; // Solde actuel CDF
   
   // === CASH DISPONIBLE ===
   final double cashDisponible; // Cash physique disponible pour cette SIM
@@ -62,6 +66,10 @@ class ClotureVirtuelleParSimModel {
     required this.dateCloture,
     required this.soldeAnterieur,
     required this.soldeActuel,
+    required this.soldeAnterieurUSD,
+    required this.soldeAnterieurCDF,
+    required this.soldeActuelUSD,
+    required this.soldeActuelCDF,
     required this.cashDisponible,
     required this.fraisAnterieur,
     required this.fraisDuJour,
@@ -102,6 +110,10 @@ class ClotureVirtuelleParSimModel {
       'date_cloture': dateCloture.toIso8601String().split('T')[0], // Date only
       'solde_anterieur': soldeAnterieur,
       'solde_actuel': soldeActuel,
+      'solde_anterieur_usd': soldeAnterieurUSD,
+      'solde_anterieur_cdf': soldeAnterieurCDF,
+      'solde_actuel_usd': soldeActuelUSD,
+      'solde_actuel_cdf': soldeActuelCDF,
       'cash_disponible': cashDisponible,
       'frais_anterieur': fraisAnterieur,
       'frais_du_jour': fraisDuJour,
@@ -143,6 +155,10 @@ class ClotureVirtuelleParSimModel {
       dateCloture: DateTime.parse(map['date_cloture'] as String),
       soldeAnterieur: (map['solde_anterieur'] as num).toDouble(),
       soldeActuel: (map['solde_actuel'] as num).toDouble(),
+      soldeAnterieurUSD: (map['solde_anterieur_usd'] as num?)?.toDouble() ?? 0.0,
+      soldeAnterieurCDF: (map['solde_anterieur_cdf'] as num?)?.toDouble() ?? 0.0,
+      soldeActuelUSD: (map['solde_actuel_usd'] as num?)?.toDouble() ?? 0.0,
+      soldeActuelCDF: (map['solde_actuel_cdf'] as num?)?.toDouble() ?? 0.0,
       cashDisponible: (map['cash_disponible'] as num).toDouble(),
       fraisAnterieur: (map['frais_anterieur'] as num).toDouble(),
       fraisDuJour: (map['frais_du_jour'] as num).toDouble(),
@@ -183,6 +199,10 @@ class ClotureVirtuelleParSimModel {
     DateTime? dateCloture,
     double? soldeAnterieur,
     double? soldeActuel,
+    double? soldeAnterieurUSD,
+    double? soldeAnterieurCDF,
+    double? soldeActuelUSD,
+    double? soldeActuelCDF,
     double? cashDisponible,
     double? fraisAnterieur,
     double? fraisDuJour,
@@ -221,6 +241,10 @@ class ClotureVirtuelleParSimModel {
       dateCloture: dateCloture ?? this.dateCloture,
       soldeAnterieur: soldeAnterieur ?? this.soldeAnterieur,
       soldeActuel: soldeActuel ?? this.soldeActuel,
+      soldeAnterieurUSD: soldeAnterieurUSD ?? this.soldeAnterieurUSD,
+      soldeAnterieurCDF: soldeAnterieurCDF ?? this.soldeAnterieurCDF,
+      soldeActuelUSD: soldeActuelUSD ?? this.soldeActuelUSD,
+      soldeActuelCDF: soldeActuelCDF ?? this.soldeActuelCDF,
       cashDisponible: cashDisponible ?? this.cashDisponible,
       fraisAnterieur: fraisAnterieur ?? this.fraisAnterieur,
       fraisDuJour: fraisDuJour ?? this.fraisDuJour,

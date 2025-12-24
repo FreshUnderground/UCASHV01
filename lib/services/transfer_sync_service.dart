@@ -450,10 +450,12 @@ class TransferSyncService extends ChangeNotifier {
     }
   }
 
-  /// Télécharger TOUTES les opérations du shop depuis le serveur
-  /// Remplace l'ancien système qui ne chargeait que les transferts "en attente"
-  /// ANCIEN ENDPOINT (obsolète): pending-transfers.php?shop_id=X - Ne chargeait que statut="enAttente"
-  /// NOUVEAU ENDPOINT: all-operations.php?shop_id=X - Charge TOUTES les opérations (4 derniers jours)
+  /// Télécharger les opérations OPTIMISÉES du shop depuis le serveur
+  /// OPTIMISATION: Filtrage intelligent par statut et date:
+  /// - EN ATTENTE: Toutes (peu importe la date)
+  /// - SERVIS: Seulement hier et aujourd'hui
+  /// - ANNULÉS: Seulement aujourd'hui
+  /// NOUVEAU ENDPOINT: optimized-operations.php?shop_id=X&filter_mode=smart
   /// 
   /// [bypassCacheOnError] Si true, ne charge PAS le cache local en cas d'erreur (pour forceRefresh)
   Future<void> _downloadPendingTransfers({bool bypassCacheOnError = false}) async {
@@ -461,15 +463,24 @@ class TransferSyncService extends ChangeNotifier {
       final baseUrl = await AppConfig.getApiBaseUrl();
       final cleanUrl = baseUrl.trim(); // Nettoyer l'URL
       
-      // Nouveau endpoint unifié qui récupère TOUTES les opérations
-      // Pour agent: filtré par shop_id
-      // Pour admin: toutes les opérations (shop_id=null)
-      // ANCIEN: '$cleanUrl/sync/operations/pending-transfers.php' (OBSOLÈTE)
-      final url = Uri.parse('$cleanUrl/sync/operations/all-operations.php').replace(
-        queryParameters: _shopId > 0 ? {'shop_id': _shopId.toString()} : {},
+      // OPTIMISATION: Endpoint avec filtrage intelligent par statut et date
+      // EN ATTENTE: Toutes (peu importe la date)
+      // SERVIS: Seulement hier et aujourd'hui  
+      // ANNULÉS: Seulement aujourd'hui
+      final queryParams = <String, String>{
+        if (_shopId > 0) 'shop_id': _shopId.toString(),
+        'filter_mode': 'smart', // Active le filtrage intelligent
+        'pending_all': 'true',   // Toutes les opérations en attente
+        'served_days': '4',      // Opérations servies: 4 derniers jours
+        'cancelled_days': '1',   // Opérations annulées: aujourd'hui seulement
+      };
+      
+      final url = Uri.parse('$cleanUrl/sync/operations/optimized-operations.php').replace(
+        queryParameters: queryParams,
       );
       
-      debugPrint('📥 Téléchargement TOUTES opérations depuis: $url');
+      debugPrint('📥 Téléchargement OPTIMISÉ opérations depuis: $url');
+      debugPrint('   🎯 Filtrage: EN ATTENTE (toutes) + SERVIS (4j) + ANNULÉS (1j)');
       
       final response = await http.get(
         url,

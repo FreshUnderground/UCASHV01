@@ -76,34 +76,55 @@ class PersonnelService extends ChangeNotifier {
     }
   }
 
+  /// Vérifier l'unicité du nom complet
+  Future<bool> isNomCompletUnique(String nom, String prenom, {String? excludeMatricule}) async {
+    await loadPersonnel();
+    final nomComplet = '$nom $prenom'.toLowerCase().trim();
+    
+    return !_personnel.any((p) => 
+      p.matricule != excludeMatricule && 
+      p.nomComplet.toLowerCase().trim() == nomComplet
+    );
+  }
+
+  /// Vérifier l'unicité du nom complet par matricule
+  Future<bool> isNomCompletUniqueByMatricule(String nom, String prenom, {String? excludeMatricule}) async {
+    return await isNomCompletUnique(nom, prenom, excludeMatricule: excludeMatricule);
+  }
+
   /// Créer un employé
   Future<PersonnelModel> createPersonnel(PersonnelModel personnel) async {
     try {
-      final prefs = await LocalDB.instance.database;
-      
-      // Générer un ID unique
-      int newId = DateTime.now().millisecondsSinceEpoch;
-      
-      // Vérifier que le matricule est unique
-      await loadPersonnel();
-      if (_personnel.any((p) => p.matricule == personnel.matricule)) {
-        throw Exception('Matricule ${personnel.matricule} existe déjà');
+      // Vérifier l'unicité du nom
+      final isUnique = await isNomCompletUnique(personnel.nom, personnel.prenom);
+      if (!isUnique) {
+        throw Exception('Un employé avec le nom "${personnel.nomComplet}" existe déjà');
       }
 
+      // Vérifier l'unicité du matricule
+      if (await matriculeExists(personnel.matricule)) {
+        throw Exception('Un employé avec le matricule "${personnel.matricule}" existe déjà');
+      }
+
+      final prefs = await LocalDB.instance.database;
+      
+      // Générer un ID séquentiel pour le personnel
+      final personnelId = DateTime.now().millisecondsSinceEpoch;
+      
       final newPersonnel = personnel.copyWith(
-        id: newId,
+        id: personnelId,
         createdAt: DateTime.now(),
         lastModifiedAt: DateTime.now(),
         isSynced: false,
       );
 
-      // Sauvegarder
-      await prefs.setString('personnel_$newId', jsonEncode(newPersonnel.toJson()));
+      // Utiliser le matricule comme clé au lieu de l'ID auto-increment
+      await prefs.setString('personnel_${personnel.matricule}', jsonEncode(newPersonnel.toJson()));
       
-      // Recharger la liste
+      // Recharger
       await loadPersonnel(forceRefresh: true);
       
-      debugPrint('✅ Personnel créé: ${newPersonnel.nomComplet} (${newPersonnel.matricule})');
+      debugPrint('✅ Personnel créé: ${newPersonnel.nomComplet} (${newPersonnel.matricule}) - ID: $personnelId');
       return newPersonnel;
     } catch (e) {
       debugPrint('❌ Erreur création personnel: $e');
@@ -113,17 +134,23 @@ class PersonnelService extends ChangeNotifier {
 
   /// Mettre à jour un employé
   Future<PersonnelModel> updatePersonnel(PersonnelModel personnel) async {
-    if (personnel.id == null) {
-      throw Exception('ID personnel requis pour mise à jour');
+    if (personnel.matricule.isEmpty) {
+      throw Exception('Matricule personnel requis pour mise à jour');
     }
 
     try {
+      // Vérifier l'unicité du nom (exclure le matricule actuel)
+      final isUnique = await isNomCompletUniqueByMatricule(personnel.nom, personnel.prenom, excludeMatricule: personnel.matricule);
+      if (!isUnique) {
+        throw Exception('Un employé avec le nom "${personnel.nomComplet}" existe déjà');
+      }
+
       final prefs = await LocalDB.instance.database;
       
       // Vérifier que l'employé existe
-      final key = 'personnel_${personnel.id}';
+      final key = 'personnel_${personnel.matricule}';
       if (!prefs.containsKey(key)) {
-        throw Exception('Personnel avec ID ${personnel.id} introuvable');
+        throw Exception('Personnel avec matricule ${personnel.matricule} introuvable');
       }
 
       final updatedPersonnel = personnel.copyWith(
@@ -136,7 +163,7 @@ class PersonnelService extends ChangeNotifier {
       // Recharger
       await loadPersonnel(forceRefresh: true);
       
-      debugPrint('✅ Personnel mis à jour: ${updatedPersonnel.nomComplet}');
+      debugPrint('✅ Personnel mis à jour: ${updatedPersonnel.nomComplet} (${updatedPersonnel.matricule})');
       return updatedPersonnel;
     } catch (e) {
       debugPrint('❌ Erreur mise à jour personnel: $e');
@@ -144,39 +171,29 @@ class PersonnelService extends ChangeNotifier {
     }
   }
 
-  /// Supprimer un employé (soft delete - mettre statut Demissionne)
-  /// Cette suppression sera synchronisée sur tous les appareils
-  Future<void> deletePersonnel(int id) async {
+  /// Supprimer un employé définitivement
+  Future<void> deletePersonnel(String matricule) async {
     try {
       final prefs = await LocalDB.instance.database;
-      final key = 'personnel_$id';
+      final key = 'personnel_$matricule';
       
       final jsonString = prefs.getString(key);
       if (jsonString == null) {
-        throw Exception('Personnel avec ID $id introuvable');
+        throw Exception('Personnel avec matricule $matricule introuvable');
       }
 
       final personnel = PersonnelModel.fromJson(jsonDecode(jsonString));
       
-      // Soft delete: changer le statut au lieu de supprimer
-      final updatedPersonnel = personnel.copyWith(
-        statut: 'Demissionne',
-        lastModifiedAt: DateTime.now(),
-        isSynced: false, // Marquer pour synchronisation
-      );
-
-      await prefs.setString(key, jsonEncode(updatedPersonnel.toJson()));
+      // Suppression définitive immédiate
+      await prefs.remove(key);
       
-      // Marquer pour suppression définitive après sync
-      await _markForDeletion(id, 'personnel');
-      
-      // Déclencher synchronisation immédiate
-      await _triggerImmediateSync();
+      // Supprimer les données liées (salaires, avances, retenues)
+      await _deleteRelatedDataByMatricule(matricule);
       
       // Recharger
       await loadPersonnel(forceRefresh: true);
       
-      debugPrint('✅ Personnel supprimé (soft) et marqué pour sync: ${personnel.nomComplet}');
+      debugPrint('✅ Personnel supprimé définitivement: ${personnel.nomComplet} (${matricule})');
     } catch (e) {
       debugPrint('❌ Erreur suppression personnel: $e');
       rethrow;
@@ -185,21 +202,21 @@ class PersonnelService extends ChangeNotifier {
 
   /// Supprimer définitivement un employé
   /// Cette méthode ne doit être appelée qu'après synchronisation
-  Future<void> hardDeletePersonnel(int id) async {
+  Future<void> hardDeletePersonnel(String matricule) async {
     try {
       final prefs = await LocalDB.instance.database;
       
       // Supprimer l'enregistrement principal
-      await prefs.remove('personnel_$id');
+      await prefs.remove('personnel_$matricule');
       
       // Supprimer le marqueur de suppression
-      await prefs.remove('deletion_personnel_$id');
+      await prefs.remove('deletion_personnel_$matricule');
       
       // Supprimer les données liées (salaires, avances, retenues)
-      await _deleteRelatedData(id);
+      await _deleteRelatedDataByMatricule(matricule);
       
       await loadPersonnel(forceRefresh: true);
-      debugPrint('✅ Personnel supprimé définitivement: ID $id');
+      debugPrint('✅ Personnel supprimé définitivement: Matricule $matricule');
     } catch (e) {
       debugPrint('❌ Erreur suppression définitive: $e');
       rethrow;
@@ -207,18 +224,18 @@ class PersonnelService extends ChangeNotifier {
   }
   
   /// Marquer un enregistrement pour suppression après synchronisation
-  Future<void> _markForDeletion(int id, String type) async {
+  Future<void> _markForDeletion(String matricule, String type) async {
     try {
       final prefs = await LocalDB.instance.database;
       final deletionRecord = {
-        'id': id,
+        'matricule': matricule,
         'type': type,
         'marked_at': DateTime.now().toIso8601String(),
         'synced': false,
       };
       
-      await prefs.setString('deletion_${type}_$id', jsonEncode(deletionRecord));
-      debugPrint('🗑️ Marqué pour suppression: $type ID $id');
+      await prefs.setString('deletion_${type}_$matricule', jsonEncode(deletionRecord));
+      debugPrint('🗑️ Marqué pour suppression: $type Matricule $matricule');
     } catch (e) {
       debugPrint('❌ Erreur marquage suppression: $e');
     }
@@ -251,8 +268,8 @@ class PersonnelService extends ChangeNotifier {
     }
   }
   
-  /// Supprimer les données liées à un personnel
-  Future<void> _deleteRelatedData(int personnelId) async {
+  /// Supprimer les données liées à un personnel par matricule
+  Future<void> _deleteRelatedDataByMatricule(String matricule) async {
     try {
       final prefs = await LocalDB.instance.database;
       final keys = prefs.getKeys();
@@ -264,7 +281,7 @@ class PersonnelService extends ChangeNotifier {
             final data = prefs.getString(key);
             if (data != null) {
               final json = jsonDecode(data);
-              if (json['personnel_id'] == personnelId) {
+              if (json['personnel_matricule'] == matricule) {
                 await prefs.remove(key);
                 debugPrint('🗑️ Salaire supprimé: $key');
               }
@@ -282,7 +299,7 @@ class PersonnelService extends ChangeNotifier {
             final data = prefs.getString(key);
             if (data != null) {
               final json = jsonDecode(data);
-              if (json['personnel_id'] == personnelId) {
+              if (json['personnel_matricule'] == matricule) {
                 await prefs.remove(key);
                 debugPrint('🗑️ Avance supprimée: $key');
               }
@@ -300,7 +317,7 @@ class PersonnelService extends ChangeNotifier {
             final data = prefs.getString(key);
             if (data != null) {
               final json = jsonDecode(data);
-              if (json['personnel_id'] == personnelId) {
+              if (json['personnel_matricule'] == matricule) {
                 await prefs.remove(key);
                 debugPrint('🗑️ Retenue supprimée: $key');
               }
@@ -311,7 +328,7 @@ class PersonnelService extends ChangeNotifier {
         }
       }
       
-      debugPrint('✅ Données liées supprimées pour personnel ID $personnelId');
+      debugPrint('✅ Données liées supprimées pour personnel Matricule $matricule');
     } catch (e) {
       debugPrint('❌ Erreur suppression données liées: $e');
     }
@@ -348,10 +365,10 @@ class PersonnelService extends ChangeNotifier {
   }
   
   /// Marquer une suppression comme synchronisée
-  Future<void> markDeletionAsSynced(int id, String type) async {
+  Future<void> markDeletionAsSynced(String matricule, String type) async {
     try {
       final prefs = await LocalDB.instance.database;
-      final key = 'deletion_${type}_$id';
+      final key = 'deletion_${type}_$matricule';
       
       final data = prefs.getString(key);
       if (data != null) {
@@ -360,11 +377,11 @@ class PersonnelService extends ChangeNotifier {
         deletion['synced_at'] = DateTime.now().toIso8601String();
         
         await prefs.setString(key, jsonEncode(deletion));
-        debugPrint('✅ Suppression marquée comme synchronisée: $type ID $id');
+        debugPrint('✅ Suppression marquée comme synchronisée: $type Matricule $matricule');
         
         // Procéder à la suppression définitive
         if (type == 'personnel') {
-          await hardDeletePersonnel(id);
+          await hardDeletePersonnel(matricule);
         }
       }
     } catch (e) {
@@ -375,16 +392,6 @@ class PersonnelService extends ChangeNotifier {
   // ============================================================================
   // RECHERCHE & FILTRES
   // ============================================================================
-
-  /// Obtenir un employé par ID
-  Future<PersonnelModel?> getPersonnelById(int id) async {
-    await loadPersonnel();
-    try {
-      return _personnel.firstWhere((p) => p.id == id);
-    } catch (e) {
-      return null;
-    }
-  }
 
   /// Obtenir un employé par matricule
   Future<PersonnelModel?> getPersonnelByMatricule(String matricule) async {

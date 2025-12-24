@@ -1,7 +1,7 @@
 class RetenuePersonnelModel {
   final int? id;
   final String reference;
-  final int personnelId;
+  final String personnelMatricule;
   final String? personnelNom;
   
   final double montantTotal;
@@ -29,7 +29,7 @@ class RetenuePersonnelModel {
   RetenuePersonnelModel({
     this.id,
     required this.reference,
-    required this.personnelId,
+    required this.personnelMatricule,
     this.personnelNom,
     required this.montantTotal,
     double? montantDeduitMensuel,
@@ -83,8 +83,8 @@ class RetenuePersonnelModel {
   Map<String, dynamic> toJson() => {
     'id': id,
     'reference': reference,
-    'personnelId': personnelId,
-    'personnelNom': personnelNom,
+    'personnel_matricule': personnelMatricule,
+    'personnel_nom': personnelNom,
     'montantTotal': montantTotal,
     'montantDeduitMensuel': montantDeduitMensuel,
     'nombreMois': nombreMois,
@@ -107,9 +107,9 @@ class RetenuePersonnelModel {
   factory RetenuePersonnelModel.fromJson(Map<String, dynamic> json) {
     return RetenuePersonnelModel(
       id: json['id'],
-      reference: json['reference'],
-      personnelId: json['personnelId'],
-      personnelNom: json['personnelNom'],
+      reference: json['reference'] ?? '',
+      personnelMatricule: json['personnel_matricule'] ?? '',
+      personnelNom: json['personnel_nom'],
       montantTotal: (json['montantTotal'] as num).toDouble(),
       montantDeduitMensuel: (json['montantDeduitMensuel'] as num).toDouble(),
       nombreMois: json['nombreMois'],
@@ -133,7 +133,7 @@ class RetenuePersonnelModel {
   RetenuePersonnelModel copyWith({
     int? id,
     String? reference,
-    int? personnelId,
+    String? personnelMatricule,
     String? personnelNom,
     double? montantTotal,
     double? montantDeduitMensuel,
@@ -156,7 +156,7 @@ class RetenuePersonnelModel {
     return RetenuePersonnelModel(
       id: id ?? this.id,
       reference: reference ?? this.reference,
-      personnelId: personnelId ?? this.personnelId,
+      personnelMatricule: personnelMatricule ?? this.personnelMatricule,
       personnelNom: personnelNom ?? this.personnelNom,
       montantTotal: montantTotal ?? this.montantTotal,
       montantDeduitMensuel: montantDeduitMensuel ?? this.montantDeduitMensuel,

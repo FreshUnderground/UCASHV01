@@ -69,7 +69,7 @@ class SalaireService extends ChangeNotifier {
       // Dédupliquer les salaires (garder le plus récent pour chaque période)
       final Map<String, SalaireModel> uniqueSalaires = {};
       for (final salaire in _salaires) {
-        final key = '${salaire.personnelId}_${salaire.mois}_${salaire.annee}';
+        final key = '${salaire.personnelMatricule}_${salaire.mois}_${salaire.annee}';
         if (!uniqueSalaires.containsKey(key) ||
             (salaire.lastModifiedAt?.isAfter(uniqueSalaires[key]!.lastModifiedAt ?? DateTime(2000)) ?? false)) {
           uniqueSalaires[key] = salaire;
@@ -97,7 +97,7 @@ class SalaireService extends ChangeNotifier {
 
   /// Générer le salaire mensuel d'un employé
   Future<SalaireModel> genererSalaireMensuel({
-    required int personnelId,
+    required String personnelMatricule,
     required int mois,
     required int annee,
     double heuresSupplementaires = 0.0,
@@ -111,7 +111,7 @@ class SalaireService extends ChangeNotifier {
       // Vérifier que le salaire n'existe pas déjà OU qu'il est partiellement payé
       await loadSalaires();
       final existant = _salaires.where((s) =>
-          s.personnelId == personnelId && s.mois == mois && s.annee == annee);
+          s.personnelMatricule == personnelMatricule && s.mois == mois && s.annee == annee);
       
       // Bloquer seulement si le salaire est TOTALEMENT payé
       if (existant.isNotEmpty && existant.first.statut == 'Paye') {
@@ -124,9 +124,9 @@ class SalaireService extends ChangeNotifier {
       }
 
       // Charger l'employé
-      final personnel = await PersonnelService.instance.getPersonnelById(personnelId);
+      final personnel = await PersonnelService.instance.getPersonnelByMatricule(personnelMatricule);
       if (personnel == null) {
-        throw Exception('Personnel avec ID $personnelId introuvable');
+        throw Exception('Personnel avec matricule $personnelMatricule introuvable');
       }
 
       if (personnel.statut != 'Actif') {
@@ -135,23 +135,26 @@ class SalaireService extends ChangeNotifier {
 
       // Calculer les déductions d'avances et crédits
       final avancesDeduites = await AvanceService.instance
-          .calculerDeductionMensuelle(personnelId, mois, annee);
+          .calculerDeductionMensuelleByMatricule(personnelMatricule, mois, annee);
       final creditsDeduits = await CreditService.instance
-          .calculerDeductionMensuelle(personnelId, mois, annee);
+          .calculerDeductionMensuelleByMatricule(personnelMatricule, mois, annee);
       
       // Calculer les retenues (pertes, dettes, sanctions)
-      final retenuesTotal = RetenueService.instance.calculerTotalRetenuesPourPeriode(
-        personnelId: personnelId,
+      final retenuesTotal = RetenueService.instance.calculerTotalRetenuesPourPeriodeByMatricule(
+        personnelMatricule: personnelMatricule,
         mois: mois,
         annee: annee,
       );
       
       debugPrint('💰 Retenues calculées pour ${personnel.nomComplet} ($mois/$annee): $retenuesTotal');
 
-      // Créer le salaire
+      // Créer le salaire avec un ID généré
+      final reference = SalaireModel.generateReference();
+      final salaireId = DateTime.now().millisecondsSinceEpoch;
       final salaire = SalaireModel(
-        reference: SalaireModel.generateReference(),
-        personnelId: personnelId,
+        id: salaireId,
+        reference: reference,
+        personnelMatricule: personnelMatricule,
         personnelNom: personnel.nomComplet,
         mois: mois,
         annee: annee,
@@ -177,34 +180,32 @@ class SalaireService extends ChangeNotifier {
         isSynced: false,
       );
 
-      // Sauvegarder
+      // Sauvegarder avec l'ID comme clé pour cohérence avec updateSalaire
       final prefs = await LocalDB.instance.database;
-      final id = DateTime.now().millisecondsSinceEpoch;
-      final salaireAvecId = salaire.copyWith(id: id);
-      
-      await prefs.setString('salaire_$id', jsonEncode(salaireAvecId.toJson()));
+      await prefs.setString('salaire_${salaire.id}', jsonEncode(salaire.toJson()));
 
       // Enregistrer les déductions dans les avances et crédits
       if (avancesDeduites > 0) {
-        await AvanceService.instance.enregistrerDeductionMensuelle(
-          personnelId, mois, annee, avancesDeduites);
+        await AvanceService.instance.enregistrerDeductionMensuelleByMatricule(
+          personnelMatricule, mois, annee, avancesDeduites);
       }
       if (creditsDeduits > 0) {
-        await CreditService.instance.enregistrerDeductionMensuelle(
-          personnelId, mois, annee, creditsDeduits);
+        await CreditService.instance.enregistrerDeductionMensuelleByMatricule(
+          personnelMatricule, mois, annee, creditsDeduits);
       }
 
       // Recharger
       await loadSalaires(forceRefresh: true);
       
       debugPrint('✅ Salaire généré: ${personnel.nomComplet} - $mois/$annee');
-      debugPrint('   Brut: ${salaireAvecId.salaireBrut} ${salaireAvecId.devise}');
-      debugPrint('   Avances: ${salaireAvecId.avancesDeduites} ${salaireAvecId.devise}');
-      debugPrint('   Retenues: ${salaireAvecId.retenueDisciplinaire} ${salaireAvecId.devise}');
-      debugPrint('   Total Déductions: ${salaireAvecId.totalDeductions} ${salaireAvecId.devise}');
-      debugPrint('   Net: ${salaireAvecId.salaireNet} ${salaireAvecId.devise}');
+      debugPrint('   Référence: ${salaire.reference}');
+      debugPrint('   Brut: ${salaire.salaireBrut} ${salaire.devise}');
+      debugPrint('   Avances: ${salaire.avancesDeduites} ${salaire.devise}');
+      debugPrint('   Retenues: ${salaire.retenueDisciplinaire} ${salaire.devise}');
+      debugPrint('   Total Déductions: ${salaire.totalDeductions} ${salaire.devise}');
+      debugPrint('   Net: ${salaire.salaireNet} ${salaire.devise}');
       
-      return salaireAvecId;
+      return salaire;
     } catch (e) {
       debugPrint('❌ Erreur génération salaire: $e');
       rethrow;
@@ -227,7 +228,7 @@ class SalaireService extends ChangeNotifier {
       for (final personnel in personnelActif) {
         try {
           final salaire = await genererSalaireMensuel(
-            personnelId: personnel.id!,
+            personnelMatricule: personnel.matricule,
             mois: mois,
             annee: annee,
           );
@@ -364,7 +365,7 @@ class SalaireService extends ChangeNotifier {
       final Set<int> idsToKeep = {};
       
       for (final salaire in allSalaires) {
-        final key = '${salaire.personnelId}_${salaire.mois}_${salaire.annee}';
+        final key = '${salaire.personnelMatricule}_${salaire.mois}_${salaire.annee}';
         if (!uniqueSalaires.containsKey(key) ||
             (salaire.lastModifiedAt?.isAfter(uniqueSalaires[key]!.lastModifiedAt ?? DateTime(2000)) ?? false)) {
           uniqueSalaires[key] = salaire;
@@ -416,7 +417,7 @@ class SalaireService extends ChangeNotifier {
       for (var personnel in personnelActif) {
         try {
           final salaire = await genererSalaireMensuel(
-            personnelId: personnel.id!,
+            personnelMatricule: personnel.matricule,
             mois: mois,
             annee: annee,
           );
@@ -497,20 +498,20 @@ class SalaireService extends ChangeNotifier {
   // RECHERCHE & FILTRES
   // ============================================================================
 
-  /// Obtenir un salaire par ID
-  Future<SalaireModel?> getSalaireById(int id) async {
+  /// Obtenir un salaire par référence
+  Future<SalaireModel?> getSalaireByReference(String reference) async {
     await loadSalaires();
     try {
-      return _salaires.firstWhere((s) => s.id == id);
+      return _salaires.firstWhere((s) => s.reference == reference);
     } catch (e) {
       return null;
     }
   }
 
   /// Obtenir les salaires d'un employé
-  Future<List<SalaireModel>> getSalairesByPersonnel(int personnelId) async {
+  Future<List<SalaireModel>> getSalairesByPersonnel(String personnelMatricule) async {
     await loadSalaires();
-    return _salaires.where((s) => s.personnelId == personnelId).toList();
+    return _salaires.where((s) => s.personnelMatricule == personnelMatricule).toList();
   }
 
   /// Obtenir les salaires d'une période
@@ -583,7 +584,7 @@ class SalaireService extends ChangeNotifier {
 
   /// Générer et payer plusieurs mois de salaire en une seule opération
   Future<List<SalaireModel>> genererEtPayerSalaireMultiPeriodes({
-    required int personnelId,
+    required String personnelMatricule,
     required List<Map<String, int>> periodes, // [{"mois": 1, "annee": 2024}, ...]
     required double montantTotalServi,
     double heuresSupplementaires = 0,
@@ -594,7 +595,7 @@ class SalaireService extends ChangeNotifier {
       // Charger le personnel
       await PersonnelService.instance.loadPersonnel();
       final personnel = PersonnelService.instance.personnel
-          .firstWhere((p) => p.id == personnelId);
+          .firstWhere((p) => p.matricule == personnelMatricule);
       
       List<SalaireModel> salairesGeneres = [];
       double montantTotalCalcule = 0;
@@ -609,7 +610,7 @@ class SalaireService extends ChangeNotifier {
         SalaireModel? salaireExistant;
         try {
           salaireExistant = _salaires.firstWhere(
-            (s) => s.personnelId == personnelId && s.mois == mois && s.annee == annee,
+            (s) => s.personnelMatricule == personnelMatricule && s.mois == mois && s.annee == annee,
           );
         } catch (e) {
           salaireExistant = null;
@@ -623,7 +624,7 @@ class SalaireService extends ChangeNotifier {
         
         // Générer le salaire pour cette période
         final salaire = await genererSalaireMensuel(
-          personnelId: personnelId,
+          personnelMatricule: personnelMatricule,
           mois: mois,
           annee: annee,
           heuresSupplementaires: heuresSupplementaires,
@@ -685,7 +686,8 @@ class SalaireService extends ChangeNotifier {
     }
   }
   
-  /// Calculer le montant total pour plusieurs périodes
+  /// Calculer le montant total pour plusieurs périodes (DEPRECATED - use calculerMontantTotalMultiPeriodesMatricule)
+  @Deprecated('Use calculerMontantTotalMultiPeriodesMatricule instead')
   Future<Map<String, dynamic>> calculerMontantTotalMultiPeriodes({
     required int personnelId,
     required List<Map<String, int>> periodes,
@@ -698,6 +700,37 @@ class SalaireService extends ChangeNotifier {
       final personnel = PersonnelService.instance.personnel
           .firstWhere((p) => p.id == personnelId);
       
+      return await calculerMontantTotalMultiPeriodesMatricule(
+        personnelMatricule: personnel.matricule,
+        periodes: periodes,
+        heuresSupplementaires: heuresSupplementaires,
+        bonus: bonus,
+      );
+    } catch (e) {
+      debugPrint('❌ Erreur calcul montant total multi-périodes: $e');
+      return {
+        'montantTotalBrut': 0.0,
+        'montantTotalNet': 0.0,
+        'totalAvancesDeduites': 0.0,
+        'totalRetenuesDeduites': 0.0,
+        'details': <Map<String, dynamic>>[],
+      };
+    }
+  }
+  
+  /// Calculer le montant total pour plusieurs périodes par matricule
+  Future<Map<String, dynamic>> calculerMontantTotalMultiPeriodesMatricule({
+    required String personnelMatricule,
+    required List<Map<String, int>> periodes,
+    double heuresSupplementaires = 0,
+    double bonus = 0,
+  }) async {
+    try {
+      // Charger le personnel
+      await PersonnelService.instance.loadPersonnel();
+      final personnel = PersonnelService.instance.personnel
+          .firstWhere((p) => p.matricule == personnelMatricule);
+      
       double montantTotalBrut = 0;
       double montantTotalNet = 0;
       double totalAvances = 0;
@@ -709,14 +742,14 @@ class SalaireService extends ChangeNotifier {
         final annee = periode['annee']!;
         
         // Calculer les déductions pour cette période
-        final avancesDeduites = await AvanceService.instance.calculerDeductionMensuelle(
-          personnelId,
+        final avancesDeduites = await AvanceService.instance.calculerDeductionMensuelleByMatricule(
+          personnelMatricule,
           mois,
           annee,
         );
         
-        final retenuesDeduites = RetenueService.instance.calculerTotalRetenuesPourPeriode(
-          personnelId: personnelId,
+        final retenuesDeduites = RetenueService.instance.calculerTotalRetenuesPourPeriodeByMatricule(
+          personnelMatricule: personnelMatricule,
           mois: mois,
           annee: annee,
         );
@@ -756,8 +789,21 @@ class SalaireService extends ChangeNotifier {
     }
   }
   
-  /// Obtenir les périodes disponibles pour un personnel (non payées)
+  /// Obtenir les périodes disponibles pour un personnel (non payées) - DEPRECATED
+  @Deprecated('Use getPeriodesDisponiblesMatricule instead')
   Future<List<Map<String, dynamic>>> getPeriodesDisponibles(int personnelId) async {
+    await loadSalaires(forceRefresh: true);
+    
+    // Trouver le matricule du personnel
+    await PersonnelService.instance.loadPersonnel();
+    final personnel = PersonnelService.instance.personnel
+        .firstWhere((p) => p.id == personnelId, orElse: () => throw Exception('Personnel non trouvé'));
+    
+    return await getPeriodesDisponiblesMatricule(personnel.matricule);
+  }
+  
+  /// Obtenir les périodes disponibles pour un personnel par matricule (non payées)
+  Future<List<Map<String, dynamic>>> getPeriodesDisponiblesMatricule(String personnelMatricule) async {
     await loadSalaires(forceRefresh: true);
     
     List<Map<String, dynamic>> periodesDisponibles = [];
@@ -771,7 +817,7 @@ class SalaireService extends ChangeNotifier {
       
       // Vérifier si le salaire existe et son statut
       final salaireExistant = _salaires.where(
-        (s) => s.personnelId == personnelId && s.mois == mois && s.annee == annee,
+        (s) => s.personnelMatricule == personnelMatricule && s.mois == mois && s.annee == annee,
       ).firstOrNull;
       
       String statut;
@@ -807,6 +853,104 @@ class SalaireService extends ChangeNotifier {
       'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
     ];
     return months[month];
+  }
+
+  /// Supprimer un salaire (soft delete puis sync)
+  Future<void> deleteSalaire(String salaireReference) async {
+    try {
+      final prefs = await LocalDB.instance.database;
+      final key = 'salaire_$salaireReference';
+      
+      final jsonString = prefs.getString(key);
+      if (jsonString == null) {
+        throw Exception('Salaire avec référence $salaireReference introuvable');
+      }
+
+      final salaire = SalaireModel.fromJson(jsonDecode(jsonString));
+      
+      // Marquer pour suppression avec sync
+      await _markSalaireForDeletion(salaireReference, 'salaire');
+      
+      // Déclencher synchronisation
+      await _triggerSalaireSync();
+      
+      debugPrint('✅ Salaire marqué pour suppression: ${salaire.reference}');
+    } catch (e) {
+      debugPrint('❌ Erreur suppression salaire: $e');
+      rethrow;
+    }
+  }
+
+  /// Supprimer définitivement un salaire après sync
+  Future<void> hardDeleteSalaire(String salaireReference) async {
+    try {
+      final prefs = await LocalDB.instance.database;
+      
+      // Supprimer l'enregistrement principal
+      await prefs.remove('salaire_$salaireReference');
+      
+      // Supprimer le marqueur de suppression
+      await prefs.remove('deletion_salaire_$salaireReference');
+      
+      await loadSalaires(forceRefresh: true);
+      debugPrint('✅ Salaire supprimé définitivement: Référence $salaireReference');
+    } catch (e) {
+      debugPrint('❌ Erreur suppression définitive salaire: $e');
+      rethrow;
+    }
+  }
+
+  /// Marquer un salaire pour suppression
+  Future<void> _markSalaireForDeletion(String reference, String type) async {
+    try {
+      final prefs = await LocalDB.instance.database;
+      final deletionRecord = {
+        'reference': reference,
+        'type': type,
+        'marked_at': DateTime.now().toIso8601String(),
+        'synced': false,
+      };
+      
+      await prefs.setString('deletion_${type}_$reference', jsonEncode(deletionRecord));
+      debugPrint('🗑️ Salaire marqué pour suppression: $type Référence $reference');
+    } catch (e) {
+      debugPrint('❌ Erreur marquage suppression salaire: $e');
+    }
+  }
+
+  /// Déclencher synchronisation des salaires
+  Future<void> _triggerSalaireSync() async {
+    try {
+      final prefs = await LocalDB.instance.database;
+      await prefs.setBool('sync_salaire_required', true);
+      await prefs.setString('sync_salaire_required_at', DateTime.now().toIso8601String());
+      debugPrint('📢 Notification sync salaire enregistrée');
+    } catch (e) {
+      debugPrint('⚠️ Erreur notification sync salaire: $e');
+    }
+  }
+
+  /// Marquer une suppression de salaire comme synchronisée
+  Future<void> markSalaireDeletionAsSynced(String reference) async {
+    try {
+      final prefs = await LocalDB.instance.database;
+      final key = 'deletion_salaire_$reference';
+      
+      final data = prefs.getString(key);
+      if (data != null) {
+        final deletion = jsonDecode(data);
+        deletion['synced'] = true;
+        deletion['synced_at'] = DateTime.now().toIso8601String();
+        
+        await prefs.setString(key, jsonEncode(deletion));
+        debugPrint('✅ Suppression salaire marquée comme synchronisée: Référence $reference');
+        
+        // Procéder à la suppression définitive
+        await hardDeleteSalaire(reference);
+      }
+    } catch (e) {
+      debugPrint('❌ Erreur marquage sync suppression salaire: $e');
+    }
   }
 
   /// Nettoyer le cache

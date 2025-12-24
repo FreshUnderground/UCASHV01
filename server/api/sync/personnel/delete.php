@@ -28,7 +28,7 @@ try {
     
     foreach ($deletions as $deletion) {
         try {
-            $id = $deletion['id'];
+            $matricule = $deletion['matricule'];
             $type = $deletion['type'];
             $markedAt = $deletion['marked_at'];
             
@@ -40,59 +40,62 @@ try {
                         SET statut = 'Demissionne', 
                             last_modified_at = NOW(),
                             deleted_at = ?
-                        WHERE id = ?
+                        WHERE matricule = ?
                     ");
-                    $stmt->execute([$markedAt, $id]);
+                    $stmt->execute([$markedAt, $matricule]);
                     
                     // Marquer les données liées comme supprimées
                     $stmt = $pdo->prepare("
                         UPDATE salaires 
                         SET deleted_at = ?
-                        WHERE personnel_id = ?
+                        WHERE personnel_matricule = ?
                     ");
-                    $stmt->execute([$markedAt, $id]);
+                    $stmt->execute([$markedAt, $matricule]);
                     
                     $stmt = $pdo->prepare("
                         UPDATE avances_personnel 
                         SET deleted_at = ?
-                        WHERE personnel_id = ?
+                        WHERE personnel_matricule = ?
                     ");
-                    $stmt->execute([$markedAt, $id]);
+                    $stmt->execute([$markedAt, $matricule]);
                     
                     $stmt = $pdo->prepare("
                         UPDATE retenues_personnel 
                         SET deleted_at = ?
-                        WHERE personnel_id = ?
+                        WHERE personnel_matricule = ?
                     ");
-                    $stmt->execute([$markedAt, $id]);
+                    $stmt->execute([$markedAt, $matricule]);
                     
                     break;
                     
                 case 'salaire':
+                    $reference = $deletion['reference'];
                     $stmt = $pdo->prepare("
                         UPDATE salaires 
                         SET deleted_at = ?
-                        WHERE id = ?
+                        WHERE reference = ?
                     ");
-                    $stmt->execute([$markedAt, $id]);
+                    $stmt->execute([$markedAt, $reference]);
                     break;
                     
                 case 'avance_personnel':
+                    $reference = $deletion['reference'];
                     $stmt = $pdo->prepare("
                         UPDATE avances_personnel 
                         SET deleted_at = ?
-                        WHERE id = ?
+                        WHERE reference = ?
                     ");
-                    $stmt->execute([$markedAt, $id]);
+                    $stmt->execute([$markedAt, $reference]);
                     break;
                     
                 case 'retenue_personnel':
+                    $reference = $deletion['reference'];
                     $stmt = $pdo->prepare("
                         UPDATE retenues_personnel 
                         SET deleted_at = ?
-                        WHERE id = ?
+                        WHERE reference = ?
                     ");
-                    $stmt->execute([$markedAt, $id]);
+                    $stmt->execute([$markedAt, $reference]);
                     break;
                     
                 default:

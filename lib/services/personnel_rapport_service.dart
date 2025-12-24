@@ -14,17 +14,17 @@ class PersonnelRapportService {
   Future<RapportPaiementsPersonnel> genererRapportPaiements({
     required DateTime dateDebut,
     required DateTime dateFin,
-    List<int>? personnelIds, // Filtrer par agents spécifiques
+    List<String>? personnelMatricules, // Filtrer par agents spécifiques
     bool grouperParAgent = true,
   }) async {
     try {
       debugPrint('📊 Génération rapport paiements du ${dateDebut.toIso8601String()} au ${dateFin.toIso8601String()}');
       
       // 1. Charger tous les personnels
-      final personnels = await _chargerPersonnels(personnelIds);
+      final personnels = await _chargerPersonnels(personnelMatricules);
       
       // 2. Charger tous les paiements de la période
-      final paiements = await _chargerPaiementsPeriode(dateDebut, dateFin, personnelIds);
+      final paiements = await _chargerPaiementsPeriode(dateDebut, dateFin, personnelMatricules);
       
       // 3. Générer les statistiques
       final stats = await _calculerStatistiques(personnels, paiements, grouperParAgent);
@@ -45,7 +45,7 @@ class PersonnelRapportService {
   }
 
   /// Charger les personnels concernés
-  Future<List<PersonnelModel>> _chargerPersonnels(List<int>? personnelIds) async {
+  Future<List<PersonnelModel>> _chargerPersonnels(List<String>? personnelMatricules) async {
     final prefs = await LocalDB.instance.database;
     final keys = prefs.getKeys();
     final personnels = <PersonnelModel>[];
@@ -57,8 +57,8 @@ class PersonnelRapportService {
           if (data != null) {
             final personnel = PersonnelModel.fromJson(jsonDecode(data));
             
-            // Filtrer par IDs si spécifié
-            if (personnelIds == null || personnelIds.contains(personnel.id)) {
+            // Filtrer par matricules si spécifié
+            if (personnelMatricules == null || personnelMatricules.contains(personnel.matricule)) {
               // Exclure les démissionnés sauf si explicitement demandés
               if (personnel.statut != 'Demissionne') {
                 personnels.add(personnel);
@@ -81,7 +81,7 @@ class PersonnelRapportService {
   Future<List<PaiementDetailPersonnel>> _chargerPaiementsPeriode(
     DateTime dateDebut, 
     DateTime dateFin, 
-    List<int>? personnelIds
+    List<String>? personnelMatricules
   ) async {
     final prefs = await LocalDB.instance.database;
     final keys = prefs.getKeys();
@@ -96,7 +96,7 @@ class PersonnelRapportService {
             final salaire = SalaireModel.fromJson(jsonDecode(data));
             
             // Filtrer par personnel si spécifié
-            if (personnelIds != null && !personnelIds.contains(salaire.personnelId)) {
+            if (personnelMatricules != null && !personnelMatricules.contains(salaire.personnelMatricule)) {
               continue;
             }
             
@@ -106,30 +106,59 @@ class PersonnelRapportService {
               continue;
             }
             
-            // Traiter l'historique des paiements
-            for (var paiement in salaire.historiquePaiements) {
-              final datePaiement = paiement.datePaiement;
+            // Si le salaire a un historique de paiements, traiter chaque paiement
+            if (salaire.historiquePaiements.isNotEmpty) {
+              for (var paiement in salaire.historiquePaiements) {
+                final datePaiement = paiement.datePaiement;
+                
+                // Vérifier si le paiement est dans la période
+                if (datePaiement.isAfter(dateDebut.subtract(const Duration(days: 1))) &&
+                    datePaiement.isBefore(dateFin.add(const Duration(days: 1)))) {
+                  
+                  paiements.add(PaiementDetailPersonnel(
+                    personnelMatricule: salaire.personnelMatricule,
+                    salaireId: salaire.id!,
+                    mois: salaire.mois,
+                    annee: salaire.annee,
+                    datePaiement: datePaiement,
+                    montantPaye: paiement.montant,
+                    montantBrut: salaire.salaireBrut,
+                    montantNet: salaire.salaireNet,
+                    deductionsAvances: salaire.avancesDeduites,
+                    deductionsRetenues: salaire.retenueDisciplinaire,
+                    deductionsImpots: salaire.impots,
+                    deductionsCnss: salaire.cotisationCnss,
+                    type: paiement.modePaiement ?? 'salaire',
+                    reference: salaire.reference,
+                    notes: paiement.notes ?? '',
+                  ));
+                }
+              }
+            } else if (salaire.montantPaye > 0) {
+              // Si pas d'historique mais montant payé > 0, créer un paiement basique
+              // Utiliser la date de paiement du salaire ou la date de création
+              final datePaiement = salaire.datePaiement ?? salaire.createdAt ?? DateTime.now();
               
-              // Vérifier si le paiement est dans la période
+              // Vérifier si ce paiement est dans la période
               if (datePaiement.isAfter(dateDebut.subtract(const Duration(days: 1))) &&
                   datePaiement.isBefore(dateFin.add(const Duration(days: 1)))) {
                 
                 paiements.add(PaiementDetailPersonnel(
-                  personnelId: salaire.personnelId,
+                  personnelMatricule: salaire.personnelMatricule,
                   salaireId: salaire.id!,
                   mois: salaire.mois,
                   annee: salaire.annee,
                   datePaiement: datePaiement,
-                  montantPaye: paiement.montant,
-                  montantBrut: salaire.salaireBase,
+                  montantPaye: salaire.montantPaye,
+                  montantBrut: salaire.salaireBrut,
                   montantNet: salaire.salaireNet,
-                  deductionsAvances: 0.0, // TODO: Ajouter ces champs au SalaireModel si nécessaire
-                  deductionsRetenues: 0.0,
-                  deductionsImpots: 0.0,
-                  deductionsCnss: 0.0,
-                  type: paiement.modePaiement ?? 'salaire',
+                  deductionsAvances: salaire.avancesDeduites,
+                  deductionsRetenues: salaire.retenueDisciplinaire,
+                  deductionsImpots: salaire.impots,
+                  deductionsCnss: salaire.cotisationCnss,
+                  type: salaire.modePaiement,
                   reference: salaire.reference,
-                  notes: paiement.notes ?? '',
+                  notes: salaire.notes ?? '',
                 ));
               }
             }
@@ -167,13 +196,13 @@ class PersonnelRapportService {
     
     // Groupement par agent si demandé
     if (grouperParAgent) {
-      final Map<int, StatistiquesParAgent> statsParAgent = {};
+      final Map<String, StatistiquesParAgent> statsParAgent = {};
       
       for (var personnel in personnels) {
-        final paiementsAgent = paiements.where((p) => p.personnelId == personnel.id).toList();
+        final paiementsAgent = paiements.where((p) => p.personnelMatricule == personnel.matricule).toList();
         
         if (paiementsAgent.isNotEmpty) {
-          statsParAgent[personnel.id!] = StatistiquesParAgent(
+          statsParAgent[personnel.matricule] = StatistiquesParAgent(
             personnel: personnel,
             nombrePaiements: paiementsAgent.length,
             totalMontantPaye: paiementsAgent.fold(0.0, (sum, p) => sum + p.montantPaye),
@@ -198,7 +227,7 @@ class PersonnelRapportService {
   Future<RapportPaiementsPersonnel> genererRapportPeriodePredefinie({
     required TypePeriodeRapport typePeriode,
     DateTime? dateReference,
-    List<int>? personnelIds,
+    List<String>? personnelMatricules,
     bool grouperParAgent = true,
   }) async {
     final dateRef = dateReference ?? DateTime.now();
@@ -230,7 +259,7 @@ class PersonnelRapportService {
     return genererRapportPaiements(
       dateDebut: dateDebut,
       dateFin: dateFin,
-      personnelIds: personnelIds,
+      personnelMatricules: personnelMatricules,
       grouperParAgent: grouperParAgent,
     );
   }
@@ -265,7 +294,7 @@ class RapportPaiementsPersonnel {
 
 /// Détail d'un paiement pour le rapport
 class PaiementDetailPersonnel {
-  final int personnelId;
+  final String personnelMatricule;
   final int salaireId;
   final int mois;
   final int annee;
@@ -282,7 +311,7 @@ class PaiementDetailPersonnel {
   final String notes;
 
   PaiementDetailPersonnel({
-    required this.personnelId,
+    required this.personnelMatricule,
     required this.salaireId,
     required this.mois,
     required this.annee,
@@ -311,7 +340,7 @@ class StatistiquesPaiementsPersonnel {
   double totalDeductionsRetenues = 0.0;
   double totalDeductionsImpots = 0.0;
   double totalDeductionsCnss = 0.0;
-  Map<int, StatistiquesParAgent> statistiquesParAgent = {};
+  Map<String, StatistiquesParAgent> statistiquesParAgent = {};
 }
 
 /// Statistiques par agent

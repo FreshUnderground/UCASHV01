@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../models/credit_personnel_model.dart';
 import 'local_db.dart';
+import 'personnel_service.dart';
 
 class CreditService extends ChangeNotifier {
   static final CreditService _instance = CreditService._internal();
@@ -103,7 +104,7 @@ class CreditService extends ChangeNotifier {
       await prefs.setString('credit_$id', jsonEncode(newCredit.toJson()));
       await loadCredits(forceRefresh: true);
       
-      debugPrint('✅ Crédit créé: ${newCredit.montantCredit} pour personnel ${newCredit.personnelId}');
+      debugPrint('✅ Crédit créé: ${newCredit.montantCredit} pour personnel ${newCredit.personnelMatricule}');
       debugPrint('   Mensualité: ${newCredit.mensualite.toStringAsFixed(2)}');
       return newCredit;
     } catch (e) {
@@ -112,12 +113,24 @@ class CreditService extends ChangeNotifier {
     }
   }
 
-  /// Obtenir les crédits en cours d'un employé
-  Future<List<CreditPersonnelModel>> getCreditsEnCours(int personnelId) async {
+  /// Obtenir les crédits en cours d'un employé par matricule
+  Future<List<CreditPersonnelModel>> getCreditsEnCoursByMatricule(String personnelMatricule) async {
     await loadCredits();
     return _credits.where((c) => 
-      c.personnelId == personnelId && (c.statut == 'En_Cours' || c.statut == 'En_Retard')
+      c.personnelMatricule == personnelMatricule && (c.statut == 'En_Cours' || c.statut == 'En_Retard')
     ).toList();
+  }
+
+  /// Obtenir les crédits en cours d'un employé (DEPRECATED - use getCreditsEnCoursByMatricule)
+  @Deprecated('Use getCreditsEnCoursByMatricule instead')
+  Future<List<CreditPersonnelModel>> getCreditsEnCours(int personnelId) async {
+    // Convertir personnelId en matricule pour utiliser la nouvelle méthode
+    await PersonnelService.instance.loadPersonnel();
+    final personnel = PersonnelService.instance.personnel.firstWhere(
+      (p) => p.id == personnelId,
+      orElse: () => throw Exception('Personnel avec ID $personnelId introuvable')
+    );
+    return await getCreditsEnCoursByMatricule(personnel.matricule);
   }
 
   /// Calculer le total des crédits restants
@@ -197,6 +210,55 @@ class CreditService extends ChangeNotifier {
       reste -= deduction;
     }
 
+    await loadCredits(forceRefresh: true);
+  }
+
+  /// Calculer la déduction mensuelle pour un employé par matricule
+  Future<double> calculerDeductionMensuelleByMatricule(String personnelMatricule, int mois, int annee) async {
+    await loadCredits();
+    final creditsEnCours = _credits.where((c) => 
+        c.personnelMatricule == personnelMatricule && c.statut == 'En_Cours').toList();
+    
+    double totalDeduction = 0.0;
+    for (var credit in creditsEnCours) {
+      // Logique de déduction selon le mode de remboursement
+      if (credit.modeRemboursement == 'Mensuel') {
+        totalDeduction += credit.montantMensuel;
+      } else if (credit.modeRemboursement == 'Unique' && 
+                 credit.moisRemboursement == mois && 
+                 credit.anneeRemboursement == annee) {
+        totalDeduction += credit.montantRestant;
+      }
+    }
+    return totalDeduction;
+  }
+
+  /// Enregistrer une déduction mensuelle par matricule
+  Future<void> enregistrerDeductionMensuelleByMatricule(String personnelMatricule, int mois, int annee, double montant) async {
+    final creditsEnCours = _credits.where((c) => 
+        c.personnelMatricule == personnelMatricule && c.statut == 'En_Cours').toList();
+    
+    double montantRestant = montant;
+    for (var credit in creditsEnCours) {
+      if (montantRestant <= 0) break;
+      
+      final deductionPourCeCredit = montantRestant > credit.montantRestant 
+          ? credit.montantRestant 
+          : montantRestant;
+      
+      final creditUpdated = credit.copyWith(
+        montantRembourse: credit.montantRembourse + deductionPourCeCredit,
+        lastModifiedAt: DateTime.now(),
+        isSynced: false,
+      );
+      
+      // Sauvegarder avec la référence
+      final prefs = await LocalDB.instance.database;
+      await prefs.setString('credit_personnel_${credit.reference}', jsonEncode(creditUpdated.toJson()));
+      
+      montantRestant -= deductionPourCeCredit;
+    }
+    
     await loadCredits(forceRefresh: true);
   }
 

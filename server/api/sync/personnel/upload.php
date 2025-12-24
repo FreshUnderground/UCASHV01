@@ -103,8 +103,9 @@ try {
 // ============================================================================
 
 function handlePersonnel($pdo, $entity, $userId, &$uploadedCount, &$updatedCount) {
-    $checkStmt = $pdo->prepare("SELECT id FROM personnel WHERE id = :id");
-    $checkStmt->execute([':id' => $entity['id'] ?? 0]);
+    // Vérifier par matricule au lieu d'ID
+    $checkStmt = $pdo->prepare("SELECT id FROM personnel WHERE matricule = :matricule");
+    $checkStmt->execute([':matricule' => $entity['matricule'] ?? '']);
     $exists = $checkStmt->fetch(PDO::FETCH_ASSOC);
     
     if ($exists) {
@@ -122,7 +123,7 @@ function handlePersonnel($pdo, $entity, $userId, &$uploadedCount, &$updatedCount
                 sexe = :sexe,
                 etat_civil = :etat_civil,
                 nombre_enfants = :nombre_enfants,
-                numero_cnss = :numero_cnss,
+                numero_inss = :numero_inss,
                 numero_compte_bancaire = :numero_compte_bancaire,
                 banque = :banque,
                 poste = :poste,
@@ -143,11 +144,11 @@ function handlePersonnel($pdo, $entity, $userId, &$uploadedCount, &$updatedCount
                 notes = :notes,
                 last_modified_at = :last_modified_at,
                 last_modified_by = :last_modified_by
-            WHERE id = :id
+            WHERE matricule = :matricule_where
         ");
         
         $stmt->execute([
-            ':id' => $entity['id'],
+            ':matricule_where' => $entity['matricule'],
             ':matricule' => $entity['matricule'] ?? '',
             ':nom' => $entity['nom'] ?? '',
             ':prenom' => $entity['prenom'] ?? '',
@@ -159,7 +160,7 @@ function handlePersonnel($pdo, $entity, $userId, &$uploadedCount, &$updatedCount
             ':sexe' => $entity['sexe'] ?? 'M',
             ':etat_civil' => $entity['etat_civil'] ?? 'Celibataire',
             ':nombre_enfants' => $entity['nombre_enfants'] ?? 0,
-            ':numero_cnss' => $entity['numero_cnss'] ?? null,
+            ':numero_inss' => $entity['numero_inss'] ?? null,
             ':numero_compte_bancaire' => $entity['numero_compte_bancaire'] ?? null,
             ':banque' => $entity['banque'] ?? null,
             ':poste' => $entity['poste'] ?? '',
@@ -182,9 +183,9 @@ function handlePersonnel($pdo, $entity, $userId, &$uploadedCount, &$updatedCount
             ':last_modified_by' => $userId
         ]);
         
-        $syncStmt = $pdo->prepare("UPDATE personnel SET is_synced = 1, synced_at = :synced_at WHERE id = :id");
+        $syncStmt = $pdo->prepare("UPDATE personnel SET is_synced = 1, synced_at = :synced_at WHERE matricule = :matricule");
         $syncStmt->execute([
-            ':id' => $entity['id'],
+            ':matricule' => $entity['matricule'],
             ':synced_at' => $entity['synced_at'] ?? date('c')
         ]);
         
@@ -193,17 +194,17 @@ function handlePersonnel($pdo, $entity, $userId, &$uploadedCount, &$updatedCount
         // INSERT
         $stmt = $pdo->prepare("
             INSERT INTO personnel (
-                id, matricule, nom, prenom, telephone, email, adresse,
+                matricule, nom, prenom, telephone, email, adresse,
                 date_naissance, lieu_naissance, sexe, etat_civil, nombre_enfants,
-                numero_cnss, numero_compte_bancaire, banque,
+                numero_inss, numero_compte_bancaire, banque,
                 poste, departement, type_contrat, date_embauche, date_fin_contrat,
                 salaire_base, prime_transport, prime_logement, prime_fonction, autres_primes,
                 devise_salaire, mode_paiement, statut, motif_depart, date_depart, notes,
                 last_modified_at, last_modified_by, created_at
             ) VALUES (
-                :id, :matricule, :nom, :prenom, :telephone, :email, :adresse,
+                :matricule, :nom, :prenom, :telephone, :email, :adresse,
                 :date_naissance, :lieu_naissance, :sexe, :etat_civil, :nombre_enfants,
-                :numero_cnss, :numero_compte_bancaire, :banque,
+                :numero_inss, :numero_compte_bancaire, :banque,
                 :poste, :departement, :type_contrat, :date_embauche, :date_fin_contrat,
                 :salaire_base, :prime_transport, :prime_logement, :prime_fonction, :autres_primes,
                 :devise_salaire, :mode_paiement, :statut, :motif_depart, :date_depart, :notes,
@@ -212,7 +213,6 @@ function handlePersonnel($pdo, $entity, $userId, &$uploadedCount, &$updatedCount
         ");
         
         $stmt->execute([
-            ':id' => $entity['id'],
             ':matricule' => $entity['matricule'] ?? '',
             ':nom' => $entity['nom'] ?? '',
             ':prenom' => $entity['prenom'] ?? '',
@@ -224,7 +224,7 @@ function handlePersonnel($pdo, $entity, $userId, &$uploadedCount, &$updatedCount
             ':sexe' => $entity['sexe'] ?? 'M',
             ':etat_civil' => $entity['etat_civil'] ?? 'Celibataire',
             ':nombre_enfants' => $entity['nombre_enfants'] ?? 0,
-            ':numero_cnss' => $entity['numero_cnss'] ?? null,
+            ':numero_inss' => $entity['numero_inss'] ?? null,
             ':numero_compte_bancaire' => $entity['numero_compte_bancaire'] ?? null,
             ':banque' => $entity['banque'] ?? null,
             ':poste' => $entity['poste'] ?? '',
@@ -248,9 +248,9 @@ function handlePersonnel($pdo, $entity, $userId, &$uploadedCount, &$updatedCount
             ':created_at' => $entity['created_at'] ?? date('Y-m-d H:i:s')
         ]);
         
-        $syncStmt = $pdo->prepare("UPDATE personnel SET is_synced = 1, synced_at = :synced_at WHERE id = :id");
+        $syncStmt = $pdo->prepare("UPDATE personnel SET is_synced = 1, synced_at = :synced_at WHERE matricule = :matricule");
         $syncStmt->execute([
-            ':id' => $entity['id'],
+            ':matricule' => $entity['matricule'],
             ':synced_at' => $entity['synced_at'] ?? date('c')
         ]);
         
@@ -259,14 +259,14 @@ function handlePersonnel($pdo, $entity, $userId, &$uploadedCount, &$updatedCount
 }
 
 function handleSalaire($pdo, $entity, $userId, &$uploadedCount, &$updatedCount) {
-    $checkStmt = $pdo->prepare("SELECT id FROM salaires WHERE id = :id");
-    $checkStmt->execute([':id' => $entity['id'] ?? 0]);
+    $checkStmt = $pdo->prepare("SELECT id FROM salaires WHERE reference = :reference");
+    $checkStmt->execute([':reference' => $entity['reference'] ?? '']);
     $exists = $checkStmt->fetch(PDO::FETCH_ASSOC);
     
     if ($exists) {
         $stmt = $pdo->prepare("
             UPDATE salaires SET
-                personnel_id = :personnel_id,
+                personnel_matricule = :personnel_matricule,
                 mois = :mois,
                 annee = :annee,
                 salaire_base = :salaire_base,

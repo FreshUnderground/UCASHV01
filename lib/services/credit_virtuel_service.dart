@@ -4,6 +4,7 @@ import '../models/virtual_transaction_model.dart';
 import 'local_db.dart';
 import 'sim_service.dart';
 import 'currency_service.dart';
+import 'credit_virtuel_sync_service.dart';
 
 /// Service de gestion des crédits virtuels entre shops/partenaires
 class CreditVirtuelService extends ChangeNotifier {
@@ -15,10 +16,44 @@ class CreditVirtuelService extends ChangeNotifier {
   List<CreditVirtuelModel> _credits = [];
   bool _isLoading = false;
   String? _errorMessage;
+  CreditVirtuelSyncService _syncService = CreditVirtuelSyncService();
+  bool _isSyncing = false;
+  String? _syncError;
 
   List<CreditVirtuelModel> get credits => _credits;
   bool get isLoading => _isLoading;
+  bool get isSyncing => _isSyncing;
   String? get errorMessage => _errorMessage;
+  String? get syncError => _syncError;
+  CreditVirtuelSyncService get syncService => _syncService;
+
+  /// Initialiser le service avec l'ID du shop
+  Future<void> initialize(int shopId) async {
+    try {
+      debugPrint('💳 Initialisation CreditVirtuelService pour shop: $shopId');
+      await _syncService.initialize(shopId);
+      
+      // Écouter les changements d'état de synchronisation
+      _syncService.addListener(_handleSyncStatusChange);
+      
+      // Charger les crédits initiaux
+      await loadCredits(shopId: shopId);
+      
+      debugPrint('✅ CreditVirtuelService initialisé avec succès');
+    } catch (e, stackTrace) {
+      _errorMessage = 'Erreur initialisation CreditVirtuelService: $e';
+      debugPrint('❌ $_errorMessage');
+      debugPrint('Stack trace: $stackTrace');
+      rethrow;
+    }
+  }
+  
+  /// Gérer les changements d'état de synchronisation
+  void _handleSyncStatusChange() {
+    _isSyncing = _syncService.isSyncing;
+    _syncError = _syncService.error;
+    notifyListeners();
+  }
 
   /// Charger tous les crédits (optionnellement filtrés)
   Future<void> loadCredits({
@@ -134,8 +169,8 @@ class CreditVirtuelService extends ChangeNotifier {
       if (savedCredit != null) {
         debugPrint('✅ [CreditVirtuelService] Crédit accordé: ${savedCredit.reference}');
         
-        // TODO: Marquer pour synchronisation quand SyncService sera disponible
-        // await SyncService.instance.markForSync('credit_virtuel', savedCredit.id!);
+        // Ajouter à la file de synchronisation
+        await _addToSyncQueue(savedCredit);
         
         // Recharger la liste
         await loadCredits();
@@ -213,8 +248,8 @@ class CreditVirtuelService extends ChangeNotifier {
       if (success) {
         debugPrint('✅ [CreditVirtuelService] Paiement enregistré: ${creditMisAJour.reference}');
         
-        // TODO: Marquer pour synchronisation quand SyncService sera disponible
-        // await SyncService.instance.markForSync('credit_virtuel', creditId);
+        // Ajouter à la file de synchronisation
+        await _addToSyncQueue(creditMisAJour);
         
         // Recharger la liste
         await loadCredits();
@@ -275,8 +310,8 @@ class CreditVirtuelService extends ChangeNotifier {
       if (success) {
         debugPrint('✅ [CreditVirtuelService] Crédit annulé: ${creditAnnule.reference}');
         
-        // TODO: Marquer pour synchronisation quand SyncService sera disponible
-        // await SyncService.instance.markForSync('credit_virtuel', creditId);
+        // Ajouter à la file de synchronisation
+        await _addToSyncQueue(creditAnnule);
         
         // Recharger la liste
         await loadCredits();
@@ -406,6 +441,50 @@ class CreditVirtuelService extends ChangeNotifier {
   /// Obtenir les crédits en retard
   List<CreditVirtuelModel> getCreditsEnRetard() {
     return _credits.where((credit) => credit.estEnRetard).toList();
+  }
+
+  /// Forcer une synchronisation complète
+  Future<bool> syncNow() async {
+    try {
+      _isSyncing = true;
+      _syncError = null;
+      notifyListeners();
+      
+      debugPrint('🔄 Démarrage manuel de la synchronisation crédits...');
+      final success = await _syncService.syncCredits();
+      
+      if (success) {
+        // Recharger les données après synchronisation
+        await loadCredits();
+      }
+      
+      return success;
+    } catch (e) {
+      _syncError = 'Erreur synchronisation crédits: $e';
+      debugPrint('❌ $_syncError');
+      return false;
+    } finally {
+      _isSyncing = false;
+      notifyListeners();
+    }
+  }
+  
+  @override
+  void dispose() {
+    _syncService.removeListener(_handleSyncStatusChange);
+    super.dispose();
+  }
+
+  /// Ajouter un crédit à la file de synchronisation
+  Future<void> _addToSyncQueue(CreditVirtuelModel credit) async {
+    try {
+      await _syncService.addToSyncQueue(credit);
+      debugPrint('🔄 Crédit ajouté à la file de synchronisation: ${credit.reference}');
+    } catch (e, stackTrace) {
+      debugPrint('⚠️ Erreur ajout crédit à la file de synchronisation: $e');
+      debugPrint('Stack trace: $stackTrace');
+      rethrow;
+    }
   }
 
   void _setLoading(bool loading) {

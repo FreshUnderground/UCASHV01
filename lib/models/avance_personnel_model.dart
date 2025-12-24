@@ -1,7 +1,7 @@
 class AvancePersonnelModel {
   final int? id;
   final String reference;
-  final int personnelId;
+  final String personnelMatricule; // Matricule du personnel
   final String? personnelNom; // Pour affichage
   final double montant;
   final String devise;
@@ -30,7 +30,7 @@ class AvancePersonnelModel {
   AvancePersonnelModel({
     this.id,
     required this.reference,
-    required this.personnelId,
+    required this.personnelMatricule,
     this.personnelNom,
     required this.montant,
     this.devise = 'USD',
@@ -64,7 +64,7 @@ class AvancePersonnelModel {
     return AvancePersonnelModel(
       id: json['id'],
       reference: json['reference'] ?? '',
-      personnelId: json['personnel_id'] ?? 0,
+      personnelMatricule: json['personnel_matricule'] ?? '',
       personnelNom: json['personnel_nom'],
       montant: json['montant'] != null 
           ? double.tryParse(json['montant'].toString()) ?? 0.0 
@@ -105,7 +105,7 @@ class AvancePersonnelModel {
     return {
       'id': id,
       'reference': reference,
-      'personnel_id': personnelId,
+      'personnel_matricule': personnelMatricule,
       'personnel_nom': personnelNom,
       'montant': montant,
       'devise': devise,
@@ -131,7 +131,7 @@ class AvancePersonnelModel {
   AvancePersonnelModel copyWith({
     int? id,
     String? reference,
-    int? personnelId,
+    String? personnelMatricule,
     String? personnelNom,
     double? montant,
     String? devise,
@@ -155,7 +155,7 @@ class AvancePersonnelModel {
     return AvancePersonnelModel(
       id: id ?? this.id,
       reference: reference ?? this.reference,
-      personnelId: personnelId ?? this.personnelId,
+      personnelMatricule: personnelMatricule ?? this.personnelMatricule,
       personnelNom: personnelNom ?? this.personnelNom,
       montant: montant ?? this.montant,
       devise: devise ?? this.devise,

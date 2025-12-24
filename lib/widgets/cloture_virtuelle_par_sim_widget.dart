@@ -290,13 +290,28 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
                       const SizedBox(height: 4),
                       Consumer<CurrencyService>(
                         builder: (context, currencyService, child) {
-                          return Text(
-                            'Cash ${currencyService.formatMontant(sim.soldeActuel, 'USD')}',
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: sim.soldeActuel >= 0 ? Colors.green : Colors.red,
-                            ),
+                          // TODO: Récupérer les soldes USD/CDF séparés depuis la dernière clôture
+                          // Pour l'instant, afficher le solde global avec indication "Mixte"
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                'Mixte ${currencyService.formatMontant(sim.soldeActuel, 'USD')}',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: sim.soldeActuel >= 0 ? Colors.green : Colors.red,
+                                ),
+                              ),
+                              Text(
+                                '(USD + CDF converti)',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey[600],
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ],
                           );
                         },
                       ),
@@ -440,9 +455,41 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
                       builder: (context, currencyService, child) {
                         return Column(
                           children: [
-                            _buildInfoRow('Solde Antérieur', 'Cash ${currencyService.formatMontant(cloture.soldeAnterieur, 'USD')}', Colors.grey),
-                            _buildInfoRow('Solde Actuel', 'Cash ${currencyService.formatMontant(cloture.soldeActuel, 'USD')}', 
+                            // Solde Antérieur avec détail USD/CDF
+                            _buildInfoRow('Solde Antérieur', 'Mixte ${currencyService.formatMontant(cloture.soldeAnterieur, 'USD')}', Colors.grey),
+                            if (cloture.soldeAnterieurUSD > 0 || cloture.soldeAnterieurCDF > 0) ...[
+                              Padding(
+                                padding: const EdgeInsets.only(left: 16, top: 4),
+                                child: Column(
+                                  children: [
+                                    if (cloture.soldeAnterieurUSD > 0)
+                                      _buildInfoRow('• USD', currencyService.formatMontant(cloture.soldeAnterieurUSD, 'USD'), Colors.grey[600]!),
+                                    if (cloture.soldeAnterieurCDF > 0)
+                                      _buildInfoRow('• CDF', currencyService.formatMontant(cloture.soldeAnterieurCDF, 'CDF'), Colors.grey[600]!),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 8),
+                            // Solde Actuel avec détail USD/CDF
+                            _buildInfoRow('Solde Actuel', 'Mixte ${currencyService.formatMontant(cloture.soldeActuel, 'USD')}', 
                               cloture.soldeActuel >= 0 ? Colors.green : Colors.red, bold: true),
+                            if (cloture.soldeActuelUSD > 0 || cloture.soldeActuelCDF > 0) ...[
+                              Padding(
+                                padding: const EdgeInsets.only(left: 16, top: 4),
+                                child: Column(
+                                  children: [
+                                    if (cloture.soldeActuelUSD > 0)
+                                      _buildInfoRow('• USD', currencyService.formatMontant(cloture.soldeActuelUSD, 'USD'), 
+                                        cloture.soldeActuelUSD >= 0 ? Colors.green[600]! : Colors.red[600]!),
+                                    if (cloture.soldeActuelCDF > 0)
+                                      _buildInfoRow('• CDF', currencyService.formatMontant(cloture.soldeActuelCDF, 'CDF'), 
+                                        cloture.soldeActuelCDF >= 0 ? Colors.green[600]! : Colors.red[600]!),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 8),
                             _buildInfoRow('Cash Physique Compté', 'Cash ${currencyService.formatMontant(cloture.cashDisponible, 'USD')}', Colors.blue),
                           ],
                         );
@@ -1306,7 +1353,7 @@ class _ClotureVirtuelleParSimWidgetState extends State<ClotureVirtuelleParSimWid
                                             fontWeight: FontWeight.bold,
                                             fontSize: 18,
                                           ),
-                                          helperText: 'Solde dans la SIM (Cash USD uniquement)',
+                                          helperText: 'Solde dans la SIM (USD uniquement)',
                                           helperStyle: const TextStyle(fontSize: 11),
                                           border: OutlineInputBorder(
                                             borderRadius: BorderRadius.circular(12),

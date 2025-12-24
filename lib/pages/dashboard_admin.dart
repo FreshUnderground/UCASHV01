@@ -18,6 +18,7 @@ import '../widgets/footer_widget.dart';
 import '../widgets/create_shop_dialog.dart';
 import '../widgets/create_agent_dialog.dart';
 import '../widgets/admin_help_widget.dart';
+import '../widgets/help_button_widget.dart';
 import '../widgets/sync_status_widget.dart';
 import '../widgets/comptes_speciaux_widget.dart';
 import '../widgets/sync_monitor_widget.dart';
@@ -40,8 +41,7 @@ import '../widgets/partner_net_position_widget.dart';
 import '../widgets/reports/dettes_intershop_report.dart';
 import '../widgets/admin_flot_dialog.dart';
 import '../widgets/admin_initialization_widget.dart';
-import '../widgets/gestion_personnel_widget.dart';
-import '../widgets/rapport_paiements_mensuels_widget.dart';
+import '../widgets/gestion_personnel_widget.dart' as personnel;
 
 class DashboardAdminPage extends StatefulWidget {
   const DashboardAdminPage({super.key});
@@ -234,6 +234,10 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
       actions: [
         // Sélecteur de langue compact
         const LanguageSelector(compact: true),
+        const SizedBox(width: 8),
+        
+        // Bouton Documentation
+        const AppBarHelpAction(),
         const SizedBox(width: 8),
         
         // Bouton Sync Monitor
@@ -1587,6 +1591,6 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
 
   // Personnel Management Widget
   Widget _buildPersonnelManagement() {
-    return const GestionPersonnelWidget();
+    return const personnel.GestionPersonnelWidget();
   }
 }

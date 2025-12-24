@@ -16,14 +16,14 @@ Beaucoup d'endroits dans l'interface des captures/transactions virtuelles affich
 - Lignes 4306, 4340, 4365, 4472, 4495, 4535, 4600, 4824, 4996: Rapports (OK, toujours USD)
 
 ### 2. Labels à Corriger
-- ✅ Ligne 6563: "Cash à servir" → "Cash USD" (DÉJÀ CORRIGÉ)
+- ✅ Ligne 6563: "Cash à servir" → "USD" (DÉJÀ CORRIGÉ)
 
 ## Règles de Formatage
 
 ### Cash (Toujours USD)
 ```dart
 // ✅ CORRECT
-Text('Cash USD')
+Text('USD')
 Text('\$${montantCash.toStringAsFixed(2)}')
 ```
 
@@ -42,8 +42,8 @@ Text('${CurrencyUtils.formatAmount(frais, devise)}')
 ```
 
 ## Status
-- ✅ ModernTransactionCard: Cash USD affiché correctement
-- ✅ virtual_transactions_widget.dart: Label "Cash USD" corrigé
+- ✅ ModernTransactionCard: USD affiché correctement
+- ✅ virtual_transactions_widget.dart: Label "USD" corrigé
 - ⚠️ Autres endroits: La plupart sont corrects car ils affichent des montants qui sont effectivement en USD
 
 ## Conclusion

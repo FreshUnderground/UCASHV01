@@ -139,7 +139,7 @@ UCASH est une application complète de transfert d'argent et de gestion financi�
 - **Transactions CDF :** Devise secondaire pour les opérations virtuelles
 - **Taux de Change :** Appliqués automatiquement selon les taux actuels
 - **Affichage des Devises :**
-  - Montants cash : Toujours "Cash USD"
+  - Montants cash : Toujours "USD"
   - Montants virtuels : Afficher la devise originale (USD/CDF)
 
 ### Synchronisation

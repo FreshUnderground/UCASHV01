@@ -1,4 +1,9 @@
 <?php
+// Activer la capture d'erreurs pour retourner du JSON
+error_reporting(E_ALL);
+ini_set('display_errors', 0); // Ne PAS afficher les erreurs en HTML
+ini_set('log_errors', 1);
+
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
@@ -17,21 +22,28 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit();
 }
 
-require_once '../../../config/database.php';
+require_once __DIR__ . '/../../../config/database.php';
 
 try {
+    // Log de débogage
+    error_log("🔺 Triangular upload - Début traitement");
+    
     // Récupération des données JSON
     $input = file_get_contents('php://input');
+    error_log("🔺 Input reçu: " . substr($input, 0, 500) . "...");
+    
     $data = json_decode($input, true);
     
     if (!$data || !isset($data['entities'])) {
+        error_log("🔺 Erreur: Données JSON invalides");
         throw new Exception('Données JSON invalides');
     }
+    
+    error_log("🔺 Entities reçues: " . count($data['entities']));
     
     $entities = $data['entities'];
     $userId = $data['user_id'] ?? 'unknown';
     $timestamp = $data['timestamp'] ?? date('c');
-    
     $uploaded = 0;
     $errors = [];
     
@@ -46,11 +58,10 @@ try {
                 throw new Exception('Champs requis manquants');
             }
             
-            // Vérifier si le règlement existe déjà
-            if (isset($entity['id'])) {
-                $checkStmt = $pdo->prepare("SELECT id FROM triangular_debt_settlements WHERE id = ?");
-                $checkStmt->execute([$entity['id']]);
-                $existing = $checkStmt->fetch();
+            // Vérifier si le règlement existe déjà par référence
+            $checkStmt = $pdo->prepare("SELECT reference FROM triangular_debt_settlements WHERE reference = ?");
+            $checkStmt->execute([$entity['reference']]);
+            $existing = $checkStmt->fetch();
                 
                 if ($existing) {
                     // Mise à jour
@@ -73,11 +84,11 @@ try {
                         last_modified_by = :last_modified_by,
                         is_synced = 1,
                         synced_at = NOW()
-                    WHERE id = :id";
+                    WHERE reference = :reference";
                 } else {
                     // Insertion
                     $sql = "INSERT INTO triangular_debt_settlements (
-                        id, reference,
+                        reference,
                         shop_debtor_id, shop_debtor_designation,
                         shop_intermediary_id, shop_intermediary_designation,
                         shop_creditor_id, shop_creditor_designation,
@@ -87,7 +98,7 @@ try {
                         created_at, last_modified_at, last_modified_by,
                         is_synced, synced_at
                     ) VALUES (
-                        :id, :reference,
+                        :reference,
                         :shop_debtor_id, :shop_debtor_designation,
                         :shop_intermediary_id, :shop_intermediary_designation,
                         :shop_creditor_id, :shop_creditor_designation,
@@ -98,30 +109,6 @@ try {
                         1, NOW()
                     )";
                 }
-            } else {
-                // Insertion sans ID (auto-increment)
-                $sql = "INSERT INTO triangular_debt_settlements (
-                    reference,
-                    shop_debtor_id, shop_debtor_designation,
-                    shop_intermediary_id, shop_intermediary_designation,
-                    shop_creditor_id, shop_creditor_designation,
-                    montant, devise, date_reglement,
-                    mode_paiement, notes,
-                    agent_id, agent_username,
-                    created_at, last_modified_at, last_modified_by,
-                    is_synced, synced_at
-                ) VALUES (
-                    :reference,
-                    :shop_debtor_id, :shop_debtor_designation,
-                    :shop_intermediary_id, :shop_intermediary_designation,
-                    :shop_creditor_id, :shop_creditor_designation,
-                    :montant, :devise, :date_reglement,
-                    :mode_paiement, :notes,
-                    :agent_id, :agent_username,
-                    :created_at, :last_modified_at, :last_modified_by,
-                    1, NOW()
-                )";
-            }
             
             $stmt = $pdo->prepare($sql);
             $params = [
@@ -144,11 +131,7 @@ try {
                 ':last_modified_by' => $userId,
             ];
             
-            if (isset($entity['id']) && isset($existing)) {
-                $params[':id'] = $entity['id'];
-            } elseif (isset($entity['id'])) {
-                $params[':id'] = $entity['id'];
-            }
+            // Pas besoin de paramètre :id car on utilise reference comme clé primaire
             
             $stmt->execute($params);
             $uploaded++;

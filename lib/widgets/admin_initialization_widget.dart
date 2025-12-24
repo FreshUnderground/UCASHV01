@@ -142,7 +142,7 @@ class _AdminInitializationWidgetState extends State<AdminInitializationWidget> w
           Expanded(
             child: TabBarView(
               controller: _tabController,
-              children: [
+              children: const [
                 _VirtualBalanceInitTab(),
                 _ClientAccountInitTab(),
                 _IntershopCreditInitTab(),
