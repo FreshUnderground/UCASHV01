@@ -327,7 +327,7 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
                   controller: _apiUrlController,
                   decoration: InputDecoration(
                     labelText: 'URL de l\'API',
-                    hintText: 'https://mahanaimeservice.investee-group.com/server/api',
+                    hintText: 'https://mahanaim.investee-group.com/server/api',
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),

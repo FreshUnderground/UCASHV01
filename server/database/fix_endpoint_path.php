@@ -10,14 +10,14 @@ try {
     echo "🔧 Fixing API endpoint path issue...\n\n";
     
     // The app calls this URL:
-    $expectedUrl = 'https://mahanaimeservice.investee-group.com/server/api/sync/deletion_requests/admin_validate.php';
+    $expectedUrl = 'https://mahanaim.investee-group.com/server/api/sync/deletion_requests/admin_validate.php';
     
     // This means the file should be at:
-    $expectedPath = '/var/www/mahanaimeservice.investee-group.com/server/api/sync/deletion_requests/admin_validate.php';
+    $expectedPath = '/var/www/mahanaim.investee-group.com/server/api/sync/deletion_requests/admin_validate.php';
     
     // Alternative paths to check
     $possiblePaths = [
-        '/var/www/mahanaimeservice.investee-group.com/server/api/sync/deletion_requests/',
+        '/var/www/mahanaim.investee-group.com/server/api/sync/deletion_requests/',
         '/var/www/investee-group.com/server/api/sync/deletion_requests/',
         '/var/www/html/server/api/sync/deletion_requests/',
         __DIR__ . '/../api/sync/deletion_requests/',
@@ -41,7 +41,7 @@ try {
         echo "\n📁 No existing API directory found. Creating directory structure...\n";
         
         // Try to create in the most likely location
-        $createPath = '/var/www/mahanaimeservice.investee-group.com/server/api/sync/deletion_requests/';
+        $createPath = '/var/www/mahanaim.investee-group.com/server/api/sync/deletion_requests/';
         
         if (mkdir($createPath, 0755, true)) {
             echo "✅ Created directory: $createPath\n";
@@ -285,7 +285,7 @@ try {
         // Test the endpoint
         echo "\n🧪 Testing the newly created endpoint...\n";
         
-        $testUrl = str_replace('/var/www/mahanaimeservice.investee-group.com/', 'https://mahanaimeservice.investee-group.com/', $targetFile);
+        $testUrl = str_replace('/var/www/mahanaim.investee-group.com/', 'https://mahanaim.investee-group.com/', $targetFile);
         
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $testUrl);

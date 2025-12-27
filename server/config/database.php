@@ -1,12 +1,11 @@
 <?php
 // Configuration de la base de données pour UCASH
-// Ce fichier doit être configuré selon votre environnement local
+// Ce fichier utilise maintenant les variables d'environnement sécurisées
 
-// Paramètres de connexion
-define('DB_HOST', '91.216.107.185');
-define('DB_NAME', 'inves2504808_1n6a7b');
-define('DB_USER', 'inves2504808');
-define('DB_PASS', '31nzzasdnh');
+// Charger la configuration d'environnement
+require_once __DIR__ . '/env.php';
+
+// Les paramètres sont maintenant définis dans env.php
 
 try {
     // Création de la connexion PDO

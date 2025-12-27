@@ -158,7 +158,7 @@ flutter build ios --release
 // Dans app_config.dart
 if (!isProduction) {
   if (kIsWeb) {
-    return 'https://mahanaimeservice.investee-group.com/server/api';
+    return 'https://mahanaim.investee-group.com/server/api';
   }
 }
 ```

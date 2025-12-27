@@ -298,7 +298,7 @@ function handleSalaire($pdo, $entity, $userId, &$uploadedCount, &$updatedCount) 
         
         $stmt->execute([
             ':id' => $entity['id'],
-            ':personnel_id' => $entity['personnel_id'],
+            ':personnel_matricule' => $entity['personnel_matricule'] ?? $entity['personnel_id'],
             ':mois' => $entity['mois'],
             ':annee' => $entity['annee'],
             ':salaire_base' => $entity['salaire_base'] ?? 0,

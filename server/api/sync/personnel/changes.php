@@ -23,10 +23,25 @@ require_once __DIR__ . '/../../../config/database.php';
 try {
     // Récupérer les paramètres de requête
     $since = $_GET['since'] ?? null;
-    $userId = $_GET['user_id'] ?? 'unknown';
+    $userId = $_GET['user_id'] ?? null;
+    $userRole = $_GET['user_role'] ?? null;
+    $shopId = isset($_GET['shop_id']) ? intval($_GET['shop_id']) : null;
     $limit = isset($_GET['limit']) ? intval($_GET['limit']) : 1000;
     
-    error_log("🔄 Changements personnel demandés depuis: $since, userId: $userId");
+    error_log("👥 PERSONNEL CHANGES - since: $since, user: $userId, role: $userRole, shop: $shopId");
+    
+    // Validation des paramètres requis
+    if (!$userId || !$userRole) {
+        http_response_code(400);
+        echo json_encode([
+            'success' => false,
+            'message' => 'Paramètres requis manquants: user_id et user_role',
+            'entities' => [],
+            'count' => 0,
+            'timestamp' => date('c')
+        ]);
+        exit();
+    }
     
     $allChanges = [];
     
@@ -36,10 +51,28 @@ try {
     $sql = "SELECT * FROM personnel WHERE 1=1";
     $params = [];
     
+    // Filtrage temporel
     if ($since && !empty($since) && $since !== '2020-01-01T00:00:00.000') {
         $sql .= " AND (last_modified_at > :since OR deleted_at > :since_deleted)";
         $params[':since'] = $since;
         $params[':since_deleted'] = $since;
+    }
+    
+    // Filtrage par rôle et shop (sécurité)
+    if ($userRole !== 'admin') {
+        if ($shopId && $shopId > 0) {
+            // Agent avec shop_id: voir seulement le personnel de son shop
+            $sql .= " AND shop_id = :shopId";
+            $params[':shopId'] = $shopId;
+            error_log("👥 Agent filtrage personnel par shop_id: $shopId");
+        } else {
+            // Agent sans shop_id: aucun accès au personnel
+            error_log("👥 Agent sans shop - aucun accès au personnel");
+            $personnel = []; // Pas d'accès
+            goto skip_personnel_query;
+        }
+    } else {
+        error_log("👥 Mode ADMIN - accès à tout le personnel");
     }
     
     $sql .= " ORDER BY COALESCE(deleted_at, last_modified_at) ASC LIMIT :limit";
@@ -52,6 +85,8 @@ try {
     $stmt->execute();
     
     $personnel = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    skip_personnel_query:
     foreach ($personnel as $p) {
         $p['_table'] = 'personnel';
         // Marquer les suppressions
@@ -257,10 +292,13 @@ try {
               ", Crédits: " . count($credits) . ", Remb: " . count($remboursements) . 
               ", Retenues: " . count($retenues) . ", Fiches: " . count($fiches) . ")");
     
+    // CORRECTION: Structure de réponse standardisée pour la synchronisation
     echo json_encode([
         'success' => true,
-        'changes' => $allChanges,
+        'entities' => $allChanges,  // ← CORRECTION: 'entities' au lieu de 'changes'
         'count' => count($allChanges),
+        'since' => $since,
+        'timestamp' => date('c'),
         'breakdown' => [
             'personnel' => count($personnel),
             'salaires' => count($salaires),

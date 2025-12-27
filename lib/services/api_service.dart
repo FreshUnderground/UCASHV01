@@ -257,7 +257,7 @@ class ApiService {
       final apiBaseUrl = await AppConfig.getApiBaseUrl();
       
       // Extraire l'URL de base (protocole + domaine) sans le path
-      // Ex: https://mahanaimeservice.investee-group.com/server/api -> https://mahanaimeservice.investee-group.com
+      // Ex: https://mahanaim.investee-group.com/server/api -> https://mahanaim.investee-group.com
       final uri = Uri.parse(apiBaseUrl);
       final baseServerUrl = '${uri.scheme}://${uri.host}';
       

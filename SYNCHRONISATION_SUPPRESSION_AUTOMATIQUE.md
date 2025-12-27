@@ -211,12 +211,12 @@ test_deletion_sync.bat
 
 ```bash
 # Test agents
-curl -X POST "https://mahanaimeservice.investee-group.com/server/api/sync/agents/check_deleted.php" \
+curl -X POST "https://mahanaim.investee-group.com/server/api/sync/agents/check_deleted.php" \
   -H "Content-Type: application/json" \
   -d "{\"agent_ids\": [1, 2, 3, 999, 1000]}"
 
 # Test shops
-curl -X POST "https://mahanaimeservice.investee-group.com/server/api/sync/shops/check_deleted.php" \
+curl -X POST "https://mahanaim.investee-group.com/server/api/sync/shops/check_deleted.php" \
   -H "Content-Type: application/json" \
   -d "{\"shop_ids\": [1, 2, 3, 999, 1000]}"
 ```

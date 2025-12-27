@@ -5,6 +5,7 @@ import '../config/app_config.dart';
 import '../config/sync_config.dart';
 import 'local_db.dart';
 import 'personnel_service.dart';
+import 'auth_service.dart';
 
 /// Service de synchronisation pour les données de gestion du personnel
 /// 
@@ -151,26 +152,45 @@ class PersonnelSyncService {
     try {
       final baseUrl = await AppConfig.getApiBaseUrl();
       
-      // Construire l'URL avec le paramètre since si nécessaire
+      // Récupérer les informations d'authentification
+      final authService = AuthService();
+      final currentUser = authService.currentUser;
+      
+      if (currentUser == null) {
+        debugPrint('  ❌ Aucun utilisateur connecté pour la sync personnel');
+        return;
+      }
+      
+      // Construire l'URL avec les paramètres requis
       String url = '$baseUrl/api/sync/personnel/changes.php';
+      final queryParams = <String, String>{
+        'user_id': currentUser.username ?? 'unknown',
+        'user_role': currentUser.role ?? 'agent',
+      };
+      
+      if (currentUser.shopId != null) {
+        queryParams['shop_id'] = currentUser.shopId.toString();
+      }
+      
       if (!forceFullSync) {
         final lastSync = await _getLastSyncTimestamp('personnel');
         if (lastSync != null) {
-          url += '?since=${lastSync.toIso8601String()}';
+          queryParams['since'] = lastSync.toIso8601String();
         }
       }
-
-      debugPrint('  📥 Download depuis $url');
+      
+      final uri = Uri.parse(url).replace(queryParameters: queryParams);
+      debugPrint('  📥 Download depuis $uri');
 
       final response = await http.get(
-        Uri.parse(url),
+        uri,
         headers: {'Content-Type': 'application/json'},
       ).timeout(SyncConfig.syncTimeout);
 
       if (response.statusCode == 200) {
         final result = jsonDecode(response.body);
         if (result['success'] == true) {
-          final changes = result['changes'] as List? ?? [];
+          final changes = result['entities'] as List? ?? [];
           
           if (changes.isEmpty) {
             debugPrint('  ℹ️ Aucune nouvelle donnée');

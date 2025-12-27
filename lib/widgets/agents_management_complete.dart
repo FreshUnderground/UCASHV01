@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/agent_service.dart';
-import '../services/reset_sync_service.dart';
+import '../services/robust_sync_service.dart';
 import '../services/shop_service.dart';
 import '../utils/responsive_utils.dart';
 import '../theme/ucash_containers.dart';
@@ -36,7 +36,10 @@ class _AgentsManagementCompleteState extends State<AgentsManagementComplete>  {
 
 
   Future<void> _resetSync() async {
-    await ResetSyncService.forceFreshSync();
+    // Utiliser RobustSyncService pour réinitialiser la synchronisation
+    final robustSync = RobustSyncService();
+    robustSync.clearCache();
+    await robustSync.forceSync();
   }
 
 

@@ -8,7 +8,7 @@ echo "<h1>Test des API Personnel - UCASH</h1>";
 echo "<pre>";
 
 // Configuration
-$baseUrl = 'https://mahanaimeservice.investee-group.com/server/api/sync/personnel';
+$baseUrl = 'https://mahanaim.investee-group.com/server/api/sync/personnel';
 
 // Test 1: Vérifier l'endpoint changes.php
 echo "=== TEST 1: GET changes.php ===\n";
