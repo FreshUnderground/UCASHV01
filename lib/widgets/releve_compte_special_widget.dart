@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ucashv01/flutter_gen/gen_l10n/app_localizations.dart';
 import '../models/compte_special_model.dart';
 import '../services/compte_special_service.dart';
 
@@ -10,7 +10,7 @@ class ReleveCompteSpecialWidget extends StatelessWidget {
   final int? shopId;
   final DateTime startDate;
   final DateTime endDate;
-  
+
   const ReleveCompteSpecialWidget({
     Key? key,
     required this.typeCompte,
@@ -24,17 +24,21 @@ class ReleveCompteSpecialWidget extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
     final service = CompteSpecialService.instance;
     final transactions = typeCompte == TypeCompteSpecial.FRAIS
-        ? service.getFrais(shopId: shopId, startDate: startDate, endDate: endDate)
-        : service.getDepenses(shopId: shopId, startDate: startDate, endDate: endDate);
-    
+        ? service.getFrais(
+            shopId: shopId, startDate: startDate, endDate: endDate)
+        : service.getDepenses(
+            shopId: shopId, startDate: startDate, endDate: endDate);
+
     final solde = typeCompte == TypeCompteSpecial.FRAIS
-        ? service.getSoldeFrais(shopId: shopId, startDate: startDate, endDate: endDate)
-        : service.getSoldeDepense(shopId: shopId, startDate: startDate, endDate: endDate);
-    
+        ? service.getSoldeFrais(
+            shopId: shopId, startDate: startDate, endDate: endDate)
+        : service.getSoldeDepense(
+            shopId: shopId, startDate: startDate, endDate: endDate);
+
     final locale = Localizations.localeOf(context).toString();
     final numberFormat = NumberFormat('#,##0.00', locale);
     final dateFormat = DateFormat('dd/MM/yyyy', locale);
-    
+
     return Card(
       margin: const EdgeInsets.all(16),
       child: Padding(
@@ -75,9 +79,9 @@ class ReleveCompteSpecialWidget extends StatelessWidget {
                 ),
               ],
             ),
-            
+
             const Divider(height: 32),
-            
+
             // Résumé
             Container(
               padding: const EdgeInsets.all(16),
@@ -120,16 +124,16 @@ class ReleveCompteSpecialWidget extends StatelessWidget {
                 ],
               ),
             ),
-            
+
             const SizedBox(height: 24),
-            
+
             // Liste des transactions
             Text(
               l10n.transactionsDetails,
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            
+
             if (transactions.isEmpty)
               Center(
                 child: Padding(
@@ -164,7 +168,8 @@ class ReleveCompteSpecialWidget extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            DateFormat('dd/MM/yyyy HH:mm', locale).format(transaction.dateTransaction),
+                            DateFormat('dd/MM/yyyy HH:mm', locale)
+                                .format(transaction.dateTransaction),
                             style: const TextStyle(fontSize: 10),
                           ),
                           Text(
@@ -202,7 +207,8 @@ class ReleveCompteSpecialWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildSummaryRow(String label, String value, {bool isTotal = false, Color? color}) {
+  Widget _buildSummaryRow(String label, String value,
+      {bool isTotal = false, Color? color}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ucashv01/flutter_gen/gen_l10n/app_localizations.dart';
 import 'services/auth_service.dart';
 import 'services/agent_auth_service.dart';
 import 'services/language_service.dart';
@@ -50,7 +50,7 @@ import 'widgets/loading_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Configuration de la barre de statut pour une apparence moderne
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -60,7 +60,7 @@ void main() async {
       systemNavigationBarIconBrightness: Brightness.dark,
     ),
   );
-  
+
   runApp(const UCashApp());
 }
 
@@ -90,22 +90,23 @@ class _UCashAppState extends State<UCashApp> {
       // Initialiser le service de langue (doit être fait en premier)
       final languageService = LanguageService.instance;
       await languageService.initialize();
-      debugPrint('✅ LanguageService initialisé - Langue: ${languageService.currentLanguageName}');
+      debugPrint(
+          '✅ LanguageService initialisé - Langue: ${languageService.currentLanguageName}');
 
       // Initialiser et vérifier l'admin par défaut (PROTÉGÉ)
       await LocalDB.instance.initializeDefaultAdmin();
       await LocalDB.instance.ensureAdminExists();
-      
+
       // Nettoyer l'admin par défaut temporaire si un admin personnalisé existe
       await LocalDB.instance.cleanupDefaultAdminOnStartup();
       debugPrint('🧹 Vérification de l\'admin par défaut effectuée');
-      
+
       _updateLoadingState('Initialisation des services de base...', 0.2);
 
       // Initialize the sync service (base uniquement, pas de sync auto)
       final syncService = SyncService();
       await syncService.initialize();
-      
+
       _updateLoadingState('Démarrage de la synchronisation...', 0.3);
 
       // Initialize RobustSyncService (synchronisation automatique)
@@ -113,31 +114,31 @@ class _UCashAppState extends State<UCashApp> {
       final robustSyncService = RobustSyncService();
       await robustSyncService.initialize();
       debugPrint('✅ RobustSyncService initialisé');
-      
+
       _updateLoadingState('Initialisation du service de connectivité...', 0.4);
 
       // Initialize ConnectivityService
       final connectivityService = ConnectivityService.instance;
       connectivityService.startMonitoring();
-      
+
       // Initialize DeletionService et démarrer l'auto-sync (toutes les 2 minutes)
       debugPrint('🗑️ Initialisation de DeletionService...');
       final deletionService = DeletionService.instance;
       deletionService.startAutoSync();
       debugPrint('✅ DeletionService initialisé avec auto-sync activé');
-      
+
       // Initialize ConflictNotificationService
       debugPrint('🔔 Initialisation de ConflictNotificationService...');
       final conflictNotificationService = ConflictNotificationService();
       await conflictNotificationService.initialize();
       debugPrint('✅ ConflictNotificationService initialisé');
-      
+
       _updateLoadingState('Chargement des données initiales...', 0.5);
 
       // Initialize the document header service
       final documentHeaderService = DocumentHeaderService();
       await documentHeaderService.initialize();
-      
+
       _updateLoadingState('Chargement des shops...', 0.6);
 
       // Charger les données initiales (shops, agents, rates) - en parallèle
@@ -155,18 +156,19 @@ class _UCashAppState extends State<UCashApp> {
           debugPrint('✅ RetenueService initialisé');
         }),
       ]);
-      
+
       debugPrint('✅ Données initiales chargées');
-      
+
       // Configuration de production
-      AppConfig.logInfo('UCASH ${AppConfig.appVersion} - Démarrage en mode ${AppConfig.isProduction ? 'PRODUCTION' : 'DEBUG'}');
-      AppConfig.logConfig();  // Afficher la configuration complète
-      
+      AppConfig.logInfo(
+          'UCASH ${AppConfig.appVersion} - Démarrage en mode ${AppConfig.isProduction ? 'PRODUCTION' : 'DEBUG'}');
+      AppConfig.logConfig(); // Afficher la configuration complète
+
       _updateLoadingState('Prêt !', 1.0);
-      
+
       // Small delay to show completion
       await Future.delayed(const Duration(milliseconds: 500));
-      
+
       setState(() {
         _isInitialized = true;
       });
@@ -227,7 +229,8 @@ class _UCashAppState extends State<UCashApp> {
         ChangeNotifierProvider(create: (_) => CompteSpecialService.instance),
         ChangeNotifierProvider(create: (_) => ConnectivityService.instance),
         ChangeNotifierProvider(create: (_) => SimService.instance),
-        ChangeNotifierProvider(create: (_) => VirtualTransactionService.instance),
+        ChangeNotifierProvider(
+            create: (_) => VirtualTransactionService.instance),
         ChangeNotifierProvider(create: (_) => DeletionService.instance),
         ChangeNotifierProvider(create: (_) => ConflictNotificationService()),
         ChangeNotifierProvider(create: (_) => CurrencyService.instance),
@@ -240,7 +243,7 @@ class _UCashAppState extends State<UCashApp> {
           return MaterialApp(
             title: 'UCASH - Transfert d\'Argent Moderne',
             debugShowCheckedModeBanner: false,
-            
+
             // Configuration de la localisation
             localizationsDelegates: const [
               AppLocalizations.delegate,
@@ -250,77 +253,80 @@ class _UCashAppState extends State<UCashApp> {
             ],
             supportedLocales: LanguageService.supportedLocales,
             locale: context.watch<LanguageService>().currentLocale,
-        
-        theme: AppTheme.lightTheme,
-        darkTheme: AppTheme.darkTheme,
-        themeMode: ThemeMode.light, // Peut être changé dynamiquement
-        builder: (context, child) {
-          return MediaQuery(
-            data: MediaQuery.of(context).copyWith(
-              textScaleFactor: MediaQuery.of(context).textScaleFactor.clamp(0.8, 1.2),
-            ),
-            child: child!,
-          );
-        },
-        home: Consumer<AuthService>(
-          builder: (context, authService, child) {
-            if (authService.isAuthenticated) {
-              // Si c'est un client connecté
-              if (authService.currentClient != null) {
-                return const ClientDashboardPage();
-              }
-              
-              // Si c'est un utilisateur (admin/agent) connecté
-              final user = authService.currentUser!;
-              switch (user.role) {
-                case 'ADMIN':
-                  return const DashboardAdminPage();
-                case 'AGENT':
-                  return const DashboardAgentPage();
-                case 'COMPTE':
-                  return const DashboardComptePage();
-                default:
-                  return const LoginPage();
-              }
-            }
-            return const LoginPage();
-          },
-        ),
-        routes: {
-          '/login': (context) => const LoginPage(),
-          '/agent-login': (context) => const AgentLoginPage(),
-          '/client-login': (context) => const ClientLoginPage(),
-          '/admin-login': (context) => const LoginPage(), // This should be LoginPage for admin
-          '/agent-dashboard': (context) => const AgentDashboardPage(),
-          '/client-dashboard': (context) => const ClientDashboardPage(),
-          '/reports': (context) => const ReportsPage(),
-          '/language-settings': (context) => const LanguageSettingsPage(),
-          '/bilingual-example': (context) => const BilingualUsageExamplePage(),
-          '/dashboard': (context) => Consumer<AuthService>(
-            builder: (context, authService, child) {
-              if (!authService.isAuthenticated) {
-                return const LoginPage();
-              }
-              
-              // Si c'est un client connecté
-              if (authService.currentClient != null) {
-                return const ClientDashboardPage();
-              }
-              
-              final user = authService.currentUser!;
-              switch (user.role) {
-                case 'ADMIN':
-                  return const DashboardAdminPage();
-                case 'AGENT':
-                  return const DashboardAgentPage();
-                case 'COMPTE':
-                  return const DashboardComptePage();
-                default:
-                  return const LoginPage();
-              }
+
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: ThemeMode.light, // Peut être changé dynamiquement
+            builder: (context, child) {
+              return MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaleFactor:
+                      MediaQuery.of(context).textScaleFactor.clamp(0.8, 1.2),
+                ),
+                child: child!,
+              );
             },
-          ),
-        },
+            home: Consumer<AuthService>(
+              builder: (context, authService, child) {
+                if (authService.isAuthenticated) {
+                  // Si c'est un client connecté
+                  if (authService.currentClient != null) {
+                    return const ClientDashboardPage();
+                  }
+
+                  // Si c'est un utilisateur (admin/agent) connecté
+                  final user = authService.currentUser!;
+                  switch (user.role) {
+                    case 'ADMIN':
+                      return const DashboardAdminPage();
+                    case 'AGENT':
+                      return const DashboardAgentPage();
+                    case 'COMPTE':
+                      return const DashboardComptePage();
+                    default:
+                      return const LoginPage();
+                  }
+                }
+                return const LoginPage();
+              },
+            ),
+            routes: {
+              '/login': (context) => const LoginPage(),
+              '/agent-login': (context) => const AgentLoginPage(),
+              '/client-login': (context) => const ClientLoginPage(),
+              '/admin-login': (context) =>
+                  const LoginPage(), // This should be LoginPage for admin
+              '/agent-dashboard': (context) => const AgentDashboardPage(),
+              '/client-dashboard': (context) => const ClientDashboardPage(),
+              '/reports': (context) => const ReportsPage(),
+              '/language-settings': (context) => const LanguageSettingsPage(),
+              '/bilingual-example': (context) =>
+                  const BilingualUsageExamplePage(),
+              '/dashboard': (context) => Consumer<AuthService>(
+                    builder: (context, authService, child) {
+                      if (!authService.isAuthenticated) {
+                        return const LoginPage();
+                      }
+
+                      // Si c'est un client connecté
+                      if (authService.currentClient != null) {
+                        return const ClientDashboardPage();
+                      }
+
+                      final user = authService.currentUser!;
+                      switch (user.role) {
+                        case 'ADMIN':
+                          return const DashboardAdminPage();
+                        case 'AGENT':
+                          return const DashboardAgentPage();
+                        case 'COMPTE':
+                          return const DashboardComptePage();
+                        default:
+                          return const LoginPage();
+                      }
+                    },
+                  ),
+            },
           );
         },
       ),

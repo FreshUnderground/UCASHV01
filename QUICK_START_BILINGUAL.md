@@ -11,7 +11,7 @@ Votre application supporte maintenant **Français 🇫🇷** et **Anglais 🇬�
 ### 1️⃣ Importer AppLocalizations
 
 ```dart
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ucashv01/flutter_gen/gen_l10n/app_localizations.dart';
 ```
 
 ### 2️⃣ Obtenir l'Instance dans votre Widget
@@ -224,7 +224,7 @@ Cette page contient:
 
 ```dart
 import 'package:flutter/material.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ucashv01/flutter_gen/gen_l10n/app_localizations.dart';
 import '../widgets/language_selector.dart';
 
 class MyPage extends StatelessWidget {

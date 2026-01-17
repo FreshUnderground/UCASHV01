@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ucashv01/flutter_gen/gen_l10n/app_localizations.dart';
 import '../widgets/language_selector.dart';
 
 /// Page de paramètres avec sélection de langue
-/// 
+///
 /// Cette page démontre comment utiliser le widget LanguageSelector
 /// dans votre application
 class LanguageSettingsPage extends StatelessWidget {
@@ -35,10 +35,11 @@ class LanguageSettingsPage extends StatelessWidget {
                       Expanded(
                         child: Text(
                           l10n.languageSettings,
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue.shade900,
-                          ),
+                          style:
+                              Theme.of(context).textTheme.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue.shade900,
+                                  ),
                         ),
                       ),
                     ],
@@ -47,20 +48,20 @@ class LanguageSettingsPage extends StatelessWidget {
                   Text(
                     l10n.selectLanguage,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey.shade700,
-                    ),
+                          color: Colors.grey.shade700,
+                        ),
                   ),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 24),
-          
+
           // Sélecteur de langue
           const LanguageSelector(),
-          
+
           const SizedBox(height: 24),
-          
+
           // Informations supplémentaires
           Card(
             color: Colors.green.shade50,
@@ -105,10 +106,10 @@ class LanguageSettingsPage extends StatelessWidget {
     // Le texte change selon la langue sélectionnée
     if (l10n.localeName == 'fr') {
       return 'Votre choix de langue est sauvegardé automatiquement et fonctionne hors ligne. '
-             'L\'application utilisera la langue sélectionnée même sans connexion Internet.';
+          'L\'application utilisera la langue sélectionnée même sans connexion Internet.';
     } else {
       return 'Your language choice is automatically saved and works offline. '
-             'The application will use the selected language even without an Internet connection.';
+          'The application will use the selected language even without an Internet connection.';
     }
   }
 }

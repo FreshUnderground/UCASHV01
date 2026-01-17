@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ucashv01/flutter_gen/gen_l10n/app_localizations.dart';
 import '../services/agent_service.dart';
 import '../services/shop_service.dart';
 import '../services/local_db.dart';
@@ -45,7 +45,8 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
             ),
             child: IntrinsicHeight(
               child: Card(
-                elevation: ResponsiveUtils.getFluidSpacing(context, mobile: 1, tablet: 1.5, desktop: 2),
+                elevation: ResponsiveUtils.getFluidSpacing(context,
+                    mobile: 1, tablet: 1.5, desktop: 2),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -70,7 +71,11 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
                           Text(
                             l10n.agentsManagement,
                             style: TextStyle(
-                              fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 16, tablet: 17, desktop: 18),
+                              fontSize: ResponsiveUtils.getFluidFontSize(
+                                  context,
+                                  mobile: 16,
+                                  tablet: 17,
+                                  desktop: 18),
                               fontWeight: FontWeight.bold,
                               color: const Color(0xFFDC2626),
                             ),
@@ -80,12 +85,12 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
                       ),
                     ),
                     const Divider(height: 1),
-                    
+
                     // Statistiques des agents
                     _buildAgentStats(),
-                    
+
                     const Divider(height: 1),
-                    
+
                     // Liste des agents
                     Expanded(
                       child: _buildAgentsList(),
@@ -104,58 +109,72 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
     final l10n = AppLocalizations.of(context)!;
     if (context.isSmallScreen) {
       return Wrap(
-        spacing: ResponsiveUtils.getFluidSpacing(context, mobile: 6, tablet: 7, desktop: 8),
-        runSpacing: ResponsiveUtils.getFluidSpacing(context, mobile: 6, tablet: 7, desktop: 8),
+        spacing: ResponsiveUtils.getFluidSpacing(context,
+            mobile: 6, tablet: 7, desktop: 8),
+        runSpacing: ResponsiveUtils.getFluidSpacing(context,
+            mobile: 6, tablet: 7, desktop: 8),
         children: [
           // Bouton Actualiser
           IconButton(
             onPressed: _loadData,
-            icon: Icon(Icons.refresh,
-              size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
+            icon: Icon(
+              Icons.refresh,
+              size: ResponsiveUtils.getFluidIconSize(context,
+                  mobile: 20, tablet: 22, desktop: 24),
             ),
             tooltip: l10n.refresh,
             color: const Color(0xFFDC2626),
           ),
-          
+
           // Bouton Vérifier Admin
           IconButton(
             onPressed: _verifyAdminExists,
-            icon: Icon(Icons.admin_panel_settings,
-              size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
+            icon: Icon(
+              Icons.admin_panel_settings,
+              size: ResponsiveUtils.getFluidIconSize(context,
+                  mobile: 20, tablet: 22, desktop: 24),
             ),
             tooltip: l10n.verifyAdmin,
             color: Colors.green,
           ),
-          
+
           // Bouton Debug
           IconButton(
             onPressed: _showDebugInfo,
-            icon: Icon(Icons.bug_report,
-              size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
+            icon: Icon(
+              Icons.bug_report,
+              size: ResponsiveUtils.getFluidIconSize(context,
+                  mobile: 20, tablet: 22, desktop: 24),
             ),
             tooltip: l10n.debugInfo,
             color: Colors.purple,
           ),
-          
+
           // Bouton Agents de Test
           IconButton(
             onPressed: _createTestAgents,
-            icon: Icon(Icons.science,
-              size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
+            icon: Icon(
+              Icons.science,
+              size: ResponsiveUtils.getFluidIconSize(context,
+                  mobile: 20, tablet: 22, desktop: 24),
             ),
             tooltip: l10n.createTestAgents,
             color: Colors.cyan,
           ),
-          
+
           // Bouton Nouveau Agent
           ElevatedButton.icon(
             onPressed: _showCreateAgentDialog,
-            icon: Icon(Icons.person_add,
-              size: ResponsiveUtils.getFluidIconSize(context, mobile: 14, tablet: 15, desktop: 16),
+            icon: Icon(
+              Icons.person_add,
+              size: ResponsiveUtils.getFluidIconSize(context,
+                  mobile: 14, tablet: 15, desktop: 16),
             ),
-            label: Text(l10n.add,
+            label: Text(
+              l10n.add,
               style: TextStyle(
-                fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 12, tablet: 13, desktop: 14),
+                fontSize: ResponsiveUtils.getFluidFontSize(context,
+                    mobile: 12, tablet: 13, desktop: 14),
               ),
             ),
             style: ElevatedButton.styleFrom(
@@ -165,11 +184,13 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
                 context,
                 mobile: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 tablet: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                desktop: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                desktop:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(
-                  ResponsiveUtils.getFluidBorderRadius(context, mobile: 6, tablet: 7, desktop: 8),
+                  ResponsiveUtils.getFluidBorderRadius(context,
+                      mobile: 6, tablet: 7, desktop: 8),
                 ),
               ),
             ),
@@ -177,60 +198,74 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
         ],
       );
     }
-    
+
     return Row(
       children: [
         // Bouton Actualiser
         IconButton(
           onPressed: _loadData,
-          icon: Icon(Icons.refresh,
-            size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
+          icon: Icon(
+            Icons.refresh,
+            size: ResponsiveUtils.getFluidIconSize(context,
+                mobile: 20, tablet: 22, desktop: 24),
           ),
           tooltip: l10n.refresh,
           color: const Color(0xFFDC2626),
         ),
-        
+
         // Bouton Vérifier Admin
         IconButton(
           onPressed: _verifyAdminExists,
-          icon: Icon(Icons.admin_panel_settings,
-            size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
+          icon: Icon(
+            Icons.admin_panel_settings,
+            size: ResponsiveUtils.getFluidIconSize(context,
+                mobile: 20, tablet: 22, desktop: 24),
           ),
           tooltip: l10n.verifyAdmin,
           color: Colors.green,
         ),
-        
+
         // Bouton Debug
         IconButton(
           onPressed: _showDebugInfo,
-          icon: Icon(Icons.bug_report,
-            size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
+          icon: Icon(
+            Icons.bug_report,
+            size: ResponsiveUtils.getFluidIconSize(context,
+                mobile: 20, tablet: 22, desktop: 24),
           ),
           tooltip: l10n.debugInfo,
           color: Colors.purple,
         ),
-        
+
         // Bouton Agents de Test
         IconButton(
           onPressed: _createTestAgents,
-          icon: Icon(Icons.science,
-            size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
+          icon: Icon(
+            Icons.science,
+            size: ResponsiveUtils.getFluidIconSize(context,
+                mobile: 20, tablet: 22, desktop: 24),
           ),
           tooltip: l10n.createTestAgents,
           color: Colors.cyan,
         ),
-        
-        SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 6, tablet: 7, desktop: 8)),
-        
+
+        SizedBox(
+            width: ResponsiveUtils.getFluidSpacing(context,
+                mobile: 6, tablet: 7, desktop: 8)),
+
         // Bouton Nouveau Agent
         ElevatedButton.icon(
           onPressed: _showCreateAgentDialog,
-          icon: Icon(Icons.person_add,
-            size: ResponsiveUtils.getFluidIconSize(context, mobile: 14, tablet: 15, desktop: 16),
+          icon: Icon(
+            Icons.person_add,
+            size: ResponsiveUtils.getFluidIconSize(context,
+                mobile: 14, tablet: 15, desktop: 16),
           ),
-          label: Text(l10n.newAgent,
+          label: Text(
+            l10n.newAgent,
             style: TextStyle(
-              fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 12, tablet: 13, desktop: 14),
+              fontSize: ResponsiveUtils.getFluidFontSize(context,
+                  mobile: 12, tablet: 13, desktop: 14),
             ),
           ),
           style: ElevatedButton.styleFrom(
@@ -244,7 +279,8 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
             ),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(
-                ResponsiveUtils.getFluidBorderRadius(context, mobile: 6, tablet: 7, desktop: 8),
+                ResponsiveUtils.getFluidBorderRadius(context,
+                    mobile: 6, tablet: 7, desktop: 8),
               ),
             ),
           ),
@@ -259,7 +295,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
       builder: (context, agentService, child) {
         final agents = agentService.agents;
         final activeAgents = agents.where((a) => a.isActive).length;
-        
+
         if (context.isSmallScreen) {
           return Container(
             padding: ResponsiveUtils.getFluidPadding(
@@ -280,7 +316,9 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
                         Colors.blue,
                       ),
                     ),
-                    SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
+                    SizedBox(
+                        width: ResponsiveUtils.getFluidSpacing(context,
+                            mobile: 12, tablet: 14, desktop: 16)),
                     Expanded(
                       child: _buildStatCard(
                         l10n.activeAgents,
@@ -291,7 +329,9 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
                     ),
                   ],
                 ),
-                SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
+                SizedBox(
+                    height: ResponsiveUtils.getFluidSpacing(context,
+                        mobile: 12, tablet: 14, desktop: 16)),
                 _buildStatCard(
                   l10n.inactiveAgents,
                   '${agents.length - activeAgents}',
@@ -302,7 +342,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
             ),
           );
         }
-        
+
         return Container(
           padding: ResponsiveUtils.getFluidPadding(
             context,
@@ -318,14 +358,18 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
                 Icons.people,
                 Colors.blue,
               ),
-              SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
+              SizedBox(
+                  width: ResponsiveUtils.getFluidSpacing(context,
+                      mobile: 12, tablet: 14, desktop: 16)),
               _buildStatCard(
                 l10n.activeAgents,
                 '$activeAgents',
                 Icons.check_circle,
                 Colors.green,
               ),
-              SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 12, tablet: 14, desktop: 16)),
+              SizedBox(
+                  width: ResponsiveUtils.getFluidSpacing(context,
+                      mobile: 12, tablet: 14, desktop: 16)),
               _buildStatCard(
                 l10n.inactiveAgents,
                 '${agents.length - activeAgents}',
@@ -339,7 +383,8 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+  Widget _buildStatCard(
+      String title, String value, IconData icon, Color color) {
     return Container(
       padding: ResponsiveUtils.getFluidPadding(
         context,
@@ -350,30 +395,39 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(
-          ResponsiveUtils.getFluidBorderRadius(context, mobile: 6, tablet: 7, desktop: 8),
+          ResponsiveUtils.getFluidBorderRadius(context,
+              mobile: 6, tablet: 7, desktop: 8),
         ),
         border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: Column(
         children: [
-          Icon(icon, 
-            color: color, 
-            size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
+          Icon(
+            icon,
+            color: color,
+            size: ResponsiveUtils.getFluidIconSize(context,
+                mobile: 20, tablet: 22, desktop: 24),
           ),
-          SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 6, tablet: 7, desktop: 8)),
+          SizedBox(
+              height: ResponsiveUtils.getFluidSpacing(context,
+                  mobile: 6, tablet: 7, desktop: 8)),
           Text(
             value,
             style: TextStyle(
-              fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 18, tablet: 19, desktop: 20),
+              fontSize: ResponsiveUtils.getFluidFontSize(context,
+                  mobile: 18, tablet: 19, desktop: 20),
               fontWeight: FontWeight.bold,
               color: color,
             ),
           ),
-          SizedBox(height: ResponsiveUtils.getFluidSpacing(context, mobile: 3, tablet: 3.5, desktop: 4)),
+          SizedBox(
+              height: ResponsiveUtils.getFluidSpacing(context,
+                  mobile: 3, tablet: 3.5, desktop: 4)),
           Text(
             title,
             style: TextStyle(
-              fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 10, tablet: 11, desktop: 12),
+              fontSize: ResponsiveUtils.getFluidFontSize(context,
+                  mobile: 10, tablet: 11, desktop: 12),
               color: Colors.grey[600],
             ),
             textAlign: TextAlign.center,
@@ -489,21 +543,24 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
         desktop: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
       leading: CircleAvatar(
-        radius: ResponsiveUtils.getFluidSpacing(context, mobile: 20, tablet: 22, desktop: 24),
-        backgroundColor: agent.isActive 
+        radius: ResponsiveUtils.getFluidSpacing(context,
+            mobile: 20, tablet: 22, desktop: 24),
+        backgroundColor: agent.isActive
             ? Colors.green.withOpacity(0.2)
             : Colors.grey.withOpacity(0.2),
         child: Icon(
           Icons.person,
           color: agent.isActive ? Colors.green : Colors.grey,
-          size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
+          size: ResponsiveUtils.getFluidIconSize(context,
+              mobile: 20, tablet: 22, desktop: 24),
         ),
       ),
       title: Text(
         agent.username,
         style: TextStyle(
           fontWeight: FontWeight.w600,
-          fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 14, tablet: 15, desktop: 16),
+          fontSize: ResponsiveUtils.getFluidFontSize(context,
+              mobile: 14, tablet: 15, desktop: 16),
         ),
       ),
       subtitle: Padding(
@@ -512,9 +569,11 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Shop ID: ${agent.shopId} - ${shop.designation}',
+            Text(
+              'Shop ID: ${agent.shopId} - ${shop.designation}',
               style: TextStyle(
-                fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 12, tablet: 13, desktop: 14),
+                fontSize: ResponsiveUtils.getFluidFontSize(context,
+                    mobile: 12, tablet: 13, desktop: 14),
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -525,29 +584,38 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
               style: TextStyle(
                 color: agent.isActive ? Colors.green : Colors.orange,
                 fontWeight: FontWeight.w500,
-                fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 12, tablet: 13, desktop: 14),
+                fontSize: ResponsiveUtils.getFluidFontSize(context,
+                    mobile: 12, tablet: 13, desktop: 14),
               ),
             ),
           ],
         ),
       ),
       trailing: PopupMenuButton<String>(
-        icon: Icon(Icons.more_vert,
-          size: ResponsiveUtils.getFluidIconSize(context, mobile: 20, tablet: 22, desktop: 24),
+        icon: Icon(
+          Icons.more_vert,
+          size: ResponsiveUtils.getFluidIconSize(context,
+              mobile: 20, tablet: 22, desktop: 24),
         ),
         itemBuilder: (context) => [
           PopupMenuItem(
             value: 'edit',
             child: Row(
               children: [
-                Icon(Icons.edit, 
-                  size: ResponsiveUtils.getFluidIconSize(context, mobile: 14, tablet: 15, desktop: 16),
+                Icon(
+                  Icons.edit,
+                  size: ResponsiveUtils.getFluidIconSize(context,
+                      mobile: 14, tablet: 15, desktop: 16),
                   color: Colors.blue,
                 ),
-                SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 6, tablet: 7, desktop: 8)),
-                Text(l10n.edit,
+                SizedBox(
+                    width: ResponsiveUtils.getFluidSpacing(context,
+                        mobile: 6, tablet: 7, desktop: 8)),
+                Text(
+                  l10n.edit,
                   style: TextStyle(
-                    fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 12, tablet: 13, desktop: 14),
+                    fontSize: ResponsiveUtils.getFluidFontSize(context,
+                        mobile: 12, tablet: 13, desktop: 14),
                   ),
                 ),
               ],
@@ -559,13 +627,18 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
               children: [
                 Icon(
                   agent.isActive ? Icons.pause : Icons.play_arrow,
-                  size: ResponsiveUtils.getFluidIconSize(context, mobile: 14, tablet: 15, desktop: 16),
+                  size: ResponsiveUtils.getFluidIconSize(context,
+                      mobile: 14, tablet: 15, desktop: 16),
                   color: agent.isActive ? Colors.orange : Colors.green,
                 ),
-                SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 6, tablet: 7, desktop: 8)),
-                Text(agent.isActive ? l10n.deactivate : l10n.activate,
+                SizedBox(
+                    width: ResponsiveUtils.getFluidSpacing(context,
+                        mobile: 6, tablet: 7, desktop: 8)),
+                Text(
+                  agent.isActive ? l10n.deactivate : l10n.activate,
                   style: TextStyle(
-                    fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 12, tablet: 13, desktop: 14),
+                    fontSize: ResponsiveUtils.getFluidFontSize(context,
+                        mobile: 12, tablet: 13, desktop: 14),
                   ),
                 ),
               ],
@@ -575,15 +648,21 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
             value: 'delete',
             child: Row(
               children: [
-                Icon(Icons.delete, 
-                  size: ResponsiveUtils.getFluidIconSize(context, mobile: 8, tablet: 15, desktop: 16),
+                Icon(
+                  Icons.delete,
+                  size: ResponsiveUtils.getFluidIconSize(context,
+                      mobile: 8, tablet: 15, desktop: 16),
                   color: Colors.red,
                 ),
-                SizedBox(width: ResponsiveUtils.getFluidSpacing(context, mobile: 5, tablet: 7, desktop: 8)),
-                Text(l10n.delete, 
+                SizedBox(
+                    width: ResponsiveUtils.getFluidSpacing(context,
+                        mobile: 5, tablet: 7, desktop: 8)),
+                Text(
+                  l10n.delete,
                   style: TextStyle(
                     color: Colors.red,
-                    fontSize: ResponsiveUtils.getFluidFontSize(context, mobile: 8, tablet: 13, desktop: 14),
+                    fontSize: ResponsiveUtils.getFluidFontSize(context,
+                        mobile: 8, tablet: 13, desktop: 14),
                   ),
                 ),
               ],
@@ -625,14 +704,16 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
     final l10n = AppLocalizations.of(context)!;
     final agentService = Provider.of<AgentService>(context, listen: false);
     final updatedAgent = agent.copyWith(isActive: !agent.isActive);
-    
+
     final success = await agentService.updateAgent(updatedAgent);
     if (mounted) {
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              updatedAgent.isActive ? l10n.agentActivated : l10n.agentDeactivated,
+              updatedAgent.isActive
+                  ? l10n.agentActivated
+                  : l10n.agentDeactivated,
             ),
             backgroundColor: Colors.green,
           ),
@@ -677,7 +758,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
     if (confirmed == true && agent.id != null) {
       final agentService = Provider.of<AgentService>(context, listen: false);
       final success = await agentService.deleteAgent(agent.id!);
-      
+
       if (mounted) {
         if (success) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -712,7 +793,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
     final l10n = AppLocalizations.of(context)!;
     await LocalDB.instance.ensureAdminExists();
     final admin = await LocalDB.instance.getDefaultAdmin();
-    
+
     if (mounted) {
       showDialog(
         context: context,
@@ -800,7 +881,7 @@ class _AgentsManagementWidgetState extends State<AgentsManagementWidget> {
     if (confirmed == true) {
       final agentService = Provider.of<AgentService>(context, listen: false);
       await agentService.createTestAgents();
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

@@ -51,7 +51,7 @@
 
 #### Import ajouté:
 ```dart
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ucashv01/flutter_gen/gen_l10n/app_localizations.dart';
 ```
 
 #### Menu items dynamiques:
@@ -111,7 +111,7 @@ ScaffoldMessenger.of(context).showSnackBar(
 
 #### Import ajouté:
 ```dart
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ucashv01/flutter_gen/gen_l10n/app_localizations.dart';
 ```
 
 #### Champs traduits:
@@ -277,7 +277,7 @@ Messages: "Operation data synchronized" "Synchronization error"
 
 1. **Ajouter l'import:**
    ```dart
-   import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+   import 'package:ucashv01/flutter_gen/gen_l10n/app_localizations.dart';
    ```
 
 2. **Obtenir les traductions:**

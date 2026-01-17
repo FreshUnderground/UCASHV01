@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ucashv01/flutter_gen/gen_l10n/app_localizations.dart';
 import '../services/language_service.dart';
 
 /// Widget pour la sélection de langue
-/// 
+///
 /// Affiche un sélecteur bilingue Français/Anglais avec:
 /// - Icône de drapeau pour chaque langue
 /// - Nom de la langue
@@ -36,8 +36,8 @@ class LanguageSelector extends StatelessWidget {
           Text(
             l10n.selectLanguage,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
+                  fontWeight: FontWeight.bold,
+                ),
           ),
           const SizedBox(height: 16),
         ],
@@ -46,7 +46,8 @@ class LanguageSelector extends StatelessWidget {
     );
   }
 
-  Widget _buildCompactSelector(BuildContext context, LanguageService languageService) {
+  Widget _buildCompactSelector(
+      BuildContext context, LanguageService languageService) {
     return PopupMenuButton<String>(
       icon: Row(
         mainAxisSize: MainAxisSize.min,
@@ -95,7 +96,8 @@ class LanguageSelector extends StatelessWidget {
     );
   }
 
-  Widget _buildLanguageOptions(BuildContext context, LanguageService languageService) {
+  Widget _buildLanguageOptions(
+      BuildContext context, LanguageService languageService) {
     return Column(
       children: [
         _buildLanguageCard(
@@ -153,9 +155,10 @@ class LanguageSelector extends StatelessWidget {
               child: Text(
                 languageName,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  color: isSelected ? Colors.blue.shade900 : Colors.black87,
-                ),
+                      fontWeight:
+                          isSelected ? FontWeight.bold : FontWeight.normal,
+                      color: isSelected ? Colors.blue.shade900 : Colors.black87,
+                    ),
               ),
             ),
             if (isSelected)
@@ -180,7 +183,7 @@ class LanguageSelector extends StatelessWidget {
     }
 
     final success = await languageService.changeLanguage(languageCode);
-    
+
     if (success && context.mounted) {
       final l10n = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(context).showSnackBar(

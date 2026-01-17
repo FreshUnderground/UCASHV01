@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ucashv01/flutter_gen/gen_l10n/app_localizations.dart';
 import '../services/documentation_service.dart';
 import '../services/auth_service.dart';
 
@@ -31,12 +31,16 @@ class _DocumentationWidgetState extends State<DocumentationWidget> {
         final locale = Localizations.localeOf(context);
         final systemLanguage = locale.languageCode == 'en' ? 'en' : 'fr';
         // Use selected language if set, otherwise fall back to system language
-        final language = _selectedLanguage.isNotEmpty ? _selectedLanguage : systemLanguage;
-        final sections = DocumentationService.searchSections(_searchQuery, userRole, language);
-        
+        final language =
+            _selectedLanguage.isNotEmpty ? _selectedLanguage : systemLanguage;
+        final sections = DocumentationService.searchSections(
+            _searchQuery, userRole, language);
+
         return Scaffold(
           appBar: AppBar(
-            title: Text(language == 'en' ? 'UCASH Documentation' : 'Documentation UCASH'),
+            title: Text(language == 'en'
+                ? 'UCASH Documentation'
+                : 'Documentation UCASH'),
             backgroundColor: const Color(0xFFDC2626),
             foregroundColor: Colors.white,
             elevation: 0,
@@ -66,7 +70,8 @@ class _DocumentationWidgetState extends State<DocumentationWidget> {
                         children: [
                           Text('🇫🇷', style: TextStyle(fontSize: 16)),
                           const SizedBox(width: 8),
-                          Text('Français', style: TextStyle(color: Colors.black87)),
+                          Text('Français',
+                              style: TextStyle(color: Colors.black87)),
                         ],
                       ),
                     ),
@@ -77,7 +82,8 @@ class _DocumentationWidgetState extends State<DocumentationWidget> {
                         children: [
                           Text('🇺🇸', style: TextStyle(fontSize: 16)),
                           const SizedBox(width: 8),
-                          Text('English', style: TextStyle(color: Colors.black87)),
+                          Text('English',
+                              style: TextStyle(color: Colors.black87)),
                         ],
                       ),
                     ),
@@ -105,7 +111,9 @@ class _DocumentationWidgetState extends State<DocumentationWidget> {
                       child: TextField(
                         controller: _searchController,
                         decoration: InputDecoration(
-                          hintText: language == 'en' ? 'Search documentation...' : 'Rechercher dans la documentation...',
+                          hintText: language == 'en'
+                              ? 'Search documentation...'
+                              : 'Rechercher dans la documentation...',
                           prefixIcon: const Icon(Icons.search),
                           suffixIcon: _searchQuery.isNotEmpty
                               ? IconButton(
@@ -131,11 +139,12 @@ class _DocumentationWidgetState extends State<DocumentationWidget> {
                         },
                       ),
                     ),
-                    
+
                     // Indicateur de rôle
                     Container(
                       margin: const EdgeInsets.symmetric(horizontal: 16),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
                         color: const Color(0xFFDC2626).withOpacity(0.1),
                         borderRadius: BorderRadius.circular(16),
@@ -163,9 +172,9 @@ class _DocumentationWidgetState extends State<DocumentationWidget> {
                         ],
                       ),
                     ),
-                    
+
                     const SizedBox(height: 16),
-                    
+
                     // Liste des sections
                     Expanded(
                       child: ListView.builder(
@@ -173,23 +182,24 @@ class _DocumentationWidgetState extends State<DocumentationWidget> {
                         itemBuilder: (context, index) {
                           final section = sections[index];
                           final isSelected = _selectedSectionId == section.id;
-                          
+
                           return Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            margin: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
                             child: ListTile(
                               leading: Icon(
                                 _getIconData(section.icon),
-                                color: isSelected 
+                                color: isSelected
                                     ? const Color(0xFFDC2626)
                                     : Colors.grey[600],
                               ),
                               title: Text(
                                 section.title,
                                 style: TextStyle(
-                                  fontWeight: isSelected 
-                                      ? FontWeight.bold 
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
                                       : FontWeight.normal,
-                                  color: isSelected 
+                                  color: isSelected
                                       ? const Color(0xFFDC2626)
                                       : Colors.black87,
                                 ),
@@ -204,7 +214,8 @@ class _DocumentationWidgetState extends State<DocumentationWidget> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                               selected: isSelected,
-                              selectedTileColor: const Color(0xFFDC2626).withOpacity(0.1),
+                              selectedTileColor:
+                                  const Color(0xFFDC2626).withOpacity(0.1),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(8),
                               ),
@@ -221,7 +232,7 @@ class _DocumentationWidgetState extends State<DocumentationWidget> {
                   ],
                 ),
               ),
-              
+
               // Contenu principal
               Expanded(
                 child: _selectedSectionId == null
@@ -238,8 +249,9 @@ class _DocumentationWidgetState extends State<DocumentationWidget> {
   Widget _buildWelcomeScreen(String userRole) {
     final locale = Localizations.localeOf(context);
     final systemLanguage = locale.languageCode == 'en' ? 'en' : 'fr';
-    final language = _selectedLanguage.isNotEmpty ? _selectedLanguage : systemLanguage;
-    
+    final language =
+        _selectedLanguage.isNotEmpty ? _selectedLanguage : systemLanguage;
+
     return Container(
       padding: const EdgeInsets.all(32),
       child: Column(
@@ -252,13 +264,13 @@ class _DocumentationWidgetState extends State<DocumentationWidget> {
           ),
           const SizedBox(height: 24),
           Text(
-            language == 'en' 
+            language == 'en'
                 ? 'Welcome to UCASH Documentation'
                 : 'Bienvenue dans la Documentation UCASH',
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-              color: const Color(0xFFDC2626),
-              fontWeight: FontWeight.bold,
-            ),
+                  color: const Color(0xFFDC2626),
+                  fontWeight: FontWeight.bold,
+                ),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
@@ -267,8 +279,8 @@ class _DocumentationWidgetState extends State<DocumentationWidget> {
                 ? 'Specialized documentation for ${_getRoleDisplayName(userRole, language)}'
                 : 'Documentation spécialisée pour ${_getRoleDisplayName(userRole, language)}',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: Colors.grey[600],
-            ),
+                  color: Colors.grey[600],
+                ),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 32),
@@ -301,15 +313,15 @@ class _DocumentationWidgetState extends State<DocumentationWidget> {
                 Text(
                   language == 'en'
                       ? '• Select a section from the left menu\n'
-                        '• Use the search bar to find quickly\n'
-                        '• Each section contains detailed guides\n'
-                        '• Information is adapted to your role\n'
-                        '• Use the language selector to switch between French and English'
+                          '• Use the search bar to find quickly\n'
+                          '• Each section contains detailed guides\n'
+                          '• Information is adapted to your role\n'
+                          '• Use the language selector to switch between French and English'
                       : '• Sélectionnez une section dans le menu de gauche\n'
-                        '• Utilisez la barre de recherche pour trouver rapidement\n'
-                        '• Chaque section contient des guides détaillés\n'
-                        '• Les informations sont adaptées à votre rôle\n'
-                        '• Utilisez le sélecteur de langue pour basculer entre français et anglais',
+                          '• Utilisez la barre de recherche pour trouver rapidement\n'
+                          '• Chaque section contient des guides détaillés\n'
+                          '• Les informations sont adaptées à votre rôle\n'
+                          '• Utilisez le sélecteur de langue pour basculer entre français et anglais',
                   style: const TextStyle(color: Colors.blue),
                 ),
               ],
@@ -323,8 +335,9 @@ class _DocumentationWidgetState extends State<DocumentationWidget> {
   Widget _buildDocumentationContent(String sectionId) {
     final locale = Localizations.localeOf(context);
     final language = locale.languageCode == 'en' ? 'en' : 'fr';
-    final content = DocumentationService.getContentForSection(sectionId, language);
-    
+    final content =
+        DocumentationService.getContentForSection(sectionId, language);
+
     if (content == null) {
       return const Center(
         child: Text('Contenu non disponible'),
@@ -340,9 +353,9 @@ class _DocumentationWidgetState extends State<DocumentationWidget> {
           Text(
             content.title,
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-              color: const Color(0xFFDC2626),
-              fontWeight: FontWeight.bold,
-            ),
+                  color: const Color(0xFFDC2626),
+                  fontWeight: FontWeight.bold,
+                ),
           ),
           const SizedBox(height: 8),
           Container(
@@ -354,7 +367,7 @@ class _DocumentationWidgetState extends State<DocumentationWidget> {
             ),
           ),
           const SizedBox(height: 32),
-          
+
           // Sections de contenu
           ...content.sections.map((section) => _buildContentSection(section)),
         ],
@@ -398,7 +411,7 @@ class _DocumentationWidgetState extends State<DocumentationWidget> {
             ),
           ),
           const SizedBox(height: 16),
-          
+
           // Contenu de la section
           Container(
             padding: const EdgeInsets.all(20),
@@ -425,14 +438,14 @@ class _DocumentationWidgetState extends State<DocumentationWidget> {
   Widget _buildFormattedContent(String content) {
     final lines = content.split('\n');
     final widgets = <Widget>[];
-    
+
     for (int i = 0; i < lines.length; i++) {
       final line = lines[i].trim();
       if (line.isEmpty) {
         widgets.add(const SizedBox(height: 8));
         continue;
       }
-      
+
       // Titres avec **
       if (line.startsWith('**') && line.endsWith('**')) {
         widgets.add(
@@ -485,10 +498,18 @@ class _DocumentationWidgetState extends State<DocumentationWidget> {
         );
       }
       // Emojis avec texte
-      else if (line.contains('✅') || line.contains('🔒') || line.contains('📸') || 
-               line.contains('💰') || line.contains('🌍') || line.contains('🏪') ||
-               line.contains('👤') || line.contains('1️⃣') || line.contains('2️⃣') ||
-               line.contains('3️⃣') || line.contains('4️⃣') || line.contains('5️⃣')) {
+      else if (line.contains('✅') ||
+          line.contains('🔒') ||
+          line.contains('📸') ||
+          line.contains('💰') ||
+          line.contains('🌍') ||
+          line.contains('🏪') ||
+          line.contains('👤') ||
+          line.contains('1️⃣') ||
+          line.contains('2️⃣') ||
+          line.contains('3️⃣') ||
+          line.contains('4️⃣') ||
+          line.contains('5️⃣')) {
         widgets.add(
           Padding(
             padding: const EdgeInsets.only(left: 16, bottom: 4),
@@ -518,7 +539,7 @@ class _DocumentationWidgetState extends State<DocumentationWidget> {
         );
       }
     }
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: widgets,

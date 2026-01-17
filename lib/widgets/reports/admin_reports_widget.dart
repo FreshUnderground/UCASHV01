@@ -10,7 +10,7 @@ import 'admin_flot_report.dart';
 import 'company_net_position_report.dart';
 import '../../utils/responsive_utils.dart';
 import '../../theme/ucash_containers.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ucashv01/flutter_gen/gen_l10n/app_localizations.dart';
 
 class AdminReportsWidget extends StatefulWidget {
   const AdminReportsWidget({super.key});
@@ -19,25 +19,28 @@ class AdminReportsWidget extends StatefulWidget {
   State<AdminReportsWidget> createState() => _AdminReportsWidgetState();
 }
 
-class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTickerProviderStateMixin {
+class _AdminReportsWidgetState extends State<AdminReportsWidget>
+    with SingleTickerProviderStateMixin {
   TabController? _tabController;
-  
+
   DateTime? _startDate;
   DateTime? _endDate;
   int? _selectedShopId;
 
   List<Tab> _buildTabs(BuildContext context, bool isMobile) {
-    final l10n = AppLocalizations.of(context);
-    
+    final l10n = AppLocalizations.of(context)!;
+
     if (isMobile) {
       return [
         Tab(icon: const Icon(Icons.business), text: l10n.enterprise),
         Tab(icon: const Icon(Icons.account_balance), text: l10n.cashRegister),
         Tab(icon: const Icon(Icons.receipt_long), text: l10n.closure),
         Tab(icon: const Icon(Icons.list_alt), text: l10n.closures),
-        Tab(icon: const Icon(Icons.monetization_on), text: l10n.commissionsReport),
+        Tab(
+            icon: const Icon(Icons.monetization_on),
+            text: l10n.commissionsReport),
         Tab(icon: const Icon(Icons.local_shipping), text: l10n.flot),
-        Tab(icon: const Icon(Icons.compare_arrows), text: 'Dettes Bil.'),
+        const Tab(icon: Icon(Icons.compare_arrows), text: 'Dettes Bil.'),
       ];
     } else {
       return [
@@ -45,9 +48,11 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
         Tab(icon: const Icon(Icons.account_balance), text: l10n.cashMovements),
         Tab(icon: const Icon(Icons.receipt_long), text: l10n.dailyClosure),
         Tab(icon: const Icon(Icons.list_alt), text: l10n.closureHistory),
-        Tab(icon: const Icon(Icons.monetization_on), text: l10n.commissionsReport),
+        Tab(
+            icon: const Icon(Icons.monetization_on),
+            text: l10n.commissionsReport),
         Tab(icon: const Icon(Icons.local_shipping), text: l10n.flotMovements),
-        Tab(icon: const Icon(Icons.compare_arrows), text: 'Dettes Bilatérales'),
+        const Tab(icon: Icon(Icons.compare_arrows), text: 'Dettes Bilatérales'),
       ];
     }
   }
@@ -79,15 +84,15 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
   Widget build(BuildContext context) {
     final isMobile = context.isSmallScreen;
     final isTablet = context.screenType == ScreenType.tablet;
-    final l10n = AppLocalizations.of(context);
-    
+    final l10n = AppLocalizations.of(context)!;
+
     // Return loading indicator if TabController not initialized
     if (_tabController == null) {
       return const Center(child: CircularProgressIndicator());
     }
-    
+
     final tabs = _buildTabs(context, isMobile);
-    
+
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -113,12 +118,14 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
               decoration: BoxDecoration(
                 color: Colors.white.withOpacity(0.95),
                 borderRadius: BorderRadius.circular(
-                  ResponsiveUtils.getFluidBorderRadius(context, mobile: 12, tablet: 16, desktop: 20),
+                  ResponsiveUtils.getFluidBorderRadius(context,
+                      mobile: 12, tablet: 16, desktop: 20),
                 ),
                 boxShadow: [
                   BoxShadow(
                     color: const Color(0xFFDC2626).withOpacity(0.1),
-                    blurRadius: context.fluidSpacing(mobile: 10, tablet: 15, desktop: 20),
+                    blurRadius: context.fluidSpacing(
+                        mobile: 10, tablet: 15, desktop: 20),
                     offset: const Offset(0, 2),
                   ),
                 ],
@@ -141,13 +148,17 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
                         end: Alignment.bottomRight,
                       ),
                       borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(ResponsiveUtils.getFluidBorderRadius(context, mobile: 12, tablet: 16, desktop: 20)),
-                        topRight: Radius.circular(ResponsiveUtils.getFluidBorderRadius(context, mobile: 12, tablet: 16, desktop: 20)),
+                        topLeft: Radius.circular(
+                            ResponsiveUtils.getFluidBorderRadius(context,
+                                mobile: 12, tablet: 16, desktop: 20)),
+                        topRight: Radius.circular(
+                            ResponsiveUtils.getFluidBorderRadius(context,
+                                mobile: 12, tablet: 16, desktop: 20)),
                       ),
                     ),
                     child: _buildModernHeader(isMobile, isTablet, l10n),
                   ),
-                  
+
                   // Filtres avec padding réduit sur mobile
                   Padding(
                     padding: context.fluidPadding(
@@ -186,16 +197,18 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
                 ],
               ),
             ),
-            
+
             // Onglets modernes avec design amélioré
             Container(
               margin: EdgeInsets.symmetric(
-                horizontal: context.fluidSpacing(mobile: 4, tablet: 8, desktop: 12),
+                horizontal:
+                    context.fluidSpacing(mobile: 4, tablet: 8, desktop: 12),
               ),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(
-                  ResponsiveUtils.getFluidBorderRadius(context, mobile: 10, tablet: 12, desktop: 14),
+                  ResponsiveUtils.getFluidBorderRadius(context,
+                      mobile: 10, tablet: 12, desktop: 14),
                 ),
                 boxShadow: [
                   BoxShadow(
@@ -207,7 +220,8 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(
-                  ResponsiveUtils.getFluidBorderRadius(context, mobile: 10, tablet: 12, desktop: 14),
+                  ResponsiveUtils.getFluidBorderRadius(context,
+                      mobile: 10, tablet: 12, desktop: 14),
                 ),
                 child: TabBar(
                   controller: _tabController,
@@ -221,35 +235,44 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
                   ),
                   isScrollable: true,
                   labelPadding: context.fluidPadding(
-                    mobile: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    tablet: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    desktop: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                    mobile:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    tablet: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    desktop: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 14),
                   ),
                   labelStyle: TextStyle(
-                    fontSize: context.fluidFont(mobile: 11, tablet: 13, desktop: 14),
+                    fontSize:
+                        context.fluidFont(mobile: 11, tablet: 13, desktop: 14),
                     fontWeight: FontWeight.w600,
                   ),
                   unselectedLabelStyle: TextStyle(
-                    fontSize: context.fluidFont(mobile: 10, tablet: 12, desktop: 13),
+                    fontSize:
+                        context.fluidFont(mobile: 10, tablet: 12, desktop: 13),
                     fontWeight: FontWeight.w500,
                   ),
                   onTap: (index) => _refreshCurrentReport(),
                 ),
               ),
             ),
-            
-            SizedBox(height: context.fluidSpacing(mobile: 6, tablet: 12, desktop: 16)),
-            
+
+            SizedBox(
+                height:
+                    context.fluidSpacing(mobile: 6, tablet: 12, desktop: 16)),
+
             // Contenu des rapports avec hauteur fixe
             Container(
               height: MediaQuery.of(context).size.height * 0.6,
               margin: EdgeInsets.symmetric(
-                horizontal: context.fluidSpacing(mobile: 4, tablet: 8, desktop: 12),
+                horizontal:
+                    context.fluidSpacing(mobile: 4, tablet: 8, desktop: 12),
               ),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(
-                  ResponsiveUtils.getFluidBorderRadius(context, mobile: 10, tablet: 12, desktop: 14),
+                  ResponsiveUtils.getFluidBorderRadius(context,
+                      mobile: 10, tablet: 12, desktop: 14),
                 ),
                 boxShadow: [
                   BoxShadow(
@@ -261,14 +284,15 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(
-                  ResponsiveUtils.getFluidBorderRadius(context, mobile: 10, tablet: 12, desktop: 14),
+                  ResponsiveUtils.getFluidBorderRadius(context,
+                      mobile: 10, tablet: 12, desktop: 14),
                 ),
                 child: TabBarView(
                   controller: _tabController,
                   children: [
                     // Tab 0: Situation Nette Entreprise
                     const CompanyNetPositionReport(),
-                    
+
                     // Tab 1: Mouvements de caisse (EXACTEMENT comme l'agent)
                     MouvementsCaisseReport(
                       shopId: _selectedShopId,
@@ -276,22 +300,22 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
                       endDate: _endDate,
                       showAllShops: _selectedShopId == null,
                     ),
-                    
+
                     // Tab 2: Clôture journalière (EXACTEMENT comme l'agent)
                     _selectedShopId != null
-                      ? RapportCloture(
-                          shopId: _selectedShopId!,
-                          isAdminView: true, // Admin ne peut pas clôturer
-                        )
-                      : _buildSelectShopMessage(l10n),
-                    
+                        ? RapportCloture(
+                            shopId: _selectedShopId!,
+                            isAdminView: true, // Admin ne peut pas clôturer
+                          )
+                        : _buildSelectShopMessage(l10n),
+
                     // Tab 3: Historique des clôtures
                     HistoriqueCloturesReport(
                       shopId: _selectedShopId,
                       startDate: _startDate,
                       endDate: _endDate,
                     ),
-                    
+
                     // Tab 4: Commissions
                     CommissionsReport(
                       shopId: _selectedShopId,
@@ -299,7 +323,7 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
                       endDate: _endDate,
                       showAllShops: _selectedShopId == null,
                     ),
-                    
+
                     // Tab 5: Mouvements FLOT
                     AdminFlotReport(
                       shopId: _selectedShopId,
@@ -310,8 +334,10 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
                 ),
               ),
             ),
-            
-            SizedBox(height: context.fluidSpacing(mobile: 4, tablet: 8, desktop: 12)),
+
+            SizedBox(
+                height:
+                    context.fluidSpacing(mobile: 4, tablet: 8, desktop: 12)),
           ],
         ),
       ),
@@ -323,7 +349,8 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
     setState(() {});
   }
 
-  Widget _buildModernHeader(bool isMobile, bool isTablet, AppLocalizations l10n) {
+  Widget _buildModernHeader(
+      bool isMobile, bool isTablet, AppLocalizations l10n) {
     if (isMobile) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -350,7 +377,8 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
                     Text(
                       l10n.adminReports,
                       style: TextStyle(
-                        fontSize: context.fluidFont(mobile: 15, tablet: 18, desktop: 20),
+                        fontSize: context.fluidFont(
+                            mobile: 15, tablet: 18, desktop: 20),
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
@@ -359,7 +387,8 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
                     Text(
                       l10n.advancedDashboards,
                       style: TextStyle(
-                        fontSize: context.fluidFont(mobile: 10, tablet: 12, desktop: 13),
+                        fontSize: context.fluidFont(
+                            mobile: 10, tablet: 12, desktop: 13),
                         color: Colors.white.withOpacity(0.9),
                       ),
                     ),
@@ -407,7 +436,8 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.2),
             borderRadius: BorderRadius.circular(
-              ResponsiveUtils.getFluidBorderRadius(context, mobile: 12, tablet: 14, desktop: 16),
+              ResponsiveUtils.getFluidBorderRadius(context,
+                  mobile: 12, tablet: 14, desktop: 16),
             ),
           ),
           child: Icon(
@@ -424,7 +454,8 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
               Text(
                 isTablet ? l10n.adminReports : l10n.adminReportsLong,
                 style: TextStyle(
-                  fontSize: context.fluidFont(mobile: 20, tablet: 22, desktop: 26),
+                  fontSize:
+                      context.fluidFont(mobile: 20, tablet: 22, desktop: 26),
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
                   letterSpacing: -0.5,
@@ -434,7 +465,8 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
               Text(
                 l10n.analysisAndPerformanceTracking,
                 style: TextStyle(
-                  fontSize: context.fluidFont(mobile: 12, tablet: 13, desktop: 14),
+                  fontSize:
+                      context.fluidFont(mobile: 12, tablet: 13, desktop: 14),
                   color: Colors.white.withOpacity(0.9),
                 ),
               ),
@@ -463,12 +495,13 @@ class _AdminReportsWidgetState extends State<AdminReportsWidget> with SingleTick
               ),
               context.horizontalSpace(mobile: 4, tablet: 6, desktop: 7),
               Text(
-                _selectedShopId == null 
+                _selectedShopId == null
                     ? (isTablet ? l10n.allShops : l10n.allShops)
                     : l10n.shopSelected,
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: context.fluidFont(mobile: 11, tablet: 12, desktop: 13),
+                  fontSize:
+                      context.fluidFont(mobile: 11, tablet: 12, desktop: 13),
                   fontWeight: FontWeight.w600,
                 ),
               ),

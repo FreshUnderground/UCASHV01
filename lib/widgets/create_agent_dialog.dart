@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ucashv01/flutter_gen/gen_l10n/app_localizations.dart';
 import '../services/agent_service.dart';
 import '../services/shop_service.dart';
 import '../models/shop_model.dart';
@@ -77,7 +77,7 @@ class _CreateAgentDialogState extends State<CreateAgentDialog> {
                     },
                   ),
                   const SizedBox(height: 16),
-                  
+
                   TextFormField(
                     controller: _passwordController,
                     obscureText: _obscurePassword,
@@ -90,7 +90,9 @@ class _CreateAgentDialogState extends State<CreateAgentDialog> {
                       prefixIcon: const Icon(Icons.lock),
                       suffixIcon: IconButton(
                         icon: Icon(
-                          _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                          _obscurePassword
+                              ? Icons.visibility
+                              : Icons.visibility_off,
                         ),
                         onPressed: () {
                           setState(() {
@@ -108,13 +110,14 @@ class _CreateAgentDialogState extends State<CreateAgentDialog> {
                     },
                   ),
                   const SizedBox(height: 16),
-                  
+
                   // Champ Matricule avec génération automatique
                   TextFormField(
                     controller: _matriculeController,
                     decoration: InputDecoration(
                       labelText: 'Matricule',
-                      hintText: 'Généré automatiquement ou saisissez manuellement',
+                      hintText:
+                          'Généré automatiquement ou saisissez manuellement',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -138,7 +141,7 @@ class _CreateAgentDialogState extends State<CreateAgentDialog> {
                     },
                   ),
                   const SizedBox(height: 16),
-                  
+
                   DropdownButtonFormField<ShopModel>(
                     value: _selectedShop,
                     decoration: InputDecoration(
@@ -151,7 +154,8 @@ class _CreateAgentDialogState extends State<CreateAgentDialog> {
                     items: shopService.shops.map((shop) {
                       return DropdownMenuItem<ShopModel>(
                         value: shop,
-                        child: Text('${shop.designation} - ${shop.localisation}'),
+                        child:
+                            Text('${shop.designation} - ${shop.localisation}'),
                       );
                     }).toList(),
                     onChanged: (shop) {
@@ -166,7 +170,7 @@ class _CreateAgentDialogState extends State<CreateAgentDialog> {
                       return null;
                     },
                   ),
-                  
+
                   if (agentService.errorMessage != null) ...[
                     const SizedBox(height: 16),
                     Container(
@@ -190,7 +194,7 @@ class _CreateAgentDialogState extends State<CreateAgentDialog> {
                       ),
                     ),
                   ],
-                  
+
                   if (shopService.shops.isEmpty) ...[
                     const SizedBox(height: 16),
                     Container(
@@ -202,7 +206,8 @@ class _CreateAgentDialogState extends State<CreateAgentDialog> {
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.warning, color: Colors.orange[700], size: 20),
+                          Icon(Icons.warning,
+                              color: Colors.orange[700], size: 20),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
@@ -220,14 +225,16 @@ class _CreateAgentDialogState extends State<CreateAgentDialog> {
           ),
           actions: [
             TextButton(
-              onPressed: agentService.isLoading ? null : () {
-                Navigator.of(context).pop();
-              },
+              onPressed: agentService.isLoading
+                  ? null
+                  : () {
+                      Navigator.of(context).pop();
+                    },
               child: Text(l10n.cancel),
             ),
             ElevatedButton(
-              onPressed: (agentService.isLoading || shopService.shops.isEmpty) 
-                  ? null 
+              onPressed: (agentService.isLoading || shopService.shops.isEmpty)
+                  ? null
                   : _handleSubmit,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFDC2626),
@@ -262,7 +269,7 @@ class _CreateAgentDialogState extends State<CreateAgentDialog> {
   Future<void> _handleSubmit() async {
     final l10n = AppLocalizations.of(context)!;
     if (!_formKey.currentState!.validate()) return;
-    
+
     // Vérifier que le shop est sélectionné et a un ID valide
     if (_selectedShop == null || _selectedShop!.id == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -275,7 +282,7 @@ class _CreateAgentDialogState extends State<CreateAgentDialog> {
     }
 
     final agentService = Provider.of<AgentService>(context, listen: false);
-    
+
     final success = await agentService.createAgent(
       username: _usernameController.text.trim(),
       password: _passwordController.text.trim(),

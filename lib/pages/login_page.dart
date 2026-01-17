@@ -8,7 +8,7 @@ import '../services/shop_service.dart';
 import '../widgets/footer_widget.dart';
 import '../widgets/modern_widgets.dart';
 import '../widgets/language_selector.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ucashv01/flutter_gen/gen_l10n/app_localizations.dart';
 import '../config/app_theme.dart';
 import '../utils/responsive_utils.dart';
 import '../theme/ucash_typography.dart';
@@ -71,7 +71,7 @@ class _LoginPageState extends State<LoginPage> {
         final connectivityService = ConnectivityService.instance;
         if (connectivityService.isOnline) {
           debugPrint('🔄 Démarrage synchronisation arrière-plan post-login...');
-          
+
           // Sync agents and shops silently en arrière-plan
           final agentService = AgentService.instance;
           final shopService = ShopService.instance;
@@ -119,7 +119,8 @@ class _LoginPageState extends State<LoginPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('✅ Admin créé/recréé ! Username: admin, Password: admin123'),
+            content: Text(
+                '✅ Admin créé/recréé ! Username: admin, Password: admin123'),
             backgroundColor: Colors.green,
             duration: Duration(seconds: 4),
           ),
@@ -139,7 +140,7 @@ class _LoginPageState extends State<LoginPage> {
 
   void _showBilingualHelpDialog(BuildContext context) {
     bool isEnglish = Localizations.localeOf(context).languageCode == 'en';
-    
+
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -147,7 +148,8 @@ class _LoginPageState extends State<LoginPage> {
           title: Row(
             children: [
               Expanded(
-                child: Text(isEnglish ? 'UCASH Complete Guide' : 'Guide Complet UCASH'),
+                child: Text(
+                    isEnglish ? 'UCASH Complete Guide' : 'Guide Complet UCASH'),
               ),
               ToggleButtons(
                 isSelected: [!isEnglish, isEnglish],
@@ -170,7 +172,8 @@ class _LoginPageState extends State<LoginPage> {
             ],
           ),
           content: SingleChildScrollView(
-            child: Text(isEnglish ? _getEnglishHelpText() : _getFrenchHelpText()),
+            child:
+                Text(isEnglish ? _getEnglishHelpText() : _getFrenchHelpText()),
           ),
           actions: [
             TextButton(
@@ -808,311 +811,366 @@ Pour plus d'aide, cliquez sur le bouton d'aide.''';
                 ],
               ),
             ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              Expanded(
-                child: Center(
-                  child: SingleChildScrollView(
-                    padding: context.fluidPadding(
-                      mobile: const EdgeInsets.all(16),
-                      tablet: const EdgeInsets.all(32),
-                      desktop: const EdgeInsets.all(48),
-                    ),
-                    child: Container(
-                      constraints: BoxConstraints(
-                        maxWidth: ResponsiveUtils.getMaxContainerWidth(context),
-                      ),
-                      child: context.adaptiveCard(
-                        child: Form(
-                          key: _formKey,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // Header moderne avec logo
-                              TweenAnimationBuilder<double>(
-                                duration: const Duration(milliseconds: 800),
-                                tween: Tween(begin: 0.0, end: 1.0),
-                                curve: AppTheme.bounceCurve,
-                                builder: (context, value, child) {
-                                  final logoSize = context.fluidIcon(mobile: 100, tablet: 120, desktop: 140);
-                                  return Transform.scale(
-                                    scale: value,
-                                    child: Container(
-                                      width: logoSize,
-                                      height: logoSize,
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius: BorderRadius.circular(context.fluidBorderRadius()),
-                                        boxShadow: AppTheme.mediumShadow,
-                                      ),
-                                      padding: const EdgeInsets.all(8),
-                                      child: Image.asset(
-                                        'assets/images/logo.png',
-                                        fit: BoxFit.contain,
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                              
-                              context.verticalSpace(mobile: 24, tablet: 28, desktop: 32),
-                              
-                              // Titre avec animation
-                              TweenAnimationBuilder<double>(
-                                duration: const Duration(milliseconds: 600),
-                                tween: Tween(begin: 0.0, end: 1.0),
-                                curve: Curves.easeOutQuart,
-                                builder: (context, value, child) {
-                                  return Opacity(
-                                    opacity: value,
-                                    child: Transform.translate(
-                                      offset: Offset(0, 20 * (1 - value)),
-                                      child: Column(
-                                        children: [
-                                          Text(
-                                            'UCASH',
-                                            style: context.h1.copyWith(
-                                              color: AppTheme.textPrimary,
-                                              fontWeight: FontWeight.w700,
-                                            ),
+            child: SafeArea(
+              child: Column(
+                children: [
+                  Expanded(
+                    child: Center(
+                      child: SingleChildScrollView(
+                        padding: context.fluidPadding(
+                          mobile: const EdgeInsets.all(16),
+                          tablet: const EdgeInsets.all(32),
+                          desktop: const EdgeInsets.all(48),
+                        ),
+                        child: Container(
+                          constraints: BoxConstraints(
+                            maxWidth:
+                                ResponsiveUtils.getMaxContainerWidth(context),
+                          ),
+                          child: context.adaptiveCard(
+                            child: Form(
+                              key: _formKey,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // Header moderne avec logo
+                                  TweenAnimationBuilder<double>(
+                                    duration: const Duration(milliseconds: 800),
+                                    tween: Tween(begin: 0.0, end: 1.0),
+                                    curve: AppTheme.bounceCurve,
+                                    builder: (context, value, child) {
+                                      final logoSize = context.fluidIcon(
+                                          mobile: 100,
+                                          tablet: 120,
+                                          desktop: 140);
+                                      return Transform.scale(
+                                        scale: value,
+                                        child: Container(
+                                          width: logoSize,
+                                          height: logoSize,
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(
+                                                context.fluidBorderRadius()),
+                                            boxShadow: AppTheme.mediumShadow,
                                           ),
-                                          context.verticalSpace(mobile: 6, tablet: 8, desktop: 10),
-                                          Text(
-                                            l10n.modernSecureTransfer,
-                                            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                          padding: const EdgeInsets.all(8),
+                                          child: Image.asset(
+                                            'assets/images/logo.png',
+                                            fit: BoxFit.contain,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+
+                                  context.verticalSpace(
+                                      mobile: 24, tablet: 28, desktop: 32),
+
+                                  // Titre avec animation
+                                  TweenAnimationBuilder<double>(
+                                    duration: const Duration(milliseconds: 600),
+                                    tween: Tween(begin: 0.0, end: 1.0),
+                                    curve: Curves.easeOutQuart,
+                                    builder: (context, value, child) {
+                                      return Opacity(
+                                        opacity: value,
+                                        child: Transform.translate(
+                                          offset: Offset(0, 20 * (1 - value)),
+                                          child: Column(
+                                            children: [
+                                              Text(
+                                                'UCASH',
+                                                style: context.h1.copyWith(
+                                                  color: AppTheme.textPrimary,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                              context.verticalSpace(
+                                                  mobile: 6,
+                                                  tablet: 8,
+                                                  desktop: 10),
+                                              Text(
+                                                l10n.modernSecureTransfer,
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodyLarge
+                                                    ?.copyWith(
+                                                      color: AppTheme
+                                                          .textSecondary,
+                                                    ),
+                                                textAlign: TextAlign.center,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+
+                                  context.verticalSpace(
+                                      mobile: 32, tablet: 36, desktop: 40),
+
+                                  // Champs de connexion modernes
+                                  ModernTextField(
+                                    label: l10n.username,
+                                    hint: l10n.enterUsername,
+                                    controller: _usernameController,
+                                    prefixIcon: Icons.person_outline,
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return l10n.pleaseEnterUsername;
+                                      }
+                                      return null;
+                                    },
+                                  ),
+
+                                  context.verticalSpace(
+                                      mobile: 16, tablet: 18, desktop: 20),
+
+                                  ModernTextField(
+                                    label: l10n.password,
+                                    hint: l10n.enterPassword,
+                                    controller: _passwordController,
+                                    obscureText: _obscurePassword,
+                                    prefixIcon: Icons.lock_outline,
+                                    suffixIcon: _obscurePassword
+                                        ? Icons.visibility
+                                        : Icons.visibility_off,
+                                    onSuffixIconTap: () {
+                                      setState(() {
+                                        _obscurePassword = !_obscurePassword;
+                                      });
+                                    },
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return l10n.pleaseEnterPassword;
+                                      }
+                                      return null;
+                                    },
+                                  ),
+
+                                  context.verticalSpace(
+                                      mobile: 12, tablet: 14, desktop: 16),
+
+                                  // Se souvenir de moi
+                                  Row(
+                                    children: [
+                                      Transform.scale(
+                                        scale: 1.2,
+                                        child: Checkbox(
+                                          value: _rememberMe,
+                                          onChanged: (value) {
+                                            setState(() {
+                                              _rememberMe = value ?? false;
+                                            });
+                                          },
+                                          activeColor: AppTheme.primaryRed,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: AppTheme.spacing8),
+                                      Text(
+                                        l10n.rememberMe,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyMedium
+                                            ?.copyWith(
                                               color: AppTheme.textSecondary,
                                             ),
-                                            textAlign: TextAlign.center,
-                                          ),
-                                        ],
                                       ),
-                                    ),
-                                  );
-                                },
-                              ),
-                              
-                              context.verticalSpace(mobile: 32, tablet: 36, desktop: 40),
-                              
-                              // Champs de connexion modernes
-                              ModernTextField(
-                                label: l10n.username,
-                                hint: l10n.enterUsername,
-                                controller: _usernameController,
-                                prefixIcon: Icons.person_outline,
-                                validator: (value) {
-                                  if (value == null || value.isEmpty) {
-                                    return l10n.pleaseEnterUsername;
-                                  }
-                                  return null;
-                                },
-                              ),
-                              
-                              context.verticalSpace(mobile: 16, tablet: 18, desktop: 20),
-                              
-                              ModernTextField(
-                                label: l10n.password,
-                                hint: l10n.enterPassword,
-                                controller: _passwordController,
-                                obscureText: _obscurePassword,
-                                prefixIcon: Icons.lock_outline,
-                                suffixIcon: _obscurePassword ? Icons.visibility : Icons.visibility_off,
-                                onSuffixIconTap: () {
-                                  setState(() {
-                                    _obscurePassword = !_obscurePassword;
-                                  });
-                                },
-                                validator: (value) {
-                                  if (value == null || value.isEmpty) {
-                                    return l10n.pleaseEnterPassword;
-                                  }
-                                  return null;
-                                },
-                              ),
-                              
-                              context.verticalSpace(mobile: 12, tablet: 14, desktop: 16),
-                              
-                              // Se souvenir de moi
-                              Row(
-                                children: [
-                                  Transform.scale(
-                                    scale: 1.2,
-                                    child: Checkbox(
-                                      value: _rememberMe,
-                                      onChanged: (value) {
-                                        setState(() {
-                                          _rememberMe = value ?? false;
-                                        });
-                                      },
-                                      activeColor: AppTheme.primaryRed,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
+                                    ],
+                                  ),
+
+                                  const SizedBox(height: AppTheme.spacing32),
+
+                                  // Bouton de connexion moderne
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ModernButton(
+                                      text: l10n.login,
+                                      onPressed:
+                                          _isLoading ? null : _handleLogin,
+                                      isLoading: _isLoading,
+                                      icon: Icons.login,
+                                      style: ModernButtonStyle.primary,
                                     ),
                                   ),
-                                  const SizedBox(width: AppTheme.spacing8),
-                                  Text(
-                                    l10n.rememberMe,
-                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                      color: AppTheme.textSecondary,
+
+                                  const SizedBox(height: AppTheme.spacing24),
+
+                                  // Liens d'accès rapide
+                                  if (context.isSmallScreen)
+                                    Column(
+                                      children: [
+                                        SizedBox(
+                                          width: double.infinity,
+                                          child: ModernButton(
+                                            text: l10n.agentLogin,
+                                            onPressed: () {
+                                              Navigator.pushNamed(
+                                                  context, '/agent-login');
+                                            },
+                                            style: ModernButtonStyle.outline,
+                                          ),
+                                        ),
+                                        context.verticalSpace(
+                                            mobile: 12,
+                                            tablet: 14,
+                                            desktop: 16),
+                                        SizedBox(
+                                          width: double.infinity,
+                                          child: ModernButton(
+                                            text: l10n.clientLogin,
+                                            onPressed: () {
+                                              Navigator.pushNamed(
+                                                  context, '/client-login');
+                                            },
+                                            style: ModernButtonStyle.ghost,
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  else
+                                    Wrap(
+                                      alignment: WrapAlignment.center,
+                                      spacing: context.fluidSpacing(
+                                          mobile: 12, tablet: 16, desktop: 20),
+                                      runSpacing: context.fluidSpacing(
+                                          mobile: 8, tablet: 12, desktop: 16),
+                                      children: [
+                                        ModernButton(
+                                          text: l10n.agentLogin,
+                                          onPressed: () {
+                                            Navigator.pushNamed(
+                                                context, '/agent-login');
+                                          },
+                                          style: ModernButtonStyle.outline,
+                                          size: const Size(140, 40),
+                                        ),
+                                        ModernButton(
+                                          text: l10n.clientLogin,
+                                          onPressed: () {
+                                            Navigator.pushNamed(
+                                                context, '/client-login');
+                                          },
+                                          style: ModernButtonStyle.ghost,
+                                          size: const Size(140, 40),
+                                        ),
+                                      ],
                                     ),
+
+                                  if (context.isSmallScreen) ...[
+                                    context.verticalSpace(
+                                        mobile: 20, tablet: 22, desktop: 24),
+                                    TextButton(
+                                      onPressed: _createDefaultAdmin,
+                                      child: Text(
+                                        l10n.createDefaultAdmin,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: AppTheme.textLight,
+                                            ),
+                                      ),
+                                    ),
+                                  ],
+
+                                  // Message d'erreur moderne
+                                  Consumer<AuthService>(
+                                    builder: (context, authService, child) {
+                                      if (authService.errorMessage != null) {
+                                        return TweenAnimationBuilder<double>(
+                                          duration: AppTheme.normalAnimation,
+                                          tween: Tween(begin: 0.0, end: 1.0),
+                                          builder: (context, value, child) {
+                                            return Transform.scale(
+                                              scale: value,
+                                              child: Container(
+                                                margin: EdgeInsets.only(
+                                                    top: context.fluidSpacing(
+                                                        mobile: 12,
+                                                        tablet: 14,
+                                                        desktop: 16)),
+                                                padding: context.fluidPadding(
+                                                  mobile:
+                                                      const EdgeInsets.all(12),
+                                                  tablet:
+                                                      const EdgeInsets.all(14),
+                                                  desktop:
+                                                      const EdgeInsets.all(16),
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: AppTheme.error
+                                                      .withOpacity(0.1),
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                          AppTheme
+                                                              .radiusMedium),
+                                                  border: Border.all(
+                                                    color: AppTheme.error
+                                                        .withOpacity(0.3),
+                                                  ),
+                                                ),
+                                                child: Row(
+                                                  children: [
+                                                    const Icon(
+                                                      Icons.error_outline,
+                                                      color: AppTheme.error,
+                                                      size: 20,
+                                                    ),
+                                                    SizedBox(
+                                                        width: context
+                                                            .fluidSpacing(
+                                                                mobile: 6,
+                                                                tablet: 8,
+                                                                desktop: 10)),
+                                                    Expanded(
+                                                      child: Text(
+                                                        authService
+                                                            .errorMessage!,
+                                                        style: const TextStyle(
+                                                          color: AppTheme.error,
+                                                          fontWeight:
+                                                              FontWeight.w500,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        );
+                                      }
+                                      return const SizedBox.shrink();
+                                    },
                                   ),
                                 ],
                               ),
-                              
-                              const SizedBox(height: AppTheme.spacing32),
-                              
-                              // Bouton de connexion moderne
-                              SizedBox(
-                                width: double.infinity,
-                                child: ModernButton(
-                                  text: l10n.login,
-                                  onPressed: _isLoading ? null : _handleLogin,
-                                  isLoading: _isLoading,
-                                  icon: Icons.login,
-                                  style: ModernButtonStyle.primary,
-                                ),
-                              ),
-                              
-                              const SizedBox(height: AppTheme.spacing24),
-                              
-                              // Liens d'accès rapide
-                              if (context.isSmallScreen)
-                                Column(
-                                  children: [
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: ModernButton(
-                                        text: l10n.agentLogin,
-                                        onPressed: () {
-                                          Navigator.pushNamed(context, '/agent-login');
-                                        },
-                                        style: ModernButtonStyle.outline,
-                                      ),
-                                    ),
-                                    context.verticalSpace(mobile: 12, tablet: 14, desktop: 16),
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: ModernButton(
-                                        text: l10n.clientLogin,
-                                        onPressed: () {
-                                          Navigator.pushNamed(context, '/client-login');
-                                        },
-                                        style: ModernButtonStyle.ghost,
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              else
-                                Wrap(
-                                  alignment: WrapAlignment.center,
-                                  spacing: context.fluidSpacing(mobile: 12, tablet: 16, desktop: 20),
-                                  runSpacing: context.fluidSpacing(mobile: 8, tablet: 12, desktop: 16),
-                                  children: [
-                                    ModernButton(
-                                      text: l10n.agentLogin,
-                                      onPressed: () {
-                                        Navigator.pushNamed(context, '/agent-login');
-                                      },
-                                      style: ModernButtonStyle.outline,
-                                      size: const Size(140, 40),
-                                    ),
-                                    ModernButton(
-                                      text: l10n.clientLogin,
-                                      onPressed: () {
-                                        Navigator.pushNamed(context, '/client-login');
-                                      },
-                                      style: ModernButtonStyle.ghost,
-                                      size: const Size(140, 40),
-                                    ),
-                                  ],
-                                ),
-                              
-                              if (context.isSmallScreen) ...[
-                                context.verticalSpace(mobile: 20, tablet: 22, desktop: 24),
-                                TextButton(
-                                  onPressed: _createDefaultAdmin,
-                                  child: Text(
-                                    l10n.createDefaultAdmin,
-                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: AppTheme.textLight,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                              
-                              // Message d'erreur moderne
-                              Consumer<AuthService>(
-                                builder: (context, authService, child) {
-                                  if (authService.errorMessage != null) {
-                                    return TweenAnimationBuilder<double>(
-                                      duration: AppTheme.normalAnimation,
-                                      tween: Tween(begin: 0.0, end: 1.0),
-                                      builder: (context, value, child) {
-                                        return Transform.scale(
-                                          scale: value,
-                                          child: Container(
-                                            margin: EdgeInsets.only(top: context.fluidSpacing(mobile: 12, tablet: 14, desktop: 16)),
-                                            padding: context.fluidPadding(
-                                              mobile: const EdgeInsets.all(12),
-                                              tablet: const EdgeInsets.all(14),
-                                              desktop: const EdgeInsets.all(16),
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: AppTheme.error.withOpacity(0.1),
-                                              borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
-                                              border: Border.all(
-                                                color: AppTheme.error.withOpacity(0.3),
-                                              ),
-                                            ),
-                                            child: Row(
-                                              children: [
-                                                const Icon(
-                                                  Icons.error_outline,
-                                                  color: AppTheme.error,
-                                                  size: 20,
-                                                ),
-                                                SizedBox(width: context.fluidSpacing(mobile: 6, tablet: 8, desktop: 10)),
-                                                Expanded(
-                                                  child: Text(
-                                                    authService.errorMessage!,
-                                                    style: const TextStyle(
-                                                      color: AppTheme.error,
-                                                      fontWeight: FontWeight.w500,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                    );
-                                  }
-                                  return const SizedBox.shrink();
-                                },
-                              ),
-                            ],
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
+                  const FooterWidget(),
+                ],
               ),
-              const FooterWidget(),
-            ],
+            ),
           ),
-        ),
-          ),
-          
+
           // Sélecteur de langue en haut à droite
           const Positioned(
             top: 16,
             right: 16,
             child: LanguageSelector(compact: true),
           ),
-          
+
           // Bouton d'aide en haut à gauche
           Positioned(
             top: 16,

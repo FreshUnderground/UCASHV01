@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ucashv01/flutter_gen/gen_l10n/app_localizations.dart';
 import '../services/agent_service.dart';
 import '../services/shop_service.dart';
 
@@ -13,22 +13,25 @@ class AgentsStatsWidget extends StatelessWidget {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 600;
     final isTablet = size.width > 600 && size.width <= 900;
-    
+
     return Consumer2<AgentService, ShopService>(
       builder: (context, agentService, shopService, child) {
         final agents = agentService.agents;
         final activeAgents = agents.where((a) => a.isActive).length;
         final inactiveAgents = agents.length - activeAgents;
-        
+
         final agentsByShop = <int, int>{};
         for (var agent in agents) {
           if (agent.shopId != null) {
-            agentsByShop[agent.shopId!] = (agentsByShop[agent.shopId!] ?? 0) + 1;
+            agentsByShop[agent.shopId!] =
+                (agentsByShop[agent.shopId!] ?? 0) + 1;
           }
         }
-        
+
         final shopsWithAgents = agentsByShop.keys.length;
-        final shopsWithoutAgents = shopService.shops.where((shop) => shop.id != null).length - shopsWithAgents;
+        final shopsWithoutAgents =
+            shopService.shops.where((shop) => shop.id != null).length -
+                shopsWithAgents;
 
         return Card(
           elevation: 0,
@@ -68,19 +71,18 @@ class AgentsStatsWidget extends StatelessWidget {
                   ],
                 ),
                 SizedBox(height: isMobile ? 16 : 20),
-                
                 LayoutBuilder(
                   builder: (context, constraints) {
                     return _buildResponsiveStatsGrid(
-                      isMobile, 
+                      isMobile,
                       isTablet,
                       agents.length,
                       activeAgents,
                       inactiveAgents,
                       shopsWithAgents,
                       shopsWithoutAgents,
-                      shopService.shops.isEmpty 
-                          ? '0%' 
+                      shopService.shops.isEmpty
+                          ? '0%'
                           : '${((shopsWithAgents / shopService.shops.length) * 100).toStringAsFixed(0)}%',
                       constraints.maxWidth,
                       context,
@@ -109,56 +111,91 @@ class AgentsStatsWidget extends StatelessWidget {
   ) {
     final l10n = AppLocalizations.of(context)!;
     final stats = [
-      {'title': l10n.total, 'value': '$totalAgents', 'icon': Icons.people, 'color': const Color(0xFF2563EB)},
-      {'title': l10n.active, 'value': '$activeAgents', 'icon': Icons.check_circle, 'color': const Color(0xFF059669)},
-      {'title': l10n.inactive, 'value': '$inactiveAgents', 'icon': Icons.pause_circle, 'color': const Color(0xFFEA580C)},
-      {'title': l10n.withAgents, 'value': '$shopsWithAgents', 'icon': Icons.store, 'color': const Color(0xFF7C3AED)},
-      {'title': l10n.withoutAgents, 'value': '$shopsWithoutAgents', 'icon': Icons.store_outlined, 'color': const Color(0xFF9CA3AF)},
-      {'title': l10n.rate, 'value': occupationRate, 'icon': Icons.pie_chart, 'color': const Color(0xFFDC2626)},
+      {
+        'title': l10n.total,
+        'value': '$totalAgents',
+        'icon': Icons.people,
+        'color': const Color(0xFF2563EB)
+      },
+      {
+        'title': l10n.active,
+        'value': '$activeAgents',
+        'icon': Icons.check_circle,
+        'color': const Color(0xFF059669)
+      },
+      {
+        'title': l10n.inactive,
+        'value': '$inactiveAgents',
+        'icon': Icons.pause_circle,
+        'color': const Color(0xFFEA580C)
+      },
+      {
+        'title': l10n.withAgents,
+        'value': '$shopsWithAgents',
+        'icon': Icons.store,
+        'color': const Color(0xFF7C3AED)
+      },
+      {
+        'title': l10n.withoutAgents,
+        'value': '$shopsWithoutAgents',
+        'icon': Icons.store_outlined,
+        'color': const Color(0xFF9CA3AF)
+      },
+      {
+        'title': l10n.rate,
+        'value': occupationRate,
+        'icon': Icons.pie_chart,
+        'color': const Color(0xFFDC2626)
+      },
     ];
 
     if (isMobile) {
       // 3 colonnes : largeur disponible / 3 - espacement
       final spacing = 8.0;
       final cardWidth = (availableWidth - (spacing * 2)) / 3;
-      
+
       return Wrap(
         spacing: spacing,
         runSpacing: spacing,
-        children: stats.map((stat) => 
-          SizedBox(
-            width: cardWidth,
-            child: _buildStatCard(
-              stat['title'] as String,
-              stat['value'] as String,
-              stat['icon'] as IconData,
-              stat['color'] as Color,
-              isMobile,
-            ),
-          ),
-        ).toList(),
+        children: stats
+            .map(
+              (stat) => SizedBox(
+                width: cardWidth,
+                child: _buildStatCard(
+                  stat['title'] as String,
+                  stat['value'] as String,
+                  stat['icon'] as IconData,
+                  stat['color'] as Color,
+                  isMobile,
+                ),
+              ),
+            )
+            .toList(),
       );
     }
 
     return Wrap(
       spacing: isTablet ? 10 : 12,
       runSpacing: isTablet ? 10 : 12,
-      children: stats.map((stat) => 
-        SizedBox(
-          width: (availableWidth - (isTablet ? 20 : 24)) / 3,
-          child: _buildStatCard(
-            stat['title'] as String,
-            stat['value'] as String,
-            stat['icon'] as IconData,
-            stat['color'] as Color,
-            isMobile,
-          ),
-        ),
-      ).toList(),
+      children: stats
+          .map(
+            (stat) => SizedBox(
+              width: (availableWidth - (isTablet ? 20 : 24)) / 3,
+              child: _buildStatCard(
+                stat['title'] as String,
+                stat['value'] as String,
+                stat['icon'] as IconData,
+                stat['color'] as Color,
+                isMobile,
+              ),
+            ),
+          )
+          .toList(),
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color, bool isMobile) {
+  Widget _buildStatCard(
+      String title, String value, IconData icon, Color color, bool isMobile) {
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: isMobile ? 6 : 12,

@@ -113,7 +113,7 @@ Le système UCASH est maintenant **100% bilingue** (Anglais/Français) avec supp
 
 ### **Import**
 ```dart
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ucashv01/flutter_gen/gen_l10n/app_localizations.dart';
 ```
 
 ### **Dans un Widget**

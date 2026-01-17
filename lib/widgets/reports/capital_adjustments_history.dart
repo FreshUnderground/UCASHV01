@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ucashv01/flutter_gen/gen_l10n/app_localizations.dart';
 import '../../services/capital_adjustment_service.dart';
 import '../../models/shop_model.dart';
 
@@ -16,7 +16,8 @@ class CapitalAdjustmentsHistory extends StatefulWidget {
   });
 
   @override
-  State<CapitalAdjustmentsHistory> createState() => _CapitalAdjustmentsHistoryState();
+  State<CapitalAdjustmentsHistory> createState() =>
+      _CapitalAdjustmentsHistoryState();
 }
 
 class _CapitalAdjustmentsHistoryState extends State<CapitalAdjustmentsHistory> {
@@ -62,7 +63,7 @@ class _CapitalAdjustmentsHistoryState extends State<CapitalAdjustmentsHistory> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    
+
     return Consumer<CapitalAdjustmentService>(
       builder: (context, service, _) {
         return Card(
@@ -129,7 +130,8 @@ class _CapitalAdjustmentsHistoryState extends State<CapitalAdjustmentsHistory> {
                   color: Colors.blue[50],
                   child: Row(
                     children: [
-                      Icon(Icons.filter_list, size: 16, color: Colors.blue[700]),
+                      Icon(Icons.filter_list,
+                          size: 16, color: Colors.blue[700]),
                       SizedBox(width: 8),
                       Text(
                         '${l10n.period}: ${_formatDate(_startDate)} - ${_formatDate(_endDate)}',

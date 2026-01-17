@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ucashv01/flutter_gen/gen_l10n/app_localizations.dart';
 import '../services/shop_service.dart';
 import '../services/auth_service.dart';
 import '../models/shop_model.dart';
@@ -30,8 +30,6 @@ class _ShopsManagementState extends State<ShopsManagement> {
     await shopService.loadShops();
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -41,11 +39,11 @@ class _ShopsManagementState extends State<ShopsManagement> {
         // Header responsive
         _buildHeader(),
         context.verticalSpace(mobile: 16, tablet: 20, desktop: 24),
-        
+
         // Statistiques rapides
         _buildStats(),
         context.verticalSpace(mobile: 16, tablet: 20, desktop: 24),
-        
+
         // Tableau des shops
         _buildShopsTable(),
       ],
@@ -66,13 +64,15 @@ class _ShopsManagementState extends State<ShopsManagement> {
           if (!context.isSmallScreen) ...[
             ElevatedButton.icon(
               onPressed: _loadData,
-              icon: Icon(Icons.refresh, size: context.fluidIcon(mobile: 16, tablet: 18, desktop: 20)),
+              icon: Icon(Icons.refresh,
+                  size: context.fluidIcon(mobile: 16, tablet: 18, desktop: 20)),
               label: Text(l10n.refresh),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1976D2),
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(context.fluidBorderRadius()),
+                  borderRadius:
+                      BorderRadius.circular(context.fluidBorderRadius()),
                 ),
               ),
             ),
@@ -80,13 +80,15 @@ class _ShopsManagementState extends State<ShopsManagement> {
           ],
           ElevatedButton.icon(
             onPressed: _showCreateDialog,
-            icon: Icon(Icons.add, size: context.fluidIcon(mobile: 16, tablet: 18, desktop: 20)),
+            icon: Icon(Icons.add,
+                size: context.fluidIcon(mobile: 16, tablet: 18, desktop: 20)),
             label: Text(context.isSmallScreen ? l10n.add : l10n.newShop),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFDC2626),
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(context.fluidBorderRadius()),
+                borderRadius:
+                    BorderRadius.circular(context.fluidBorderRadius()),
               ),
             ),
           ),
@@ -136,9 +138,10 @@ class _ShopsManagementState extends State<ShopsManagement> {
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+  Widget _buildStatCard(
+      String title, String value, IconData icon, Color color) {
     final isMobile = MediaQuery.of(context).size.width <= 600;
-    
+
     return Container(
       padding: EdgeInsets.all(isMobile ? 10 : 16),
       decoration: BoxDecoration(
@@ -163,8 +166,8 @@ class _ShopsManagementState extends State<ShopsManagement> {
               shape: BoxShape.circle,
             ),
             child: Icon(
-              icon, 
-              color: color, 
+              icon,
+              color: color,
               size: isMobile ? 18 : 24,
             ),
           ),
@@ -211,7 +214,9 @@ class _ShopsManagementState extends State<ShopsManagement> {
 
         return context.adaptiveCard(
           child: SingleChildScrollView(
-            child: context.isSmallScreen ? _buildMobileShopsList(shops) : _buildDesktopShopsTable(shops),
+            child: context.isSmallScreen
+                ? _buildMobileShopsList(shops)
+                : _buildDesktopShopsTable(shops),
           ),
         );
       },
@@ -296,7 +301,8 @@ class _ShopsManagementState extends State<ShopsManagement> {
                       value: 'adjust_capital',
                       child: Row(
                         children: [
-                          const Icon(Icons.account_balance, size: 18, color: Colors.green),
+                          const Icon(Icons.account_balance,
+                              size: 18, color: Colors.green),
                           const SizedBox(width: 8),
                           Text(AppLocalizations.of(context)!.adjustCapital),
                         ],
@@ -308,7 +314,8 @@ class _ShopsManagementState extends State<ShopsManagement> {
                         children: [
                           const Icon(Icons.delete, size: 18, color: Colors.red),
                           const SizedBox(width: 8),
-                          Text(AppLocalizations.of(context)!.delete, style: const TextStyle(color: Colors.red)),
+                          Text(AppLocalizations.of(context)!.delete,
+                              style: const TextStyle(color: Colors.red)),
                         ],
                       ),
                     ),
@@ -333,8 +340,8 @@ class _ShopsManagementState extends State<ShopsManagement> {
     return GridView.count(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 1,  // Changé de 2 à 1 car on n'affiche que Cash
-      childAspectRatio: 5.0,  // Ajusté pour une seule ligne
+      crossAxisCount: 1, // Changé de 2 à 1 car on n'affiche que Cash
+      childAspectRatio: 5.0, // Ajusté pour une seule ligne
       mainAxisSpacing: 8,
       crossAxisSpacing: 8,
       children: [
@@ -392,55 +399,55 @@ class _ShopsManagementState extends State<ShopsManagement> {
       child: DataTable(
         headingRowColor: MaterialStateProperty.all(Colors.grey[50]),
         columns: [
-            DataColumn(
-              label: Text(
-                l10n.shopName,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
+          DataColumn(
+            label: Text(
+              l10n.shopName,
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-            DataColumn(
-              label: Text(
-                l10n.location,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
+          ),
+          DataColumn(
+            label: Text(
+              l10n.location,
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-            DataColumn(
-              label: Text(
-                l10n.capitalCash,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
+          ),
+          DataColumn(
+            label: Text(
+              l10n.capitalCash,
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-            // MASQUÉ: Airtel Money, M-Pesa, Orange Money ne doivent pas être visibles
-            // DataColumn(
-            //   label: Text(
-            //     'Airtel Money',
-            //     style: TextStyle(fontWeight: FontWeight.bold),
-            //   ),
-            // ),
-            // DataColumn(
-            //   label: Text(
-            //     'M-Pesa',
-            //     style: TextStyle(fontWeight: FontWeight.bold),
-            //   ),
-            // ),
-            // DataColumn(
-            //   label: Text(
-            //     'Orange Money',
-            //     style: TextStyle(fontWeight: FontWeight.bold),
-            //   ),
-            // ),
-            DataColumn(
-              label: Text(
-                l10n.totalCapital,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
+          ),
+          // MASQUÉ: Airtel Money, M-Pesa, Orange Money ne doivent pas être visibles
+          // DataColumn(
+          //   label: Text(
+          //     'Airtel Money',
+          //     style: TextStyle(fontWeight: FontWeight.bold),
+          //   ),
+          // ),
+          // DataColumn(
+          //   label: Text(
+          //     'M-Pesa',
+          //     style: TextStyle(fontWeight: FontWeight.bold),
+          //   ),
+          // ),
+          // DataColumn(
+          //   label: Text(
+          //     'Orange Money',
+          //     style: TextStyle(fontWeight: FontWeight.bold),
+          //   ),
+          // ),
+          DataColumn(
+            label: Text(
+              l10n.totalCapital,
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-            DataColumn(
-              label: Text(
-                l10n.actions,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
+          ),
+          DataColumn(
+            label: Text(
+              l10n.actions,
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
+          ),
         ],
         rows: shops.map((shop) => _buildShopRow(shop)).toList(),
       ),
@@ -561,7 +568,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
   void _showDeleteDialog(ShopModel shop) {
     final l10n = AppLocalizations.of(context)!;
     final reasonController = TextEditingController();
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -606,7 +613,8 @@ class _ShopsManagementState extends State<ShopsManagement> {
               maxLines: 3,
               decoration: InputDecoration(
                 border: const OutlineInputBorder(),
-                hintText: 'Ex: Shop fermé définitivement, fusion avec un autre shop...',
+                hintText:
+                    'Ex: Shop fermé définitivement, fusion avec un autre shop...',
                 hintStyle: TextStyle(fontSize: 12, color: Colors.grey[400]),
               ),
             ),
@@ -620,7 +628,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
           ElevatedButton(
             onPressed: () async {
               final reason = reasonController.text.trim();
-              
+
               // Validation de la raison
               if (reason.isEmpty || reason.length < 10) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -631,9 +639,9 @@ class _ShopsManagementState extends State<ShopsManagement> {
                 );
                 return;
               }
-              
+
               Navigator.of(context).pop();
-              
+
               // Afficher un indicateur de chargement
               showDialog(
                 context: context,
@@ -642,16 +650,18 @@ class _ShopsManagementState extends State<ShopsManagement> {
                   child: CircularProgressIndicator(),
                 ),
               );
-              
+
               try {
-                final shopService = Provider.of<ShopService>(context, listen: false);
-                final authService = Provider.of<AuthService>(context, listen: false);
+                final shopService =
+                    Provider.of<ShopService>(context, listen: false);
+                final authService =
+                    Provider.of<AuthService>(context, listen: false);
                 final user = authService.currentUser;
-                
+
                 if (user == null) {
                   throw Exception(l10n.userNotConnected);
                 }
-                
+
                 // Utiliser la nouvelle API avec audit trail
                 final result = await shopService.deleteShopViaAPI(
                   shop.id!,
@@ -661,14 +671,15 @@ class _ShopsManagementState extends State<ShopsManagement> {
                   deleteType: 'soft', // Soft delete par défaut
                   forceDelete: false,
                 );
-                
+
                 // Fermer le loader
                 if (mounted) Navigator.of(context).pop();
-                
+
                 if (result != null && result['success'] == true) {
                   if (mounted) {
-                    final affectedAgents = result['affected_agents']['count'] ?? 0;
-                    
+                    final affectedAgents =
+                        result['affected_agents']['count'] ?? 0;
+
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Column(
@@ -694,11 +705,12 @@ class _ShopsManagementState extends State<ShopsManagement> {
                 } else {
                   // Fermer le loader si erreur
                   if (mounted) Navigator.of(context).pop();
-                  
+
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('${l10n.error}: ${result?['message'] ?? 'Erreur inconnue'}'),
+                        content: Text(
+                            '${l10n.error}: ${result?['message'] ?? 'Erreur inconnue'}'),
                         backgroundColor: Colors.red,
                       ),
                     );
@@ -707,7 +719,7 @@ class _ShopsManagementState extends State<ShopsManagement> {
               } catch (e) {
                 // Fermer le loader si exception
                 if (mounted) Navigator.of(context).pop();
-                
+
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
@@ -719,7 +731,8 @@ class _ShopsManagementState extends State<ShopsManagement> {
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: Text(l10n.delete, style: const TextStyle(color: Colors.white)),
+            child:
+                Text(l10n.delete, style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -739,8 +752,8 @@ class _ShopsManagementState extends State<ShopsManagement> {
 
   String _formatCurrency(int amount) {
     return amount.toString().replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-      (Match m) => '${m[1]},',
-    );
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (Match m) => '${m[1]},',
+        );
   }
 }

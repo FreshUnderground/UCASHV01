@@ -45,7 +45,7 @@ Le support bilingue **Français 🇫🇷 / Anglais 🇬🇧** a été ajouté av
 ### Méthode 1: Utiliser les Traductions
 
 ```dart
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ucashv01/flutter_gen/gen_l10n/app_localizations.dart';
 
 // Dans votre widget
 final l10n = AppLocalizations.of(context)!;
@@ -286,7 +286,7 @@ Navigator.pushNamed(context, '/bilingual-example');
 
 5. **L'import est toujours:**
    ```dart
-   import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+   import 'package:ucashv01/flutter_gen/gen_l10n/app_localizations.dart';
    ```
 
 ---

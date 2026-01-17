@@ -7,43 +7,43 @@ class AppTheme {
   static const Color primaryRed = Color(0xFFDC2626);
   static const Color primaryRedDark = Color(0xFFB91C1C);
   static const Color primaryRedLight = Color(0xFFEF4444);
-  
+
   // Couleurs secondaires modernes
   static const Color backgroundLight = Color(0xFFFAFAFA);
   static const Color backgroundDark = Color(0xFF1F2937);
   static const Color surfaceLight = Color(0xFFFFFFFF);
   static const Color surfaceDark = Color(0xFF374151);
-  
+
   // Couleurs d'accent
   static const Color accentBlue = Color(0xFF3B82F6);
   static const Color accentGreen = Color(0xFF10B981);
   static const Color accentOrange = Color(0xFFF59E0B);
   static const Color accentPurple = Color(0xFF8B5CF6);
-  
+
   // Couleurs de texte
   static const Color textPrimary = Color(0xFF111827);
   static const Color textSecondary = Color(0xFF6B7280);
   static const Color textLight = Color(0xFF9CA3AF);
-  
+
   // Couleurs d'état
   static const Color success = Color(0xFF10B981);
   static const Color warning = Color(0xFFF59E0B);
   static const Color error = Color(0xFFEF4444);
   static const Color info = Color(0xFF3B82F6);
-  
+
   // Gradients modernes
   static const LinearGradient primaryGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [primaryRed, primaryRedDark],
   );
-  
+
   static const LinearGradient cardGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [Color(0xFFFFFFFF), Color(0xFFF8FAFC)],
   );
-  
+
   static const LinearGradient darkCardGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
@@ -55,7 +55,7 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
-      
+
       // Couleurs principales
       colorScheme: const ColorScheme.light(
         primary: primaryRed,
@@ -71,7 +71,7 @@ class AppTheme {
         onBackground: textPrimary,
         onError: Colors.white,
       ),
-      
+
       // AppBar moderne
       appBarTheme: const AppBarTheme(
         elevation: 0,
@@ -85,9 +85,9 @@ class AppTheme {
         ),
         systemOverlayStyle: SystemUiOverlayStyle.dark,
       ),
-      
+
       // Cards modernes avec ombres douces
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         elevation: 2,
         shadowColor: Colors.black.withOpacity(0.1),
         shape: RoundedRectangleBorder(
@@ -95,7 +95,7 @@ class AppTheme {
         ),
         color: surfaceLight,
       ),
-      
+
       // Boutons modernes
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
@@ -113,7 +113,7 @@ class AppTheme {
           ),
         ),
       ),
-      
+
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: primaryRed,
@@ -128,7 +128,7 @@ class AppTheme {
           ),
         ),
       ),
-      
+
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: primaryRed,
@@ -142,7 +142,7 @@ class AppTheme {
           ),
         ),
       ),
-      
+
       // Champs de texte modernes
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
@@ -163,7 +163,8 @@ class AppTheme {
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: error, width: 1.5),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         labelStyle: const TextStyle(
           color: textSecondary,
           fontSize: 14,
@@ -174,7 +175,7 @@ class AppTheme {
           fontSize: 14,
         ),
       ),
-      
+
       // Typographie moderne
       textTheme: const TextTheme(
         displayLarge: TextStyle(
@@ -255,20 +256,20 @@ class AppTheme {
           color: textLight,
         ),
       ),
-      
+
       // Dividers modernes
       dividerTheme: const DividerThemeData(
         color: Color(0xFFE5E7EB),
         thickness: 1,
         space: 1,
       ),
-      
+
       // Icônes
       iconTheme: const IconThemeData(
         color: textSecondary,
         size: 24,
       ),
-      
+
       // Chips modernes
       chipTheme: ChipThemeData(
         backgroundColor: const Color(0xFFF3F4F6),
@@ -283,7 +284,7 @@ class AppTheme {
         ),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       ),
-      
+
       // BottomNavigationBar moderne
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: surfaceLight,
@@ -300,14 +301,14 @@ class AppTheme {
           fontWeight: FontWeight.w400,
         ),
       ),
-      
+
       // Drawer moderne
       drawerTheme: const DrawerThemeData(
         backgroundColor: surfaceLight,
         elevation: 16,
         shadowColor: Colors.black26,
       ),
-      
+
       // ListTile moderne
       listTileTheme: const ListTileThemeData(
         contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -322,7 +323,7 @@ class AppTheme {
         ),
         iconColor: textSecondary,
       ),
-      
+
       // SnackBar moderne
       snackBarTheme: SnackBarThemeData(
         backgroundColor: const Color(0xFF374151),
@@ -337,9 +338,9 @@ class AppTheme {
         behavior: SnackBarBehavior.floating,
         elevation: 6,
       ),
-      
+
       // Dialog moderne
-      dialogTheme: DialogTheme(
+      dialogTheme: DialogThemeData(
         backgroundColor: surfaceLight,
         elevation: 24,
         shape: RoundedRectangleBorder(
@@ -355,7 +356,7 @@ class AppTheme {
           color: textPrimary,
         ),
       ),
-      
+
       // FloatingActionButton moderne
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
         backgroundColor: primaryRed,
@@ -374,7 +375,7 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      
+
       colorScheme: const ColorScheme.dark(
         primary: primaryRedLight,
         primaryContainer: primaryRed,
@@ -389,7 +390,7 @@ class AppTheme {
         onBackground: Colors.white,
         onError: Colors.white,
       ),
-      
+
       // Configuration similaire au thème clair mais avec couleurs sombres
       appBarTheme: const AppBarTheme(
         elevation: 0,
@@ -402,8 +403,8 @@ class AppTheme {
         ),
         systemOverlayStyle: SystemUiOverlayStyle.light,
       ),
-      
-      cardTheme: CardTheme(
+
+      cardTheme: CardThemeData(
         elevation: 4,
         shadowColor: Colors.black.withOpacity(0.3),
         shape: RoundedRectangleBorder(
@@ -418,35 +419,35 @@ class AppTheme {
   static const Duration fastAnimation = Duration(milliseconds: 200);
   static const Duration normalAnimation = Duration(milliseconds: 300);
   static const Duration slowAnimation = Duration(milliseconds: 500);
-  
+
   static const Curve defaultCurve = Curves.easeInOutCubic;
   static const Curve bounceCurve = Curves.elasticOut;
   static const Curve smoothCurve = Curves.easeOutQuart;
 
   /// Ombres modernes
   static List<BoxShadow> get softShadow => [
-    BoxShadow(
-      color: Colors.black.withOpacity(0.08),
-      blurRadius: 10,
-      offset: const Offset(0, 4),
-    ),
-  ];
-  
+        BoxShadow(
+          color: Colors.black.withOpacity(0.08),
+          blurRadius: 10,
+          offset: const Offset(0, 4),
+        ),
+      ];
+
   static List<BoxShadow> get mediumShadow => [
-    BoxShadow(
-      color: Colors.black.withOpacity(0.12),
-      blurRadius: 20,
-      offset: const Offset(0, 8),
-    ),
-  ];
-  
+        BoxShadow(
+          color: Colors.black.withOpacity(0.12),
+          blurRadius: 20,
+          offset: const Offset(0, 8),
+        ),
+      ];
+
   static List<BoxShadow> get strongShadow => [
-    BoxShadow(
-      color: Colors.black.withOpacity(0.16),
-      blurRadius: 30,
-      offset: const Offset(0, 12),
-    ),
-  ];
+        BoxShadow(
+          color: Colors.black.withOpacity(0.16),
+          blurRadius: 30,
+          offset: const Offset(0, 12),
+        ),
+      ];
 
   /// Espacements cohérents
   static const double spacing4 = 4.0;

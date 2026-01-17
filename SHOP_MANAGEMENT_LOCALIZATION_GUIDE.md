@@ -31,7 +31,7 @@ InputDecoration(labelText: 'Capital Cash *')
 Text('Créer le Shop')
 
 // APRÈS (Multilingue)
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ucashv01/flutter_gen/gen_l10n/app_localizations.dart';
 
 final l10n = AppLocalizations.of(context)!;
 
@@ -173,7 +173,7 @@ AlertDialog(
 
 ### **Étape 1: Import**
 ```dart
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ucashv01/flutter_gen/gen_l10n/app_localizations.dart';
 ```
 
 ### **Étape 2: Obtenir l'instance**

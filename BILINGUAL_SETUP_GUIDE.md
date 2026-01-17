@@ -29,7 +29,7 @@ Le support bilingue Français-Anglais a été ajouté avec succès à votre appl
 ### 1. Accéder aux Traductions dans vos Widgets
 
 ```dart
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ucashv01/flutter_gen/gen_l10n/app_localizations.dart';
 
 class MyWidget extends StatelessWidget {
   @override
@@ -282,7 +282,7 @@ Text('Bienvenue')
 
 ### Après
 ```dart
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ucashv01/flutter_gen/gen_l10n/app_localizations.dart';
 
 final l10n = AppLocalizations.of(context)!;
 Text(l10n.welcome)
@@ -294,7 +294,7 @@ Text(l10n.welcome)
 
 ```dart
 import 'package:flutter/material.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:ucashv01/flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:provider/provider.dart';
 import '../services/language_service.dart';
 import '../widgets/language_selector.dart';
