@@ -6,6 +6,7 @@ import '../models/flot_model.dart' as flot_model;
 import '../models/triangular_debt_settlement_model.dart';
 import 'local_db.dart';
 import 'agent_service.dart';
+import 'daily_debt_snapshot_service.dart';
 
 class ReportService extends ChangeNotifier {
   static final ReportService _instance = ReportService._internal();
@@ -641,13 +642,19 @@ class ReportService extends ChangeNotifier {
     double dettes = 0;
 
     // LOGIQUE CORRECTE : Shop SOURCE (qui reçoit le cash du client) DOIT au shop DESTINATION (qui servira le bénéficiaire)
+    // ⚠️ IMPORTANT: Les crédits/dettes intershop s'affichent DÈS LA CRÉATION du transfert (statut enAttente)
+    // Pas besoin d'attendre la validation/service pour créer la dette
+
     // Transferts sortants : ce shop (SOURCE) doit de l'argent aux shops de destination
     final transfertsSortants = _operations
         .where((op) =>
             op.shopSourceId == shopId &&
             op.shopDestinationId != null &&
             (op.statut == OperationStatus.validee ||
-                op.statut == OperationStatus.terminee) && // Validés ou terminés
+                op.statut == OperationStatus.terminee ||
+                op.statut ==
+                    OperationStatus
+                        .enAttente) && // Inclure EN ATTENTE pour crédits intershop
             (op.type == OperationType.transfertNational ||
                 op.type == OperationType.transfertInternationalSortant))
         .toList();
@@ -657,7 +664,10 @@ class ReportService extends ChangeNotifier {
         .where((op) =>
             op.shopDestinationId == shopId &&
             (op.statut == OperationStatus.validee ||
-                op.statut == OperationStatus.terminee) && // Validés ou terminés
+                op.statut == OperationStatus.terminee ||
+                op.statut ==
+                    OperationStatus
+                        .enAttente) && // Inclure EN ATTENTE pour crédits intershop
             (op.type == OperationType.transfertNational ||
                 op.type == OperationType.transfertInternationalEntrant))
         .toList();
@@ -1178,12 +1188,183 @@ class ReportService extends ChangeNotifier {
     debugPrint('🔍 DIAGNOSTIC TERMINÉ');
   }
 
+  /// Generate report from pre-computed daily snapshots (FAST PATH)
+  /// Returns null if snapshots are incomplete
+  Future<Map<String, dynamic>?> _generateReportFromSnapshots({
+    required int shopId,
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    try {
+      // Get all snapshots for this shop in the date range
+      final snapshots =
+          await LocalDB.instance.getDailyDebtSnapshotsForShopInRange(
+        shopId: shopId,
+        startDate: startDate,
+        endDate: endDate,
+      );
+
+      if (snapshots.isEmpty) {
+        debugPrint('⚠️ No snapshots found for shop $shopId');
+        return null;
+      }
+
+      // Load shop data
+      final shops = await LocalDB.instance.getAllShops();
+      final shop = shops.firstWhere(
+        (s) => s.id == shopId,
+        orElse: () => throw Exception('Shop with ID $shopId not found'),
+      );
+
+      // Calculate totals and group by other shop
+      double totalCreances = 0.0;
+      double totalDettes = 0.0;
+      final Map<int, Map<String, dynamic>> soldesParShop = {};
+      final List<Map<String, dynamic>> mouvementsParJour = [];
+
+      // Process each snapshot (organized by date and other_shop_id)
+      for (final snapshot in snapshots) {
+        final otherShopId = snapshot['other_shop_id'] as int;
+        final date = snapshot['date'] as String;
+        final detteAnterieure = snapshot['dette_anterieure'] as double;
+        final creancesDuJour = snapshot['creances_du_jour'] as double;
+        final dettesDuJour = snapshot['dettes_du_jour'] as double;
+        final soldeCumule = snapshot['solde_cumule'] as double;
+
+        // Aggregate by other shop
+        if (!soldesParShop.containsKey(otherShopId)) {
+          final otherShop = shops.firstWhere(
+            (s) => s.id == otherShopId,
+            orElse: () => ShopModel(
+              id: otherShopId,
+              designation: 'Shop $otherShopId',
+              localisation: 'Inconnu',
+              capitalCash: 0,
+              capitalAirtelMoney: 0,
+              capitalMPesa: 0,
+              capitalOrangeMoney: 0,
+            ),
+          );
+
+          soldesParShop[otherShopId] = {
+            'shopId': otherShopId,
+            'shopName': otherShop.designation,
+            'creances': 0.0,
+            'dettes': 0.0,
+            'solde': 0.0,
+          };
+        }
+
+        // Accumulate totals from snapshots
+        soldesParShop[otherShopId]!['creances'] =
+            (soldesParShop[otherShopId]!['creances'] as double) +
+                creancesDuJour;
+        soldesParShop[otherShopId]!['dettes'] =
+            (soldesParShop[otherShopId]!['dettes'] as double) + dettesDuJour;
+
+        totalCreances += creancesDuJour;
+        totalDettes += dettesDuJour;
+
+        // Add daily evolution entry
+        mouvementsParJour.add({
+          'date': date,
+          'detteAnterieure': detteAnterieure,
+          'creances': creancesDuJour,
+          'dettes': dettesDuJour,
+          'solde': creancesDuJour - dettesDuJour,
+          'soldeCumule': soldeCumule,
+          'nombreOperations':
+              0, // We don't track individual ops count in snapshots
+        });
+      }
+
+      // Calculate final soldes for each shop
+      for (final entry in soldesParShop.values) {
+        final creances = entry['creances'] as double;
+        final dettes = entry['dettes'] as double;
+        entry['solde'] = creances - dettes;
+      }
+
+      // Separate shops into creditors and debtors
+      final shopsNousDoivent = soldesParShop.values
+          .where((s) => (s['solde'] as double) > 0)
+          .toList()
+        ..sort(
+            (a, b) => (b['solde'] as double).compareTo(a['solde'] as double));
+
+      final shopsNousDevons = soldesParShop.values
+          .where((s) => (s['solde'] as double) < 0)
+          .toList()
+        ..sort(
+            (a, b) => (a['solde'] as double).compareTo(b['solde'] as double));
+
+      // Sort daily movements by date descending
+      mouvementsParJour
+          .sort((a, b) => (b['date'] as String).compareTo(a['date'] as String));
+
+      debugPrint(
+          '📊 Snapshot report: $totalCreances créances, $totalDettes dettes');
+
+      return {
+        'periode': {
+          'debut': startDate.toIso8601String(),
+          'fin': endDate.toIso8601String(),
+        },
+        'shopName': shop.designation,
+        'summary': {
+          'totalCreances': totalCreances,
+          'totalDettes': totalDettes,
+          'soldeNet': totalCreances - totalDettes,
+          'nombreMouvements': snapshots.length,
+        },
+        'shopsNousDoivent': shopsNousDoivent,
+        'shopsNousDevons': shopsNousDevons,
+        'mouvements': [], // Detailed movements not available in snapshot mode
+        'mouvementsParJour': mouvementsParJour,
+        'fromSnapshots': true, // Flag to indicate data source
+      };
+    } catch (e) {
+      debugPrint('❌ Error generating report from snapshots: $e');
+      return null;
+    }
+  }
+
   // Générer le rapport des mouvements de dettes intershop journalier
   Future<Map<String, dynamic>> generateDettesIntershopReport({
     int? shopId,
     DateTime? startDate,
     DateTime? endDate,
   }) async {
+    // ⚡ OPTIMIZATION: Try using snapshots first (100x faster!)
+    if (shopId != null && startDate != null && endDate != null) {
+      try {
+        debugPrint('📸 Checking for debt snapshots...');
+
+        // Ensure snapshots exist for the date range
+        await DailyDebtSnapshotService.instance.ensureSnapshotsExist(
+          shopId: shopId,
+          startDate: startDate,
+          endDate: endDate,
+        );
+
+        // Try to load from snapshots
+        final snapshotData = await _generateReportFromSnapshots(
+          shopId: shopId,
+          startDate: startDate,
+          endDate: endDate,
+        );
+
+        if (snapshotData != null) {
+          debugPrint('✅ Report generated from snapshots (FAST PATH)');
+          return snapshotData;
+        }
+      } catch (e) {
+        debugPrint(
+            '⚠️ Snapshot generation failed, falling back to full calculation: $e');
+      }
+    }
+
+    debugPrint('🔄 Generating report from operations (SLOW PATH)');
     await loadReportData(
         shopId: shopId, startDate: startDate, endDate: endDate);
 

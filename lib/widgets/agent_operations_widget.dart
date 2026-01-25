@@ -24,7 +24,7 @@ import 'retrait_dialog.dart';
 import 'operations_help_widget.dart';
 import 'pdf_viewer_dialog.dart';
 import 'cloture_required_dialog.dart';
-
+import 'pwa_install_button.dart';
 
 class AgentOperationsWidget extends StatefulWidget {
   const AgentOperationsWidget({super.key});
@@ -36,8 +36,10 @@ class AgentOperationsWidget extends StatefulWidget {
 class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
   String _searchQuery = '';
   OperationType? _typeFilter;
-  bool _showFiltersAndStats = false; // Contrôle l'affichage des stats et filtres (masqué par défaut)
-  String _categoryFilter = 'all'; // all, pending, my_transfers, my_withdrawals, my_served, my_deposits, my_flots
+  bool _showFiltersAndStats =
+      false; // Contrôle l'affichage des stats et filtres (masqué par défaut)
+  String _categoryFilter =
+      'all'; // all, pending, my_transfers, my_withdrawals, my_served, my_deposits, my_flots
   // ❌ REMOVED: bool _includeFlots - FLOT operations now ONLY visible in 'my_flots' category
 
   @override
@@ -47,7 +49,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
       _loadOperations();
     });
   }
-  
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -58,37 +60,43 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
   void _loadOperations() async {
     // Check if widget is still mounted before starting
     if (!mounted) return;
-    
+
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentUser = authService.currentUser;
     if (currentUser?.id != null) {
       // 1️⃣ D'ABORD: Synchroniser depuis l'API pour obtenir toutes les opérations fraîches
       if (!mounted) return; // Check before accessing context
-      
-      final transferSync = Provider.of<TransferSyncService>(context, listen: false);
-      debugPrint('🔄 [MES OPS] Synchronisation des opérations depuis l\'API...');
+
+      final transferSync =
+          Provider.of<TransferSyncService>(context, listen: false);
+      debugPrint(
+          '🔄 [MES OPS] Synchronisation des opérations depuis l\'API...');
       await transferSync.forceRefreshFromAPI();
       debugPrint('✅ [MES OPS] Synchronisation terminée');
-      
+
       // 2️⃣ ENSUITE: Charger les opérations filtrées par shop depuis LocalDB
       // ✅ Ceci inclut maintenant les FLOTs (type = flotShopToShop) depuis la table operations
       if (!mounted) return; // Check after async operation
-      
-      Provider.of<OperationService>(context, listen: false).loadOperations(shopId: currentUser!.shopId!);
-      debugPrint('📋 [MES OPS] Chargement des opérations (incluant FLOTs) pour shop ${currentUser.shopId}');
+
+      Provider.of<OperationService>(context, listen: false)
+          .loadOperations(shopId: currentUser!.shopId!);
+      debugPrint(
+          '📋 [MES OPS] Chargement des opérations (incluant FLOTs) pour shop ${currentUser.shopId}');
     }
   }
 
   Future<void> _generateReportPdf() async {
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
-      final operationService = Provider.of<OperationService>(context, listen: false);
+      final operationService =
+          Provider.of<OperationService>(context, listen: false);
       final shopService = Provider.of<ShopService>(context, listen: false);
-      final agentAuthService = Provider.of<AgentAuthService>(context, listen: false);
-      
+      final agentAuthService =
+          Provider.of<AgentAuthService>(context, listen: false);
+
       final currentUser = authService.currentUser;
       final currentAgent = agentAuthService.currentAgent;
-      
+
       if (currentUser == null || currentAgent == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -98,10 +106,11 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
         );
         return;
       }
-      
-      final shop = shopService.shops.firstWhere((s) => s.id == currentUser.shopId);
+
+      final shop =
+          shopService.shops.firstWhere((s) => s.id == currentUser.shopId);
       final operations = _getFilteredOperations(operationService.operations);
-      
+
       final pdfService = PdfService();
       final pdfDoc = await pdfService.generateOperationsReportPdf(
         operations: operations,
@@ -109,13 +118,14 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
         agent: currentAgent,
         filterType: _typeFilter?.toString(),
       );
-      
+
       if (mounted) {
         await showPdfViewer(
           context: context,
           pdfDocument: pdfDoc,
           title: 'Rapport d\'Opérations',
-          fileName: 'rapport_operations_${DateTime.now().millisecondsSinceEpoch}',
+          fileName:
+              'rapport_operations_${DateTime.now().millisecondsSinceEpoch}',
         );
       }
     } catch (e) {
@@ -133,40 +143,49 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
   List<OperationModel> _getFilteredOperations(List<OperationModel> operations) {
     final authService = Provider.of<AuthService>(context, listen: false);
     final shopId = authService.currentUser?.shopId ?? 0;
-    
+
     // Debug: Log all operations and their types
     debugPrint('📊 [FILTER] Total operations: ${operations.length}');
-    final flotCount = operations.where((op) => op.type == OperationType.flotShopToShop).length;
+    final flotCount = operations
+        .where((op) => op.type == OperationType.flotShopToShop)
+        .length;
     debugPrint('📊 [FILTER] FLOTs (flotShopToShop): $flotCount');
     debugPrint('📊 [FILTER] Current filter: $_categoryFilter, shopId: $shopId');
-    
+
     return operations.where((operation) {
       // 1. Filter by search query
       final matchesSearch = _searchQuery.isEmpty ||
-          (operation.destinataire?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false) ||
+          (operation.destinataire
+                  ?.toLowerCase()
+                  .contains(_searchQuery.toLowerCase()) ??
+              false) ||
           operation.id.toString().contains(_searchQuery) ||
-          (operation.codeOps?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false);
-      
+          (operation.codeOps
+                  ?.toLowerCase()
+                  .contains(_searchQuery.toLowerCase()) ??
+              false);
+
       // 2. Filter by operation type
       final matchesType = _typeFilter == null || operation.type == _typeFilter;
-      
-      
+
       // 4. Filter by category
       bool matchesCategory = true;
       switch (_categoryFilter) {
         case 'pending':
           // Operations en attente (transfers waiting for validation) - NO FLOT
-          matchesCategory = 
-              operation.statut == OperationStatus.enAttente &&
-              operation.shopDestinationId == shopId; // Transfers I need to serve
+          matchesCategory = operation.statut == OperationStatus.enAttente &&
+              operation.shopDestinationId ==
+                  shopId; // Transfers I need to serve
           break;
         case 'my_transfers':
           // My sent transfers (all statuses) - NO FLOT
-          matchesCategory = 
+          matchesCategory =
               (operation.type == OperationType.transfertNational ||
-               operation.type == OperationType.transfertInternationalEntrant ||
-               operation.type == OperationType.transfertInternationalSortant) &&
-              operation.shopSourceId == shopId; // Transfers I sent
+                      operation.type ==
+                          OperationType.transfertInternationalEntrant ||
+                      operation.type ==
+                          OperationType.transfertInternationalSortant) &&
+                  operation.shopSourceId == shopId; // Transfers I sent
           break;
         case 'my_withdrawals':
           // My withdrawals - NO FLOT
@@ -175,10 +194,12 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
           break;
         case 'my_served':
           // Transfers I validated/served - NO FLOT
-          matchesCategory = 
-              (operation.type == OperationType.transfertNational ||
-               operation.type == OperationType.transfertInternationalEntrant ||
-               operation.type == OperationType.transfertInternationalSortant) &&
+          matchesCategory = (operation.type ==
+                      OperationType.transfertNational ||
+                  operation.type ==
+                      OperationType.transfertInternationalEntrant ||
+                  operation.type ==
+                      OperationType.transfertInternationalSortant) &&
               (operation.statut == OperationStatus.validee) &&
               operation.shopDestinationId == shopId; // Transfers I validated
           break;
@@ -190,18 +211,20 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
         case 'my_flots':
           // My FLOTs (flotShopToShop) - Show ALL FLOTs where I'm involved (source OR destination)
           matchesCategory = operation.type == OperationType.flotShopToShop &&
-              (operation.shopSourceId == shopId || operation.shopDestinationId == shopId);
-          
+              (operation.shopSourceId == shopId ||
+                  operation.shopDestinationId == shopId);
+
           // Debug logging
           if (operation.type == OperationType.flotShopToShop) {
-            debugPrint('🔍 [MY_FLOTS] FLOT trouvé: ID=${operation.id}, source=${operation.shopSourceId}, dest=${operation.shopDestinationId}, currentShop=$shopId, match=$matchesCategory');
+            debugPrint(
+                '🔍 [MY_FLOTS] FLOT trouvé: ID=${operation.id}, source=${operation.shopSourceId}, dest=${operation.shopDestinationId}, currentShop=$shopId, match=$matchesCategory');
           }
           break;
         case 'all':
         default:
           matchesCategory = true;
       }
-      
+
       return matchesSearch && matchesType && matchesCategory;
     }).toList();
   }
@@ -212,7 +235,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
     final isMobile = size.width <= 768;
     // ✨ Padding réduit pour maximiser l'espace
     final padding = isMobile ? 4.0 : 8.0;
-    
+
     return Padding(
       padding: EdgeInsets.all(padding),
       child: Column(
@@ -222,17 +245,17 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
           // Header avec boutons d'actions - Compact sur mobile
           _buildHeader(),
           SizedBox(height: isMobile ? 6 : 12),
-          
+
           // Category Filter Tabs (like En attente/Mes Validations)
           _buildCategoryTabs(),
           SizedBox(height: isMobile ? 6 : 12),
-          
+
           // Statistiques - Affichées uniquement si _showFiltersAndStats est true (Désactivé pour plus d'espace)
           // if (_showFiltersAndStats) ...[
           //   _buildStats(),
           //   SizedBox(height: isMobile ? 8 : 24),
           // ],
-          
+
           // Liste des opérations - Prend l'espace nécessaire
           Flexible(
             fit: FlexFit.loose,
@@ -247,11 +270,12 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 768;
     final isTablet = size.width > 768 && size.width <= 1024;
-    
+
     return Card(
       elevation: 2,
       margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(isMobile ? 10 : 12)),
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(isMobile ? 10 : 12)),
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(isMobile ? 10 : 12),
@@ -283,18 +307,23 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
                     ),
                   ),
                   SizedBox(width: isMobile ? 8 : 12),
-                  Text(
-                    'Mes Opérations',
-                    style: TextStyle(
-                      fontSize: isMobile ? 16 : 20,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFFDC2626),
+                  Expanded(
+                    child: Text(
+                      'Mes Opérations',
+                      style: TextStyle(
+                        fontSize: isMobile ? 16 : 20,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFFDC2626),
+                      ),
                     ),
                   ),
+                  // PWA Install Button
+                  if (!isMobile)
+                    const PwaInstallButton(isCompact: false, showIcon: true),
                 ],
               ),
               SizedBox(height: isMobile ? 6 : 12),
-              
+
               // Boutons d'actions - Responsive
               if (isMobile)
                 // Sur mobile: Boutons sur une seule ligne
@@ -360,7 +389,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
                   ],
                 ),
               SizedBox(height: isMobile ? 6 : 10),
-              
+
               // Bouton pour afficher/masquer les filtres et stats - Plus compact
               Center(
                 child: TextButton.icon(
@@ -378,7 +407,9 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
                     ),
                   ),
                   icon: Icon(
-                    _showFiltersAndStats ? Icons.expand_less : Icons.expand_more,
+                    _showFiltersAndStats
+                        ? Icons.expand_less
+                        : Icons.expand_more,
                     color: const Color(0xFFDC2626),
                     size: isMobile ? 18 : 24,
                   ),
@@ -392,78 +423,23 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
                   ),
                 ),
               ),
-              
+
               // Barre de recherche et filtres - Affichés uniquement si _showFiltersAndStats est true
               if (_showFiltersAndStats) ...[
                 SizedBox(height: isMobile ? 12 : 16),
-              if (isMobile)
-                Column(
-                  children: [
-                    TextField(
-                      decoration: InputDecoration(
-                        hintText: 'Rechercher...',
-                        prefixIcon: const Icon(Icons.search),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        isDense: true,
-                        filled: true,
-                        fillColor: Colors.white,
-                      ),
-                      onChanged: (value) {
-                        setState(() {
-                          _searchQuery = value;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: DropdownButtonFormField<OperationType?>(
-                            value: _typeFilter,
-                            decoration: const InputDecoration(
-                              labelText: 'Type',
-                              border: OutlineInputBorder(),
-                              isDense: true,
-                            ),
-                            items: const [
-                              DropdownMenuItem(value: null, child: Text('Toutes')),
-                              DropdownMenuItem(value: OperationType.depot, child: Text('Dépôts')),
-                              DropdownMenuItem(value: OperationType.retrait, child: Text('Retraits')),
-                              DropdownMenuItem(value: OperationType.transfertNational, child: Text('Nationaux')),
-                              DropdownMenuItem(value: OperationType.transfertInternationalSortant, child: Text('Sortants')),
-                              DropdownMenuItem(value: OperationType.transfertInternationalEntrant, child: Text('Entrants')),
-                            ],
-                            onChanged: (value) {
-                              setState(() {
-                                _typeFilter = value;
-                              });
-                            },
+                if (isMobile)
+                  Column(
+                    children: [
+                      TextField(
+                        decoration: InputDecoration(
+                          hintText: 'Rechercher...',
+                          prefixIcon: const Icon(Icons.search),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          onPressed: _loadOperations,
-                          icon: const Icon(Icons.refresh),
-                          tooltip: 'Actualiser',
-                          color: const Color(0xFFDC2626),
-                        ),
-                      ],
-                    ),
-                  ],
-                )
-              else
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 2,
-                      child: TextField(
-                        decoration: const InputDecoration(
-                          hintText: 'Rechercher par client, destinataire ou référence...',
-                          prefixIcon: Icon(Icons.search),
-                          border: OutlineInputBorder(),
                           isDense: true,
+                          filled: true,
+                          fillColor: Colors.white,
                         ),
                         onChanged: (value) {
                           setState(() {
@@ -471,40 +447,122 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
                           });
                         },
                       ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: DropdownButtonFormField<OperationType?>(
-                        value: _typeFilter,
-                        decoration: const InputDecoration(
-                          labelText: 'Type d\'opération',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: null, child: Text('Toutes')),
-                          DropdownMenuItem(value: OperationType.depot, child: Text('Dépôts')),
-                          DropdownMenuItem(value: OperationType.retrait, child: Text('Retraits')),
-                          DropdownMenuItem(value: OperationType.transfertNational, child: Text('Transferts Nationaux')),
-                          DropdownMenuItem(value: OperationType.transfertInternationalSortant, child: Text('Transferts Sortants')),
-                          DropdownMenuItem(value: OperationType.transfertInternationalEntrant, child: Text('Transferts Entrants')),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<OperationType?>(
+                              value: _typeFilter,
+                              decoration: const InputDecoration(
+                                labelText: 'Type',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                    value: null, child: Text('Toutes')),
+                                DropdownMenuItem(
+                                    value: OperationType.depot,
+                                    child: Text('Dépôts')),
+                                DropdownMenuItem(
+                                    value: OperationType.retrait,
+                                    child: Text('Retraits')),
+                                DropdownMenuItem(
+                                    value: OperationType.transfertNational,
+                                    child: Text('Nationaux')),
+                                DropdownMenuItem(
+                                    value: OperationType
+                                        .transfertInternationalSortant,
+                                    child: Text('Sortants')),
+                                DropdownMenuItem(
+                                    value: OperationType
+                                        .transfertInternationalEntrant,
+                                    child: Text('Entrants')),
+                              ],
+                              onChanged: (value) {
+                                setState(() {
+                                  _typeFilter = value;
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            onPressed: _loadOperations,
+                            icon: const Icon(Icons.refresh),
+                            tooltip: 'Actualiser',
+                            color: const Color(0xFFDC2626),
+                          ),
                         ],
-                        onChanged: (value) {
-                          setState(() {
-                            _typeFilter = value;
-                          });
-                        },
                       ),
-                    ),
-                    const SizedBox(width: 16),
-                    IconButton(
-                      onPressed: _loadOperations,
-                      icon: const Icon(Icons.refresh),
-                      tooltip: 'Actualiser',
-                      color: const Color(0xFFDC2626),
-                    ),
-                  ],
-                ),
+                    ],
+                  )
+                else
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: TextField(
+                          decoration: const InputDecoration(
+                            hintText:
+                                'Rechercher par client, destinataire ou référence...',
+                            prefixIcon: Icon(Icons.search),
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          onChanged: (value) {
+                            setState(() {
+                              _searchQuery = value;
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: DropdownButtonFormField<OperationType?>(
+                          value: _typeFilter,
+                          decoration: const InputDecoration(
+                            labelText: 'Type d\'opération',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                                value: null, child: Text('Toutes')),
+                            DropdownMenuItem(
+                                value: OperationType.depot,
+                                child: Text('Dépôts')),
+                            DropdownMenuItem(
+                                value: OperationType.retrait,
+                                child: Text('Retraits')),
+                            DropdownMenuItem(
+                                value: OperationType.transfertNational,
+                                child: Text('Transferts Nationaux')),
+                            DropdownMenuItem(
+                                value:
+                                    OperationType.transfertInternationalSortant,
+                                child: Text('Transferts Sortants')),
+                            DropdownMenuItem(
+                                value:
+                                    OperationType.transfertInternationalEntrant,
+                                child: Text('Transferts Entrants')),
+                          ],
+                          onChanged: (value) {
+                            setState(() {
+                              _typeFilter = value;
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      IconButton(
+                        onPressed: _loadOperations,
+                        icon: const Icon(Icons.refresh),
+                        tooltip: 'Actualiser',
+                        color: const Color(0xFFDC2626),
+                      ),
+                    ],
+                  ),
               ], // Fin du if _showFiltersAndStats
             ],
           ),
@@ -516,7 +574,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
   Widget _buildCategoryTabs() {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 768;
-    
+
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -588,45 +646,45 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
     required bool isMobile,
   }) {
     final isSelected = _categoryFilter == value;
-    
+
     return ElevatedButton.icon(
-        onPressed: () {
-          if (mounted) {
-            setState(() {
-              _categoryFilter = value;
-            });
-          }
-        },
-        icon: Icon(
-          icon,
-          size: isMobile ? 14 : 16,
+      onPressed: () {
+        if (mounted) {
+          setState(() {
+            _categoryFilter = value;
+          });
+        }
+      },
+      icon: Icon(
+        icon,
+        size: isMobile ? 14 : 16,
+        color: isSelected ? Colors.white : const Color(0xFFDC2626),
+      ),
+      label: Text(
+        label,
+        style: TextStyle(
+          fontSize: isMobile ? 11 : 13,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
           color: isSelected ? Colors.white : const Color(0xFFDC2626),
         ),
-        label: Text(
-          label,
-          style: TextStyle(
-            fontSize: isMobile ? 11 : 13,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-            color: isSelected ? Colors.white : const Color(0xFFDC2626),
-          ),
+      ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: isSelected ? const Color(0xFFDC2626) : Colors.white,
+        foregroundColor: isSelected ? Colors.white : const Color(0xFFDC2626),
+        side: BorderSide(
+          color: const Color(0xFFDC2626),
+          width: isSelected ? 2 : 1,
         ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: isSelected ? const Color(0xFFDC2626) : Colors.white,
-          foregroundColor: isSelected ? Colors.white : const Color(0xFFDC2626),
-          side: BorderSide(
-            color: const Color(0xFFDC2626),
-            width: isSelected ? 2 : 1,
-          ),
-          padding: EdgeInsets.symmetric(
-            horizontal: isMobile ? 8 : 12,
-            vertical: isMobile ? 8 : 10,
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-          elevation: isSelected ? 4 : 0,
+        padding: EdgeInsets.symmetric(
+          horizontal: isMobile ? 8 : 12,
+          vertical: isMobile ? 8 : 10,
         ),
-      );
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        elevation: isSelected ? 4 : 0,
+      ),
+    );
   }
 
   // Helper pour créer un bouton d'action
@@ -638,7 +696,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
   }) {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 768;
-    
+
     return ElevatedButton.icon(
       onPressed: onPressed,
       icon: Icon(icon, size: isMobile ? 16 : 18),
@@ -667,37 +725,37 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
   // Widget _buildStats() {
   //   final size = MediaQuery.of(context).size;
   //   final isMobile = size.width <= 768;
-    
+
   //   return Consumer3<OperationService, AuthService, ShopService>(
   //     builder: (context, operationService, authService, shopService, child) {
   //       final operations = operationService.operations;
-        
+
   //       // Also get FLOTs for this shop
   //       final currentUser = authService.currentUser;
   //       final flotService = FlotService.instance;
-        
+
   //       // Filter FLOTs by current shop (source or destination)
   //       List<flot_model.FlotModel> shopFlots = [];
   //       if (currentUser?.shopId != null) {
-  //         shopFlots = flotService.flots.where((f) => 
-  //           f.shopSourceId == currentUser!.shopId || 
+  //         shopFlots = flotService.flots.where((f) =>
+  //           f.shopSourceId == currentUser!.shopId ||
   //           f.shopDestinationId == currentUser.shopId
   //         ).toList();
   //       } else {
   //         shopFlots = flotService.flots;
   //       }
-        
+
   //       // Total operations should include both operations and FLOTs
   //       final totalOperations = operations.length + shopFlots.length;
-        
+
   //       final depots = operations.where((op) => op.type == OperationType.depot).length;
   //       final retraits = operations.where((op) => op.type == OperationType.retrait).length;
-  //       final transferts = operations.where((op) => 
+  //       final transferts = operations.where((op) =>
   //         op.type == OperationType.transfertNational ||
   //         op.type == OperationType.transfertInternationalSortant ||
   //         op.type == OperationType.transfertInternationalEntrant
   //       ).length;
-        
+
   //       // Add FLOT count
   //       final flotsCount = shopFlots.length;
 
@@ -873,7 +931,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
   Widget _buildOperationsList() {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 768;
-    
+
     return Consumer<OperationService>(
       builder: (context, operationService, child) {
         if (operationService.isLoading) {
@@ -902,15 +960,16 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
           );
         }
 
-        final filteredOperations = _getFilteredOperations(operationService.operations);
+        final filteredOperations =
+            _getFilteredOperations(operationService.operations);
 
         // ✅ IMPORTANT: FLOTs are now in the operations table with type flotShopToShop
         // No need to load from old FlotService - they're already in filteredOperations
         // This prevents duplicates!
-        
+
         // Use only filteredOperations (which already includes FLOTs)
         final allItems = <dynamic>[...filteredOperations];
-        
+
         // Sort by date (most recent first)
         allItems.sort((a, b) {
           // All items are OperationModel now
@@ -920,13 +979,14 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
         });
 
         if (allItems.isEmpty) {
-          return operationService.operations.isEmpty 
+          return operationService.operations.isEmpty
               ? const SingleChildScrollView(child: OperationsHelpWidget())
               : Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.search_off, color: Colors.grey, size: 64),
+                      const Icon(Icons.search_off,
+                          color: Colors.grey, size: 64),
                       const SizedBox(height: 16),
                       const Text(
                         'Aucune opération trouvée avec ces critères',
@@ -952,7 +1012,8 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
           child: ListView.separated(
             padding: EdgeInsets.all(isMobile ? 8 : 12),
             itemCount: allItems.length,
-            separatorBuilder: (context, index) => Divider(height: isMobile ? 12 : 16),
+            separatorBuilder: (context, index) =>
+                Divider(height: isMobile ? 12 : 16),
             itemBuilder: (context, index) {
               // All items are OperationModel now (including FLOTs)
               final operation = allItems[index] as OperationModel;
@@ -969,21 +1030,27 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
     final isMobile = size.width <= 768;
     final isTablet = size.width > 768 && size.width <= 1024;
     final isSmallMobile = size.width < 600;
-    
+
     // Tailles responsive
-    final iconSize = isSmallMobile ? 18.0 : (isMobile ? 20.0 : (isTablet ? 24.0 : 28.0));
-    final titleFontSize = isSmallMobile ? 12.0 : (isMobile ? 13.0 : (isTablet ? 14.0 : 16.0));
-    final amountFontSize = isSmallMobile ? 13.0 : (isMobile ? 14.0 : (isTablet ? 15.0 : 16.0));
-    final detailFontSize = isSmallMobile ? 10.0 : (isMobile ? 11.0 : (isTablet ? 12.0 : 13.0));
+    final iconSize =
+        isSmallMobile ? 18.0 : (isMobile ? 20.0 : (isTablet ? 24.0 : 28.0));
+    final titleFontSize =
+        isSmallMobile ? 12.0 : (isMobile ? 13.0 : (isTablet ? 14.0 : 16.0));
+    final amountFontSize =
+        isSmallMobile ? 13.0 : (isMobile ? 14.0 : (isTablet ? 15.0 : 16.0));
+    final detailFontSize =
+        isSmallMobile ? 10.0 : (isMobile ? 11.0 : (isTablet ? 12.0 : 13.0));
     final tagFontSize = isSmallMobile ? 8.0 : (isMobile ? 9.0 : 10.0);
     final iconPadding = isSmallMobile ? 6.0 : (isMobile ? 8.0 : 10.0);
-    final cardPadding = isSmallMobile ? 6.0 : (isMobile ? 8.0 : (isTablet ? 12.0 : 16.0));
-    final cardVerticalPadding = isSmallMobile ? 4.0 : (isMobile ? 6.0 : (isTablet ? 8.0 : 4.0));
-    
+    final cardPadding =
+        isSmallMobile ? 6.0 : (isMobile ? 8.0 : (isTablet ? 12.0 : 16.0));
+    final cardVerticalPadding =
+        isSmallMobile ? 4.0 : (isMobile ? 6.0 : (isTablet ? 8.0 : 4.0));
+
     Color typeColor;
     IconData typeIcon;
     String typeText;
-    
+
     switch (operation.type) {
       case OperationType.depot:
         typeColor = Colors.green;
@@ -1030,7 +1097,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
     Color statusColor;
     String statusText;
     IconData statusIcon;
-    
+
     switch (operation.statut) {
       case OperationStatus.validee:
         statusColor = Colors.green;
@@ -1058,7 +1125,8 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
       margin: EdgeInsets.only(bottom: isSmallMobile ? 4 : (isMobile ? 6 : 8)),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(isSmallMobile ? 6 : (isMobile ? 8 : 12)),
+        borderRadius:
+            BorderRadius.circular(isSmallMobile ? 6 : (isMobile ? 8 : 12)),
         border: Border.all(color: Colors.grey.shade200),
         boxShadow: [
           BoxShadow(
@@ -1089,7 +1157,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
           children: [
             Expanded(
               child: Text(
-                operation.destinataire != null 
+                operation.destinataire != null
                     ? '${operation.destinataire}'
                     : typeText,
                 style: TextStyle(
@@ -1103,7 +1171,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
             const SizedBox(width: 8),
             Container(
               padding: EdgeInsets.symmetric(
-                horizontal: isMobile ? 5 : 8, 
+                horizontal: isMobile ? 5 : 8,
                 vertical: isMobile ? 2 : 4,
               ),
               decoration: BoxDecoration(
@@ -1130,7 +1198,8 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
               // Montant principal avec icône
               Row(
                 children: [
-                  Icon(Icons.attach_money, size: isMobile ? 12 : 14, color: Colors.grey[600]),
+                  Icon(Icons.attach_money,
+                      size: isMobile ? 12 : 14, color: Colors.grey[600]),
                   const SizedBox(width: 4),
                   Text(
                     '${operation.montantBrut.toStringAsFixed(2)} ${operation.devise}',
@@ -1151,12 +1220,13 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
                 ],
               ),
               SizedBox(height: isMobile ? 4 : 6),
-              
+
               // Source et Destination pour les FLOT (virement)
               if (operation.type == OperationType.virement)
                 Row(
                   children: [
-                    Icon(Icons.arrow_upward, size: isMobile ? 11 : 13, color: Colors.orange),
+                    Icon(Icons.arrow_upward,
+                        size: isMobile ? 11 : 13, color: Colors.orange),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
@@ -1171,9 +1241,11 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Icon(Icons.arrow_forward, size: isMobile ? 11 : 13, color: Colors.grey[500]),
+                    Icon(Icons.arrow_forward,
+                        size: isMobile ? 11 : 13, color: Colors.grey[500]),
                     const SizedBox(width: 8),
-                    Icon(Icons.arrow_downward, size: isMobile ? 11 : 13, color: Colors.green),
+                    Icon(Icons.arrow_downward,
+                        size: isMobile ? 11 : 13, color: Colors.green),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
@@ -1191,7 +1263,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
                 ),
               if (operation.type == OperationType.virement)
                 SizedBox(height: isMobile ? 4 : 6),
-              
+
               // Mode de paiement + Statut
               Row(
                 children: [
@@ -1211,7 +1283,8 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
                   ),
                   SizedBox(width: isMobile ? 8 : 12),
                   // Statut
-                  Icon(statusIcon, size: isMobile ? 12 : 14, color: statusColor),
+                  Icon(statusIcon,
+                      size: isMobile ? 12 : 14, color: statusColor),
                   const SizedBox(width: 4),
                   Text(
                     statusText,
@@ -1227,7 +1300,8 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
               // Date
               Row(
                 children: [
-                  Icon(Icons.access_time, size: isMobile ? 12 : 14, color: Colors.grey[500]),
+                  Icon(Icons.access_time,
+                      size: isMobile ? 12 : 14, color: Colors.grey[500]),
                   const SizedBox(width: 4),
                   Text(
                     _formatDate(operation.dateOp),
@@ -1243,7 +1317,8 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
               if (operation.codeOps != null)
                 Row(
                   children: [
-                    Icon(Icons.code, size: isMobile ? 10 : 12, color: Colors.grey[500]),
+                    Icon(Icons.code,
+                        size: isMobile ? 10 : 12, color: Colors.grey[500]),
                     const SizedBox(width: 4),
                     Text(
                       operation.codeOps!,
@@ -1260,7 +1335,8 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
           ),
         ),
         trailing: PopupMenuButton<String>(
-          icon: Icon(Icons.more_vert, color: Colors.grey[600], size: isMobile ? 18 : 24),
+          icon: Icon(Icons.more_vert,
+              color: Colors.grey[600], size: isMobile ? 18 : 24),
           itemBuilder: (context) => [
             const PopupMenuItem(
               value: 'details',
@@ -1327,7 +1403,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
       // Récupérer les services nécessaires
       final authService = Provider.of<AuthService>(context, listen: false);
       final shopService = Provider.of<ShopService>(context, listen: false);
-      
+
       // Obtenir le shop de l'agent
       final shopId = authService.currentUser?.shopId;
       if (shopId == null) {
@@ -1338,7 +1414,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
         }
         return;
       }
-      
+
       final shop = shopService.getShopById(shopId);
       if (shop == null) {
         if (mounted) {
@@ -1348,7 +1424,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
         }
         return;
       }
-      
+
       // Obtenir l'agent
       final user = authService.currentUser;
       if (user == null) {
@@ -1359,7 +1435,7 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
         }
         return;
       }
-      
+
       // Convertir UserModel en AgentModel
       final agent = AgentModel(
         id: user.id,
@@ -1369,34 +1445,36 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
         nom: user.nom,
         telephone: user.telephone,
       );
-      
+
       // Enrichir l'opération avec les noms de shops si manquants (pour les transferts)
       OperationModel enrichedOperation = operation;
       if (operation.type == OperationType.transfertNational ||
           operation.type == OperationType.transfertInternationalSortant ||
           operation.type == OperationType.transfertInternationalEntrant) {
-        
         String? sourceDesignation = operation.shopSourceDesignation;
         String? destDesignation = operation.shopDestinationDesignation;
-        
+
         // Enrichir shop source si manquant
-        if ((sourceDesignation == null || sourceDesignation.isEmpty) && operation.shopSourceId != null) {
+        if ((sourceDesignation == null || sourceDesignation.isEmpty) &&
+            operation.shopSourceId != null) {
           final sourceShop = shopService.getShopById(operation.shopSourceId!);
           if (sourceShop != null) {
             sourceDesignation = sourceShop.designation;
           }
         }
-        
+
         // Enrichir shop destination si manquant
-        if ((destDesignation == null || destDesignation.isEmpty) && operation.shopDestinationId != null) {
-          final destShop = shopService.getShopById(operation.shopDestinationId!);
+        if ((destDesignation == null || destDesignation.isEmpty) &&
+            operation.shopDestinationId != null) {
+          final destShop =
+              shopService.getShopById(operation.shopDestinationId!);
           if (destShop != null) {
             destDesignation = destShop.designation;
           }
         }
-        
+
         // Créer une copie enrichie si nécessaire
-        if (sourceDesignation != operation.shopSourceDesignation || 
+        if (sourceDesignation != operation.shopSourceDesignation ||
             destDesignation != operation.shopDestinationDesignation) {
           enrichedOperation = operation.copyWith(
             shopSourceDesignation: sourceDesignation,
@@ -1404,17 +1482,16 @@ class _AgentOperationsWidgetState extends State<AgentOperationsWidget> {
           );
         }
       }
-      
+
       // Utiliser AutoPrintHelper au lieu de la méthode native qui ne marche pas
       if (mounted) {
-await AutoPrintHelper.autoPrintWithDialog(
+        await AutoPrintHelper.autoPrintWithDialog(
           context: context,
           operation: enrichedOperation,
           shop: shop,
           agent: agent,
           clientName: operation.destinataire,
         );
-        
       }
     } catch (e) {
       // Silently ignore printing errors
@@ -1426,34 +1503,36 @@ await AutoPrintHelper.autoPrintWithDialog(
   Future<bool> _verifierClotureAvantOperation() async {
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentUser = authService.currentUser;
-    
+
     // ✅ ADMIN EXEMPTION: Les admins ne sont pas soumis à la clôture obligatoire
     if (currentUser?.role == 'ADMIN') {
       debugPrint('✅ Utilisateur ADMIN - Exemption de clôture accordée');
       return true; // Admin peut opérer sans clôture
     }
-    
+
     final shopId = currentUser?.shopId;
-    
+
     if (shopId == null || shopId <= 0) {
       return true; // Pas de shop ID, on laisse passer
     }
-    
+
     // TOUJOURS vérifier depuis LocalDB (pas de cache)
     debugPrint('🔍 Vérification des clôtures pour shop $shopId...');
-    final joursNonClotures = await RapportClotureService.instance.verifierAccesMenusAgent(shopId);
-    
+    final joursNonClotures =
+        await RapportClotureService.instance.verifierAccesMenusAgent(shopId);
+
     // Si pas de jours non clôturés, accès autorisé
     if (joursNonClotures == null || joursNonClotures.isEmpty) {
       debugPrint('✅ Toutes les journées sont clôturées - accès autorisé');
       return true;
     }
-    
-    debugPrint('⚠️ ${joursNonClotures.length} jour(s) non clôturé(s) - affichage du dialog');
+
+    debugPrint(
+        '⚠️ ${joursNonClotures.length} jour(s) non clôturé(s) - affichage du dialog');
     for (var date in joursNonClotures) {
       debugPrint('   - ${date.toIso8601String().split('T')[0]}');
     }
-    
+
     // Afficher le dialog de clôture
     if (mounted) {
       final result = await ClotureRequiredDialog.show(
@@ -1461,24 +1540,27 @@ await AutoPrintHelper.autoPrintWithDialog(
         shopId: shopId,
         joursNonClotures: joursNonClotures,
       );
-      
+
       // Si le dialog retourne true, RE-VÉRIFIER que les clôtures ont bien été enregistrées
       if (result) {
         debugPrint('🔄 Re-vérification après clôture...');
         // Attendre un court instant pour que LocalDB soit bien à jour
         await Future.delayed(const Duration(milliseconds: 300));
-        
-        final joursRestants = await RapportClotureService.instance.verifierAccesMenusAgent(shopId);
+
+        final joursRestants = await RapportClotureService.instance
+            .verifierAccesMenusAgent(shopId);
         if (joursRestants == null || joursRestants.isEmpty) {
           debugPrint('✅ Toutes les clôtures confirmées - accès autorisé');
           return true;
         } else {
-          debugPrint('⚠️ Encore ${joursRestants.length} jour(s) non clôturé(s)');
+          debugPrint(
+              '⚠️ Encore ${joursRestants.length} jour(s) non clôturé(s)');
           // Ne pas afficher le dialog encore - l'utilisateur peut réessayer
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Encore ${joursRestants.length} jour(s) à clôturer. Veuillez réessayer.'),
+                content: Text(
+                    'Encore ${joursRestants.length} jour(s) à clôturer. Veuillez réessayer.'),
                 backgroundColor: Colors.orange,
               ),
             );
@@ -1486,10 +1568,10 @@ await AutoPrintHelper.autoPrintWithDialog(
           return false;
         }
       }
-      
+
       return false; // Dialog annulé
     }
-    
+
     return false; // Accès refusé
   }
 
@@ -1497,7 +1579,7 @@ await AutoPrintHelper.autoPrintWithDialog(
     // Vérifier d'abord si les jours précédents sont clôturés
     final canProceed = await _verifierClotureAvantOperation();
     if (!canProceed || !mounted) return;
-    
+
     // Show loading indicator
     showDialog(
       context: context,
@@ -1526,13 +1608,13 @@ await AutoPrintHelper.autoPrintWithDialog(
 
       if (hasConnection) {
         debugPrint('📥 Synchronisation clients pour dépôt...');
-        
+
         // NE PAS vider - juste synchroniser depuis le serveur
         // Le serveur enverra les nouveaux et modifiés, LocalDB les mergera
         debugPrint('🔄 Téléchargement depuis le serveur...');
         final syncService = SyncService();
         await syncService.downloadTableData('clients', 'admin', 'admin');
-        
+
         // Recharger en mémoire
         final clientService = ClientService();
         await clientService.loadClients();
@@ -1576,7 +1658,7 @@ await AutoPrintHelper.autoPrintWithDialog(
     // Vérifier d'abord si les jours précédents sont clôturés
     final canProceed = await _verifierClotureAvantOperation();
     if (!canProceed || !mounted) return;
-    
+
     // Show loading indicator
     showDialog(
       context: context,
@@ -1605,12 +1687,12 @@ await AutoPrintHelper.autoPrintWithDialog(
 
       if (hasConnection) {
         debugPrint('📥 Synchronisation clients pour retrait...');
-        
+
         // NE PAS vider - juste synchroniser depuis le serveur
         debugPrint('🔄 Téléchargement depuis le serveur...');
         final syncService = SyncService();
         await syncService.downloadTableData('clients', 'admin', 'admin');
-        
+
         // Recharger en mémoire
         final clientService = ClientService();
         await clientService.loadClients();
@@ -1650,13 +1732,11 @@ await AutoPrintHelper.autoPrintWithDialog(
     }
   }
 
-
-
   void _showTransfertDestinationDialog() async {
     // Vérifier d'abord si les jours précédents sont clôturés
     final canProceed = await _verifierClotureAvantOperation();
     if (!canProceed || !mounted) return;
-    
+
     // Show loading indicator
     showDialog(
       context: context,
@@ -1685,7 +1765,7 @@ await AutoPrintHelper.autoPrintWithDialog(
 
       if (hasConnection) {
         debugPrint('📥 Synchronisation commissions et shops pour transfert...');
-        
+
         // NE PAS vider - juste synchroniser depuis le serveur
         // Le serveur enverra les modifiés, LocalDB les mergera
         debugPrint('🔄 Téléchargement depuis le serveur...');
@@ -1694,7 +1774,7 @@ await AutoPrintHelper.autoPrintWithDialog(
           syncService.downloadTableData('commissions', 'admin', 'admin'),
           syncService.downloadTableData('shops', 'admin', 'admin'),
         ]);
-        
+
         // Recharger en mémoire
         final ratesService = RatesService.instance;
         final shopService = Provider.of<ShopService>(context, listen: false);
@@ -1703,7 +1783,8 @@ await AutoPrintHelper.autoPrintWithDialog(
           shopService.loadShops(),
         ]);
 
-        debugPrint('✅ ${shopService.shops.length} shops chargés depuis le serveur');
+        debugPrint(
+            '✅ ${shopService.shops.length} shops chargés depuis le serveur');
       } else {
         debugPrint('ℹ️ Hors ligne - utilisation des données locales');
         // Charger depuis la base locale
@@ -1750,7 +1831,7 @@ await AutoPrintHelper.autoPrintWithDialog(
   // Helper method to get shop name by ID
   String _getShopName(int? shopId) {
     if (shopId == null) return 'Non spécifié';
-    
+
     final shopService = Provider.of<ShopService>(context, listen: false);
     final shop = shopService.shops.firstWhere(
       (s) => s.id == shopId,
@@ -1764,31 +1845,37 @@ await AutoPrintHelper.autoPrintWithDialog(
     final shopService = Provider.of<ShopService>(context, listen: false);
     final authService = Provider.of<AuthService>(context, listen: false);
     final agent = agentService.getAgentById(operation.agentId);
-    final agentName = agent?.nom ?? agent?.username ?? operation.lastModifiedBy ?? 'Agent inconnu';
-    
+    final agentName = agent?.nom ??
+        agent?.username ??
+        operation.lastModifiedBy ??
+        'Agent inconnu';
+
     // Get shop names for FLOT operations
     String? shopSourceName;
     String? shopDestinationName;
-    
+
     if (operation.type == OperationType.virement) {
       // For FLOT (virement), get both source and destination shops
       if (operation.shopSourceId != null) {
         final sourceShop = shopService.shops.firstWhere(
           (s) => s.id == operation.shopSourceId,
-          orElse: () => ShopModel(designation: 'Shop #${operation.shopSourceId}', localisation: ''),
+          orElse: () => ShopModel(
+              designation: 'Shop #${operation.shopSourceId}', localisation: ''),
         );
         shopSourceName = sourceShop.designation;
       }
-      
+
       if (operation.shopDestinationId != null) {
         final destShop = shopService.shops.firstWhere(
           (s) => s.id == operation.shopDestinationId,
-          orElse: () => ShopModel(designation: 'Shop #${operation.shopDestinationId}', localisation: ''),
+          orElse: () => ShopModel(
+              designation: 'Shop #${operation.shopDestinationId}',
+              localisation: ''),
         );
         shopDestinationName = destShop.designation;
       }
     }
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1798,12 +1885,12 @@ await AutoPrintHelper.autoPrintWithDialog(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (operation.codeOps != null)
-                Text('Code: ${operation.codeOps}'),
+              if (operation.codeOps != null) Text('Code: ${operation.codeOps}'),
               Text('Type: ${operation.typeLabel}'),
-              
+
               // Show source and destination for FLOT operations
-              if (operation.type == OperationType.virement && (shopSourceName != null || shopDestinationName != null))
+              if (operation.type == OperationType.virement &&
+                  (shopSourceName != null || shopDestinationName != null))
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Column(
@@ -1812,13 +1899,17 @@ await AutoPrintHelper.autoPrintWithDialog(
                       if (shopSourceName != null)
                         Row(
                           children: [
-                            const Icon(Icons.store, size: 16, color: Colors.orange),
+                            const Icon(Icons.store,
+                                size: 16, color: Colors.orange),
                             const SizedBox(width: 8),
-                            const Text('De: ', style: TextStyle(fontWeight: FontWeight.w600)),
+                            const Text('De: ',
+                                style: TextStyle(fontWeight: FontWeight.w600)),
                             Expanded(
                               child: Text(
                                 shopSourceName,
-                                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.orange),
                               ),
                             ),
                           ],
@@ -1828,13 +1919,17 @@ await AutoPrintHelper.autoPrintWithDialog(
                       if (shopDestinationName != null)
                         Row(
                           children: [
-                            const Icon(Icons.send, size: 16, color: Colors.blue),
+                            const Icon(Icons.send,
+                                size: 16, color: Colors.blue),
                             const SizedBox(width: 8),
-                            const Text('Envoy\u00e9 vers: ', style: TextStyle(fontWeight: FontWeight.w600)),
+                            const Text('Envoy\u00e9 vers: ',
+                                style: TextStyle(fontWeight: FontWeight.w600)),
                             Expanded(
                               child: Text(
                                 shopDestinationName,
-                                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue),
                               ),
                             ),
                           ],
@@ -1842,24 +1937,29 @@ await AutoPrintHelper.autoPrintWithDialog(
                     ],
                   ),
                 ),
-              
+
               // Expéditeur - From observation field
               Row(
                 children: [
                   const Icon(Icons.person, size: 16, color: Colors.orange),
                   const SizedBox(width: 8),
-                  const Text('Expéditeur: ', style: TextStyle(fontWeight: FontWeight.w600)),
+                  const Text('Expéditeur: ',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
                   Expanded(
                     child: Text(
-                      operation.observation != null && operation.observation!.isNotEmpty
+                      operation.observation != null &&
+                              operation.observation!.isNotEmpty
                           ? operation.observation!
-                          : (operation.clientNom != null && operation.clientNom!.isNotEmpty
+                          : (operation.clientNom != null &&
+                                  operation.clientNom!.isNotEmpty
                               ? operation.clientNom!
                               : 'Non spécifié'),
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: (operation.observation != null && operation.observation!.isNotEmpty) ||
-                                (operation.clientNom != null && operation.clientNom!.isNotEmpty)
+                        color: (operation.observation != null &&
+                                    operation.observation!.isNotEmpty) ||
+                                (operation.clientNom != null &&
+                                    operation.clientNom!.isNotEmpty)
                             ? Colors.black
                             : Colors.grey,
                       ),
@@ -1870,7 +1970,8 @@ await AutoPrintHelper.autoPrintWithDialog(
               const SizedBox(height: 4),
               if (operation.destinataire != null)
                 Text('Destinataire: ${operation.destinataire}'),
-              Text('Montant brut: ${operation.montantBrut} ${operation.devise}'),
+              Text(
+                  'Montant brut: ${operation.montantBrut} ${operation.devise}'),
               if (operation.commission > 0)
                 Text('Commission: ${operation.commission} ${operation.devise}'),
               Text('Montant net: ${operation.montantNet} ${operation.devise}'),
@@ -1878,8 +1979,7 @@ await AutoPrintHelper.autoPrintWithDialog(
               Text('Statut: ${operation.statutLabel}'),
               Text('Agent: $agentName'),
               Text('Date: ${_formatDate(operation.dateOp)}'),
-              if (operation.notes != null)
-                Text('Notes: ${operation.notes}'),
+              if (operation.notes != null) Text('Notes: ${operation.notes}'),
             ],
           ),
         ),

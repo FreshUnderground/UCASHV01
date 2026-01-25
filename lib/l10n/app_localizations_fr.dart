@@ -90,7 +90,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get commission => 'Commission';
 
   @override
-  String get total => 'Total';
+  String get total => 'TOTAL';
 
   @override
   String get date => 'Date';
@@ -1524,4 +1524,361 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get submit => 'Soumettre';
+
+  @override
+  String get closureReport => 'Rapport de Clôture';
+
+  @override
+  String get dailyClosureReport => 'Rapport de Clôture Journalière';
+
+  @override
+  String get generateReport => 'Générer le Rapport';
+
+  @override
+  String get reportDate => 'Date du rapport';
+
+  @override
+  String get previousBalance => 'Solde Antérieur';
+
+  @override
+  String get transfersReceived => 'Transferts Reçus';
+
+  @override
+  String get transfersServed => 'Transferts Servis';
+
+  @override
+  String get feesWithdrawal => 'Sortie Frais';
+
+  @override
+  String get detailByShop => 'Détail par Shop';
+
+  @override
+  String get dailyFeesBalance => 'Solde Frais du jour';
+
+  @override
+  String get servedPartners => 'Partenaires Servis';
+
+  @override
+  String get partnersDeposits => 'Dépôts Partenaires';
+
+  @override
+  String get shopsWeOwe => 'Shops à qui Nous Devons';
+
+  @override
+  String get shopsOwingUs => 'Shops qui Nous Doivent';
+
+  @override
+  String get totalIntershopDebts => 'Total Dettes Inter-Shops';
+
+  @override
+  String get noPartnerOperations => 'Aucune opération partenaire trouvée pour ce jour';
+
+  @override
+  String get previewPdf => 'Prévisualiser';
+
+  @override
+  String get downloadPdf => 'Télécharger PDF';
+
+  @override
+  String get printReport => 'Imprimer';
+
+  @override
+  String get confirmPrint => 'Confirmer l\'impression';
+
+  @override
+  String get printingLaunched => 'Impression lancée avec succès';
+
+  @override
+  String get reportFor => 'Rapport du';
+
+  @override
+  String get tip => 'Conseil';
+
+  @override
+  String get usePreviewBeforePrinting => 'Utilisez \"Prévisualiser\" pour voir le contenu avant d\'imprimer';
+
+  @override
+  String get noReportAvailable => 'Aucun rapport disponible';
+
+  @override
+  String get generatingReport => 'Génération du rapport en cours...';
+
+  @override
+  String get refreshReport => 'Actualiser le rapport';
+
+  @override
+  String get pdfGeneratedSuccessfully => 'PDF généré avec succès';
+
+  @override
+  String get pdfError => 'Erreur PDF';
+
+  @override
+  String get partner => 'Partenaire';
+
+  @override
+  String get debtor => 'Débiteur';
+
+  @override
+  String get creditor => 'Créancier';
+
+  @override
+  String get installApp => 'Installer l\'App';
+
+  @override
+  String get installUcashApp => 'Installer l\'Application UCASH';
+
+  @override
+  String get installPwaDescription => 'Installez UCASH sur votre appareil pour un accès rapide, un support hors ligne et une expérience d\'application native';
+
+  @override
+  String get installPwaTitle => 'Installer l\'Application';
+
+  @override
+  String get installPwaMessage => 'Installez UCASH pour de meilleures performances et un accès hors ligne';
+
+  @override
+  String get pwaInstallSuccess => 'Application prête à être installée !';
+
+  @override
+  String get pwaNotSupported => 'L\'installation PWA n\'est pas supportée sur cet appareil';
+
+  @override
+  String get pwaAlreadyInstalled => 'Application déjà installée';
+
+  @override
+  String get installNow => 'Installer Maintenant';
+
+  @override
+  String get alreadyInstalled => 'Déjà Installée';
+
+  @override
+  String get workOffline => 'Travailler Hors Ligne';
+
+  @override
+  String get fastAccess => 'Accès Rapide';
+
+  @override
+  String get likeNativeApp => 'Comme une App Native';
+
+  @override
+  String get intershopDebtsMovements => 'Mouvements des Dettes Intershop';
+
+  @override
+  String get intershopDebtsReport => 'Rapport des Dettes Intershop';
+
+  @override
+  String get totalReceivables => 'Total Créances';
+
+  @override
+  String get totalDebts => 'Total Dettes';
+
+  @override
+  String get netBalance => 'Solde Net';
+
+  @override
+  String get movements => 'Mouvements';
+
+  @override
+  String get noIntershopDebt => 'Aucune dette inter-shop';
+
+  @override
+  String get noReceivablesOrDebtsForPeriod => 'Ce shop n\'a ni créances ni dettes pour la période sélectionnée';
+
+  @override
+  String get filters => 'Filtres';
+
+  @override
+  String get periodSelection => 'Sélection de la période';
+
+  @override
+  String get generatePdf => 'Générer PDF';
+
+  @override
+  String get dailyEvolution => 'Évolution Quotidienne';
+
+  @override
+  String get movementDetails => 'Détails des Mouvements';
+
+  @override
+  String get errorGeneratingReport => 'Erreur lors de la génération du rapport';
+
+  @override
+  String get totalOperations => 'Total Opérations';
+
+  @override
+  String get clickForDetails => 'Cliquer pour détails';
+
+  @override
+  String get operation => 'Opération';
+
+  @override
+  String get receivable => 'Créance';
+
+  @override
+  String get debt => 'Dette';
+
+  @override
+  String get previousDebt => 'Dette Antérieure';
+
+  @override
+  String get cumulativeBalance => 'Solde Cumulé';
+
+  @override
+  String get dailyBalance => 'Solde du jour';
+
+  @override
+  String get noMovementsForPeriod => 'Aucun mouvement pour cette période';
+
+  @override
+  String get showDailyEvolution => 'Afficher l\'évolution quotidienne';
+
+  @override
+  String get hideDailyEvolution => 'Masquer l\'évolution quotidienne';
+
+  @override
+  String get showMovementDetails => 'Afficher les détails des mouvements';
+
+  @override
+  String get hideMovementDetails => 'Masquer les détails des mouvements';
+
+  @override
+  String get served => 'Servi';
+
+  @override
+  String get awaiting => 'En attente';
+
+  @override
+  String get groupBy => 'Grouper par';
+
+  @override
+  String get groupByType => 'Grouper par type';
+
+  @override
+  String get groupBySourceShop => 'Grouper par shop source';
+
+  @override
+  String get groupByDestinationShop => 'Grouper par shop destination';
+
+  @override
+  String get transferServed => 'Transfert servi';
+
+  @override
+  String get transferPending => 'Transfert en attente';
+
+  @override
+  String get transferInitiated => 'Transfert initié';
+
+  @override
+  String get depositReceived => 'Dépôt reçu';
+
+  @override
+  String get depositMade => 'Dépôt fait';
+
+  @override
+  String get withdrawalServed => 'Retrait servi';
+
+  @override
+  String get withdrawalMade => 'Retrait fait';
+
+  @override
+  String get flotShopToShop => 'FLOT shop-to-shop';
+
+  @override
+  String get flotReceived => 'FLOT reçu';
+
+  @override
+  String get flotSent => 'FLOT envoyé';
+
+  @override
+  String get shopToShopFlot => 'FLOT shop-à-shop';
+
+  @override
+  String get exportPdf => 'Exporter PDF';
+
+  @override
+  String get partnersNetPosition => 'Situation Nette des Partenaires';
+
+  @override
+  String get searchPartner => 'Rechercher un partenaire (nom, téléphone, numéro de compte)';
+
+  @override
+  String get enterNamePhoneOrAccount => 'Entrez un nom, téléphone ou numéro de compte';
+
+  @override
+  String get globalNetPosition => 'Position Nette Globale';
+
+  @override
+  String get theyOweUs => 'Ils Nous qui Doivent';
+
+  @override
+  String get weOweThem => 'Nous leur devons';
+
+  @override
+  String get netPosition => 'Position Nette';
+
+  @override
+  String get thoseWhoOweUs => 'Ceux qui Nous qui Doivent';
+
+  @override
+  String get thoseWeOwe => 'Ceux que Nous que Devons';
+
+  @override
+  String get noPartner => 'Aucun partenaire';
+
+  @override
+  String get inThisCategory => 'dans cette catégorie';
+
+  @override
+  String get trashBin => 'Corbeille';
+
+  @override
+  String get emptyTrash => 'Corbeille vide';
+
+  @override
+  String get restoreOperation => 'Restaurer l\'opération';
+
+  @override
+  String get restoreThisOperation => 'Restaurer cette opération';
+
+  @override
+  String get confirmRestore => 'Confirmer la restauration de cette opération ?';
+
+  @override
+  String get operationRestored => 'Opération restaurée avec succès';
+
+  @override
+  String get errorRestoring => 'Erreur lors de la restauration';
+
+  @override
+  String get deletedOn => 'Supprimé le';
+
+  @override
+  String get deletedBy => 'Par';
+
+  @override
+  String get syncedOnServer => 'Synchronisé sur le serveur';
+
+  @override
+  String get waitingForSync => 'En attente de synchronisation';
+
+  @override
+  String get recipient => 'Destinataire';
+
+  @override
+  String get client => 'Client';
+
+  @override
+  String get grossAmount => 'Montant brut';
+
+  @override
+  String get netAmount => 'Montant net';
+
+  @override
+  String get operationDate => 'Date opération';
+
+  @override
+  String get deletionReason => 'Raison suppression';
+
+  @override
+  String get code => 'Code';
 }

@@ -1,27 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/deletion_request_model.dart';
 import '../models/operation_corbeille_model.dart';
 import '../services/deletion_service.dart';
 import '../services/auth_service.dart';
+import '../l10n/app_localizations.dart';
 
 /// Widget Corbeille: Restaurer les opérations supprimées
 class TrashBinWidget extends StatelessWidget {
-  final bool showAll; // Si true, affiche TOUT (admin), sinon seulement les non-synced (agent)
-  
+  final bool
+      showAll; // Si true, affiche TOUT (admin), sinon seulement les non-synced (agent)
+
   const TrashBinWidget({Key? key, this.showAll = false}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
     return Consumer<DeletionService>(
       builder: (context, service, _) {
         // Admin: afficher TOUS les éléments (synchronisés ou non)
         // Agent: afficher seulement les éléments en attente de sync
         final trash = showAll ? service.allTrash : service.activeTrash;
-        
+
         return Scaffold(
           appBar: AppBar(
-            title: Text('Corbeille (${trash.length})'),
+            title: Text('${l10n.trashBin} (${trash.length})'),
             actions: [
               IconButton(
                 icon: const Icon(Icons.refresh),
@@ -30,13 +33,15 @@ class TrashBinWidget extends StatelessWidget {
             ],
           ),
           body: trash.isEmpty
-              ? const Center(
+              ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.delete_outline, size: 80, color: Colors.grey),
-                      SizedBox(height: 16),
-                      Text('Corbeille vide', style: TextStyle(fontSize: 18)),
+                      const Icon(Icons.delete_outline,
+                          size: 80, color: Colors.grey),
+                      const SizedBox(height: 16),
+                      Text(l10n.emptyTrash,
+                          style: const TextStyle(fontSize: 18)),
                     ],
                   ),
                 )
@@ -44,7 +49,7 @@ class TrashBinWidget extends StatelessWidget {
                   itemCount: trash.length,
                   itemBuilder: (context, index) {
                     final item = trash[index];
-                    return _buildTrashCard(context, item);
+                    return _buildTrashCard(context, item, l10n);
                   },
                 ),
         );
@@ -52,14 +57,15 @@ class TrashBinWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildTrashCard(BuildContext context, OperationCorbeilleModel item) {
+  Widget _buildTrashCard(BuildContext context, OperationCorbeilleModel item,
+      AppLocalizations l10n) {
     return Card(
       margin: const EdgeInsets.all(8),
       // Bordure verte si synchronisé (sur le serveur)
       color: item.isSynced ? Colors.green[50] : null,
       child: ExpansionTile(
         leading: Icon(
-          Icons.delete, 
+          Icons.delete,
           color: item.isSynced ? Colors.green : Colors.red,
         ),
         title: Text(
@@ -69,30 +75,31 @@ class TrashBinWidget extends StatelessWidget {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Code: ${item.codeOps}'),
-            Text('Supprimé le: ${_formatDate(item.deletedAt)}'),
+            Text('${l10n.code}: ${item.codeOps}'),
+            Text('${l10n.deletedOn}: ${_formatDate(item.deletedAt)}'),
             if (item.deletedByAdminName != null)
-              Text('Par: ${item.deletedByAdminName}'),
+              Text('${l10n.deletedBy}: ${item.deletedByAdminName}'),
             // Indicateur de synchronisation
             if (item.isSynced)
-              const Row(
+              Row(
                 children: [
-                  Icon(Icons.cloud_done, size: 16, color: Colors.green),
-                  SizedBox(width: 4),
+                  const Icon(Icons.cloud_done, size: 16, color: Colors.green),
+                  const SizedBox(width: 4),
                   Text(
-                    'Synchronisé sur le serveur',
-                    style: TextStyle(color: Colors.green, fontSize: 12),
+                    l10n.syncedOnServer,
+                    style: const TextStyle(color: Colors.green, fontSize: 12),
                   ),
                 ],
               )
             else
-              const Row(
+              Row(
                 children: [
-                  Icon(Icons.cloud_upload, size: 16, color: Colors.orange),
-                  SizedBox(width: 4),
+                  const Icon(Icons.cloud_upload,
+                      size: 16, color: Colors.orange),
+                  const SizedBox(width: 4),
                   Text(
-                    'En attente de synchronisation',
-                    style: TextStyle(color: Colors.orange, fontSize: 12),
+                    l10n.waitingForSync,
+                    style: const TextStyle(color: Colors.orange, fontSize: 12),
                   ),
                 ],
               ),
@@ -105,29 +112,33 @@ class TrashBinWidget extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (item.destinataire != null)
-                  _buildDetailRow('Destinataire', item.destinataire!),
+                  _buildDetailRow(l10n.recipient, item.destinataire!, l10n),
                 if (item.clientNom != null)
-                  _buildDetailRow('Client', item.clientNom!),
+                  _buildDetailRow(l10n.client, item.clientNom!, l10n),
                 if (item.agentUsername != null)
-                  _buildDetailRow('Agent', item.agentUsername!),
-                _buildDetailRow('Montant brut', '${item.montantBrut} ${item.devise}'),
-                _buildDetailRow('Commission', '${item.commission} ${item.devise}'),
-                _buildDetailRow('Montant net', '${item.montantNet} ${item.devise}'),
-                _buildDetailRow('Date opération', _formatDate(item.dateOp)),
-                
+                  _buildDetailRow(l10n.agent, item.agentUsername!, l10n),
+                _buildDetailRow(l10n.grossAmount,
+                    '${item.montantBrut} ${item.devise}', l10n),
+                _buildDetailRow(
+                    l10n.commission, '${item.commission} ${item.devise}', l10n),
+                _buildDetailRow(
+                    l10n.netAmount, '${item.montantNet} ${item.devise}', l10n),
+                _buildDetailRow(
+                    l10n.operationDate, _formatDate(item.dateOp), l10n),
                 if (item.deletionReason != null) ...[
                   const SizedBox(height: 8),
-                  const Text('Raison suppression:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text('${l10n.deletionReason}:',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
                   Text(item.deletionReason!),
                 ],
-                
                 const SizedBox(height: 16),
                 Center(
                   child: ElevatedButton.icon(
-                    onPressed: () => _restoreOperation(context, item),
+                    onPressed: () => _restoreOperation(context, item, l10n),
                     icon: const Icon(Icons.restore),
-                    label: const Text('Restaurer cette opération'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                    label: Text(l10n.restoreThisOperation),
+                    style:
+                        ElevatedButton.styleFrom(backgroundColor: Colors.green),
                   ),
                 ),
               ],
@@ -138,7 +149,7 @@ class TrashBinWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildDetailRow(String label, String value) {
+  Widget _buildDetailRow(String label, String value, AppLocalizations l10n) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -150,58 +161,61 @@ class TrashBinWidget extends StatelessWidget {
     );
   }
 
-  void _restoreOperation(BuildContext context, OperationCorbeilleModel item) {
+  void _restoreOperation(BuildContext context, OperationCorbeilleModel item,
+      AppLocalizations l10n) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Restaurer l\'opération'),
+        title: Text(l10n.restoreOperation),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Confirmer la restauration de cette opération ?'),
+            Text(l10n.confirmRestore),
             const SizedBox(height: 8),
-            Text('Code: ${item.codeOps}'),
-            Text('Montant: ${item.montantNet} ${item.devise}'),
+            Text('${l10n.code}: ${item.codeOps}'),
+            Text('${l10n.amount}: ${item.montantNet} ${item.devise}'),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Annuler'),
+            child: Text(l10n.cancel),
           ),
           ElevatedButton(
             onPressed: () async {
-              final authService = Provider.of<AuthService>(context, listen: false);
+              final authService =
+                  Provider.of<AuthService>(context, listen: false);
               final user = authService.currentUser;
-              
+
               if (user == null) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Utilisateur non connecté')),
+                  SnackBar(content: Text(l10n.userNotConnected)),
                 );
                 return;
               }
-              
-              final deletionService = Provider.of<DeletionService>(context, listen: false);
+
+              final deletionService =
+                  Provider.of<DeletionService>(context, listen: false);
               final success = await deletionService.restoreOperation(
                 codeOps: item.codeOps,
                 restoredBy: 'admin_${user.username}',
               );
-              
+
               Navigator.pop(context);
-              
+
               if (success) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Opération restaurée avec succès')),
+                  SnackBar(content: Text(l10n.operationRestored)),
                 );
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Erreur lors de la restauration')),
+                  SnackBar(content: Text(l10n.errorRestoring)),
                 );
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            child: const Text('Restaurer'),
+            child: Text(l10n.restoreOperation),
           ),
         ],
       ),

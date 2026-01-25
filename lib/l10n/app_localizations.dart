@@ -260,7 +260,7 @@ abstract class AppLocalizations {
   /// No description provided for @total.
   ///
   /// In en, this message translates to:
-  /// **'Total'**
+  /// **'TOTAL'**
   String get total;
 
   /// No description provided for @date.
@@ -3124,6 +3124,720 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Submit'**
   String get submit;
+
+  /// No description provided for @closureReport.
+  ///
+  /// In en, this message translates to:
+  /// **'Closure Report'**
+  String get closureReport;
+
+  /// No description provided for @dailyClosureReport.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily Closure Report'**
+  String get dailyClosureReport;
+
+  /// No description provided for @generateReport.
+  ///
+  /// In en, this message translates to:
+  /// **'Generate Report'**
+  String get generateReport;
+
+  /// No description provided for @reportDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Report date'**
+  String get reportDate;
+
+  /// No description provided for @previousBalance.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous Balance'**
+  String get previousBalance;
+
+  /// No description provided for @transfersReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfers Received'**
+  String get transfersReceived;
+
+  /// No description provided for @transfersServed.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfers Served'**
+  String get transfersServed;
+
+  /// No description provided for @feesWithdrawal.
+  ///
+  /// In en, this message translates to:
+  /// **'Fees Withdrawal'**
+  String get feesWithdrawal;
+
+  /// No description provided for @detailByShop.
+  ///
+  /// In en, this message translates to:
+  /// **'Detail by Shop'**
+  String get detailByShop;
+
+  /// No description provided for @dailyFeesBalance.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily Fees Balance'**
+  String get dailyFeesBalance;
+
+  /// No description provided for @servedPartners.
+  ///
+  /// In en, this message translates to:
+  /// **'Served Partners'**
+  String get servedPartners;
+
+  /// No description provided for @partnersDeposits.
+  ///
+  /// In en, this message translates to:
+  /// **'Partners Deposits'**
+  String get partnersDeposits;
+
+  /// No description provided for @shopsWeOwe.
+  ///
+  /// In en, this message translates to:
+  /// **'Shops We Owe'**
+  String get shopsWeOwe;
+
+  /// No description provided for @shopsOwingUs.
+  ///
+  /// In en, this message translates to:
+  /// **'Shops Owing Us'**
+  String get shopsOwingUs;
+
+  /// No description provided for @totalIntershopDebts.
+  ///
+  /// In en, this message translates to:
+  /// **'Total Intershop Debts'**
+  String get totalIntershopDebts;
+
+  /// No description provided for @noPartnerOperations.
+  ///
+  /// In en, this message translates to:
+  /// **'No partner operations found for this day'**
+  String get noPartnerOperations;
+
+  /// No description provided for @previewPdf.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview'**
+  String get previewPdf;
+
+  /// No description provided for @downloadPdf.
+  ///
+  /// In en, this message translates to:
+  /// **'Download PDF'**
+  String get downloadPdf;
+
+  /// No description provided for @printReport.
+  ///
+  /// In en, this message translates to:
+  /// **'Print'**
+  String get printReport;
+
+  /// No description provided for @confirmPrint.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm printing'**
+  String get confirmPrint;
+
+  /// No description provided for @printingLaunched.
+  ///
+  /// In en, this message translates to:
+  /// **'Printing launched successfully'**
+  String get printingLaunched;
+
+  /// No description provided for @reportFor.
+  ///
+  /// In en, this message translates to:
+  /// **'Report for'**
+  String get reportFor;
+
+  /// No description provided for @tip.
+  ///
+  /// In en, this message translates to:
+  /// **'Tip'**
+  String get tip;
+
+  /// No description provided for @usePreviewBeforePrinting.
+  ///
+  /// In en, this message translates to:
+  /// **'Use \"Preview\" to see the content before printing'**
+  String get usePreviewBeforePrinting;
+
+  /// No description provided for @noReportAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No report available'**
+  String get noReportAvailable;
+
+  /// No description provided for @generatingReport.
+  ///
+  /// In en, this message translates to:
+  /// **'Generating report...'**
+  String get generatingReport;
+
+  /// No description provided for @refreshReport.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh Report'**
+  String get refreshReport;
+
+  /// No description provided for @pdfGeneratedSuccessfully.
+  ///
+  /// In en, this message translates to:
+  /// **'PDF generated successfully'**
+  String get pdfGeneratedSuccessfully;
+
+  /// No description provided for @pdfError.
+  ///
+  /// In en, this message translates to:
+  /// **'PDF Error'**
+  String get pdfError;
+
+  /// No description provided for @partner.
+  ///
+  /// In en, this message translates to:
+  /// **'Partner'**
+  String get partner;
+
+  /// No description provided for @debtor.
+  ///
+  /// In en, this message translates to:
+  /// **'Debtor'**
+  String get debtor;
+
+  /// No description provided for @creditor.
+  ///
+  /// In en, this message translates to:
+  /// **'Creditor'**
+  String get creditor;
+
+  /// No description provided for @installApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Install App'**
+  String get installApp;
+
+  /// No description provided for @installUcashApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Install UCASH App'**
+  String get installUcashApp;
+
+  /// No description provided for @installPwaDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Install UCASH on your device for quick access, offline support, and a native app experience'**
+  String get installPwaDescription;
+
+  /// No description provided for @installPwaTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Install Application'**
+  String get installPwaTitle;
+
+  /// No description provided for @installPwaMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Install UCASH for better performance and offline access'**
+  String get installPwaMessage;
+
+  /// No description provided for @pwaInstallSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Application ready to install!'**
+  String get pwaInstallSuccess;
+
+  /// No description provided for @pwaNotSupported.
+  ///
+  /// In en, this message translates to:
+  /// **'PWA installation not supported on this device'**
+  String get pwaNotSupported;
+
+  /// No description provided for @pwaAlreadyInstalled.
+  ///
+  /// In en, this message translates to:
+  /// **'Application already installed'**
+  String get pwaAlreadyInstalled;
+
+  /// No description provided for @installNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Install Now'**
+  String get installNow;
+
+  /// No description provided for @alreadyInstalled.
+  ///
+  /// In en, this message translates to:
+  /// **'Already Installed'**
+  String get alreadyInstalled;
+
+  /// No description provided for @workOffline.
+  ///
+  /// In en, this message translates to:
+  /// **'Work Offline'**
+  String get workOffline;
+
+  /// No description provided for @fastAccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Fast Access'**
+  String get fastAccess;
+
+  /// No description provided for @likeNativeApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Like a Native App'**
+  String get likeNativeApp;
+
+  /// No description provided for @intershopDebtsMovements.
+  ///
+  /// In en, this message translates to:
+  /// **'Intershop Debts Movements'**
+  String get intershopDebtsMovements;
+
+  /// No description provided for @intershopDebtsReport.
+  ///
+  /// In en, this message translates to:
+  /// **'Intershop Debts Report'**
+  String get intershopDebtsReport;
+
+  /// No description provided for @totalReceivables.
+  ///
+  /// In en, this message translates to:
+  /// **'Total Receivables'**
+  String get totalReceivables;
+
+  /// No description provided for @totalDebts.
+  ///
+  /// In en, this message translates to:
+  /// **'Total Debts'**
+  String get totalDebts;
+
+  /// No description provided for @netBalance.
+  ///
+  /// In en, this message translates to:
+  /// **'Net Balance'**
+  String get netBalance;
+
+  /// No description provided for @movements.
+  ///
+  /// In en, this message translates to:
+  /// **'Movements'**
+  String get movements;
+
+  /// No description provided for @noIntershopDebt.
+  ///
+  /// In en, this message translates to:
+  /// **'No intershop debt'**
+  String get noIntershopDebt;
+
+  /// No description provided for @noReceivablesOrDebtsForPeriod.
+  ///
+  /// In en, this message translates to:
+  /// **'This shop has neither receivables nor debts for the selected period'**
+  String get noReceivablesOrDebtsForPeriod;
+
+  /// No description provided for @filters.
+  ///
+  /// In en, this message translates to:
+  /// **'Filters'**
+  String get filters;
+
+  /// No description provided for @periodSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Period Selection'**
+  String get periodSelection;
+
+  /// No description provided for @generatePdf.
+  ///
+  /// In en, this message translates to:
+  /// **'Generate PDF'**
+  String get generatePdf;
+
+  /// No description provided for @dailyEvolution.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily Evolution'**
+  String get dailyEvolution;
+
+  /// No description provided for @movementDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Movement Details'**
+  String get movementDetails;
+
+  /// No description provided for @errorGeneratingReport.
+  ///
+  /// In en, this message translates to:
+  /// **'Error generating report'**
+  String get errorGeneratingReport;
+
+  /// No description provided for @totalOperations.
+  ///
+  /// In en, this message translates to:
+  /// **'Total Operations'**
+  String get totalOperations;
+
+  /// No description provided for @clickForDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Click for details'**
+  String get clickForDetails;
+
+  /// No description provided for @operation.
+  ///
+  /// In en, this message translates to:
+  /// **'Operation'**
+  String get operation;
+
+  /// No description provided for @receivable.
+  ///
+  /// In en, this message translates to:
+  /// **'Receivable'**
+  String get receivable;
+
+  /// No description provided for @debt.
+  ///
+  /// In en, this message translates to:
+  /// **'Debt'**
+  String get debt;
+
+  /// No description provided for @previousDebt.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous Debt'**
+  String get previousDebt;
+
+  /// No description provided for @cumulativeBalance.
+  ///
+  /// In en, this message translates to:
+  /// **'Cumulative Balance'**
+  String get cumulativeBalance;
+
+  /// No description provided for @dailyBalance.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily Balance'**
+  String get dailyBalance;
+
+  /// No description provided for @noMovementsForPeriod.
+  ///
+  /// In en, this message translates to:
+  /// **'No movements for this period'**
+  String get noMovementsForPeriod;
+
+  /// No description provided for @showDailyEvolution.
+  ///
+  /// In en, this message translates to:
+  /// **'Show daily evolution'**
+  String get showDailyEvolution;
+
+  /// No description provided for @hideDailyEvolution.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide daily evolution'**
+  String get hideDailyEvolution;
+
+  /// No description provided for @showMovementDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Show movement details'**
+  String get showMovementDetails;
+
+  /// No description provided for @hideMovementDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide movement details'**
+  String get hideMovementDetails;
+
+  /// No description provided for @served.
+  ///
+  /// In en, this message translates to:
+  /// **'Served'**
+  String get served;
+
+  /// No description provided for @awaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Awaiting'**
+  String get awaiting;
+
+  /// No description provided for @groupBy.
+  ///
+  /// In en, this message translates to:
+  /// **'Group by'**
+  String get groupBy;
+
+  /// No description provided for @groupByType.
+  ///
+  /// In en, this message translates to:
+  /// **'Group by type'**
+  String get groupByType;
+
+  /// No description provided for @groupBySourceShop.
+  ///
+  /// In en, this message translates to:
+  /// **'Group by source shop'**
+  String get groupBySourceShop;
+
+  /// No description provided for @groupByDestinationShop.
+  ///
+  /// In en, this message translates to:
+  /// **'Group by destination shop'**
+  String get groupByDestinationShop;
+
+  /// No description provided for @transferServed.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer served'**
+  String get transferServed;
+
+  /// No description provided for @transferPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer pending'**
+  String get transferPending;
+
+  /// No description provided for @transferInitiated.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer initiated'**
+  String get transferInitiated;
+
+  /// No description provided for @depositReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'Deposit received'**
+  String get depositReceived;
+
+  /// No description provided for @depositMade.
+  ///
+  /// In en, this message translates to:
+  /// **'Deposit made'**
+  String get depositMade;
+
+  /// No description provided for @withdrawalServed.
+  ///
+  /// In en, this message translates to:
+  /// **'Withdrawal served'**
+  String get withdrawalServed;
+
+  /// No description provided for @withdrawalMade.
+  ///
+  /// In en, this message translates to:
+  /// **'Withdrawal made'**
+  String get withdrawalMade;
+
+  /// No description provided for @flotShopToShop.
+  ///
+  /// In en, this message translates to:
+  /// **'FLOT shop-to-shop'**
+  String get flotShopToShop;
+
+  /// No description provided for @flotReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'FLOT received'**
+  String get flotReceived;
+
+  /// No description provided for @flotSent.
+  ///
+  /// In en, this message translates to:
+  /// **'FLOT sent'**
+  String get flotSent;
+
+  /// No description provided for @shopToShopFlot.
+  ///
+  /// In en, this message translates to:
+  /// **'Shop-to-shop FLOT'**
+  String get shopToShopFlot;
+
+  /// No description provided for @exportPdf.
+  ///
+  /// In en, this message translates to:
+  /// **'Export PDF'**
+  String get exportPdf;
+
+  /// No description provided for @partnersNetPosition.
+  ///
+  /// In en, this message translates to:
+  /// **'Partners Net Position'**
+  String get partnersNetPosition;
+
+  /// No description provided for @searchPartner.
+  ///
+  /// In en, this message translates to:
+  /// **'Search for a partner (name, phone, account number)'**
+  String get searchPartner;
+
+  /// No description provided for @enterNamePhoneOrAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a name, phone or account number'**
+  String get enterNamePhoneOrAccount;
+
+  /// No description provided for @globalNetPosition.
+  ///
+  /// In en, this message translates to:
+  /// **'Global Net Position'**
+  String get globalNetPosition;
+
+  /// No description provided for @theyOweUs.
+  ///
+  /// In en, this message translates to:
+  /// **'They Owe Us'**
+  String get theyOweUs;
+
+  /// No description provided for @weOweThem.
+  ///
+  /// In en, this message translates to:
+  /// **'We Owe Them'**
+  String get weOweThem;
+
+  /// No description provided for @netPosition.
+  ///
+  /// In en, this message translates to:
+  /// **'Net Position'**
+  String get netPosition;
+
+  /// No description provided for @thoseWhoOweUs.
+  ///
+  /// In en, this message translates to:
+  /// **'Those Who Owe Us'**
+  String get thoseWhoOweUs;
+
+  /// No description provided for @thoseWeOwe.
+  ///
+  /// In en, this message translates to:
+  /// **'Those We Owe'**
+  String get thoseWeOwe;
+
+  /// No description provided for @noPartner.
+  ///
+  /// In en, this message translates to:
+  /// **'No partner'**
+  String get noPartner;
+
+  /// No description provided for @inThisCategory.
+  ///
+  /// In en, this message translates to:
+  /// **'in this category'**
+  String get inThisCategory;
+
+  /// No description provided for @trashBin.
+  ///
+  /// In en, this message translates to:
+  /// **'Trash Bin'**
+  String get trashBin;
+
+  /// No description provided for @emptyTrash.
+  ///
+  /// In en, this message translates to:
+  /// **'Empty trash'**
+  String get emptyTrash;
+
+  /// No description provided for @restoreOperation.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore operation'**
+  String get restoreOperation;
+
+  /// No description provided for @restoreThisOperation.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore this operation'**
+  String get restoreThisOperation;
+
+  /// No description provided for @confirmRestore.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm restoration of this operation?'**
+  String get confirmRestore;
+
+  /// No description provided for @operationRestored.
+  ///
+  /// In en, this message translates to:
+  /// **'Operation restored successfully'**
+  String get operationRestored;
+
+  /// No description provided for @errorRestoring.
+  ///
+  /// In en, this message translates to:
+  /// **'Error restoring operation'**
+  String get errorRestoring;
+
+  /// No description provided for @deletedOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted on'**
+  String get deletedOn;
+
+  /// No description provided for @deletedBy.
+  ///
+  /// In en, this message translates to:
+  /// **'By'**
+  String get deletedBy;
+
+  /// No description provided for @syncedOnServer.
+  ///
+  /// In en, this message translates to:
+  /// **'Synced on server'**
+  String get syncedOnServer;
+
+  /// No description provided for @waitingForSync.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for synchronization'**
+  String get waitingForSync;
+
+  /// No description provided for @recipient.
+  ///
+  /// In en, this message translates to:
+  /// **'Recipient'**
+  String get recipient;
+
+  /// No description provided for @client.
+  ///
+  /// In en, this message translates to:
+  /// **'Client'**
+  String get client;
+
+  /// No description provided for @grossAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'Gross amount'**
+  String get grossAmount;
+
+  /// No description provided for @netAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'Net amount'**
+  String get netAmount;
+
+  /// No description provided for @operationDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Operation date'**
+  String get operationDate;
+
+  /// No description provided for @deletionReason.
+  ///
+  /// In en, this message translates to:
+  /// **'Deletion reason'**
+  String get deletionReason;
+
+  /// No description provided for @code.
+  ///
+  /// In en, this message translates to:
+  /// **'Code'**
+  String get code;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

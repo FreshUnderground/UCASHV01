@@ -24,6 +24,7 @@ import '../models/triangular_debt_settlement_model.dart';
 import '../models/credit_intershop_tracking_model.dart';
 import '../models/multi_month_payment_model.dart';
 import '../models/virtual_exchange_model.dart';
+import 'daily_debt_snapshot_service.dart';
 
 class LocalDB {
   static final LocalDB _instance = LocalDB._internal();
@@ -1953,6 +1954,20 @@ class LocalDB {
     await prefs.setString(key, jsonEncode(updatedCloture.toJson()));
 
     debugPrint('✅ Clôture caisse sauvegardée avec succès');
+
+    // IMPORTANT: Create daily debt snapshot after closure
+    try {
+      debugPrint(
+          '📸 Creating debt snapshot for shop ${updatedCloture.shopId}...');
+      await DailyDebtSnapshotService.instance.saveSnapshotForDate(
+        shopId: updatedCloture.shopId,
+        date: updatedCloture.dateCloture,
+      );
+      debugPrint('✅ Debt snapshot created successfully');
+    } catch (e) {
+      debugPrint('⚠️ Error creating debt snapshot: $e');
+      // Don't fail the closure if snapshot fails
+    }
   }
 
   /// Récupérer toutes les clôtures de caisse
@@ -3761,5 +3776,134 @@ class LocalDB {
     }
 
     return duplicatesRemoved;
+  }
+
+  // === DAILY INTERSHOP DEBT SNAPSHOTS ===
+
+  /// Save or update a daily debt snapshot
+  Future<void> saveDailyDebtSnapshot(Map<String, dynamic> snapshot) async {
+    final prefs = await database;
+    final shopId = snapshot['shop_id'] as int;
+    final otherShopId = snapshot['other_shop_id'] as int;
+    final date = snapshot['date'] as String;
+
+    // Create unique key: shop_other_date
+    final key = 'debt_snapshot_${shopId}_${otherShopId}_$date';
+
+    await prefs.setString(key, jsonEncode(snapshot));
+    debugPrint('💾 Saved debt snapshot: $key');
+  }
+
+  /// Get snapshot for a specific shop pair and date
+  Future<Map<String, dynamic>?> getDailyDebtSnapshot({
+    required int shopId,
+    required int otherShopId,
+    required DateTime date,
+  }) async {
+    final prefs = await database;
+    final dateStr = date.toIso8601String().split('T')[0];
+    final key = 'debt_snapshot_${shopId}_${otherShopId}_$dateStr';
+
+    final data = prefs.getString(key);
+    if (data != null) {
+      return jsonDecode(data) as Map<String, dynamic>;
+    }
+    return null;
+  }
+
+  /// Get all snapshots for a shop on a specific date
+  Future<List<Map<String, dynamic>>> getDailyDebtSnapshotsForShopAndDate({
+    required int shopId,
+    required DateTime date,
+  }) async {
+    final prefs = await database;
+    final dateStr = date.toIso8601String().split('T')[0];
+    final prefix = 'debt_snapshot_${shopId}_';
+    final suffix = '_$dateStr';
+
+    final snapshots = <Map<String, dynamic>>[];
+    final keys = prefs
+        .getKeys()
+        .where((key) => key.startsWith(prefix) && key.endsWith(suffix))
+        .toList();
+
+    for (final key in keys) {
+      final data = prefs.getString(key);
+      if (data != null) {
+        snapshots.add(jsonDecode(data) as Map<String, dynamic>);
+      }
+    }
+
+    return snapshots;
+  }
+
+  /// Get snapshots for a shop in a date range
+  Future<List<Map<String, dynamic>>> getDailyDebtSnapshotsForShopInRange({
+    required int shopId,
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    final prefs = await database;
+    final prefix = 'debt_snapshot_${shopId}_';
+
+    final snapshots = <Map<String, dynamic>>[];
+    final keys =
+        prefs.getKeys().where((key) => key.startsWith(prefix)).toList();
+
+    for (final key in keys) {
+      final data = prefs.getString(key);
+      if (data != null) {
+        try {
+          final snapshot = jsonDecode(data) as Map<String, dynamic>;
+          final snapshotDate = DateTime.parse(snapshot['date'] as String);
+
+          // Filter by date range
+          if (!snapshotDate.isBefore(startDate) &&
+              !snapshotDate.isAfter(endDate)) {
+            snapshots.add(snapshot);
+          }
+        } catch (e) {
+          debugPrint('⚠️ Error parsing snapshot $key: $e');
+        }
+      }
+    }
+
+    // Sort by date
+    snapshots.sort((a, b) =>
+        DateTime.parse(a['date']).compareTo(DateTime.parse(b['date'])));
+
+    return snapshots;
+  }
+
+  /// Delete snapshots older than a certain date
+  Future<int> cleanOldDebtSnapshots({required DateTime beforeDate}) async {
+    final prefs = await database;
+    final prefix = 'debt_snapshot_';
+    int deleted = 0;
+
+    final keys =
+        prefs.getKeys().where((key) => key.startsWith(prefix)).toList();
+
+    for (final key in keys) {
+      final data = prefs.getString(key);
+      if (data != null) {
+        try {
+          final snapshot = jsonDecode(data) as Map<String, dynamic>;
+          final snapshotDate = DateTime.parse(snapshot['date'] as String);
+
+          if (snapshotDate.isBefore(beforeDate)) {
+            await prefs.remove(key);
+            deleted++;
+          }
+        } catch (e) {
+          // Remove corrupted data
+          await prefs.remove(key);
+          deleted++;
+        }
+      }
+    }
+
+    debugPrint('🗑️ Cleaned $deleted old debt snapshots');
+    return deleted;
   }
 }

@@ -6,6 +6,7 @@ import '../services/operation_service.dart';
 import '../services/shop_service.dart';
 import '../models/client_model.dart';
 import '../models/operation_model.dart';
+import '../l10n/app_localizations.dart';
 
 /// Widget pour afficher la situation nette des partenaires
 /// - Ceux qui Nous qui Doivent (solde négatif)
@@ -19,7 +20,8 @@ class PartnerNetPositionWidget extends StatefulWidget {
   });
 
   @override
-  State<PartnerNetPositionWidget> createState() => _PartnerNetPositionWidgetState();
+  State<PartnerNetPositionWidget> createState() =>
+      _PartnerNetPositionWidgetState();
 }
 
 class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
@@ -36,7 +38,8 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
 
   Future<void> _loadData() async {
     final clientService = Provider.of<ClientService>(context, listen: false);
-    final operationService = Provider.of<OperationService>(context, listen: false);
+    final operationService =
+        Provider.of<OperationService>(context, listen: false);
     await Future.wait([
       clientService.loadClients(),
       operationService.loadOperations(),
@@ -44,9 +47,10 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
   }
 
   /// Calculer le solde réel d'un client à partir de ses opérations
-  double _calculateClientBalance(int clientId, List<OperationModel> operations) {
+  double _calculateClientBalance(
+      int clientId, List<OperationModel> operations) {
     double balance = 0.0;
-    
+
     for (final op in operations.where((o) => o.clientId == clientId)) {
       switch (op.type) {
         case OperationType.depot:
@@ -71,7 +75,7 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
           break;
       }
     }
-    
+
     return balance;
   }
 
@@ -89,21 +93,26 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
         // Filtrer les clients par recherche uniquement (afficher tous les shops)
         var clients = clientService.clients.where((client) {
           if (_searchQuery.isNotEmpty) {
-            return client.nom.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-                   client.telephone.contains(_searchQuery) ||
-                   client.numeroCompteFormate.contains(_searchQuery);
+            return client.nom
+                    .toLowerCase()
+                    .contains(_searchQuery.toLowerCase()) ||
+                client.telephone.contains(_searchQuery) ||
+                client.numeroCompteFormate.contains(_searchQuery);
           }
           return true;
         }).toList();
 
         // Calculer les soldes et séparer en deux catégories
         // IMPORTANT: Solde négatif (-) = Ils Nous qui Doivent, Solde positif (+) = Nous leur devons
-        List<Map<String, dynamic>> partnersWeOwe = []; // Solde positif (+) = Nous leur devons
-        List<Map<String, dynamic>> partnersWhoOweUs = []; // Solde négatif (-) = Ils Nous qui Doivent
+        List<Map<String, dynamic>> partnersWeOwe =
+            []; // Solde positif (+) = Nous leur devons
+        List<Map<String, dynamic>> partnersWhoOweUs =
+            []; // Solde négatif (-) = Ils Nous qui Doivent
 
         for (final client in clients) {
-          final balance = _calculateClientBalance(client.id!, operationService.operations);
-          
+          final balance =
+              _calculateClientBalance(client.id!, operationService.operations);
+
           if (balance > 0) {
             // Solde POSITIF = Nous leur devons (le client a plus déposé que retiré)
             partnersWeOwe.add({
@@ -120,12 +129,16 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
         }
 
         // Trier par montant décroissant
-        partnersWeOwe.sort((a, b) => (b['balance'] as double).compareTo(a['balance'] as double));
-        partnersWhoOweUs.sort((a, b) => (b['balance'] as double).compareTo(a['balance'] as double));
+        partnersWeOwe.sort((a, b) =>
+            (b['balance'] as double).compareTo(a['balance'] as double));
+        partnersWhoOweUs.sort((a, b) =>
+            (b['balance'] as double).compareTo(a['balance'] as double));
 
         // Calculer les totaux
-        final totalWeOwe = partnersWeOwe.fold(0.0, (sum, item) => sum + (item['balance'] as double));
-        final totalWhoOweUs = partnersWhoOweUs.fold(0.0, (sum, item) => sum + (item['balance'] as double));
+        final totalWeOwe = partnersWeOwe.fold(
+            0.0, (sum, item) => sum + (item['balance'] as double));
+        final totalWhoOweUs = partnersWhoOweUs.fold(
+            0.0, (sum, item) => sum + (item['balance'] as double));
         final netPosition = totalWhoOweUs - totalWeOwe;
 
         return CustomScrollView(
@@ -134,26 +147,29 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
             SliverToBoxAdapter(
               child: _buildHeader(isMobile, shopService),
             ),
-            
+
             SliverToBoxAdapter(
               child: const SizedBox(height: 16),
             ),
-            
+
             // Résumé de la position nette
             SliverToBoxAdapter(
-              child: _buildNetPositionSummary(totalWeOwe, totalWhoOweUs, netPosition, isMobile),
+              child: _buildNetPositionSummary(
+                  totalWeOwe, totalWhoOweUs, netPosition, isMobile),
             ),
-            
+
             SliverToBoxAdapter(
               child: const SizedBox(height: 16),
             ),
-            
+
             // Listes des partenaires
             SliverFillRemaining(
               hasScrollBody: true,
-              child: isMobile 
-                ? _buildMobileView(partnersWeOwe, partnersWhoOweUs, totalWeOwe, totalWhoOweUs)
-                : _buildDesktopView(partnersWeOwe, partnersWhoOweUs, totalWeOwe, totalWhoOweUs),
+              child: isMobile
+                  ? _buildMobileView(partnersWeOwe, partnersWhoOweUs,
+                      totalWeOwe, totalWhoOweUs)
+                  : _buildDesktopView(partnersWeOwe, partnersWhoOweUs,
+                      totalWeOwe, totalWhoOweUs),
             ),
           ],
         );
@@ -162,6 +178,8 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
   }
 
   Widget _buildHeader(bool isMobile, ShopService shopService) {
+    final l10n = AppLocalizations.of(context)!;
+
     return Card(
       elevation: 2,
       child: Padding(
@@ -179,7 +197,7 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Situation Nette des Partenaires',
+                    l10n.partnersNetPosition,
                     style: TextStyle(
                       fontSize: isMobile ? 18 : 22,
                       fontWeight: FontWeight.bold,
@@ -191,7 +209,7 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
                   onPressed: _loadData,
                   icon: const Icon(Icons.refresh),
                   color: const Color(0xFFDC2626),
-                  tooltip: 'Actualiser',
+                  tooltip: l10n.refresh,
                 ),
               ],
             ),
@@ -199,8 +217,8 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
             // Filtre de recherche uniquement
             TextField(
               decoration: InputDecoration(
-                labelText: 'Rechercher un partenaire (nom, téléphone, numéro de compte)',
-                hintText: 'Entrez un nom, téléphone ou numéro de compte',
+                labelText: l10n.searchPartner,
+                hintText: l10n.enterNamePhoneOrAccount,
                 prefixIcon: const Icon(Icons.search),
                 border: const OutlineInputBorder(),
                 contentPadding: EdgeInsets.symmetric(
@@ -220,7 +238,10 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
     );
   }
 
-  Widget _buildNetPositionSummary(double totalWeOwe, double totalWhoOweUs, double netPosition, bool isMobile) {
+  Widget _buildNetPositionSummary(double totalWeOwe, double totalWhoOweUs,
+      double netPosition, bool isMobile) {
+    final l10n = AppLocalizations.of(context)!;
+
     return Card(
       elevation: 4,
       color: netPosition >= 0 ? Colors.green[50] : Colors.red[50],
@@ -229,7 +250,7 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
         child: Column(
           children: [
             Text(
-              'Position Nette Globale',
+              l10n.globalNetPosition,
               style: TextStyle(
                 fontSize: isMobile ? 16 : 18,
                 fontWeight: FontWeight.bold,
@@ -241,7 +262,7 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildSummaryItem(
-                  'Ils Nous qui Doivent',
+                  l10n.theyOweUs,
                   totalWhoOweUs,
                   Colors.green,
                   Icons.arrow_downward,
@@ -253,7 +274,7 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
                   color: Colors.grey[300],
                 ),
                 _buildSummaryItem(
-                  'Nous leur devons',
+                  l10n.weOweThem,
                   totalWeOwe,
                   Colors.red,
                   Icons.arrow_upward,
@@ -275,7 +296,7 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Position Nette',
+                      l10n.netPosition,
                       style: TextStyle(
                         fontSize: isMobile ? 12 : 14,
                         color: Colors.grey[600],
@@ -299,7 +320,8 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
     );
   }
 
-  Widget _buildSummaryItem(String label, double amount, Color color, IconData icon, bool isMobile) {
+  Widget _buildSummaryItem(
+      String label, double amount, Color color, IconData icon, bool isMobile) {
     return Column(
       children: [
         Icon(icon, color: color, size: isMobile ? 24 : 32),
@@ -331,11 +353,13 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
     double totalWeOwe,
     double totalWhoOweUs,
   ) {
+    final l10n = AppLocalizations.of(context)!;
+
     return Row(
       children: [
         Expanded(
           child: _buildPartnerList(
-            'Ceux qui Nous qui Doivent',
+            l10n.thoseWhoOweUs,
             partnersWhoOweUs,
             totalWhoOweUs,
             Colors.green,
@@ -345,7 +369,7 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
         const SizedBox(width: 16),
         Expanded(
           child: _buildPartnerList(
-            'Ceux que Nous que Devons',
+            l10n.thoseWeOwe,
             partnersWeOwe,
             totalWeOwe,
             Colors.red,
@@ -362,6 +386,8 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
     double totalWeOwe,
     double totalWhoOweUs,
   ) {
+    final l10n = AppLocalizations.of(context)!;
+
     return DefaultTabController(
       length: 2,
       child: Column(
@@ -373,16 +399,17 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
               labelColor: const Color(0xFFDC2626),
               unselectedLabelColor: Colors.grey,
               indicatorColor: const Color(0xFFDC2626),
-              labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              labelStyle:
+                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
               unselectedLabelStyle: const TextStyle(fontSize: 13),
-              tabs: const [
+              tabs: [
                 Tab(
-                  icon: Icon(Icons.arrow_downward, size: 20),
-                  text: 'Ils Nous qui Doivent',
+                  icon: const Icon(Icons.arrow_downward, size: 20),
+                  text: l10n.theyOweUs,
                 ),
                 Tab(
-                  icon: Icon(Icons.arrow_upward, size: 20),
-                  text: 'Nous leur devons',
+                  icon: const Icon(Icons.arrow_upward, size: 20),
+                  text: l10n.weOweThem,
                 ),
               ],
             ),
@@ -392,14 +419,14 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
               physics: const NeverScrollableScrollPhysics(),
               children: [
                 _buildPartnerList(
-                  'Ceux qui Nous qui Doivent',
+                  l10n.thoseWhoOweUs,
                   partnersWhoOweUs,
                   totalWhoOweUs,
                   Colors.green,
                   Icons.arrow_downward,
                 ),
                 _buildPartnerList(
-                  'Ceux que Nous que Devons',
+                  l10n.thoseWeOwe,
                   partnersWeOwe,
                   totalWeOwe,
                   Colors.red,
@@ -422,6 +449,7 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
   ) {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 768;
+    final l10n = AppLocalizations.of(context)!;
 
     return Container(
       margin: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 16),
@@ -450,7 +478,8 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(12)),
             ),
             child: Row(
               children: [
@@ -477,7 +506,7 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '${partners.length} partenaire(s)',
+                        '${partners.length} ${partners.length > 1 ? l10n.partners.toLowerCase() : l10n.partner.toLowerCase()}',
                         style: TextStyle(
                           fontSize: isMobile ? 11 : 12,
                           color: Colors.grey[600],
@@ -490,7 +519,7 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      'TOTAL',
+                      l10n.total,
                       style: TextStyle(
                         fontSize: isMobile ? 10 : 11,
                         color: Colors.grey[600],
@@ -518,10 +547,11 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.check_circle_outline, size: 64, color: Colors.grey[300]),
+                        Icon(Icons.check_circle_outline,
+                            size: 64, color: Colors.grey[300]),
                         const SizedBox(height: 16),
                         Text(
-                          'Aucun partenaire',
+                          l10n.noPartner,
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
@@ -530,7 +560,7 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'dans cette catégorie',
+                          l10n.inThisCategory,
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.grey[500],
@@ -547,8 +577,9 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
                       final item = partners[index];
                       final client = item['client'] as ClientModel;
                       final balance = item['balance'] as double;
-                      
-                      return _buildPartnerItem(client, balance, color, isMobile, index);
+
+                      return _buildPartnerItem(
+                          client, balance, color, isMobile, index);
                     },
                   ),
           ),
@@ -557,7 +588,8 @@ class _PartnerNetPositionWidgetState extends State<PartnerNetPositionWidget> {
     );
   }
 
-  Widget _buildPartnerItem(ClientModel client, double balance, Color color, bool isMobile, int index) {
+  Widget _buildPartnerItem(ClientModel client, double balance, Color color,
+      bool isMobile, int index) {
     return Container(
       margin: EdgeInsets.only(bottom: isMobile ? 8 : 10),
       decoration: BoxDecoration(

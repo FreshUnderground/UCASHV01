@@ -8,6 +8,7 @@ import '../../services/report_service.dart';
 import '../../services/shop_service.dart';
 import '../../services/document_header_service.dart';
 import '../../utils/responsive_utils.dart';
+import '../../l10n/app_localizations.dart';
 
 /// Rapport des Mouvements des Dettes Intershop Journalier
 /// Ce rapport affiche les mouvements quotidiens des dettes entre shops
@@ -122,15 +123,23 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
   @override
   Widget build(BuildContext context) {
     final isMobile = context.isSmallScreen;
+    final l10n = AppLocalizations.of(context);
+
+    // Safety check: if localization is not available, show loading
+    if (l10n == null) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
 
     if (_isLoading) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Génération du rapport en cours...'),
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(l10n.generatingReport),
           ],
         ),
       );
@@ -144,7 +153,7 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
             Icon(Icons.error_outline, size: 64, color: Colors.red[400]),
             const SizedBox(height: 16),
             Text(
-              'Erreur lors de la génération du rapport',
+              l10n.errorGeneratingReport,
               style: TextStyle(fontSize: 18, color: Colors.red[600]),
             ),
             const SizedBox(height: 8),
@@ -152,7 +161,7 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _loadReport,
-              child: const Text('Réessayer'),
+              child: Text(l10n.retry),
             ),
           ],
         ),
@@ -160,8 +169,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
     }
 
     if (_reportData == null) {
-      return const Center(
-        child: Text('Aucune donnée disponible'),
+      return Center(
+        child: Text(l10n.noData),
       );
     }
 
@@ -187,6 +196,10 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
   Widget _buildHeader(bool isMobile) {
     final periode = _reportData!['periode'] as Map<String, dynamic>;
     final shopName = _reportData!['shopName'] as String?;
+    final l10n = AppLocalizations.of(context);
+
+    // Safety check for localization
+    if (l10n == null) return const SizedBox.shrink();
 
     return Card(
       elevation: 2,
@@ -206,7 +219,7 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Mouvements des Dettes Intershop',
+                    l10n.intershopDebtsMovements,
                     style: TextStyle(
                       fontSize: isMobile ? 18 : 22,
                       fontWeight: FontWeight.bold,
@@ -224,7 +237,7 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                       size: isMobile ? 14 : 16, color: Colors.grey[600]),
                   const SizedBox(width: 4),
                   Text(
-                    'Shop: $shopName',
+                    '${l10n.shop}: $shopName',
                     style: TextStyle(
                       fontSize: isMobile ? 13 : 14,
                       fontWeight: FontWeight.w600,
@@ -253,6 +266,11 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
 
   /// Bouton pour afficher/masquer les filtres
   Widget _buildFilterToggle(bool isMobile) {
+    final l10n = AppLocalizations.of(context);
+
+    // Safety check for localization
+    if (l10n == null) return const SizedBox.shrink();
+
     return InkWell(
       onTap: () {
         setState(() {
@@ -284,7 +302,7 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Filtres',
+                  l10n.filters,
                   style: TextStyle(
                     fontSize: isMobile ? 13 : 14,
                     fontWeight: FontWeight.w600,
@@ -594,6 +612,10 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
   Widget _buildSummaryCards(bool isMobile) {
     final summary = _reportData!['summary'] as Map<String, dynamic>;
     final shopName = _reportData!['shopName'] as String?;
+    final l10n = AppLocalizations.of(context);
+
+    // Safety check for localization
+    if (l10n == null) return const SizedBox.shrink();
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -609,28 +631,28 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
           childAspectRatio: isMobile ? 3 : 2.5,
           children: [
             _buildSummaryCard(
-              'Total Créances',
+              l10n.totalReceivables,
               summary['totalCreances'] as double,
               Icons.trending_up,
               Colors.green,
               isMobile,
             ),
             _buildSummaryCard(
-              'Total Dettes',
+              l10n.totalDebts,
               summary['totalDettes'] as double,
               Icons.trending_down,
               Colors.red,
               isMobile,
             ),
             _buildSummaryCard(
-              'Solde Net',
+              l10n.netBalance,
               summary['soldeNet'] as double,
               Icons.account_balance,
               summary['soldeNet'] >= 0 ? Colors.green : Colors.red,
               isMobile,
             ),
             _buildSummaryCard(
-              'Mouvements',
+              l10n.movements,
               (summary['nombreMouvements'] as int).toDouble(),
               Icons.swap_horiz,
               Colors.blue,
@@ -689,10 +711,21 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
   }
 
   Widget _buildShopsBreakdown(bool isMobile) {
-    final shopsNousDoivent =
-        _reportData!['shopsNousDoivent'] as List<Map<String, dynamic>>?;
-    final shopsNousDevons =
-        _reportData!['shopsNousDevons'] as List<Map<String, dynamic>>?;
+    final shopsNousDoiventRaw = _reportData!['shopsNousDoivent'];
+    final shopsNousDevonsRaw = _reportData!['shopsNousDevons'];
+
+    // Fix type casting - convert List<dynamic> to List<Map<String, dynamic>>
+    final shopsNousDoivent = shopsNousDoiventRaw != null
+        ? (shopsNousDoiventRaw as List)
+            .map((e) => e as Map<String, dynamic>)
+            .toList()
+        : null;
+    final shopsNousDevons = shopsNousDevonsRaw != null
+        ? (shopsNousDevonsRaw as List)
+            .map((e) => e as Map<String, dynamic>)
+            .toList()
+        : null;
+
     final shopName = _reportData!['shopName'] as String?;
 
     // N'afficher cette section que si un shop spécifique est sélectionné
@@ -862,7 +895,11 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
   ) {
     final soldeAbs = solde.abs();
     final isExpanded = _expandedShopName == shopName;
-    final mouvements = _reportData!['mouvements'] as List<Map<String, dynamic>>;
+
+    // Fix type casting - convert List<dynamic> to List<Map<String, dynamic>>
+    final mouvementsRaw = _reportData!['mouvements'];
+    final mouvements =
+        (mouvementsRaw as List).map((e) => e as Map<String, dynamic>).toList();
 
     // Filter movements for this specific shop
     final shopMouvements = mouvements.where((m) {
@@ -1242,9 +1279,15 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
   }
 
   Widget _buildMouvementsParJour(bool isMobile) {
-    final mouvementsParJour =
-        _reportData!['mouvementsParJour'] as List<Map<String, dynamic>>;
-    final mouvements = _reportData!['mouvements'] as List<Map<String, dynamic>>;
+    // Fix type casting - convert List<dynamic> to List<Map<String, dynamic>>
+    final mouvementsParJourRaw = _reportData!['mouvementsParJour'];
+    final mouvementsRaw = _reportData!['mouvements'];
+
+    final mouvementsParJour = (mouvementsParJourRaw as List)
+        .map((e) => e as Map<String, dynamic>)
+        .toList();
+    final mouvements =
+        (mouvementsRaw as List).map((e) => e as Map<String, dynamic>).toList();
 
     if (mouvementsParJour.isEmpty) {
       return const SizedBox.shrink();
@@ -3051,7 +3094,10 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
   }
 
   Widget _buildDetailsMouvements(bool isMobile) {
-    final mouvements = _reportData!['mouvements'] as List<Map<String, dynamic>>;
+    // Fix type casting - convert List<dynamic> to List<Map<String, dynamic>>
+    final mouvementsRaw = _reportData!['mouvements'];
+    final mouvements =
+        (mouvementsRaw as List).map((e) => e as Map<String, dynamic>).toList();
 
     if (mouvements.isEmpty) {
       return const SizedBox.shrink();
@@ -3890,13 +3936,28 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
     final pdf = pw.Document();
     final summary = _reportData!['summary'] as Map<String, dynamic>;
     final shopName = _reportData!['shopName'] as String?;
-    final shopsNousDoivent =
-        _reportData!['shopsNousDoivent'] as List<Map<String, dynamic>>? ?? [];
-    final shopsNousDevons =
-        _reportData!['shopsNousDevons'] as List<Map<String, dynamic>>? ?? [];
-    final mouvements = _reportData!['mouvements'] as List<Map<String, dynamic>>;
-    final mouvementsParJour =
-        _reportData!['mouvementsParJour'] as List<Map<String, dynamic>>;
+
+    // Fix type casting - convert List<dynamic> to List<Map<String, dynamic>>
+    final shopsNousDoiventRaw = _reportData!['shopsNousDoivent'];
+    final shopsNousDevonsRaw = _reportData!['shopsNousDevons'];
+    final mouvementsRaw = _reportData!['mouvements'];
+    final mouvementsParJourRaw = _reportData!['mouvementsParJour'];
+
+    final shopsNousDoivent = shopsNousDoiventRaw != null
+        ? (shopsNousDoiventRaw as List)
+            .map((e) => e as Map<String, dynamic>)
+            .toList()
+        : <Map<String, dynamic>>[];
+    final shopsNousDevons = shopsNousDevonsRaw != null
+        ? (shopsNousDevonsRaw as List)
+            .map((e) => e as Map<String, dynamic>)
+            .toList()
+        : <Map<String, dynamic>>[];
+    final mouvements =
+        (mouvementsRaw as List).map((e) => e as Map<String, dynamic>).toList();
+    final mouvementsParJour = (mouvementsParJourRaw as List)
+        .map((e) => e as Map<String, dynamic>)
+        .toList();
 
     // Load header from DocumentHeaderService
     final headerService = DocumentHeaderService();

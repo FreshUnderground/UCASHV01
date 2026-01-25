@@ -36,7 +36,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
   int _selectedIndex = 0;
   bool _isDisposed = false; // Track disposal state
   FlotNotificationService? _flotNotificationService;
-  
+
   final List<String> _menuItems = [
     'Dashboard',
     'Nouvelle Transaction',
@@ -79,7 +79,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
       }
     });
   }
-  
+
   @override
   void dispose() {
     _isDisposed = true;
@@ -90,19 +90,21 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
 
   Future<void> _loadData() async {
     if (_isDisposed || !mounted) return;
-    
+
     try {
       if (!_isDisposed && mounted) {
         setState(() {});
       }
-      
+
       final authService = Provider.of<AgentAuthService>(context, listen: false);
-      final operationService = Provider.of<OperationService>(context, listen: false);
+      final operationService =
+          Provider.of<OperationService>(context, listen: false);
       final shopService = Provider.of<ShopService>(context, listen: false);
       final agentService = Provider.of<AgentService>(context, listen: false);
       final flotService = Provider.of<FlotService>(context, listen: false);
-      final transferSyncService = Provider.of<TransferSyncService>(context, listen: false);
-      
+      final transferSyncService =
+          Provider.of<TransferSyncService>(context, listen: false);
+
       if (authService.currentAgent != null) {
         // Initialize TransferSyncService with the current shop ID (only if not already initialized)
         final shopId = authService.currentAgent!.shopId;
@@ -113,36 +115,40 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
             await transferSyncService.initialize(shopId);
             debugPrint('🔄 TransferSyncService initialized for shop: $shopId');
           } catch (e) {
-            debugPrint('⚠️ TransferSyncService already initialized or error: $e');
+            debugPrint(
+                '⚠️ TransferSyncService already initialized or error: $e');
           }
         }
-        
+
         // Build the list of futures to wait for
         final futures = <Future>[
           shopService.loadShops(),
           agentService.loadAgents(),
-          operationService.loadOperations(agentId: authService.currentAgent!.id),
+          operationService.loadOperations(
+              agentId: authService.currentAgent!.id),
         ];
-        
+
         // Add flotService.loadFlots only if shopId is not null
         if (shopId != null) {
           futures.add(flotService.loadFlots(shopId: shopId, isAdmin: false));
         }
-        
+
         // IMPORTANT: Recharger TOUS les services après sync
         await Future.wait(futures);
-        
+
         debugPrint('🔄 _loadData: Rechargement des données après sync');
         debugPrint('   Agents disponibles: ${agentService.agents.length}');
         debugPrint('   Shops disponibles: ${shopService.shops.length}');
-        debugPrint('   Opérations pour agent ${authService.currentAgent!.id}: ${operationService.operations.length}');
+        debugPrint(
+            '   Opérations pour agent ${authService.currentAgent!.id}: ${operationService.operations.length}');
         if (shopId != null) {
-          debugPrint('   FLOTs pour shop $shopId: ${flotService.flots.length} (maintenant gérés comme operations)');
+          debugPrint(
+              '   FLOTs pour shop $shopId: ${flotService.flots.length} (maintenant gérés comme operations)');
         }
       }
     } catch (e) {
       debugPrint('❌ [AgentDashboard] Erreur chargement données: $e');
-      
+
       if (!_isDisposed && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -167,19 +173,20 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
   /// NOTE: Les flots sont maintenant gérés comme des operations avec type=flotShopToShop
   void _setupFlotNotifications() {
     if (_isDisposed || !mounted) return;
-    
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_isDisposed || !mounted) return;
-      
+
       final authService = Provider.of<AgentAuthService>(context, listen: false);
       final flotService = Provider.of<FlotService>(context, listen: false);
       _flotNotificationService = FlotNotificationService();
-      
+
       _flotNotificationService!.startMonitoring(
         shopId: authService.currentAgent?.shopId ?? 0,
-        getFlots: () => flotService.flots, // Returns List<OperationModel> filtered by flotShopToShop (flots sont maintenant des operations)
+        getFlots: () => flotService
+            .flots, // Returns List<OperationModel> filtered by flotShopToShop (flots sont maintenant des operations)
       );
-      
+
       // Définir le callback pour les nouvelles notifications de flots
       _flotNotificationService!.onNewFlotDetected = (title, message, flotId) {
         // CRITICAL: Check if widget is still mounted before accessing context
@@ -187,7 +194,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
           debugPrint('⚠️ [FLOT-NOTIF] Widget disposed, ignoring notification');
           return;
         }
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
@@ -213,7 +220,8 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
                 ),
               ],
             ),
-            backgroundColor: const Color(0xFF2563EB), // Bleu pour différencier des transferts
+            backgroundColor: const Color(
+                0xFF2563EB), // Bleu pour différencier des transferts
             duration: const Duration(seconds: 8),
             action: SnackBarAction(
               label: 'VOIR',
@@ -238,7 +246,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
     final size = MediaQuery.of(context).size;
     final isDesktop = size.width > 1024;
     final isMobile = size.width <= 768;
-    
+
     return Consumer<AgentAuthService>(
       builder: (context, authService, child) {
         if (!authService.isAuthenticated) {
@@ -266,7 +274,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
   PreferredSizeWidget _buildAppBar(AgentAuthService authService) {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 768;
-    
+
     return AppBar(
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -387,21 +395,29 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
               itemBuilder: (context, index) {
                 final isSelected = _selectedIndex == index;
                 return Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  margin:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(8),
-                    color: isSelected ? const Color(0xFFDC2626).withOpacity(0.1) : null,
+                    color: isSelected
+                        ? const Color(0xFFDC2626).withOpacity(0.1)
+                        : null,
                   ),
                   child: ListTile(
                     leading: Icon(
                       _menuIcons[index],
-                      color: isSelected ? const Color(0xFFDC2626) : Colors.grey[600],
+                      color: isSelected
+                          ? const Color(0xFFDC2626)
+                          : Colors.grey[600],
                     ),
                     title: Text(
                       _menuItems[index],
                       style: TextStyle(
-                        color: isSelected ? const Color(0xFFDC2626) : Colors.grey[800],
-                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                        color: isSelected
+                            ? const Color(0xFFDC2626)
+                            : Colors.grey[800],
+                        fontWeight:
+                            isSelected ? FontWeight.w600 : FontWeight.normal,
                       ),
                     ),
                     onTap: () {
@@ -421,7 +437,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
   Widget _buildSidebar() {
     final size = MediaQuery.of(context).size;
     final isTablet = size.width > 768 && size.width <= 1024;
-    
+
     return Container(
       width: isTablet ? 250 : 280,
       decoration: BoxDecoration(
@@ -488,13 +504,15 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
                     color: isSelected ? const Color(0xFFDC2626) : null,
-                    boxShadow: isSelected ? [
-                      BoxShadow(
-                        color: const Color(0xFFDC2626).withOpacity(0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ] : null,
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: const Color(0xFFDC2626).withOpacity(0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ]
+                        : null,
                   ),
                   child: ListTile(
                     contentPadding: EdgeInsets.symmetric(
@@ -506,7 +524,8 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
                       _menuItems[index],
                       style: TextStyle(
                         color: isSelected ? Colors.white : Colors.grey[800],
-                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                        fontWeight:
+                            isSelected ? FontWeight.w600 : FontWeight.w500,
                         fontSize: isTablet ? 14 : 15,
                       ),
                     ),
@@ -531,15 +550,16 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
       final transferSync = TransferSyncService();
       final authService = Provider.of<AgentAuthService>(context, listen: false);
       final currentShopId = authService.currentAgent?.shopId;
-      
+
       // Obtenir le nombre de FLOTs en attente depuis TransferSyncService pour plus de précision
-      final pendingFlotsCount = currentShopId != null 
+      final pendingFlotsCount = currentShopId != null
           ? transferSync.getPendingFlotsForShop(currentShopId).length
           : 0;
-      
+
       // Debug logging for sidebar comparison
-      debugPrint('🔍 [SIDEBAR-FLOT] Shop ID: $currentShopId, Pending FLOTs count: $pendingFlotsCount');
-      
+      debugPrint(
+          '🔍 [SIDEBAR-FLOT] Shop ID: $currentShopId, Pending FLOTs count: $pendingFlotsCount');
+
       if (pendingFlotsCount > 0) {
         return badges.Badge(
           badgeContent: Text(
@@ -556,10 +576,10 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
           child: Icon(_menuIcons[7]),
         );
       }
-      
+
       return Icon(_menuIcons[7]);
     }
-    
+
     // Icône normale pour les autres items
     return Icon(
       _menuIcons[index],
@@ -571,7 +591,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
   Widget _buildMainContent() {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 768;
-    
+
     return Container(
       padding: EdgeInsets.all(isMobile ? 16 : 24),
       child: _getSelectedWidget(),
@@ -583,7 +603,8 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
       case 0:
         return _buildDashboardContent();
       case 1:
-        return const Center(child: Text('Nouvelle Transaction - À implémenter'));
+        return const Center(
+            child: Text('Nouvelle Transaction - À implémenter'));
       case 2:
         return const AgentTransactionsWidget();
       case 3:
@@ -615,7 +636,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 768;
     final isTablet = size.width > 768 && size.width <= 1024;
-    
+
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -637,7 +658,9 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
                     ),
                     SizedBox(height: isMobile ? 2 : 4),
                     Text(
-                      isMobile ? 'Vos opérations' : 'Vue d\'ensemble de vos opérations',
+                      isMobile
+                          ? 'Vos opérations'
+                          : 'Vue d\'ensemble de vos opérations',
                       style: TextStyle(
                         fontSize: isMobile ? 13 : (isTablet ? 15 : 16),
                         color: Colors.grey,
@@ -666,15 +689,15 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
             ],
           ),
           SizedBox(height: isMobile ? 24 : 32),
-          
+
           // Cartes de statistiques
           const AgentStatsCards(),
           SizedBox(height: isMobile ? 24 : 32),
-          
+
           // Vue d'ensemble du capital
           const AgentCapitalOverview(),
           SizedBox(height: isMobile ? 24 : 32),
-          
+
           // Dernières opérations
           const AgentOperationsList(),
         ],
@@ -685,7 +708,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
   Widget _buildJournalCaisseContent() {
     final authService = Provider.of<AgentAuthService>(context, listen: false);
     final shopId = authService.currentAgent?.shopId;
-    
+
     return JournalCaisseWidget(
       shopId: shopId,
       agentId: authService.currentAgent?.id,
@@ -695,7 +718,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
   Widget _buildRapportClotureContent() {
     final authService = Provider.of<AgentAuthService>(context, listen: false);
     final shopId = authService.currentAgent?.shopId;
-    
+
     return _buildClotureReport(shopId!);
   }
 
@@ -706,7 +729,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
   Widget _buildFraisContent() {
     final authService = Provider.of<AgentAuthService>(context, listen: false);
     final shopId = authService.currentAgent?.shopId;
-    
+
     return ComptesSpeciauxWidget(
       shopId: shopId,
       isAdmin: false,
@@ -715,8 +738,10 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
 
   Widget _buildDettesIntershopContent() {
     final authService = Provider.of<AgentAuthService>(context, listen: false);
-    final shopId = authService.currentAgent?.shopId;
-    
+    // Changed: Pass null to show global view like admin
+    // This ensures agents see the same data as admin - all intershop debts
+    final shopId = null; // authService.currentAgent?.shopId;
+
     return DettesIntershopReport(
       shopId: shopId,
       startDate: DateTime.now().subtract(const Duration(days: 30)),
@@ -769,7 +794,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
   Widget _buildReconciliationContent() {
     final authService = Provider.of<AgentAuthService>(context, listen: false);
     final shopId = authService.currentAgent?.shopId;
-    
+
     return ReconciliationReportWidget(
       shopId: shopId,
       showOnlyGaps: false,
@@ -785,28 +810,42 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
     int getMobileNavIndex(int desktopIndex) {
       // Dashboard=0, Rapports=1, FLOT=2, Frais=3, VIRTUEL=4, Config=5
       switch (desktopIndex) {
-        case 0: return 0; // Dashboard
-        case 6: return 1; // Rapports
-        case 7: return 2; // FLOT
-        case 9: return 3; // Frais
-        case 12: return 4; // VIRTUEL (Retrait Mobile Money)
-        case 11: return 5; // Config
-        default: 
+        case 0:
+          return 0; // Dashboard
+        case 6:
+          return 1; // Rapports
+        case 7:
+          return 2; // FLOT
+        case 9:
+          return 3; // Frais
+        case 12:
+          return 4; // VIRTUEL (Retrait Mobile Money)
+        case 11:
+          return 5; // Config
+        default:
           // Pour les items non mappés (1,2,3,4,5,8,10), retourner Dashboard
-          debugPrint('⚠️ [BottomNav] Index desktop $desktopIndex non mappé -> Dashboard');
+          debugPrint(
+              '⚠️ [BottomNav] Index desktop $desktopIndex non mappé -> Dashboard');
           return 0;
       }
     }
 
     int getDesktopIndexFromMobile(int mobileIndex) {
       switch (mobileIndex) {
-        case 0: return 0; // Dashboard
-        case 1: return 6; // Rapports
-        case 2: return 7; // FLOT
-        case 3: return 9; // Frais
-        case 4: return 12; // VIRTUEL
-        case 5: return 11; // Config
-        default: return 0;
+        case 0:
+          return 0; // Dashboard
+        case 1:
+          return 6; // Rapports
+        case 2:
+          return 7; // FLOT
+        case 3:
+          return 9; // Frais
+        case 4:
+          return 12; // VIRTUEL
+        case 5:
+          return 11; // Config
+        default:
+          return 0;
       }
     }
 
@@ -814,9 +853,10 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
     final mobileIndex = getMobileNavIndex(_selectedIndex);
     // Double sécurité: clamp entre 0 et 5 (6 items)
     final validMobileIndex = mobileIndex.clamp(0, 5);
-    
+
     if (mobileIndex != validMobileIndex) {
-      debugPrint('⚠️ [BottomNav] Index invalidé: $mobileIndex -> $validMobileIndex');
+      debugPrint(
+          '⚠️ [BottomNav] Index invalidé: $mobileIndex -> $validMobileIndex');
     }
 
     return BottomNavigationBar(
@@ -862,26 +902,31 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
   }
 
   Widget _buildFlotIconWithBadge() {
-    return Consumer<TransferSyncService>(builder: (context, transferSync, child) {
+    return Consumer<TransferSyncService>(
+        builder: (context, transferSync, child) {
       final authService = Provider.of<AgentAuthService>(context, listen: false);
       final currentShopId = authService.currentAgent?.shopId;
-      
+
       // Use TransferSyncService for consistency with sidebar implementation
-      final pendingFlotsCount = currentShopId != null 
+      final pendingFlotsCount = currentShopId != null
           ? transferSync.getPendingFlotsForShop(currentShopId).length
           : 0;
-      
+
       // Debug logging to help diagnose the issue
-      debugPrint('🔍 [FLOT-BADGE] Shop ID: $currentShopId, Pending FLOTs count: $pendingFlotsCount');
+      debugPrint(
+          '🔍 [FLOT-BADGE] Shop ID: $currentShopId, Pending FLOTs count: $pendingFlotsCount');
       if (currentShopId != null) {
-        final allPendingFlots = transferSync.getPendingFlotsForShop(currentShopId);
-        debugPrint('🔍 [FLOT-BADGE] All pending FLOTs for shop $currentShopId:');
+        final allPendingFlots =
+            transferSync.getPendingFlotsForShop(currentShopId);
+        debugPrint(
+            '🔍 [FLOT-BADGE] All pending FLOTs for shop $currentShopId:');
         for (var i = 0; i < allPendingFlots.length; i++) {
           final flot = allPendingFlots[i];
-          debugPrint('   #$i: codeOps=${flot.codeOps}, type=${flot.type?.name}, status=${flot.statut?.name}, dest=${flot.shopDestinationId}');
+          debugPrint(
+              '   #$i: codeOps=${flot.codeOps}, type=${flot.type?.name}, status=${flot.statut?.name}, dest=${flot.shopDestinationId}');
         }
       }
-      
+
       if (pendingFlotsCount > 0) {
         return badges.Badge(
           badgeContent: Text(
@@ -898,7 +943,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
           child: Icon(_menuIcons[7]),
         );
       }
-      
+
       return Icon(_menuIcons[7]);
     });
   }
@@ -913,7 +958,8 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
               SizedBox(
                 width: 16,
                 height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Colors.white),
               ),
               SizedBox(width: 12),
               Text('🔄 Synchronisation en cours...'),
@@ -923,12 +969,14 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
           duration: Duration(seconds: 3),
         ),
       );
-      
+
       // Appeler la synchronisation complète (même fonction que auto-sync)
       final syncService = SyncService();
-      final currentAgent = Provider.of<AgentAuthService>(context, listen: false).currentAgent;
-      final result = await syncService.syncAll(userId: currentAgent?.username ?? 'agent');
-      
+      final currentAgent =
+          Provider.of<AgentAuthService>(context, listen: false).currentAgent;
+      final result =
+          await syncService.syncAll(userId: currentAgent?.username ?? 'agent');
+
       if (mounted) {
         if (result.success) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -938,7 +986,7 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
               duration: Duration(seconds: 2),
             ),
           );
-          
+
           // Recharger les données locales
           _loadData();
         } else {
@@ -992,7 +1040,8 @@ class _AgentDashboardPageState extends State<AgentDashboardPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Changer le mot de passe'),
-        content: const Text('Dialog de changement de mot de passe à implémenter'),
+        content:
+            const Text('Dialog de changement de mot de passe à implémenter'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),

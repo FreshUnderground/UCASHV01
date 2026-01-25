@@ -42,6 +42,7 @@ import '../widgets/reports/dettes_intershop_report.dart';
 import '../widgets/admin_flot_dialog.dart';
 import '../widgets/admin_initialization_widget.dart';
 import '../widgets/gestion_personnel_widget.dart' as personnel;
+import '../widgets/pwa_install_button.dart';
 
 class DashboardAdminPage extends StatefulWidget {
   const DashboardAdminPage({super.key});
@@ -238,6 +239,10 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
       elevation: 4,
       shadowColor: Colors.black.withOpacity(0.3),
       actions: [
+        // Bouton Installation PWA
+        const PwaInstallButton(isCompact: true),
+        const SizedBox(width: 8),
+
         // Sélecteur de langue compact
         const LanguageSelector(compact: true),
         const SizedBox(width: 8),
@@ -1396,14 +1401,23 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
             style: context.bodySecondary,
           ),
           context.verticalSpace(mobile: 8, tablet: 10, desktop: 12),
-          context.badgeContainer(
-            backgroundColor: const Color(0xFFDC2626).withOpacity(0.1),
-            child: Text(
-              DateTime.now().toString().split(' ')[0],
-              style: context.badge.copyWith(
-                color: const Color(0xFFDC2626),
+          Row(
+            children: [
+              context.badgeContainer(
+                backgroundColor: const Color(0xFFDC2626).withOpacity(0.1),
+                child: Text(
+                  DateTime.now().toString().split(' ')[0],
+                  style: context.badge.copyWith(
+                    color: const Color(0xFFDC2626),
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(width: 12),
+              // Bouton PWA Install (mobile)
+              const Expanded(
+                child: PwaInstallButton(isCompact: false, showIcon: true),
+              ),
+            ],
           ),
         ],
       );
@@ -1429,6 +1443,9 @@ class _DashboardAdminPageState extends State<DashboardAdminPage> {
             ],
           ),
         ),
+        context.horizontalSpace(mobile: 8, tablet: 12, desktop: 16),
+        // Bouton PWA Install (desktop/tablet)
+        const PwaInstallButton(isCompact: false, showIcon: true),
         context.horizontalSpace(mobile: 8, tablet: 12, desktop: 16),
         context.badgeContainer(
           backgroundColor: const Color(0xFFDC2626).withOpacity(0.1),

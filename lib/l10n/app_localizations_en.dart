@@ -90,7 +90,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get commission => 'Commission';
 
   @override
-  String get total => 'Total';
+  String get total => 'TOTAL';
 
   @override
   String get date => 'Date';
@@ -1524,4 +1524,361 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get submit => 'Submit';
+
+  @override
+  String get closureReport => 'Closure Report';
+
+  @override
+  String get dailyClosureReport => 'Daily Closure Report';
+
+  @override
+  String get generateReport => 'Generate Report';
+
+  @override
+  String get reportDate => 'Report date';
+
+  @override
+  String get previousBalance => 'Previous Balance';
+
+  @override
+  String get transfersReceived => 'Transfers Received';
+
+  @override
+  String get transfersServed => 'Transfers Served';
+
+  @override
+  String get feesWithdrawal => 'Fees Withdrawal';
+
+  @override
+  String get detailByShop => 'Detail by Shop';
+
+  @override
+  String get dailyFeesBalance => 'Daily Fees Balance';
+
+  @override
+  String get servedPartners => 'Served Partners';
+
+  @override
+  String get partnersDeposits => 'Partners Deposits';
+
+  @override
+  String get shopsWeOwe => 'Shops We Owe';
+
+  @override
+  String get shopsOwingUs => 'Shops Owing Us';
+
+  @override
+  String get totalIntershopDebts => 'Total Intershop Debts';
+
+  @override
+  String get noPartnerOperations => 'No partner operations found for this day';
+
+  @override
+  String get previewPdf => 'Preview';
+
+  @override
+  String get downloadPdf => 'Download PDF';
+
+  @override
+  String get printReport => 'Print';
+
+  @override
+  String get confirmPrint => 'Confirm printing';
+
+  @override
+  String get printingLaunched => 'Printing launched successfully';
+
+  @override
+  String get reportFor => 'Report for';
+
+  @override
+  String get tip => 'Tip';
+
+  @override
+  String get usePreviewBeforePrinting => 'Use \"Preview\" to see the content before printing';
+
+  @override
+  String get noReportAvailable => 'No report available';
+
+  @override
+  String get generatingReport => 'Generating report...';
+
+  @override
+  String get refreshReport => 'Refresh Report';
+
+  @override
+  String get pdfGeneratedSuccessfully => 'PDF generated successfully';
+
+  @override
+  String get pdfError => 'PDF Error';
+
+  @override
+  String get partner => 'Partner';
+
+  @override
+  String get debtor => 'Debtor';
+
+  @override
+  String get creditor => 'Creditor';
+
+  @override
+  String get installApp => 'Install App';
+
+  @override
+  String get installUcashApp => 'Install UCASH App';
+
+  @override
+  String get installPwaDescription => 'Install UCASH on your device for quick access, offline support, and a native app experience';
+
+  @override
+  String get installPwaTitle => 'Install Application';
+
+  @override
+  String get installPwaMessage => 'Install UCASH for better performance and offline access';
+
+  @override
+  String get pwaInstallSuccess => 'Application ready to install!';
+
+  @override
+  String get pwaNotSupported => 'PWA installation not supported on this device';
+
+  @override
+  String get pwaAlreadyInstalled => 'Application already installed';
+
+  @override
+  String get installNow => 'Install Now';
+
+  @override
+  String get alreadyInstalled => 'Already Installed';
+
+  @override
+  String get workOffline => 'Work Offline';
+
+  @override
+  String get fastAccess => 'Fast Access';
+
+  @override
+  String get likeNativeApp => 'Like a Native App';
+
+  @override
+  String get intershopDebtsMovements => 'Intershop Debts Movements';
+
+  @override
+  String get intershopDebtsReport => 'Intershop Debts Report';
+
+  @override
+  String get totalReceivables => 'Total Receivables';
+
+  @override
+  String get totalDebts => 'Total Debts';
+
+  @override
+  String get netBalance => 'Net Balance';
+
+  @override
+  String get movements => 'Movements';
+
+  @override
+  String get noIntershopDebt => 'No intershop debt';
+
+  @override
+  String get noReceivablesOrDebtsForPeriod => 'This shop has neither receivables nor debts for the selected period';
+
+  @override
+  String get filters => 'Filters';
+
+  @override
+  String get periodSelection => 'Period Selection';
+
+  @override
+  String get generatePdf => 'Generate PDF';
+
+  @override
+  String get dailyEvolution => 'Daily Evolution';
+
+  @override
+  String get movementDetails => 'Movement Details';
+
+  @override
+  String get errorGeneratingReport => 'Error generating report';
+
+  @override
+  String get totalOperations => 'Total Operations';
+
+  @override
+  String get clickForDetails => 'Click for details';
+
+  @override
+  String get operation => 'Operation';
+
+  @override
+  String get receivable => 'Receivable';
+
+  @override
+  String get debt => 'Debt';
+
+  @override
+  String get previousDebt => 'Previous Debt';
+
+  @override
+  String get cumulativeBalance => 'Cumulative Balance';
+
+  @override
+  String get dailyBalance => 'Daily Balance';
+
+  @override
+  String get noMovementsForPeriod => 'No movements for this period';
+
+  @override
+  String get showDailyEvolution => 'Show daily evolution';
+
+  @override
+  String get hideDailyEvolution => 'Hide daily evolution';
+
+  @override
+  String get showMovementDetails => 'Show movement details';
+
+  @override
+  String get hideMovementDetails => 'Hide movement details';
+
+  @override
+  String get served => 'Served';
+
+  @override
+  String get awaiting => 'Awaiting';
+
+  @override
+  String get groupBy => 'Group by';
+
+  @override
+  String get groupByType => 'Group by type';
+
+  @override
+  String get groupBySourceShop => 'Group by source shop';
+
+  @override
+  String get groupByDestinationShop => 'Group by destination shop';
+
+  @override
+  String get transferServed => 'Transfer served';
+
+  @override
+  String get transferPending => 'Transfer pending';
+
+  @override
+  String get transferInitiated => 'Transfer initiated';
+
+  @override
+  String get depositReceived => 'Deposit received';
+
+  @override
+  String get depositMade => 'Deposit made';
+
+  @override
+  String get withdrawalServed => 'Withdrawal served';
+
+  @override
+  String get withdrawalMade => 'Withdrawal made';
+
+  @override
+  String get flotShopToShop => 'FLOT shop-to-shop';
+
+  @override
+  String get flotReceived => 'FLOT received';
+
+  @override
+  String get flotSent => 'FLOT sent';
+
+  @override
+  String get shopToShopFlot => 'Shop-to-shop FLOT';
+
+  @override
+  String get exportPdf => 'Export PDF';
+
+  @override
+  String get partnersNetPosition => 'Partners Net Position';
+
+  @override
+  String get searchPartner => 'Search for a partner (name, phone, account number)';
+
+  @override
+  String get enterNamePhoneOrAccount => 'Enter a name, phone or account number';
+
+  @override
+  String get globalNetPosition => 'Global Net Position';
+
+  @override
+  String get theyOweUs => 'They Owe Us';
+
+  @override
+  String get weOweThem => 'We Owe Them';
+
+  @override
+  String get netPosition => 'Net Position';
+
+  @override
+  String get thoseWhoOweUs => 'Those Who Owe Us';
+
+  @override
+  String get thoseWeOwe => 'Those We Owe';
+
+  @override
+  String get noPartner => 'No partner';
+
+  @override
+  String get inThisCategory => 'in this category';
+
+  @override
+  String get trashBin => 'Trash Bin';
+
+  @override
+  String get emptyTrash => 'Empty trash';
+
+  @override
+  String get restoreOperation => 'Restore operation';
+
+  @override
+  String get restoreThisOperation => 'Restore this operation';
+
+  @override
+  String get confirmRestore => 'Confirm restoration of this operation?';
+
+  @override
+  String get operationRestored => 'Operation restored successfully';
+
+  @override
+  String get errorRestoring => 'Error restoring operation';
+
+  @override
+  String get deletedOn => 'Deleted on';
+
+  @override
+  String get deletedBy => 'By';
+
+  @override
+  String get syncedOnServer => 'Synced on server';
+
+  @override
+  String get waitingForSync => 'Waiting for synchronization';
+
+  @override
+  String get recipient => 'Recipient';
+
+  @override
+  String get client => 'Client';
+
+  @override
+  String get grossAmount => 'Gross amount';
+
+  @override
+  String get netAmount => 'Net amount';
+
+  @override
+  String get operationDate => 'Operation date';
+
+  @override
+  String get deletionReason => 'Deletion reason';
+
+  @override
+  String get code => 'Code';
 }

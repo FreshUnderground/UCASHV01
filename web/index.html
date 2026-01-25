@@ -99,14 +99,12 @@
   </div>
   
   <script>
-    // Enregistrement du Service Worker - TEMPORAIREMENT DÉSACTIVÉ
-    // Le Service Worker bloque actuellement les requêtes vers l'API externe
-    /*
+    // Enregistrement du Service Worker pour PWA
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function() {
         navigator.serviceWorker.register('/sw.js')
           .then(function(registration) {
-            console.log('Service Worker enregistré avec succès:', registration.scope);
+            console.log('✅ Service Worker enregistré avec succès:', registration.scope);
             
             // Écouter les mises à jour du SW
             registration.addEventListener('updatefound', function() {
@@ -120,19 +118,8 @@
             });
           })
           .catch(function(error) {
-            console.log('Erreur d\'enregistrement du Service Worker:', error);
+            console.log('❌ Erreur d\'enregistrement du Service Worker:', error);
           });
-      });
-    }
-    */
-    
-    // DÉSENREGISTRER les Service Workers existants
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(function(registrations) {
-        for(let registration of registrations) {
-          registration.unregister();
-          console.log('Service Worker désenregistré');
-        }
       });
     }
     

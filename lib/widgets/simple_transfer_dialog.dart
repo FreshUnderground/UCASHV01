@@ -23,16 +23,18 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
   final _montantController = TextEditingController();
   final _destinataireController = TextEditingController();
   final _referenceController = TextEditingController();
-  final _expediteurController = TextEditingController(); // Add expediteur controller
-  
+  final _expediteurController =
+      TextEditingController(); // Add expediteur controller
+
   XFile? _selectedImage;
   Uint8List? _imageBytes;
   bool _isLoading = false;
   final ImagePicker _picker = ImagePicker();
-  
+
   double _commission = 0.0;
   double _montantNet = 0.0;
   double _tauxCommission = 0.0; // Taux réel de la commission en %
+  bool _isCommissionFree = false; // Checkbox pour transaction gratuite
   int? _selectedShopDestinationId; // Shop de destination pour le transfert
 
   @override
@@ -57,14 +59,15 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
     _expediteurController.dispose(); // Dispose expediteur controller
     super.dispose();
   }
-  
+
   void _calculateCommission() async {
-    final montantNet = double.tryParse(_montantController.text) ?? 0.0;  // Montant que le destinataire REÇOIT
-    
+    final montantNet = double.tryParse(_montantController.text) ??
+        0.0; // Montant que le destinataire REÇOIT
+
     // Récupérer l'utilisateur connecté pour obtenir le shopSourceId
     final authService = Provider.of<AuthService>(context, listen: false);
     final currentUser = authService.currentUser;
-    
+
     if (currentUser?.shopId == null) {
       debugPrint('⚠️ Shop source non défini');
       _tauxCommission = 0.0;
@@ -72,41 +75,51 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
       if (mounted) setState(() {});
       return;
     }
-    
+
     // Récupérer la commission shop-to-shop depuis RatesService
     final ratesService = RatesService.instance;
     await ratesService.loadRatesAndCommissions();
-    
-    // Utiliser la méthode shop-to-shop qui gère les fallbacks
-    final commissionData = ratesService.getCommissionByShopsAndType(
-      currentUser!.shopId!,  // Shop source
-      _selectedShopDestinationId,  // Shop destination (peut être null)
-      'SORTANT',
-    );
-    
-    if (commissionData != null) {
-      _tauxCommission = commissionData.taux; // Stocker le taux réel
-      _commission = montantNet * (commissionData.taux / 100);
-      
-      // Log pour débogage
-      String route = 'GENERAL';
-      if (commissionData.shopSourceId != null && commissionData.shopDestinationId != null) {
-        route = 'shop-to-shop (${commissionData.shopSourceId} → ${commissionData.shopDestinationId})';
-      } else if (commissionData.shopId != null) {
-        route = 'shop-specific (${commissionData.shopId})';
-      }
-      debugPrint('✅ Commission $route: ${commissionData.taux}% sur $montantNet = $_commission');
-    } else {
-      // PAS DE FALLBACK - Afficher erreur
-      debugPrint('❌ ERREUR: Aucune commission trouvée pour cette route!');
+
+    // Vérifier si la transaction est gratuite (checkbox cochée)
+    if (_isCommissionFree) {
       _tauxCommission = 0.0;
       _commission = 0.0;
+      debugPrint('✅ Transaction gratuite activée - Commission annulée');
+    } else {
+      // Utiliser la méthode shop-to-shop qui gère les fallbacks
+      final commissionData = ratesService.getCommissionByShopsAndType(
+        currentUser!.shopId!, // Shop source
+        _selectedShopDestinationId, // Shop destination (peut être null)
+        'SORTANT',
+      );
+
+      if (commissionData != null) {
+        _tauxCommission = commissionData.taux; // Stocker le taux réel
+        _commission = montantNet * (commissionData.taux / 100);
+
+        // Log pour débogage
+        String route = 'GENERAL';
+        if (commissionData.shopSourceId != null &&
+            commissionData.shopDestinationId != null) {
+          route =
+              'shop-to-shop (${commissionData.shopSourceId} → ${commissionData.shopDestinationId})';
+        } else if (commissionData.shopId != null) {
+          route = 'shop-specific (${commissionData.shopId})';
+        }
+        debugPrint(
+            '✅ Commission $route: ${commissionData.taux}% sur $montantNet = $_commission');
+      } else {
+        // PAS DE FALLBACK - Afficher erreur
+        debugPrint('❌ ERREUR: Aucune commission trouvée pour cette route!');
+        _tauxCommission = 0.0;
+        _commission = 0.0;
+      }
     }
-    
+
     // LE CLIENT PAIE: Montant Net + Commission
-    _montantNet = montantNet;  // Ce que le destinataire reçoit
+    _montantNet = montantNet; // Ce que le destinataire reçoit
     // montantBrut sera = montantNet + commission (calculé lors de la création)
-    
+
     if (mounted) {
       setState(() {});
     }
@@ -125,7 +138,7 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
     final isMobile = screenWidth <= 480;
     final fieldSpacing = ResponsiveDialogUtils.getFieldSpacing(context);
     final labelFontSize = ResponsiveDialogUtils.getLabelFontSize(context);
-    
+
     return ResponsiveDialogUtils.buildResponsiveDialog(
       context: context,
       header: ResponsiveDialogUtils.buildResponsiveHeader(
@@ -150,7 +163,9 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.info, color: Colors.blue, size: ResponsiveDialogUtils.getIconSize(context)),
+                  Icon(Icons.info,
+                      color: Colors.blue,
+                      size: ResponsiveDialogUtils.getIconSize(context)),
                   SizedBox(width: isMobile ? 8 : 12),
                   Expanded(
                     child: Text(
@@ -167,7 +182,7 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
               ),
             ),
             SizedBox(height: fieldSpacing),
-            
+
             // 1. Capture d'écran (optionnelle)
             Text(
               '1. Capture d\'écran de la preuve (optionnelle)',
@@ -178,7 +193,7 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
               ),
             ),
             SizedBox(height: isMobile ? 8 : 12),
-            
+
             GestureDetector(
               onTap: _pickImage,
               child: Container(
@@ -191,7 +206,7 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
                     style: BorderStyle.solid,
                   ),
                   borderRadius: BorderRadius.circular(8),
-                  color: _selectedImage != null 
+                  color: _selectedImage != null
                       ? Colors.green.withOpacity(0.05)
                       : Colors.grey.withOpacity(0.05),
                 ),
@@ -249,7 +264,7 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
               ),
             ),
             SizedBox(height: fieldSpacing),
-            
+
             // 2. Destinataire
             Text(
               '2. Nom du destinataire *',
@@ -260,13 +275,14 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
               ),
             ),
             SizedBox(height: isMobile ? 8 : 12),
-            
+
             TextFormField(
               controller: _destinataireController,
               decoration: InputDecoration(
                 labelText: 'Nom complet',
                 border: const OutlineInputBorder(),
-                prefixIcon: Icon(Icons.person, size: ResponsiveDialogUtils.getIconSize(context)),
+                prefixIcon: Icon(Icons.person,
+                    size: ResponsiveDialogUtils.getIconSize(context)),
                 contentPadding: EdgeInsets.symmetric(
                   horizontal: isMobile ? 12 : 16,
                   vertical: isMobile ? 12 : 16,
@@ -281,7 +297,7 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
               },
             ),
             SizedBox(height: fieldSpacing),
-            
+
             // 3. Shop de destination
             Text(
               '3. Shop de destination *',
@@ -292,22 +308,25 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
               ),
             ),
             SizedBox(height: isMobile ? 8 : 12),
-            
+
             Consumer<ShopService>(
               builder: (context, shopService, child) {
                 final shops = shopService.shops;
-                final authService = Provider.of<AuthService>(context, listen: false);
+                final authService =
+                    Provider.of<AuthService>(context, listen: false);
                 final currentShopId = authService.currentUser?.shopId;
-                
+
                 // Filtrer pour exclure le shop source
-                final availableShops = shops.where((shop) => shop.id != currentShopId).toList();
-                
+                final availableShops =
+                    shops.where((shop) => shop.id != currentShopId).toList();
+
                 return DropdownButtonFormField<int>(
                   value: _selectedShopDestinationId,
                   decoration: InputDecoration(
                     labelText: 'Sélectionner le shop de destination',
                     border: const OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.store, size: ResponsiveDialogUtils.getIconSize(context)),
+                    prefixIcon: Icon(Icons.store,
+                        size: ResponsiveDialogUtils.getIconSize(context)),
                     contentPadding: EdgeInsets.symmetric(
                       horizontal: isMobile ? 12 : 16,
                       vertical: isMobile ? 12 : 16,
@@ -338,7 +357,7 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
               },
             ),
             SizedBox(height: fieldSpacing),
-            
+
             // 4. Nom de l'expéditeur
             Text(
               '4. Nom de l\'expéditeur *',
@@ -349,13 +368,14 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
               ),
             ),
             SizedBox(height: isMobile ? 8 : 12),
-            
+
             TextFormField(
               controller: _expediteurController,
               decoration: InputDecoration(
                 labelText: 'Nom de l\'expéditeur',
                 border: const OutlineInputBorder(),
-                prefixIcon: Icon(Icons.person_outline, size: ResponsiveDialogUtils.getIconSize(context)),
+                prefixIcon: Icon(Icons.person_outline,
+                    size: ResponsiveDialogUtils.getIconSize(context)),
                 contentPadding: EdgeInsets.symmetric(
                   horizontal: isMobile ? 12 : 16,
                   vertical: isMobile ? 12 : 16,
@@ -370,7 +390,7 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
               },
             ),
             SizedBox(height: fieldSpacing),
-            
+
             // 5. Référence
             Text(
               '5. Référence du transfert *',
@@ -381,13 +401,14 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
               ),
             ),
             SizedBox(height: isMobile ? 8 : 12),
-            
+
             TextFormField(
               controller: _referenceController,
               decoration: InputDecoration(
                 labelText: 'Référence unique',
                 border: const OutlineInputBorder(),
-                prefixIcon: Icon(Icons.confirmation_number, size: ResponsiveDialogUtils.getIconSize(context)),
+                prefixIcon: Icon(Icons.confirmation_number,
+                    size: ResponsiveDialogUtils.getIconSize(context)),
                 contentPadding: EdgeInsets.symmetric(
                   horizontal: isMobile ? 12 : 16,
                   vertical: isMobile ? 12 : 16,
@@ -402,7 +423,7 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
               },
             ),
             SizedBox(height: fieldSpacing),
-            
+
             // 6. Montant
             Text(
               '6. Montant du transfert *',
@@ -413,13 +434,14 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
               ),
             ),
             SizedBox(height: isMobile ? 8 : 12),
-            
+
             TextFormField(
               controller: _montantController,
               decoration: InputDecoration(
                 labelText: 'Montant en USD',
                 border: const OutlineInputBorder(),
-                prefixIcon: Icon(Icons.attach_money, size: ResponsiveDialogUtils.getIconSize(context)),
+                prefixIcon: Icon(Icons.attach_money,
+                    size: ResponsiveDialogUtils.getIconSize(context)),
                 suffixText: 'USD',
                 contentPadding: EdgeInsets.symmetric(
                   horizontal: isMobile ? 12 : 16,
@@ -440,8 +462,48 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
               },
             ),
             const SizedBox(height: 16),
+
+            // Checkbox pour transaction gratuite
+            Container(
+              padding: EdgeInsets.all(isMobile ? 12 : 16),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green.withOpacity(0.3)),
+              ),
+              child: CheckboxListTile(
+                title: Text(
+                  'Transaction gratuite (annuler la commission)',
+                  style: TextStyle(
+                    fontSize: isMobile ? 14 : 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.green[800],
+                  ),
+                ),
+                subtitle: Text(
+                  'Cochez cette case pour effectuer le transfert sans commission',
+                  style: TextStyle(
+                    fontSize: isMobile ? 12 : 13,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                value: _isCommissionFree,
+                activeColor: Colors.green,
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                onChanged: (value) {
+                  setState(() {
+                    _isCommissionFree = value ?? false;
+                  });
+                  _calculateCommission();
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+
             // Add CodeOps preview
-            if (_montantController.text.isNotEmpty && _destinataireController.text.isNotEmpty)
+            if (_montantController.text.isNotEmpty &&
+                _destinataireController.text.isNotEmpty)
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -463,7 +525,8 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
                       // Generate a preview of what the CodeOps will look like (timestamp-based for uniqueness)
                       () {
                         final now = DateTime.now();
-                        final year = (now.year % 100).toString().padLeft(2, '0');
+                        final year =
+                            (now.year % 100).toString().padLeft(2, '0');
                         final month = now.month.toString().padLeft(2, '0');
                         final day = now.day.toString().padLeft(2, '0');
                         final hour = now.hour.toString().padLeft(2, '0');
@@ -480,7 +543,7 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
                 ),
               ),
             SizedBox(height: fieldSpacing),
-            
+
             // Résumé commission
             if (_montantController.text.isNotEmpty)
               Container(
@@ -495,10 +558,13 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Montant à servir:', style: TextStyle(fontSize: isMobile ? 13 : 14)),
+                        Text('Montant à servir:',
+                            style: TextStyle(fontSize: isMobile ? 13 : 14)),
                         Text(
                           '${_montantController.text} USD',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: isMobile ? 13 : 14),
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: isMobile ? 13 : 14),
                         ),
                       ],
                     ),
@@ -507,12 +573,44 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Commission (${_tauxCommission > 0 ? '${_tauxCommission.toStringAsFixed(1)}%' : '0%'}):', 
-                          style: TextStyle(fontSize: isMobile ? 13 : 14)
-                        ),
-                        Text(
-                          '${_commission.toStringAsFixed(2)} USD',
-                          style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: isMobile ? 13 : 14),
+                            _isCommissionFree
+                                ? 'Commission (Gratuite):'
+                                : 'Commission (${_tauxCommission > 0 ? '${_tauxCommission.toStringAsFixed(1)}%' : '0%'}):',
+                            style: TextStyle(fontSize: isMobile ? 13 : 14)),
+                        Row(
+                          children: [
+                            if (_isCommissionFree)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.green,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  'GRATUIT',
+                                  style: TextStyle(
+                                    fontSize: isMobile ? 10 : 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            if (_isCommissionFree) const SizedBox(width: 8),
+                            Text(
+                              '${_commission.toStringAsFixed(2)} USD',
+                              style: TextStyle(
+                                color: _isCommissionFree || _commission == 0
+                                    ? Colors.green
+                                    : Colors.orange,
+                                fontWeight: FontWeight.bold,
+                                fontSize: isMobile ? 13 : 14,
+                                decoration: _isCommissionFree
+                                    ? TextDecoration.lineThrough
+                                    : null,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -522,7 +620,9 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
                       children: [
                         Text(
                           'Total à payer:',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: isMobile ? 14 : 16),
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: isMobile ? 14 : 16),
                         ),
                         Text(
                           '${(_montantNet + _commission).toStringAsFixed(2)} USD',
@@ -553,7 +653,8 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFDC2626),
               foregroundColor: Colors.white,
-              minimumSize: Size(isMobile ? double.infinity : 120, isMobile ? 48 : 40),
+              minimumSize:
+                  Size(isMobile ? double.infinity : 120, isMobile ? 48 : 40),
             ),
             child: _isLoading
                 ? const SizedBox(
@@ -581,7 +682,7 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
           maxHeight: 1080,
           imageQuality: 85,
         );
-        
+
         if (image != null) {
           final bytes = await image.readAsBytes();
           setState(() {
@@ -591,7 +692,7 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
         }
         return;
       }
-      
+
       // Pour les plateformes mobiles: Proposer CAMÉRA ou GALERIE
       final source = await showDialog<ImageSource>(
         context: context,
@@ -606,7 +707,8 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
                 onTap: () => Navigator.pop(context, ImageSource.camera),
               ),
               ListTile(
-                leading: const Icon(Icons.photo_library, color: Color(0xFFDC2626)),
+                leading:
+                    const Icon(Icons.photo_library, color: Color(0xFFDC2626)),
                 title: const Text('Choisir depuis la galerie'),
                 onTap: () => Navigator.pop(context, ImageSource.gallery),
               ),
@@ -614,16 +716,16 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
           ),
         ),
       );
-      
+
       if (source == null) return;
-      
+
       final XFile? image = await _picker.pickImage(
         source: source,
         maxWidth: 1920,
         maxHeight: 1080,
         imageQuality: 85,
       );
-      
+
       if (image != null) {
         final bytes = await image.readAsBytes();
         setState(() {
@@ -646,9 +748,9 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
 
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     // Image is now optional, so we don't check for it
-    
+
     setState(() {
       _isLoading = true;
     });
@@ -656,40 +758,42 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
       final currentUser = authService.currentUser;
-      
+
       if (currentUser?.id == null || currentUser?.shopId == null) {
         throw Exception('Utilisateur non connecté');
       }
 
       final operationService = OperationService();
       final montant = double.parse(_montantController.text);
-      
+
       // Create notes with image info if available
       String notes = 'Transfert simple';
       if (_selectedImage != null) {
         notes += ' - Photo: ${_selectedImage!.path}';
       }
-      
+
       // Add expediteur info to notes
       notes += ' - Expéditeur: ${_expediteurController.text}';
-      
+
       // Créer l'opération de transfert simple
       final operation = OperationModel(
         codeOps: '', // Sera généré automatiquement par createOperation
         agentId: currentUser!.id!,
         agentUsername: currentUser.username,
         shopSourceId: currentUser.shopId!,
-        shopDestinationId: _selectedShopDestinationId, // Shop de destination pour commission spécifique
+        shopDestinationId:
+            _selectedShopDestinationId, // Shop de destination pour commission spécifique
         type: OperationType.transfertNational, // Par défaut national
-        montantNet: _montantNet,  // Ce que le destinataire REÇOIT
-        montantBrut: _montantNet + _commission,  // Ce que le client PAIE
+        montantNet: _montantNet, // Ce que le destinataire REÇOIT
+        montantBrut: _montantNet + _commission, // Ce que le client PAIE
         commission: _commission,
         devise: 'USD',
         modePaiement: ModePaiement.cash,
         destinataire: _destinataireController.text,
         reference: _referenceController.text,
         notes: notes,
-        observation: _expediteurController.text, // Store expediteur in observation field (now required)
+        observation: _expediteurController
+            .text, // Store expediteur in observation field (now required)
         statut: OperationStatus.enAttente,
         dateOp: DateTime.now(),
         lastModifiedAt: DateTime.now(),
@@ -697,22 +801,23 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
       );
 
       final savedOperation = await operationService.createOperation(operation);
-      
+
       if (savedOperation == null) {
-        throw Exception(operationService.errorMessage ?? 'Erreur lors de la création du transfert');
+        throw Exception(operationService.errorMessage ??
+            'Erreur lors de la création du transfert');
       }
 
       if (mounted) {
         // Fermer le dialog de transfert
         Navigator.of(context).pop(true);
-        
+
         // Récupérer les données pour le reçu
         final shopService = Provider.of<ShopService>(context, listen: false);
         final shop = shopService.shops.firstWhere(
           (s) => s.id == currentUser.shopId,
           orElse: () => shopService.shops.first,
         );
-        
+
         // Convertir UserModel en AgentModel pour le reçu
         final agent = AgentModel(
           id: currentUser.id,
@@ -722,7 +827,7 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
           nom: currentUser.nom,
           telephone: currentUser.telephone,
         );
-        
+
         // Imprimer automatiquement le reçu sur POS
         await AutoPrintHelper.autoPrintWithDialog(
           context: context,
@@ -737,7 +842,8 @@ class _SimpleTransferDialogState extends State<SimpleTransferDialog> {
         if (mounted) {
           // Check if it's a closure-related error
           final errorMessage = e.toString();
-          if (errorMessage.contains('clôturer') || errorMessage.contains('clôturée')) {
+          if (errorMessage.contains('clôturer') ||
+              errorMessage.contains('clôturée')) {
             // Show a prominent alert dialog for closure issues
             showDialog(
               context: context,

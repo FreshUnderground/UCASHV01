@@ -9,24 +9,26 @@ import '../utils/responsive_utils.dart';
 
 /// Widget pour permettre aux agents de créer des règlements triangulaires
 /// RESTRICTION: L'agent peut créer des règlements UNIQUEMENT pour son propre shop
-/// 
+///
 /// Scénarios autorisés pour un agent du Shop A:
 /// 1. Shop A (son shop) doit à Shop C, Shop B reçoit le paiement
 /// 2. Shop A (son shop) reçoit le paiement pour Shop C (mais Shop B doit à Shop C)
-/// 
+///
 /// Le shop de l'agent DOIT toujours être impliqué (débiteur OU intermédiaire)
 class AgentTriangularDebtSettlementWidget extends StatefulWidget {
   const AgentTriangularDebtSettlementWidget({super.key});
 
   @override
-  State<AgentTriangularDebtSettlementWidget> createState() => _AgentTriangularDebtSettlementWidgetState();
+  State<AgentTriangularDebtSettlementWidget> createState() =>
+      _AgentTriangularDebtSettlementWidgetState();
 }
 
-class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDebtSettlementWidget> {
+class _AgentTriangularDebtSettlementWidgetState
+    extends State<AgentTriangularDebtSettlementWidget> {
   final _formKey = GlobalKey<FormState>();
   final _montantController = TextEditingController();
   final _notesController = TextEditingController();
-  
+
   String _settlementType = 'debtor'; // 'debtor' ou 'intermediary'
   ShopModel? _otherShopA; // L'autre shop impliqué dans la dette
   ShopModel? _shopCreditor; // Shop créancier (toujours Shop C)
@@ -48,7 +50,7 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
       _shopCreditor = null;
       _settlementType = 'debtor'; // Reset to default
     });
-    
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -63,31 +65,144 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
   @override
   Widget build(BuildContext context) {
     final isMobile = context.isSmallScreen;
-    final agentAuthService = Provider.of<AgentAuthService>(context, listen: false);
+    final agentAuthService =
+        Provider.of<AgentAuthService>(context, listen: false);
     final currentAgent = agentAuthService.currentAgent;
     final agentShopId = currentAgent?.shopId;
-    
+
+    // Logs de débogage pour diagnostiquer le problème
+    debugPrint('🔧 [Triangular Widget] Build appelé');
+    debugPrint('   currentAgent: ${currentAgent?.username ?? "null"}');
+    debugPrint('   currentAgent.id: ${currentAgent?.id}');
+    debugPrint('   currentAgent.shopId: ${currentAgent?.shopId}');
+    debugPrint('   agentShopId: $agentShopId');
+
     if (agentShopId == null) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.error_outline, size: 64, color: Colors.red),
-              SizedBox(height: 16),
-              Text(
-                'Erreur: Shop de l\'agent non trouvé',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
-              SizedBox(height: 8),
-              Text(
-                'Seuls les agents assignés à un shop peuvent accéder à cette fonctionnalité.',
-                style: TextStyle(color: Colors.grey),
-                textAlign: TextAlign.center,
-              ),
-            ],
+      debugPrint(
+          '⚠️ [Triangular Widget] agentShopId est null - affichage message d\'erreur');
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Règlement Triangulaire'),
+          backgroundColor: Colors.purple,
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.store_outlined,
+                    size: 80,
+                    color: Colors.orange,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Shop Non Assigné',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Votre compte agent n\'est pas encore assigné à un shop.',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey[700],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Pour accéder à la fonctionnalité de règlement triangulaire, '
+                  'vous devez être assigné à un shop par un administrateur.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 32),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.info_outline,
+                              color: Colors.blue, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Que faire ?',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue[900],
+                                fontSize: 15,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      _buildStepItem('1', 'Contactez votre administrateur'),
+                      const SizedBox(height: 8),
+                      _buildStepItem('2', 'Demandez l\'assignation à un shop'),
+                      const SizedBox(height: 8),
+                      _buildStepItem(
+                          '3', 'Reconnectez-vous après l\'assignation'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.arrow_back),
+                      label: const Text('Retour'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.grey,
+                        side: BorderSide(color: Colors.grey.shade400),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        // Déconnecter et revenir à l'écran de login
+                        final authService = Provider.of<AgentAuthService>(
+                            context,
+                            listen: false);
+                        authService.logout();
+                        Navigator.of(context).pushReplacementNamed('/login');
+                      },
+                      icon: const Icon(Icons.logout),
+                      label: const Text('Se déconnecter'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -110,7 +225,7 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
             ),
           );
         }
-        
+
         // Vérifier si la liste des shops est vide
         if (shopService.shops.isEmpty) {
           return Scaffold(
@@ -133,7 +248,7 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
             ),
           );
         }
-        
+
         final agentShop = shopService.shops.firstWhere(
           (s) => s.id == agentShopId,
           orElse: () => ShopModel(
@@ -156,7 +271,10 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [Colors.purple.withOpacity(0.1), Colors.blue.withOpacity(0.1)],
+                        colors: [
+                          Colors.purple.withOpacity(0.1),
+                          Colors.blue.withOpacity(0.1)
+                        ],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
@@ -171,7 +289,8 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
                             color: Colors.purple.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Icon(Icons.store, color: Colors.purple, size: 24),
+                          child: const Icon(Icons.store,
+                              color: Colors.purple, size: 24),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -208,11 +327,12 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
                     icon: Icons.info,
                     color: Colors.blue,
                     title: 'Règlement Triangulaire',
-                    description: 'Créez un règlement triangulaire impliquant votre shop. '
+                    description:
+                        'Créez un règlement triangulaire impliquant votre shop. '
                         'Votre shop doit être soit le débiteur qui paie, soit l\'intermédiaire qui reçoit le paiement.',
                   ),
                   const SizedBox(height: 24),
-                  
+
                   // Type de règlement
                   Container(
                     padding: const EdgeInsets.all(12),
@@ -233,8 +353,10 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
                         ),
                         const SizedBox(height: 8),
                         RadioListTile<String>(
-                          title: Text('${agentShop.designation} PAIE (débiteur)'),
-                          subtitle: const Text('Votre shop doit de l\'argent et paie via un autre shop'),
+                          title:
+                              Text('${agentShop.designation} PAIE (débiteur)'),
+                          subtitle: const Text(
+                              'Votre shop doit de l\'argent et paie via un autre shop'),
                           value: 'debtor',
                           groupValue: _settlementType,
                           onChanged: (value) {
@@ -246,8 +368,10 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
                           },
                         ),
                         RadioListTile<String>(
-                          title: Text('${agentShop.designation} REÇOIT (intermédiaire)'),
-                          subtitle: const Text('Votre shop reçoit un paiement pour le compte d\'un créancier'),
+                          title: Text(
+                              '${agentShop.designation} REÇOIT (intermédiaire)'),
+                          subtitle: const Text(
+                              'Votre shop reçoit un paiement pour le compte d\'un créancier'),
                           value: 'intermediary',
                           groupValue: _settlementType,
                           onChanged: (value) {
@@ -262,15 +386,15 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
                     ),
                   ),
                   const SizedBox(height: 24),
-                  
+
                   // Impact sur les dettes
                   _buildImpactSummary(agentShop, agentShopId),
                   const SizedBox(height: 24),
-                  
+
                   // Formulaire dynamique
                   _buildDynamicForm(agentShop, shopService),
                   const SizedBox(height: 24),
-                  
+
                   // Bouton de soumission
                   _buildSubmitButton(agentShopId, currentAgent),
                 ],
@@ -291,7 +415,7 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
 
   Widget _buildImpactSummary(ShopModel agentShop, int agentShopId) {
     final montant = _montantController.text;
-    
+
     // Vérifier si les shops requis sont sélectionnés
     if (_otherShopA == null || _shopCreditor == null) {
       return Container(
@@ -315,7 +439,7 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
         ),
       );
     }
-    
+
     // Déterminer les 3 shops selon le type
     final ShopModel shopA, shopB, shopC;
     if (_settlementType == 'debtor') {
@@ -327,12 +451,15 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
       shopB = agentShop;
       shopC = _shopCreditor!;
     }
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Colors.purple.withOpacity(0.1), Colors.blue.withOpacity(0.1)],
+          colors: [
+            Colors.purple.withOpacity(0.1),
+            Colors.blue.withOpacity(0.1)
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -382,7 +509,8 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
     );
   }
 
-  Widget _buildImpactRow(IconData icon, Color color, String text, {required bool isAgentShop}) {
+  Widget _buildImpactRow(IconData icon, Color color, String text,
+      {required bool isAgentShop}) {
     return Row(
       children: [
         Icon(icon, color: color, size: 16),
@@ -420,7 +548,7 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
             ),
           ),
           const SizedBox(height: 16),
-          
+
           DropdownButtonFormField<ShopModel>(
             value: _otherShopA,
             decoration: const InputDecoration(
@@ -439,12 +567,13 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
             onChanged: (value) => setState(() => _otherShopA = value),
             validator: (value) {
               if (value == null) return 'Sélectionnez le shop intermédiaire';
-              if (value == _shopCreditor) return 'L\'intermédiaire et le créancier doivent être différents';
+              if (value == _shopCreditor)
+                return 'L\'intermédiaire et le créancier doivent être différents';
               return null;
             },
           ),
           const SizedBox(height: 16),
-          
+
           DropdownButtonFormField<ShopModel>(
             value: _shopCreditor,
             decoration: const InputDecoration(
@@ -477,7 +606,7 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
             ),
           ),
           const SizedBox(height: 16),
-          
+
           DropdownButtonFormField<ShopModel>(
             value: _otherShopA,
             decoration: const InputDecoration(
@@ -496,12 +625,13 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
             onChanged: (value) => setState(() => _otherShopA = value),
             validator: (value) {
               if (value == null) return 'Sélectionnez le shop débiteur';
-              if (value == _shopCreditor) return 'Le débiteur et le créancier doivent être différents';
+              if (value == _shopCreditor)
+                return 'Le débiteur et le créancier doivent être différents';
               return null;
             },
           ),
           const SizedBox(height: 16),
-          
+
           DropdownButtonFormField<ShopModel>(
             value: _shopCreditor,
             decoration: const InputDecoration(
@@ -524,9 +654,9 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
             },
           ),
         ],
-        
+
         const SizedBox(height: 16),
-        
+
         // Montant
         TextFormField(
           controller: _montantController,
@@ -546,7 +676,7 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
           },
         ),
         const SizedBox(height: 16),
-        
+
         // Notes
         TextFormField(
           controller: _notesController,
@@ -566,7 +696,9 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton.icon(
-        onPressed: _isLoading ? null : () => _handleCreateSettlement(agentShopId, currentAgent!.id!),
+        onPressed: _isLoading
+            ? null
+            : () => _handleCreateSettlement(agentShopId, currentAgent!.id!),
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.purple,
           foregroundColor: Colors.white,
@@ -582,7 +714,8 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
                 ),
               )
             : const Icon(Icons.check_circle),
-        label: Text(_isLoading ? 'Création...' : 'Créer Règlement Triangulaire'),
+        label:
+            Text(_isLoading ? 'Création...' : 'Créer Règlement Triangulaire'),
       ),
     );
   }
@@ -593,18 +726,19 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
     setState(() => _isLoading = true);
 
     try {
-      final agentAuthService = Provider.of<AgentAuthService>(context, listen: false);
+      final agentAuthService =
+          Provider.of<AgentAuthService>(context, listen: false);
       final currentAgent = agentAuthService.currentAgent;
-      
+
       if (currentAgent == null) {
         throw Exception('Agent non connecté');
       }
 
       final montant = double.parse(_montantController.text.trim());
-      
+
       // Déterminer les IDs selon le type de règlement
       final int shopDebtorId, shopIntermediaryId, shopCreditorId;
-      
+
       if (_settlementType == 'debtor') {
         // Mon shop (A) doit à C, je paie via B
         shopDebtorId = agentShopId;
@@ -618,14 +752,17 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
       }
 
       // Créer le règlement
-      final settlement = await TriangularDebtSettlementService.instance.createTriangularSettlement(
+      final settlement = await TriangularDebtSettlementService.instance
+          .createTriangularSettlement(
         shopDebtorId: shopDebtorId,
         shopIntermediaryId: shopIntermediaryId,
         shopCreditorId: shopCreditorId,
         montant: montant,
         agentId: currentAgent.id!,
         agentUsername: currentAgent.username,
-        notes: _notesController.text.trim().isNotEmpty ? _notesController.text.trim() : null,
+        notes: _notesController.text.trim().isNotEmpty
+            ? _notesController.text.trim()
+            : null,
       );
 
       if (mounted) {
@@ -705,6 +842,38 @@ class _AgentTriangularDebtSettlementWidgetState extends State<AgentTriangularDeb
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildStepItem(String number, String text) {
+    return Row(
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: Colors.blue,
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Text(
+              number,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(fontSize: 14),
+          ),
+        ),
+      ],
     );
   }
 }

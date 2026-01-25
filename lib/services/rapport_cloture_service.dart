@@ -10,6 +10,7 @@ import '../models/compte_special_model.dart';
 import 'local_db.dart';
 import 'flot_service.dart';
 import 'compte_special_service.dart';
+import 'daily_debt_snapshot_service.dart';
 
 /// Service pour générer le Rapport de Clôture Journalière
 class RapportClotureService {
