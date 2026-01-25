@@ -6,7 +6,7 @@ This guide explains how to test the synchronization functionality in the UCASH a
 ## Prerequisites
 1. Ensure Laragon (or another local server environment) is running
 2. Ensure the UCASH database is properly configured
-3. Ensure the API endpoints are accessible at `https://mahanaim.investee-group.com/server/api/sync`
+3. Ensure the API endpoints are accessible at `https://safdal.investee-group.com/server/api/sync`
 
 ## Testing Methods
 

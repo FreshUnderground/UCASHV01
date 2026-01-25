@@ -62,7 +62,7 @@ echo "   Nouvelle localisation: $newLocalisation\n";
 echo "   Nouveau capital: $newCapital USD\n\n";
 
 // 3. Envoyer la requête à l'API
-$url = 'https://mahanaim.investee-group.com/server/api/sync/shops/update.php';
+$url = 'https://safdal.investee-group.com/server/api/sync/shops/update.php';
 
 $ch = curl_init();
 curl_setopt($ch, CURLOPT_URL, $url);

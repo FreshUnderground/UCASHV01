@@ -26,7 +26,7 @@ SELECT
     IS_NULLABLE,
     COLUMN_DEFAULT
 FROM INFORMATION_SCHEMA.COLUMNS 
-WHERE TABLE_SCHEMA = 'inves2504808_1n6a7b' 
+WHERE TABLE_SCHEMA = 'inves2504808_18xpitt' 
 AND TABLE_NAME = 'personnel'
 AND COLUMN_NAME IN ('mode_paiement', 'motif_depart', 'date_depart', 'notes', 'deleted_at')
 ORDER BY COLUMN_NAME;

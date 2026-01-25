@@ -274,7 +274,7 @@ ORDER BY al.created_at ASC;
 
 #### Test 1: Augmentation de capital
 ```bash
-curl -X POST https://mahanaim.investee-group.com/server/api/audit/log_capital_adjustment.php \
+curl -X POST https://safdal.investee-group.com/server/api/audit/log_capital_adjustment.php \
   -H "Content-Type: application/json" \
   -d '{
     "shop_id": 1,
@@ -290,7 +290,7 @@ curl -X POST https://mahanaim.investee-group.com/server/api/audit/log_capital_ad
 
 #### Test 2: Diminution de capital
 ```bash
-curl -X POST https://mahanaim.investee-group.com/server/api/audit/log_capital_adjustment.php \
+curl -X POST https://safdal.investee-group.com/server/api/audit/log_capital_adjustment.php \
   -H "Content-Type: application/json" \
   -d '{
     "shop_id": 1,
@@ -305,7 +305,7 @@ curl -X POST https://mahanaim.investee-group.com/server/api/audit/log_capital_ad
 
 #### Test 3: Récupérer l'historique
 ```bash
-curl https://mahanaim.investee-group.com/server/api/audit/get_capital_adjustments.php?shop_id=1&limit=10
+curl https://safdal.investee-group.com/server/api/audit/get_capital_adjustments.php?shop_id=1&limit=10
 ```
 
 ---

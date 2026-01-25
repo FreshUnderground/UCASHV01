@@ -1,6 +1,6 @@
 <?php
 // Test the shops upload endpoint directly
-$url = 'https://mahanaim.investee-group.com/server/api/sync/shops/upload.php';
+$url = 'https://safdal.investee-group.com/server/api/sync/shops/upload.php';
 
 // Create test data
 $data = [

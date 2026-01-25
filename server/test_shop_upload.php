@@ -46,7 +46,7 @@ echo "📤 Données à envoyer:\n";
 echo json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . "\n\n";
 
 // URL de l'API
-$url = 'https://mahanaim.investee-group.com/server/api/sync/shops/upload.php';
+$url = 'https://safdal.investee-group.com/server/api/sync/shops/upload.php';
 
 // Initialiser cURL
 $ch = curl_init();

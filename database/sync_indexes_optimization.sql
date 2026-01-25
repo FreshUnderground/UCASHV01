@@ -6,7 +6,7 @@
 -- ============================================================================
 
 -- Vérifier la base de données
-USE inves2504808_1n6a7b;
+USE inves2504808_18xpitt;
 
 -- ============================================================================
 -- TABLE: operations
@@ -212,7 +212,7 @@ SELECT
     ROUND((INDEX_LENGTH / 1024 / 1024), 2) AS 'Index Size (MB)',
     TABLE_ROWS AS 'Rows'
 FROM information_schema.TABLES
-WHERE TABLE_SCHEMA = 'inves2504808_1n6a7b'
+WHERE TABLE_SCHEMA = 'inves2504808_18xpitt'
 AND TABLE_NAME IN ('operations', 'shops', 'agents', 'clients', 'taux_change', 'commissions')
 ORDER BY (DATA_LENGTH + INDEX_LENGTH) DESC;
 

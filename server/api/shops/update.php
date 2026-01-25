@@ -54,6 +54,7 @@ try {
     $allowedFields = [
         'designation',
         'localisation',
+        'is_principal',
         'capital_initial',
         'devise_principale',
         'devise_secondaire',

@@ -11,7 +11,7 @@ echo Build precedent supprime.
 echo.
 
 echo [2/4] Creation du build de production...
-flutter build web --release --web-renderer html
+flutter build web --release --web-renderer canvaskit --base-href /
 if %errorlevel% neq 0 (
     echo ERREUR: Echec du build Flutter
     pause

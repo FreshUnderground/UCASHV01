@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/robust_sync_service.dart';
+import '../services/sync_service.dart';
+import '../services/agent_service.dart';
 
 /// Widget de monitoring de la synchronisation robuste
 /// Affiche l'état, les statistiques et les erreurs en temps réel
@@ -20,7 +22,7 @@ class _SyncMonitorWidgetState extends State<SyncMonitorWidget> {
   void initState() {
     super.initState();
     _loadStats();
-    
+
     // Rafraîchir les stats toutes les 2 secondes
     _refreshTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       if (mounted) {
@@ -49,7 +51,7 @@ class _SyncMonitorWidgetState extends State<SyncMonitorWidget> {
     final isEnabled = _stats['isEnabled'] ?? false;
     final isFastSyncing = _stats['isFastSyncing'] ?? false;
     final isSlowSyncing = _stats['isSlowSyncing'] ?? false;
-    
+
     return Card(
       margin: const EdgeInsets.all(16),
       child: Padding(
@@ -97,9 +99,9 @@ class _SyncMonitorWidgetState extends State<SyncMonitorWidget> {
                 ),
               ],
             ),
-            
+
             const Divider(height: 24),
-            
+
             // État de connexion
             _buildStatusRow(
               'État de connexion',
@@ -107,9 +109,9 @@ class _SyncMonitorWidgetState extends State<SyncMonitorWidget> {
               isOnline ? Colors.green : Colors.red,
               isOnline ? Icons.wifi : Icons.wifi_off,
             ),
-            
+
             const SizedBox(height: 8),
-            
+
             // État FAST SYNC
             _buildStatusRow(
               'FAST (2 min)',
@@ -117,9 +119,9 @@ class _SyncMonitorWidgetState extends State<SyncMonitorWidget> {
               isFastSyncing ? Colors.blue : Colors.grey,
               isFastSyncing ? Icons.sync : Icons.schedule,
             ),
-            
+
             const SizedBox(height: 8),
-            
+
             // État SLOW SYNC
             _buildStatusRow(
               'SLOW (10 min)',
@@ -127,9 +129,9 @@ class _SyncMonitorWidgetState extends State<SyncMonitorWidget> {
               isSlowSyncing ? Colors.blue : Colors.grey,
               isSlowSyncing ? Icons.sync : Icons.schedule,
             ),
-            
+
             const Divider(height: 24),
-            
+
             // Statistiques
             const Text(
               'Statistiques',
@@ -139,7 +141,7 @@ class _SyncMonitorWidgetState extends State<SyncMonitorWidget> {
               ),
             ),
             const SizedBox(height: 10),
-            
+
             Row(
               children: [
                 Expanded(
@@ -161,9 +163,9 @@ class _SyncMonitorWidgetState extends State<SyncMonitorWidget> {
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Dernières synchronisations
             _buildLastSyncInfo(
               'Dernière FAST SYNC',
@@ -176,7 +178,7 @@ class _SyncMonitorWidgetState extends State<SyncMonitorWidget> {
               _stats['lastSlowSync'],
               Colors.purple,
             ),
-            
+
             // Tables échouées
             if ((_stats['failedFastTables'] as List?)?.isNotEmpty == true ||
                 (_stats['failedSlowTables'] as List?)?.isNotEmpty == true) ...[
@@ -203,10 +205,10 @@ class _SyncMonitorWidgetState extends State<SyncMonitorWidget> {
                   Colors.purple,
                 ),
             ],
-            
+
             const Divider(height: 10),
-            
-            // Bouton sync manuelle
+
+            // Bouton sync manuelle complète
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
@@ -214,7 +216,8 @@ class _SyncMonitorWidgetState extends State<SyncMonitorWidget> {
                     ? () async {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('🔄 Synchronisation manuelle en cours...'),
+                            content:
+                                Text('🔄 Synchronisation manuelle en cours...'),
                             duration: Duration(seconds: 2),
                           ),
                         );
@@ -231,9 +234,68 @@ class _SyncMonitorWidgetState extends State<SyncMonitorWidget> {
                       }
                     : null,
                 icon: const Icon(Icons.refresh),
-                label: const Text('Synchroniser'),
+                label: const Text('Synchroniser Tout'),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.all(7),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            // 🆕 Bouton FORCER DOWNLOAD AGENTS
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: isOnline
+                    ? () async {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('👥 Téléchargement des agents...'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+
+                        try {
+                          final syncService = SyncService();
+
+                          // Forcer le download des agents
+                          await syncService.downloadTableData(
+                              'agents', 'admin', 'admin');
+
+                          // Recharger en mémoire
+                          await AgentService.instance.loadAgents();
+
+                          final agentCount =
+                              AgentService.instance.agents.length;
+
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                    '✅ $agentCount agent(s) téléchargé(s)'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('❌ Erreur: $e'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        }
+                      }
+                    : null,
+                icon: const Icon(Icons.people_alt, size: 18),
+                label: const Text('Forcer Download Agents'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.all(7),
+                  foregroundColor: Colors.orange,
+                  side: const BorderSide(color: Colors.orange),
                 ),
               ),
             ),
@@ -243,7 +305,8 @@ class _SyncMonitorWidgetState extends State<SyncMonitorWidget> {
     );
   }
 
-  Widget _buildStatusRow(String label, String value, Color color, IconData icon) {
+  Widget _buildStatusRow(
+      String label, String value, Color color, IconData icon) {
     return Row(
       children: [
         Icon(icon, color: color, size: 10),
@@ -288,11 +351,13 @@ class _SyncMonitorWidgetState extends State<SyncMonitorWidget> {
             children: [
               const Icon(Icons.check_circle, color: Colors.green, size: 16),
               const SizedBox(width: 4),
-              Text('$success', style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text('$success',
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(width: 12),
               const Icon(Icons.error, color: Colors.red, size: 16),
               const SizedBox(width: 4),
-              Text('$errors', style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text('$errors',
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
             ],
           ),
         ],
@@ -307,7 +372,7 @@ class _SyncMonitorWidgetState extends State<SyncMonitorWidget> {
         final dateTime = DateTime.parse(timestamp);
         final now = DateTime.now();
         final diff = now.difference(dateTime);
-        
+
         if (diff.inSeconds < 60) {
           displayText = 'Il y a ${diff.inSeconds}s';
         } else if (diff.inMinutes < 60) {
@@ -319,7 +384,7 @@ class _SyncMonitorWidgetState extends State<SyncMonitorWidget> {
         displayText = 'Erreur';
       }
     }
-    
+
     return Row(
       children: [
         Container(

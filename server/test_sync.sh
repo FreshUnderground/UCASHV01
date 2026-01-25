@@ -8,7 +8,7 @@ echo "===================================="
 echo ""
 
 # Configuration
-BASE_URL="https://mahanaim.investee-group.com/server/api/sync"
+BASE_URL="https://safdal.investee-group.com/server/api/sync"
 
 # Couleurs
 GREEN='\033[0;32m'

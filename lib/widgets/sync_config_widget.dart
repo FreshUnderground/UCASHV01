@@ -29,7 +29,7 @@ class _SyncConfigWidgetState extends State<SyncConfigWidget> {
     // Charger l'URL personnalisée
     _customApiUrl = await AppConfig.getApiBaseUrl();
     _urlController.text = _customApiUrl;
-    
+
     // Charger l'état de l'auto-sync
     setState(() {
       _autoSyncEnabled = _syncService.isAutoSyncEnabled;
@@ -49,14 +49,14 @@ class _SyncConfigWidgetState extends State<SyncConfigWidget> {
   Future<void> _saveCustomUrl() async {
     final newUrl = _urlController.text.trim();
     if (newUrl.isEmpty) return;
-    
+
     await AppConfig.setCustomApiUrl(newUrl);
-    
+
     if (mounted) {
       setState(() {
         _customApiUrl = newUrl;
       });
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('✅ URL du serveur sauvegardée'),
@@ -70,12 +70,12 @@ class _SyncConfigWidgetState extends State<SyncConfigWidget> {
   Future<void> _resetToDefault() async {
     await AppConfig.resetToDefaultApiUrl();
     _urlController.text = AppConfig.apiBaseUrl;
-    
+
     if (mounted) {
       setState(() {
         _customApiUrl = AppConfig.apiBaseUrl;
       });
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('🔄 URL réinitialisée à la valeur par défaut'),
@@ -90,9 +90,9 @@ class _SyncConfigWidgetState extends State<SyncConfigWidget> {
     setState(() {
       _autoSyncEnabled = value;
     });
-    
+
     _syncService.setAutoSync(value);
-    
+
     if (value) {
       _syncService.startAutoSync();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -121,11 +121,12 @@ class _SyncConfigWidgetState extends State<SyncConfigWidget> {
 
     try {
       final result = await _syncService.syncAll();
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(result.success ? '✅ ${result.message}' : '❌ ${result.message}'),
+            content: Text(
+                result.success ? '✅ ${result.message}' : '❌ ${result.message}'),
             backgroundColor: result.success ? Colors.green : Colors.red,
             duration: const Duration(seconds: 3),
           ),
@@ -195,9 +196,9 @@ class _SyncConfigWidgetState extends State<SyncConfigWidget> {
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 20),
-            
+
             // Configuration de l'URL du serveur
             Container(
               padding: const EdgeInsets.all(16),
@@ -231,7 +232,8 @@ class _SyncConfigWidgetState extends State<SyncConfigWidget> {
                         child: TextField(
                           controller: _urlController,
                           decoration: const InputDecoration(
-                            hintText: 'https://mahanaim.investee-group.com/server/api',
+                            hintText:
+                                'https://safdal.investee-group.com/server/api',
                             prefixIcon: Icon(Icons.link),
                             border: OutlineInputBorder(),
                             contentPadding: EdgeInsets.symmetric(
@@ -266,9 +268,9 @@ class _SyncConfigWidgetState extends State<SyncConfigWidget> {
                 ],
               ),
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Auto-sync toggle
             Container(
               padding: const EdgeInsets.all(16),
@@ -312,9 +314,9 @@ class _SyncConfigWidgetState extends State<SyncConfigWidget> {
                 ],
               ),
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Sync manuelle
             Container(
               padding: const EdgeInsets.all(16),
@@ -357,8 +359,11 @@ class _SyncConfigWidgetState extends State<SyncConfigWidget> {
                             )
                           : const Icon(Icons.sync, size: 20),
                       label: Text(
-                        _isSyncing ? 'Synchronisation...' : 'Synchroniser Maintenant',
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                        _isSyncing
+                            ? 'Synchronisation...'
+                            : 'Synchroniser Maintenant',
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w600),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blue,
@@ -373,9 +378,9 @@ class _SyncConfigWidgetState extends State<SyncConfigWidget> {
                 ],
               ),
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Info
             Container(
               padding: const EdgeInsets.all(12),
@@ -386,7 +391,8 @@ class _SyncConfigWidgetState extends State<SyncConfigWidget> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline, color: Colors.orange.shade700, size: 20),
+                  Icon(Icons.info_outline,
+                      color: Colors.orange.shade700, size: 20),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(

@@ -1,7 +1,7 @@
 // Test CORS OPTIONS
 async function testCORS() {
     try {
-        const response = await fetch('https://mahanaim.investee-group.com/server/api/sync/triangular_debt_settlements/upload.php', {
+        const response = await fetch('https://safdal.investee-group.com/server/api/sync/triangular_debt_settlements/upload.php', {
             method: 'OPTIONS',
             headers: {
                 'Content-Type': 'application/json',
@@ -50,7 +50,7 @@ async function testTriangularUpload() {
 
     try {
         console.log('📤 Sending data:', data);
-        const response = await fetch('https://mahanaim.investee-group.com/server/api/sync/triangular_debt_settlements/upload.php', {
+        const response = await fetch('https://safdal.investee-group.com/server/api/sync/triangular_debt_settlements/upload.php', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

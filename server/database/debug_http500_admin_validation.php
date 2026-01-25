@@ -10,7 +10,7 @@ try {
     echo "🔍 Debugging HTTP 500 error in admin validation...\n\n";
     
     // Test the endpoint directly with the exact data from the app
-    $endpointUrl = 'https://mahanaim.investee-group.com/server/api/sync/deletion_requests/admin_validate.php';
+    $endpointUrl = 'https://safdal.investee-group.com/server/api/sync/deletion_requests/admin_validate.php';
     $testData = [
         'code_ops' => '251211225017939',
         'validated_by_admin_id' => 1, // Assuming admin ID 1

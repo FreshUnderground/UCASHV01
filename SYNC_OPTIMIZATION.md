@@ -9,7 +9,7 @@ Lors de la synchronisation, les logs montraient que:
 
 ### Exemple de logs répétitifs
 ```
-📥 Téléchargement TOUTES opérations depuis: https://mahanaim.investee-group.com/...
+📥 Téléchargement TOUTES opérations depuis: https://safdal.investee-group.com/...
 📊 loadOperations: 25 opérations totales chargées depuis LocalDB
 🔍 [FILTER] F1764207354919176420728923211272357: type=depot, statut=...
 🔍 [FILTER] 251127121627902: type=transfertNational, statut=...
@@ -112,7 +112,7 @@ Total: 1 téléchargement × ~30 lignes = 30 lignes de logs
    🎯 3 tâches: 1) Download TOUTES les ops, 2) Upload validations, 3) Update statuts
 
 📥 [TÂCHE 1/3] Download TOUTES les opérations du shop 1764207354919...
-📥 Téléchargement depuis: https://mahanaim.investee-group.com/.../all-operations.php?shop_id=1764207354919
+📥 Téléchargement depuis: https://safdal.investee-group.com/.../all-operations.php?shop_id=1764207354919
 📥 Nombre d'opérations reçues: 25
 📊 Par type: {transfertNational: 22, depot: 1, flotShopToShop: 2}
 📊 Par statut: {OperationStatus.validee: 22, OperationStatus.enAttente: 3}

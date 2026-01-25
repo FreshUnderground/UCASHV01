@@ -69,7 +69,7 @@ try {
     echo "----------------------------------------\n";
     
     // Tester d'abord la version simple
-    $uploadUrl = 'https://mahanaim.investee-group.com/server/api/sync/sims/upload_simple_test.php';
+    $uploadUrl = 'https://safdal.investee-group.com/server/api/sync/sims/upload_simple_test.php';
     echo "URL de test: $uploadUrl\n\n";
     
     $ch = curl_init($uploadUrl);

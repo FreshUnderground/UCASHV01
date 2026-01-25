@@ -41,20 +41,22 @@ class SyncManager {
     private function insertShop($data) {
         $sql = "INSERT IGNORE INTO shops (
             id,
-            designation, localisation,
+            designation, localisation, is_principal, is_transfer_shop,
             capital_initial, 
             devise_principale, devise_secondaire,
             capital_actuel, capital_cash, capital_airtel_money, capital_mpesa, capital_orange_money,
             capital_actuel_devise2, capital_cash_devise2, capital_airtel_money_devise2, capital_mpesa_devise2, capital_orange_money_devise2,
             creances, dettes,
             last_modified_at, last_modified_by, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         
         $stmt = $this->pdo->prepare($sql);
         $result = $stmt->execute([
             $data['id'] ?? null,  // Forcer l'utilisation de l'ID de l'app
             $data['designation'] ?? '',
             $data['localisation'] ?? '',
+            $data['is_principal'] ?? 0,
+            $data['is_transfer_shop'] ?? 0,
             $data['capital_initial'] ?? 0,
             $data['devise_principale'] ?? 'USD',
             $data['devise_secondaire'] ?? null,
@@ -108,7 +110,7 @@ class SyncManager {
      */
     private function updateShop($data) {
         $sql = "UPDATE shops SET 
-            designation = ?, localisation = ?,
+            designation = ?, localisation = ?, is_principal = ?, is_transfer_shop = ?,
             capital_initial = ?,
             devise_principale = ?, devise_secondaire = ?,
             capital_actuel = ?, capital_cash = ?, capital_airtel_money = ?, capital_mpesa = ?, capital_orange_money = ?,
@@ -121,6 +123,8 @@ class SyncManager {
         $result = $stmt->execute([
             $data['designation'] ?? '',
             $data['localisation'] ?? '',
+            $data['is_principal'] ?? 0,
+            $data['is_transfer_shop'] ?? 0,
             $data['capital_initial'] ?? 0,
             $data['devise_principale'] ?? 'USD',
             $data['devise_secondaire'] ?? null,

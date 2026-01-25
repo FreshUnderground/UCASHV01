@@ -21,6 +21,7 @@ import '../models/cloture_virtuelle_model.dart';
 import '../models/depot_client_model.dart';
 import '../models/credit_virtuel_model.dart';
 import '../models/triangular_debt_settlement_model.dart';
+import '../models/credit_intershop_tracking_model.dart';
 import '../models/multi_month_payment_model.dart';
 import '../models/virtual_exchange_model.dart';
 
@@ -40,12 +41,13 @@ class LocalDB {
   // Générer un ID séquentiel au lieu d'un timestamp
   Future<int> _generateSequentialId(String prefix) async {
     final prefs = await database;
-    final keys = prefs.getKeys().where((key) => key.startsWith(prefix)).toList();
-    
+    final keys =
+        prefs.getKeys().where((key) => key.startsWith(prefix)).toList();
+
     if (keys.isEmpty) {
       return 1; // Premier ID
     }
-    
+
     // Trouver le plus grand ID existant
     int maxId = 0;
     for (var key in keys) {
@@ -53,7 +55,7 @@ class LocalDB {
       final id = int.tryParse(idStr) ?? 0;
       if (id > maxId) maxId = id;
     }
-    
+
     return maxId + 1; // Prochain ID
   }
 
@@ -64,16 +66,17 @@ class LocalDB {
     final updatedShop = shop.copyWith(id: shopId);
     final key = 'shop_$shopId';
     final jsonData = updatedShop.toJson();
-    
+
     debugPrint('💾 Sauvegarde shop: $key');
     debugPrint('📄 Données: ${jsonEncode(jsonData)}');
-    
+
     await prefs.setString(key, jsonEncode(jsonData));
-    
+
     // Vérifier que la sauvegarde a fonctionné
     final saved = prefs.getString(key);
     if (saved != null) {
-      debugPrint('✅ Shop sauvegardé avec succès: ${updatedShop.designation} (ID: $shopId)');
+      debugPrint(
+          '✅ Shop sauvegardé avec succès: ${updatedShop.designation} (ID: $shopId)');
     } else {
       debugPrint('❌ Échec de la sauvegarde du shop dans SharedPreferences');
     }
@@ -94,7 +97,8 @@ class LocalDB {
     final prefs = await database;
     final agentId = agent.id ?? await _generateSequentialId('agent_legacy_');
     final updatedAgent = agent.copyWith(id: agentId);
-    await prefs.setString('agent_legacy_$agentId', jsonEncode(updatedAgent.toJson()));
+    await prefs.setString(
+        'agent_legacy_$agentId', jsonEncode(updatedAgent.toJson()));
   }
 
   Future<void> updateAgentLegacy(UserModel agent) async {
@@ -112,7 +116,8 @@ class LocalDB {
     final prefs = await database;
     final caisseId = caisse.id ?? DateTime.now().millisecondsSinceEpoch;
     final updatedCaisse = caisse.copyWith(id: caisseId);
-    await prefs.setString('caisse_$caisseId', jsonEncode(updatedCaisse.toJson()));
+    await prefs.setString(
+        'caisse_$caisseId', jsonEncode(updatedCaisse.toJson()));
   }
 
   Future<void> updateCaisse(CaisseModel caisse) async {
@@ -123,7 +128,7 @@ class LocalDB {
   Future<List<CaisseModel>> getCaissesByShop(int shopId) async {
     final prefs = await database;
     final caisses = <CaisseModel>[];
-    
+
     final keys = prefs.getKeys();
     for (String key in keys) {
       if (key.startsWith('caisse_')) {
@@ -160,7 +165,7 @@ class LocalDB {
   Future<List<TauxModel>> getAllTaux() async {
     final prefs = await database;
     final taux = <TauxModel>[];
-    
+
     final keys = prefs.getKeys();
     for (String key in keys) {
       if (key.startsWith('taux_')) {
@@ -176,14 +181,17 @@ class LocalDB {
   // === CRUD COMMISSIONS ===
   Future<void> saveCommission(CommissionModel commission) async {
     final prefs = await database;
-    final commissionId = commission.id ?? await _generateSequentialId('commission_');
+    final commissionId =
+        commission.id ?? await _generateSequentialId('commission_');
     final updatedCommission = commission.copyWith(id: commissionId);
-    
-    await prefs.setString('commission_$commissionId', jsonEncode(updatedCommission.toJson()));
+
+    await prefs.setString(
+        'commission_$commissionId', jsonEncode(updatedCommission.toJson()));
   }
 
   Future<void> updateCommission(CommissionModel commission) async {
-    if (commission.id == null) throw Exception('Commission ID is required for update');
+    if (commission.id == null)
+      throw Exception('Commission ID is required for update');
     await saveCommission(commission);
   }
 
@@ -195,7 +203,7 @@ class LocalDB {
   Future<List<CommissionModel>> getAllCommissions() async {
     final prefs = await database;
     final commissions = <CommissionModel>[];
-    
+
     final keys = prefs.getKeys();
     for (String key in keys) {
       if (key.startsWith('commission_')) {
@@ -205,7 +213,7 @@ class LocalDB {
         }
       }
     }
-    
+
     return commissions;
   }
 
@@ -231,8 +239,12 @@ class LocalDB {
     await saveAgentLegacy(compte);
   }
 
-  Future<void> createShop(String designation, String localisation, double capitalInitial, 
-      {double capitalCash = 0.0, double capitalAirtelMoney = 0.0, double capitalMPesa = 0.0, double capitalOrangeMoney = 0.0}) async {
+  Future<void> createShop(
+      String designation, String localisation, double capitalInitial,
+      {double capitalCash = 0.0,
+      double capitalAirtelMoney = 0.0,
+      double capitalMPesa = 0.0,
+      double capitalOrangeMoney = 0.0}) async {
     final shop = ShopModel(
       designation: designation,
       localisation: localisation,
@@ -280,16 +292,15 @@ class LocalDB {
     await prefs.remove('current_user');
   }
 
-
   // ===== GESTION DES ADMINISTRATEURS (MAX 2) =====
-  
+
   static const int maxAdmins = 2;
-  
+
   // Récupérer tous les admins (sans l'admin par défaut temporaire)
   Future<List<UserModel>> getAllAdmins() async {
     final prefs = await database;
     final admins = <UserModel>[];
-    
+
     final keys = prefs.getKeys();
     for (String key in keys) {
       if (key.startsWith('admin_') && key != 'admin_default_temp') {
@@ -308,19 +319,19 @@ class LocalDB {
     }
     return admins;
   }
-  
+
   // Compter le nombre d'admins
   Future<int> countAdmins() async {
     final admins = await getAllAdmins();
     return admins.length;
   }
-  
+
   // Vérifier si on peut créer un nouvel admin
   Future<bool> canCreateAdmin() async {
     final count = await countAdmins();
     return count < maxAdmins;
   }
-  
+
   // Créer un nouvel administrateur
   Future<Map<String, dynamic>> createAdmin({
     required String username,
@@ -338,7 +349,7 @@ class LocalDB {
           'message': 'Nombre maximum d\'administrateurs atteint (2 max)'
         };
       }
-      
+
       // Vérifier si le username existe déjà
       final existingAdmin = await getAdminByUsername(username);
       if (existingAdmin != null) {
@@ -347,13 +358,15 @@ class LocalDB {
           'message': 'Ce nom d\'utilisateur existe déjà'
         };
       }
-      
+
       final prefs = await database;
       final admins = await getAllAdmins();
-      
+
       // Générer un ID unique (basé sur le nombre d'admins)
-      final newId = admins.isEmpty ? 1 : (admins.map((a) => a.id ?? 0).reduce((a, b) => a > b ? a : b) + 1);
-      
+      final newId = admins.isEmpty
+          ? 1
+          : (admins.map((a) => a.id ?? 0).reduce((a, b) => a > b ? a : b) + 1);
+
       final newAdmin = UserModel(
         id: newId,
         username: username,
@@ -364,15 +377,15 @@ class LocalDB {
         shopId: null, // Admin n'a pas besoin de shop
         createdAt: DateTime.now(),
       );
-      
+
       // Sauvegarder localement
       await prefs.setString('admin_$newId', jsonEncode(newAdmin.toJson()));
-      
+
       // Supprimer l'admin par défaut si c'est le premier admin personnalisé créé
       await _removeDefaultAdminIfNeeded();
-      
+
       debugPrint('✅ Admin créé: $username (ID: $newId)');
-      
+
       return {
         'success': true,
         'message': 'Administrateur créé avec succès',
@@ -380,13 +393,10 @@ class LocalDB {
       };
     } catch (e) {
       debugPrint('❌ Erreur lors de la création de l\'admin: $e');
-      return {
-        'success': false,
-        'message': 'Erreur: $e'
-      };
+      return {'success': false, 'message': 'Erreur: $e'};
     }
   }
-  
+
   // Récupérer un admin par username
   Future<UserModel?> getAdminByUsername(String username) async {
     final admins = await getAllAdmins();
@@ -396,7 +406,7 @@ class LocalDB {
       return null;
     }
   }
-  
+
   // Récupérer un admin par ID
   Future<UserModel?> getAdminById(int id) async {
     final prefs = await database;
@@ -410,7 +420,7 @@ class LocalDB {
     }
     return null;
   }
-  
+
   // Mettre à jour un admin
   Future<Map<String, dynamic>> updateAdmin(UserModel admin) async {
     try {
@@ -420,30 +430,27 @@ class LocalDB {
           'message': 'ID de l\'administrateur manquant'
         };
       }
-      
+
       final prefs = await database;
       await prefs.setString('admin_${admin.id}', jsonEncode(admin.toJson()));
-      
+
       debugPrint('✅ Admin mis à jour: ${admin.username}');
-      
+
       return {
         'success': true,
         'message': 'Administrateur mis à jour avec succès'
       };
     } catch (e) {
       debugPrint('❌ Erreur lors de la mise à jour de l\'admin: $e');
-      return {
-        'success': false,
-        'message': 'Erreur: $e'
-      };
+      return {'success': false, 'message': 'Erreur: $e'};
     }
   }
-  
+
   // Supprimer un admin
   Future<Map<String, dynamic>> deleteAdmin(int id) async {
     try {
       final admins = await getAllAdmins();
-      
+
       // Empêcher la suppression s'il ne reste qu'un seul admin
       if (admins.length <= 1) {
         return {
@@ -451,29 +458,26 @@ class LocalDB {
           'message': 'Impossible de supprimer le dernier administrateur'
         };
       }
-      
+
       final prefs = await database;
       await prefs.remove('admin_$id');
-      
+
       debugPrint('✅ Admin supprimé: ID $id');
-      
+
       return {
         'success': true,
         'message': 'Administrateur supprimé avec succès'
       };
     } catch (e) {
       debugPrint('❌ Erreur lors de la suppression de l\'admin: $e');
-      return {
-        'success': false,
-        'message': 'Erreur: $e'
-      };
+      return {'success': false, 'message': 'Erreur: $e'};
     }
   }
-  
+
   // Initialiser l'admin par défaut (PROTÉGÉ)
   Future<void> initializeDefaultAdmin() async {
     final prefs = await database;
-    
+
     // Vérifier si un admin existe déjà
     final admins = await getAllAdmins();
     if (admins.isEmpty) {
@@ -486,7 +490,8 @@ class LocalDB {
         createdAt: DateTime.now(),
       );
       await prefs.setString('admin_default_temp', jsonEncode(admin.toJson()));
-      debugPrint('🔐 Admin par défaut temporaire créé: admin/admin123 (sera supprimé après création du premier admin)');
+      debugPrint(
+          '🔐 Admin par défaut temporaire créé: admin/admin123 (sera supprimé après création du premier admin)');
     } else {
       debugPrint('🔐 Admin(s) déjà présent(s): ${admins.length}');
     }
@@ -507,7 +512,7 @@ class LocalDB {
     if (admins.isNotEmpty) {
       return admins.first;
     }
-    
+
     // Si aucun admin personnalisé, vérifier l'admin temporaire
     final prefs = await database;
     final tempAdminData = prefs.getString('admin_default_temp');
@@ -536,7 +541,7 @@ class LocalDB {
   // Forcer la création de l'admin (même s'il existe)
   Future<void> forceCreateAdmin() async {
     final prefs = await database;
-    
+
     final admin = UserModel(
       id: 1,
       username: 'admin',
@@ -560,16 +565,16 @@ class LocalDB {
   Future<void> clearAllDataExceptAdmin() async {
     final prefs = await database;
     final keys = prefs.getKeys();
-    
+
     for (String key in keys) {
       // Garder seulement l'admin et les données de session
-      if (!key.startsWith('agent_admin') && 
-          !key.startsWith('current_user') && 
+      if (!key.startsWith('agent_admin') &&
+          !key.startsWith('current_user') &&
           !key.startsWith('user_session')) {
         await prefs.remove(key);
       }
     }
-    
+
     debugPrint('Toutes les données supprimées sauf l\'admin');
   }
 
@@ -577,13 +582,14 @@ class LocalDB {
   Future<void> _removeDefaultAdminIfNeeded() async {
     final prefs = await database;
     final tempAdminData = prefs.getString('admin_default_temp');
-    
+
     if (tempAdminData != null) {
       await prefs.remove('admin_default_temp');
-      debugPrint('🗑️ Admin par défaut temporaire supprimé (admin personnalisé créé)');
+      debugPrint(
+          '🗑️ Admin par défaut temporaire supprimé (admin personnalisé créé)');
     }
   }
-  
+
   // Nettoyer l'admin par défaut au démarrage de la session
   Future<void> cleanupDefaultAdminOnStartup() async {
     final admins = await getAllAdmins();
@@ -594,7 +600,8 @@ class LocalDB {
   }
 
   // Méthodes pour les agents
-  Future<UserModel?> getAgentByCredentials(String username, String password) async {
+  Future<UserModel?> getAgentByCredentials(
+      String username, String password) async {
     // Vérifier d'abord dans les admins personnalisés
     final admins = await getAllAdmins();
     for (var admin in admins) {
@@ -602,7 +609,7 @@ class LocalDB {
         return admin;
       }
     }
-    
+
     // Vérifier l'admin par défaut temporaire
     final prefs = await database;
     final tempAdminData = prefs.getString('admin_default_temp');
@@ -616,7 +623,7 @@ class LocalDB {
         debugPrint('Erreur lors de la lecture de l\'admin temporaire: $e');
       }
     }
-    
+
     // Chercher dans les agents
     final keys = prefs.getKeys();
     for (String key in keys) {
@@ -636,7 +643,7 @@ class LocalDB {
   Future<List<UserModel>> getAllAgentsLegacy() async {
     final prefs = await database;
     final agents = <UserModel>[];
-    
+
     // Chercher tous les agents stockés dynamiquement
     final keys = prefs.getKeys();
     for (String key in keys) {
@@ -651,9 +658,10 @@ class LocalDB {
   }
 
   // Méthodes pour les comptes
-  Future<UserModel?> getCompteByCredentials(String username, String password) async {
+  Future<UserModel?> getCompteByCredentials(
+      String username, String password) async {
     final prefs = await database;
-    
+
     // Chercher tous les comptes stockés dynamiquement
     final keys = prefs.getKeys();
     for (String key in keys) {
@@ -673,7 +681,7 @@ class LocalDB {
   Future<List<UserModel>> getAllComptes() async {
     final prefs = await database;
     final comptes = <UserModel>[];
-    
+
     // Chercher tous les comptes stockés dynamiquement
     final keys = prefs.getKeys();
     for (String key in keys) {
@@ -687,15 +695,14 @@ class LocalDB {
     return comptes;
   }
 
-
   // Récupérer les shops
   Future<List<ShopModel>> getAllShops() async {
     final prefs = await database;
     final shops = <ShopModel>[];
-    
+
     final keys = prefs.getKeys();
     final shopKeys = keys.where((key) => key.startsWith('shop_')).toList();
-    
+
     for (String key in shopKeys) {
       final shopData = prefs.getString(key);
       if (shopData != null) {
@@ -707,7 +714,7 @@ class LocalDB {
         }
       }
     }
-    
+
     return shops;
   }
 
@@ -719,15 +726,15 @@ class LocalDB {
       id: agentId,
       lastModifiedAt: DateTime.now(),
     );
-    
+
     final jsonData = updatedAgent.toJson();
     final key = 'agent_$agentId';
-    
+
     debugPrint('💾 Sauvegarde agent: $key');
     debugPrint('📄 Données: ${jsonEncode(jsonData)}');
-    
+
     await prefs.setString(key, jsonEncode(jsonData));
-    
+
     // Vérifier que la sauvegarde a fonctionné
     final saved = prefs.getString(key);
     if (saved != null) {
@@ -735,27 +742,29 @@ class LocalDB {
     } else {
       debugPrint('❌ Échec de la sauvegarde dans SharedPreferences');
     }
-    
+
     return updatedAgent;
   }
 
   Future<void> updateAgent(AgentModel agent) async {
     if (agent.id == null) throw Exception('Agent ID is required for update');
-    
+
     // Forcer la mise à jour en marquant lastModifiedAt
     final updatedAgent = agent.copyWith(
       lastModifiedAt: DateTime.now(),
     );
-    
-    debugPrint('🔄 [LocalDB] Mise à jour agent ID: ${agent.id}, Username: ${agent.username}');
+
+    debugPrint(
+        '🔄 [LocalDB] Mise à jour agent ID: ${agent.id}, Username: ${agent.username}');
     await saveAgent(updatedAgent);
-    
+
     // Vérifier immédiatement que la mise à jour a été faite
     final prefs = await database;
     final saved = prefs.getString('agent_${agent.id}');
     if (saved != null) {
       final savedData = jsonDecode(saved);
-      debugPrint('✅ [LocalDB] Agent mis à jour - Username: ${savedData['username']}');
+      debugPrint(
+          '✅ [LocalDB] Agent mis à jour - Username: ${savedData['username']}');
     }
   }
 
@@ -767,7 +776,7 @@ class LocalDB {
   Future<List<AgentModel>> getAllAgents() async {
     final prefs = await database;
     final agents = <AgentModel>[];
-    
+
     final keys = prefs.getKeys();
     for (String key in keys) {
       if (key.startsWith('agent_')) {
@@ -775,10 +784,9 @@ class LocalDB {
           final agentData = prefs.getString(key);
           if (agentData != null) {
             final agentJson = jsonDecode(agentData);
-            
+
             // Vérifier que les champs obligatoires sont présents
-            if (agentJson['id'] != null && 
-                agentJson['username'] != null) {
+            if (agentJson['id'] != null && agentJson['username'] != null) {
               agents.add(AgentModel.fromJson(agentJson));
             } else {
               // Supprimer les données corrompues
@@ -798,13 +806,13 @@ class LocalDB {
   Future<void> updateAgentPassword(int agentId, String newPassword) async {
     final prefs = await database;
     final key = 'agent_$agentId';
-    
+
     final agentData = prefs.getString(key);
     if (agentData != null) {
       final agentJson = jsonDecode(agentData);
       agentJson['password'] = newPassword;
       agentJson['last_modified_at'] = DateTime.now().toIso8601String();
-      
+
       await prefs.setString(key, jsonEncode(agentJson));
       debugPrint('✅ Mot de passe mis à jour pour agent ID: $agentId');
     } else {
@@ -820,7 +828,8 @@ class LocalDB {
       id: clientId,
       lastModifiedAt: DateTime.now(),
     );
-    await prefs.setString('client_$clientId', jsonEncode(updatedClient.toJson()));
+    await prefs.setString(
+        'client_$clientId', jsonEncode(updatedClient.toJson()));
     return updatedClient;
   }
 
@@ -833,10 +842,11 @@ class LocalDB {
     final prefs = await database;
     await prefs.remove('client_$clientId');
   }
+
   Future<List<ClientModel>> getAllClients() async {
     final prefs = await database;
     final clients = <ClientModel>[];
-    
+
     final keys = prefs.getKeys().where((key) => key.startsWith('client_'));
     for (final key in keys) {
       final clientJson = prefs.getString(key);
@@ -849,7 +859,7 @@ class LocalDB {
         }
       }
     }
-    
+
     return clients;
   }
 
@@ -887,64 +897,73 @@ class LocalDB {
     final allClients = await getAllClients();
     return allClients.where((client) => client.shopId == shopId).toList();
   }
+
   // === CRUD OPERATIONS ===
   /// Sauvegarde une opération localement
   /// Utilise code_ops comme clé unique pour éviter les doublons
   /// Si une opération avec le même code_ops existe, elle est écrasée
   Future<OperationModel> saveOperation(OperationModel operation) async {
     final prefs = await database;
-    
+
     // IMPORTANT: Vérifier si une opération avec le même code_ops existe déjà
     final existingOp = await getOperationByCodeOps(operation.codeOps);
-    
+
     // Si l'opération existe déjà, utiliser son ID et écraser les données
     // Sinon, générer un nouvel ID
-    final operationId = existingOp?.id ?? operation.id ?? DateTime.now().millisecondsSinceEpoch;
-    
+    final operationId =
+        existingOp?.id ?? operation.id ?? DateTime.now().millisecondsSinceEpoch;
+
     final updatedOperation = operation.copyWith(
       id: operationId,
       lastModifiedAt: DateTime.now(),
     );
-    
+
     // Log pour les opérations de capital initial
     if (operation.destinataire == 'CAPITAL INITIAL') {
-      debugPrint('💰 saveOperation: Enregistrement opération de capital initial ID $operationId');
+      debugPrint(
+          '💰 saveOperation: Enregistrement opération de capital initial ID $operationId');
       debugPrint('   Montant: ${operation.montantNet} USD');
       debugPrint('   Shop source: ${operation.shopSourceId}');
       debugPrint('   Statut: ${operation.statut.name}');
     }
-    
+
     if (existingOp != null) {
       // ÉCRASER l'opération existante avec les nouvelles données
-      debugPrint('🔄 Opération ${operation.codeOps} existe déjà (ID: $operationId) - ÉCRASEMENT des données');
-      
+      debugPrint(
+          '🔄 Opération ${operation.codeOps} existe déjà (ID: $operationId) - ÉCRASEMENT des données');
+
       // Supprimer l'ancienne clé si elle existe
       await prefs.remove('operation_${existingOp.id}');
     }
-    
+
     // Sauvegarder avec la clé operation_ID
-    await prefs.setString('operation_$operationId', jsonEncode(updatedOperation.toJson()));
-    
+    await prefs.setString(
+        'operation_$operationId', jsonEncode(updatedOperation.toJson()));
+
     // Confirmation de sauvegarde
     if (operation.destinataire == 'CAPITAL INITIAL') {
-      debugPrint('✅ saveOperation: Opération de capital initial ID $operationId sauvegardée avec succès');
+      debugPrint(
+          '✅ saveOperation: Opération de capital initial ID $operationId sauvegardée avec succès');
     } else if (existingOp != null) {
-      debugPrint('✅ Opération ${operation.codeOps} mise à jour avec succès (ID: $operationId)');
+      debugPrint(
+          '✅ Opération ${operation.codeOps} mise à jour avec succès (ID: $operationId)');
     } else {
-      debugPrint('✅ Opération ${operation.codeOps} créée avec succès (ID: $operationId)');
+      debugPrint(
+          '✅ Opération ${operation.codeOps} créée avec succès (ID: $operationId)');
     }
-    
+
     // Invalider le cache après modification
     invalidateOperationsCache();
-    
+
     return updatedOperation;
   }
 
   Future<void> updateOperation(OperationModel operation) async {
-    if (operation.id == null) throw Exception('Operation ID is required for update');
+    if (operation.id == null)
+      throw Exception('Operation ID is required for update');
     await saveOperation(operation);
   }
-  
+
   /// Update operation by CodeOps (unique identifier - more reliable than ID)
   Future<void> updateOperationByCodeOps(OperationModel operation) async {
     // First, find the operation by CodeOps to get its ID
@@ -952,7 +971,7 @@ class LocalDB {
     if (existingOp == null) {
       throw Exception('Operation not found with CodeOps: ${operation.codeOps}');
     }
-    
+
     // Update using the existing ID
     final operationWithId = operation.copyWith(id: existingOp.id);
     await saveOperation(operationWithId);
@@ -976,26 +995,28 @@ class LocalDB {
     _cacheTimestamp = null;
   }
 
-  Future<List<OperationModel>> getAllOperations({bool forceRefresh = false}) async {
+  Future<List<OperationModel>> getAllOperations(
+      {bool forceRefresh = false}) async {
     // Utiliser le cache si valide et pas de refresh forcé
-    if (!forceRefresh && 
-        _operationsCache != null && 
+    if (!forceRefresh &&
+        _operationsCache != null &&
         _cacheTimestamp != null &&
         DateTime.now().difference(_cacheTimestamp!) < _cacheDuration) {
       return _operationsCache!;
     }
-    
+
     final prefs = await database;
     final operations = <OperationModel>[];
-    
+
     final keys = prefs.getKeys();
-    
+
     for (String key in keys) {
       if (key.startsWith('operation_')) {
         final operationData = prefs.getString(key);
         if (operationData != null) {
           try {
-            final operation = OperationModel.fromJson(jsonDecode(operationData));
+            final operation =
+                OperationModel.fromJson(jsonDecode(operationData));
             operations.add(operation);
           } catch (e) {
             // Ignorer les erreurs de parsing silencieusement pour performance
@@ -1003,11 +1024,11 @@ class LocalDB {
         }
       }
     }
-    
+
     // Mettre en cache
     _operationsCache = operations;
     _cacheTimestamp = DateTime.now();
-    
+
     return operations;
   }
 
@@ -1016,9 +1037,9 @@ class LocalDB {
   Future<List<OperationModel>> getFlotOperations({int? shopId}) async {
     final prefs = await database;
     final flots = <OperationModel>[];
-    
+
     final keys = prefs.getKeys();
-    
+
     for (String key in keys) {
       if (key.startsWith('operation_')) {
         final operationData = prefs.getString(key);
@@ -1027,15 +1048,15 @@ class LocalDB {
             final json = jsonDecode(operationData);
             // Vérifier le type AVANT de créer l'objet complet (optimisation)
             final typeValue = json['type'];
-            final isFlot = typeValue == 7 || 
-                           typeValue == 'flotShopToShop' || 
-                           typeValue == OperationType.flotShopToShop.index;
-            
+            final isFlot = typeValue == 7 ||
+                typeValue == 'flotShopToShop' ||
+                typeValue == OperationType.flotShopToShop.index;
+
             if (isFlot) {
               final operation = OperationModel.fromJson(json);
               // Filtrer par shop si spécifié
-              if (shopId == null || 
-                  operation.shopSourceId == shopId || 
+              if (shopId == null ||
+                  operation.shopSourceId == shopId ||
                   operation.shopDestinationId == shopId) {
                 flots.add(operation);
               }
@@ -1046,7 +1067,7 @@ class LocalDB {
         }
       }
     }
-    
+
     return flots;
   }
 
@@ -1054,9 +1075,9 @@ class LocalDB {
   Future<List<OperationModel>> getPendingOperationsForShop(int shopId) async {
     final prefs = await database;
     final pending = <OperationModel>[];
-    
+
     final keys = prefs.getKeys();
-    
+
     for (String key in keys) {
       if (key.startsWith('operation_')) {
         final operationData = prefs.getString(key);
@@ -1065,14 +1086,14 @@ class LocalDB {
             final json = jsonDecode(operationData);
             // Vérifier le statut AVANT de créer l'objet complet
             final statutValue = json['statut'];
-            final isEnAttente = statutValue == 0 || 
-                               statutValue == 'enAttente' || 
-                               statutValue == OperationStatus.enAttente.index;
-            
+            final isEnAttente = statutValue == 0 ||
+                statutValue == 'enAttente' ||
+                statutValue == OperationStatus.enAttente.index;
+
             if (isEnAttente) {
               final operation = OperationModel.fromJson(json);
               // Vérifier si le shop est concerné
-              if (operation.shopSourceId == shopId || 
+              if (operation.shopSourceId == shopId ||
                   operation.shopDestinationId == shopId) {
                 pending.add(operation);
               }
@@ -1083,7 +1104,7 @@ class LocalDB {
         }
       }
     }
-    
+
     return pending;
   }
 
@@ -1094,8 +1115,10 @@ class LocalDB {
 
   Future<List<OperationModel>> getOperationsByShop(int shopId) async {
     final allOperations = await getAllOperations();
-    return allOperations.where((op) => 
-      op.shopSourceId == shopId || op.shopDestinationId == shopId).toList();
+    return allOperations
+        .where(
+            (op) => op.shopSourceId == shopId || op.shopDestinationId == shopId)
+        .toList();
   }
 
   Future<OperationModel?> getOperationByCodeOps(String codeOps) async {
@@ -1106,7 +1129,7 @@ class LocalDB {
       return null; // Not found
     }
   }
-  
+
   Future<OperationModel?> getOperationById(int operationId) async {
     final prefs = await database;
     final operationJson = prefs.getString('operation_$operationId');
@@ -1130,12 +1153,14 @@ class LocalDB {
       if (operation != null && operation.id != null) {
         // Delete using the ID
         await deleteOperation(operation.id!);
-        debugPrint('🗑️ Opération supprimée de LocalDB par code_ops: $codeOps (ID: ${operation.id})');
+        debugPrint(
+            '🗑️ Opération supprimée de LocalDB par code_ops: $codeOps (ID: ${operation.id})');
       } else {
         debugPrint('⚠️ Opération non trouvée pour code_ops: $codeOps');
       }
     } catch (e) {
-      debugPrint('❌ Erreur lors de la suppression de l\'opération par code_ops $codeOps: $e');
+      debugPrint(
+          '❌ Erreur lors de la suppression de l\'opération par code_ops $codeOps: $e');
     }
   }
 
@@ -1150,15 +1175,18 @@ class LocalDB {
           if (operation != null && operation.id != null) {
             await deleteOperation(operation.id!);
             deletedCount++;
-            debugPrint('🗑️ Opération supprimée: $codeOps (ID: ${operation.id})');
+            debugPrint(
+                '🗑️ Opération supprimée: $codeOps (ID: ${operation.id})');
           }
         } catch (e) {
           debugPrint('⚠️ Erreur lors de la suppression de $codeOps: $e');
         }
       }
-      debugPrint('✅ $deletedCount opérations supprimées de LocalDB par code_ops');
+      debugPrint(
+          '✅ $deletedCount opérations supprimées de LocalDB par code_ops');
     } catch (e) {
-      debugPrint('❌ Erreur lors de la suppression des opérations par code_ops: $e');
+      debugPrint(
+          '❌ Erreur lors de la suppression des opérations par code_ops: $e');
     }
   }
 
@@ -1170,12 +1198,14 @@ class LocalDB {
       id: entryId,
       lastModifiedAt: DateTime.now(),
     );
-    await prefs.setString('journal_$entryId', jsonEncode(updatedEntry.toJson()));
+    await prefs.setString(
+        'journal_$entryId', jsonEncode(updatedEntry.toJson()));
     return updatedEntry;
   }
 
   Future<void> updateJournalEntry(JournalCaisseModel entry) async {
-    if (entry.id == null) throw Exception('Journal entry ID is required for update');
+    if (entry.id == null)
+      throw Exception('Journal entry ID is required for update');
     await saveJournalEntry(entry);
   }
 
@@ -1187,7 +1217,7 @@ class LocalDB {
   Future<List<JournalCaisseModel>> getAllJournalEntries() async {
     final prefs = await database;
     final entries = <JournalCaisseModel>[];
-    
+
     final keys = prefs.getKeys();
     for (String key in keys) {
       if (key.startsWith('journal_')) {
@@ -1220,9 +1250,9 @@ class LocalDB {
     final prefs = await database;
     final keys = prefs.getKeys();
     for (String key in keys) {
-      if (key.startsWith('agent_') || 
-          key.startsWith('client_') || 
-          key.startsWith('operation_') || 
+      if (key.startsWith('agent_') ||
+          key.startsWith('client_') ||
+          key.startsWith('operation_') ||
           key.startsWith('journal_')) {
         await prefs.remove(key);
       }
@@ -1234,17 +1264,17 @@ class LocalDB {
     final prefs = await database;
     final keys = prefs.getKeys();
     int cleaned = 0;
-    
+
     for (String key in keys) {
       if (key.startsWith('agent_')) {
         try {
           final agentData = prefs.getString(key);
           if (agentData != null) {
             final agentJson = jsonDecode(agentData);
-            
+
             // Vérifier les champs obligatoires
-            if (agentJson['id'] == null || 
-                agentJson['username'] == null || 
+            if (agentJson['id'] == null ||
+                agentJson['username'] == null ||
                 (agentJson['shop_id'] == null && agentJson['shopId'] == null)) {
               await prefs.remove(key);
               cleaned++;
@@ -1256,9 +1286,10 @@ class LocalDB {
         }
       }
     }
-    
+
     if (cleaned > 0) {
-      debugPrint('🧹 Nettoyage terminé: $cleaned données d\'agents corrompues supprimées');
+      debugPrint(
+          '🧹 Nettoyage terminé: $cleaned données d\'agents corrompues supprimées');
     }
   }
 
@@ -1267,14 +1298,16 @@ class LocalDB {
     final prefs = await database;
     final keys = prefs.getKeys();
     final agentKeys = keys.where((key) => key.startsWith('agent_')).toList();
-    
-    debugPrint('🔍 Debug: ${agentKeys.length} clés d\'agents trouvées dans SharedPreferences:');
+
+    debugPrint(
+        '🔍 Debug: ${agentKeys.length} clés d\'agents trouvées dans SharedPreferences:');
     for (String key in agentKeys) {
       final data = prefs.getString(key);
       if (data != null) {
         try {
           final json = jsonDecode(data);
-          debugPrint('   $key: ${json['username']} (ID: ${json['id']}, Shop: ${json['shop_id'] ?? json['shopId']})');
+          debugPrint(
+              '   $key: ${json['username']} (ID: ${json['id']}, Shop: ${json['shop_id'] ?? json['shopId']})');
         } catch (e) {
           debugPrint('   $key: DONNÉES CORROMPUES - $e');
         }
@@ -1287,32 +1320,33 @@ class LocalDB {
     final prefs = await database;
     final keys = prefs.getKeys();
     final agentKeys = keys.where((key) => key.startsWith('agent_')).toList();
-    
+
     debugPrint('🔍 VÉRIFICATION COMPATIBILITÉ MYSQL - TABLE AGENTS');
     debugPrint('📋 Structure attendue: id, username, password, role, shop_id');
-    debugPrint('📊 Analyse de ${agentKeys.length} agents dans SharedPreferences:');
+    debugPrint(
+        '📊 Analyse de ${agentKeys.length} agents dans SharedPreferences:');
     debugPrint('');
-    
+
     int compatibleCount = 0;
     int incompatibleCount = 0;
-    
+
     for (String key in agentKeys) {
       final data = prefs.getString(key);
       if (data != null) {
         try {
           final json = jsonDecode(data);
-          
+
           // Vérifier les champs requis pour MySQL
           final id = json['id'];
           final username = json['username'];
           final password = json['password'];
           final role = json['role'] ?? 'AGENT'; // Par défaut AGENT
           final shopId = json['shop_id'] ?? json['shopId'];
-          
+
           var isCompatible = true;
           final missingFields = <String>[];
           final extraFields = <String>[];
-          
+
           // Vérifier les champs obligatoires
           if (id == null) {
             missingFields.add('id');
@@ -1330,24 +1364,27 @@ class LocalDB {
             missingFields.add('shop_id');
             isCompatible = false;
           }
-          
+
           // Vérifier les champs supplémentaires (non MySQL)
           json.forEach((key, value) {
-            if (!['id', 'username', 'password', 'role', 'shop_id', 'shopId'].contains(key)) {
+            if (!['id', 'username', 'password', 'role', 'shop_id', 'shopId']
+                .contains(key)) {
               extraFields.add(key);
             }
           });
-          
+
           if (isCompatible) {
             compatibleCount++;
             debugPrint('✅ $key: COMPATIBLE');
             debugPrint('   - ID: $id (${id.runtimeType})');
             debugPrint('   - Username: $username');
-            debugPrint('   - Password: ${password.toString().length} caractères');
+            debugPrint(
+                '   - Password: ${password.toString().length} caractères');
             debugPrint('   - Role: $role');
             debugPrint('   - Shop ID: $shopId (${shopId.runtimeType})');
             if (extraFields.isNotEmpty) {
-              debugPrint('   - Champs supplémentaires: ${extraFields.join(", ")}');
+              debugPrint(
+                  '   - Champs supplémentaires: ${extraFields.join(", ")}');
             }
           } else {
             incompatibleCount++;
@@ -1358,7 +1395,6 @@ class LocalDB {
             debugPrint('   - Données: ${json.toString()}');
           }
           debugPrint('');
-          
         } catch (e) {
           incompatibleCount++;
           debugPrint('❌ $key: ERREUR DE PARSING - $e');
@@ -1366,15 +1402,17 @@ class LocalDB {
         }
       }
     }
-    
+
     debugPrint('📊 RÉSUMÉ DE COMPATIBILITÉ:');
     debugPrint('✅ Agents compatibles: $compatibleCount');
     debugPrint('❌ Agents incompatibles: $incompatibleCount');
-    debugPrint('📈 Taux de compatibilité: ${agentKeys.isEmpty ? 0 : (compatibleCount * 100 / agentKeys.length).toStringAsFixed(1)}%');
-    
+    debugPrint(
+        '📈 Taux de compatibilité: ${agentKeys.isEmpty ? 0 : (compatibleCount * 100 / agentKeys.length).toStringAsFixed(1)}%');
+
     if (compatibleCount > 0) {
       debugPrint('');
-      debugPrint('🎯 RECOMMANDATION: Les données sont ${compatibleCount == agentKeys.length ? "entièrement" : "partiellement"} compatibles avec MySQL');
+      debugPrint(
+          '🎯 RECOMMANDATION: Les données sont ${compatibleCount == agentKeys.length ? "entièrement" : "partiellement"} compatibles avec MySQL');
       debugPrint('💡 Vous pouvez migrer vers MySQL en utilisant ces données');
     } else if (agentKeys.isNotEmpty) {
       debugPrint('');
@@ -1392,16 +1430,17 @@ class LocalDB {
     final prefs = await database;
     final keys = prefs.getKeys();
     int removed = 0;
-    
+
     for (String key in keys.toList()) {
       if (key.startsWith('agent_') && key != 'admin_default') {
         await prefs.remove(key);
         removed++;
       }
     }
-    
-    debugPrint('🧹 Suppression de $removed agents de SharedPreferences (Admin protégé)');
-    
+
+    debugPrint(
+        '🧹 Suppression de $removed agents de SharedPreferences (Admin protégé)');
+
     // S'assurer que l'admin existe toujours
     await ensureAdminExists();
   }
@@ -1411,80 +1450,82 @@ class LocalDB {
     final prefs = await database;
     final keys = prefs.getKeys();
     int cleared = 0;
-    
+
     for (String key in keys) {
       if (key.startsWith('shop_')) {
         await prefs.remove(key);
         cleared++;
       }
     }
-    
+
     debugPrint('🗑️ Shops supprimés en local: $cleared');
   }
-  
+
   /// Supprimer tous les clients en local (pour forcer le rechargement depuis le serveur)
   Future<void> clearAllClients() async {
     final prefs = await database;
     final keys = prefs.getKeys();
     int cleared = 0;
-    
+
     for (String key in keys) {
       if (key.startsWith('client_')) {
         await prefs.remove(key);
         cleared++;
       }
     }
-    
+
     debugPrint('🗑️ Clients supprimés en local: $cleared');
   }
-  
+
   /// Supprimer toutes les commissions en local (pour forcer le rechargement depuis le serveur)
   Future<void> clearAllCommissions() async {
     final prefs = await database;
     final keys = prefs.getKeys();
     int cleared = 0;
-    
+
     for (String key in keys) {
       if (key.startsWith('commission_')) {
         await prefs.remove(key);
         cleared++;
       }
     }
-    
+
     debugPrint('🗑️ Commissions supprimées en local: $cleared');
   }
-  
+
   /// Supprimer tous les taux en local (pour forcer le rechargement depuis le serveur)
   Future<void> clearAllTaux() async {
     final prefs = await database;
     final keys = prefs.getKeys();
     int cleared = 0;
-    
+
     for (String key in keys) {
       if (key.startsWith('taux_')) {
         await prefs.remove(key);
         cleared++;
       }
     }
-    
+
     debugPrint('🗑️ Taux supprimés en local: $cleared');
   }
-
 
   // === CRUD TRANSACTIONS ===
   Future<TransactionModel> saveTransaction(TransactionModel transaction) async {
     final prefs = await database;
-    final transactionId = transaction.id ?? DateTime.now().millisecondsSinceEpoch;
+    final transactionId =
+        transaction.id ?? DateTime.now().millisecondsSinceEpoch;
     final updatedTransaction = transaction.copyWith(
       id: transactionId,
       lastModifiedAt: DateTime.now(),
     );
-    await prefs.setString('transaction_$transactionId', jsonEncode(updatedTransaction.toJson()));
+    await prefs.setString(
+        'transaction_$transactionId', jsonEncode(updatedTransaction.toJson()));
     return updatedTransaction;
   }
 
   Future<void> updateTransaction(TransactionModel transaction) async {
-    if (transaction.id == null) throw Exception('Transaction ID is required for update');
+    if (transaction.id == null)
+      throw Exception('Transaction ID is required for update');
     await saveTransaction(transaction);
   }
 
@@ -1496,14 +1537,15 @@ class LocalDB {
   Future<List<TransactionModel>> getAllTransactions() async {
     final prefs = await database;
     final transactions = <TransactionModel>[];
-    
+
     final keys = prefs.getKeys();
     for (String key in keys) {
       if (key.startsWith('transaction_')) {
         try {
           final transactionData = prefs.getString(key);
           if (transactionData != null) {
-            transactions.add(TransactionModel.fromJson(jsonDecode(transactionData)));
+            transactions
+                .add(TransactionModel.fromJson(jsonDecode(transactionData)));
           }
         } catch (e) {
           debugPrint('Erreur lors du parsing de la transaction $key: $e');
@@ -1515,18 +1557,23 @@ class LocalDB {
 
   Future<List<TransactionModel>> getTransactionsByShop(int shopId) async {
     final allTransactions = await getAllTransactions();
-    return allTransactions.where((transaction) => transaction.shopId == shopId).toList();
+    return allTransactions
+        .where((transaction) => transaction.shopId == shopId)
+        .toList();
   }
 
   Future<List<TransactionModel>> getTransactionsByAgent(int agentId) async {
     final allTransactions = await getAllTransactions();
-    return allTransactions.where((transaction) => transaction.agentId == agentId).toList();
+    return allTransactions
+        .where((transaction) => transaction.agentId == agentId)
+        .toList();
   }
 
   // ===== MÉTHODES DE SYNCHRONISATION =====
 
   /// Récupère les entités non synchronisées d'une table
-  Future<List<Map<String, dynamic>>> getUnsyncedEntities(String tableName) async {
+  Future<List<Map<String, dynamic>>> getUnsyncedEntities(
+      String tableName) async {
     try {
       // Pour la simulation web, retourner une liste vide
       // Dans une vraie implémentation SQLite, ce serait :
@@ -1573,22 +1620,25 @@ class LocalDB {
   }
 
   /// Récupère une entité par son ID
-  Future<Map<String, dynamic>?> getEntityById(String tableName, dynamic entityId) async {
+  Future<Map<String, dynamic>?> getEntityById(
+      String tableName, dynamic entityId) async {
     try {
       // Dans une vraie implémentation SQLite :
       // SELECT * FROM $tableName WHERE id = ?
-      
+
       // Simulation pour les tables existantes
       switch (tableName) {
         case 'operations':
           final operations = await getAllOperations();
-          final operation = operations.cast<OperationModel?>().firstWhere((op) => op?.id == entityId, orElse: () => null);
+          final operation = operations
+              .cast<OperationModel?>()
+              .firstWhere((op) => op?.id == entityId, orElse: () => null);
           return operation?.toJson();
-        
+
         case 'shops':
           // Simulation - retourner null pour déclencher l'insertion
           return null;
-        
+
         default:
           return null;
       }
@@ -1610,7 +1660,8 @@ class LocalDB {
   }
 
   /// Met à jour une entité existante
-  Future<void> updateEntity(String tableName, dynamic entityId, Map<String, dynamic> data) async {
+  Future<void> updateEntity(
+      String tableName, dynamic entityId, Map<String, dynamic> data) async {
     try {
       // Dans une vraie implémentation SQLite :
       // UPDATE $tableName SET ... WHERE id = ?
@@ -1676,7 +1727,7 @@ class LocalDB {
       ALTER TABLE operations ADD COLUMN synced_at TEXT;
       ALTER TABLE operations ADD COLUMN sync_id TEXT;
       */
-      
+
       debugPrint('Tables de synchronisation initialisées');
     } catch (e) {
       debugPrint('Erreur initSyncTables: $e');
@@ -1690,11 +1741,12 @@ class LocalDB {
       if (flot.statut == flot_model.StatutFlot.enRoute) {
         // Charger les shops pour résoudre les désignations
         final shops = await getAllShops();
-        
+
         final journalEntry = JournalCaisseModel(
           shopId: flot.shopSourceId,
           agentId: flot.agentEnvoyeurId,
-          libelle: 'FLOT envoyé vers ${flot.getShopDestinationDesignation(shops)}',
+          libelle:
+              'FLOT envoyé vers ${flot.getShopDestinationDesignation(shops)}',
           montant: flot.montant,
           type: TypeMouvement.sortie,
           mode: _convertFlotModeToJournalMode(flot.modePaiement),
@@ -1703,16 +1755,18 @@ class LocalDB {
           lastModifiedAt: DateTime.now(),
           lastModifiedBy: flot.lastModifiedBy,
         );
-        
+
         await saveJournalEntry(journalEntry);
-        debugPrint('📋 Journal FLOT: SORTIE de ${flot.montant} ${flot.devise} - FLOT ${flot.reference}');
+        debugPrint(
+            '📋 Journal FLOT: SORTIE de ${flot.montant} ${flot.devise} - FLOT ${flot.reference}');
       }
-      
+
       // Pour le shop destination: ENTRÉE (quand le flot est servi/reçu)
-      if (flot.statut == flot_model.StatutFlot.servi && flot.dateReception != null) {
+      if (flot.statut == flot_model.StatutFlot.servi &&
+          flot.dateReception != null) {
         // Charger les shops pour résoudre les désignations
         final shops = await getAllShops();
-        
+
         final journalEntry = JournalCaisseModel(
           shopId: flot.shopDestinationId,
           agentId: flot.agentRecepteurId ?? 0, // Peut être null
@@ -1725,9 +1779,10 @@ class LocalDB {
           lastModifiedAt: DateTime.now(),
           lastModifiedBy: flot.lastModifiedBy,
         );
-        
+
         await saveJournalEntry(journalEntry);
-        debugPrint('📋 Journal FLOT: ENTRÉE de ${flot.montant} ${flot.devise} - FLOT ${flot.reference}');
+        debugPrint(
+            '📋 Journal FLOT: ENTRÉE de ${flot.montant} ${flot.devise} - FLOT ${flot.reference}');
       }
     } catch (e) {
       debugPrint('⚠️ Erreur création entrée journal FLOT: $e');
@@ -1751,46 +1806,50 @@ class LocalDB {
   }
 
   // === CRUD FLOTS ===
-  
+
   /// Sauvegarder un flot
   /// Utilise reference comme clé unique pour éviter les doublons
   /// Si un flot avec la même reference existe, il est écrasé
   Future<flot_model.FlotModel> saveFlot(flot_model.FlotModel flot) async {
     final prefs = await database;
-    
+
     // IMPORTANT: Vérifier si un flot avec la même reference existe déjà
     flot_model.FlotModel? existingFlot;
     if (flot.reference != null && flot.reference!.isNotEmpty) {
       existingFlot = await getFlotByReference(flot.reference!);
     }
-    
+
     // Si le flot existe déjà, utiliser son ID et écraser les données
     // Sinon, générer un nouvel ID
-    final flotId = existingFlot?.id ?? flot.id ?? DateTime.now().millisecondsSinceEpoch;
-    
+    final flotId =
+        existingFlot?.id ?? flot.id ?? DateTime.now().millisecondsSinceEpoch;
+
     final updatedFlot = flot.copyWith(id: flotId);
-    
+
     if (existingFlot != null) {
       // ÉCRASER le flot existant avec les nouvelles données
-      debugPrint('🔄 Flot ${flot.reference} existe déjà (ID: $flotId) - ÉCRASEMENT des données');
-      
+      debugPrint(
+          '🔄 Flot ${flot.reference} existe déjà (ID: $flotId) - ÉCRASEMENT des données');
+
       // Supprimer l'ancienne clé si elle existe
       await prefs.remove('flot_${existingFlot.id}');
     }
-    
+
     // Sauvegarder avec la clé flot_ID
     await prefs.setString('flot_$flotId', jsonEncode(updatedFlot.toJson()));
-    
+
     // Confirmation de sauvegarde
     if (existingFlot != null) {
-      debugPrint('✅ Flot ${flot.reference} mis à jour avec succès (ID: $flotId)');
+      debugPrint(
+          '✅ Flot ${flot.reference} mis à jour avec succès (ID: $flotId)');
     } else {
-      debugPrint('💸 Flot sauvegardé: reference=${flot.reference}, ID=$flotId, montant=${updatedFlot.montant} ${updatedFlot.devise}');
+      debugPrint(
+          '💸 Flot sauvegardé: reference=${flot.reference}, ID=$flotId, montant=${updatedFlot.montant} ${updatedFlot.devise}');
     }
-    
+
     // Créer une entrée de journal pour le flot
     await _createJournalEntryForFlot(updatedFlot);
-    
+
     return updatedFlot;
   }
 
@@ -1811,7 +1870,7 @@ class LocalDB {
   Future<List<flot_model.FlotModel>> getAllFlots() async {
     final prefs = await database;
     final flots = <flot_model.FlotModel>[];
-    
+
     final keys = prefs.getKeys();
     for (String key in keys) {
       if (key.startsWith('flot_')) {
@@ -1825,7 +1884,7 @@ class LocalDB {
         }
       }
     }
-    
+
     // Trier par date d'envoi (plus récents en premier)
     flots.sort((a, b) => b.dateEnvoi.compareTo(a.dateEnvoi));
     return flots;
@@ -1854,13 +1913,14 @@ class LocalDB {
   /// Récupérer les flots par shop (source ou destination)
   Future<List<flot_model.FlotModel>> getFlotsByShop(int shopId) async {
     final allFlots = await getAllFlots();
-    return allFlots.where((f) => 
-      f.shopSourceId == shopId || f.shopDestinationId == shopId
-    ).toList();
+    return allFlots
+        .where((f) => f.shopSourceId == shopId || f.shopDestinationId == shopId)
+        .toList();
   }
 
   /// Récupérer les flots par statut
-  Future<List<flot_model.FlotModel>> getFlotsByStatut(flot_model.StatutFlot statut) async {
+  Future<List<flot_model.FlotModel>> getFlotsByStatut(
+      flot_model.StatutFlot statut) async {
     final allFlots = await getAllFlots();
     return allFlots.where((f) => f.statut == statut).toList();
   }
@@ -1868,29 +1928,30 @@ class LocalDB {
   /// Récupérer les flots par agent (envoyeur ou récepteur)
   Future<List<flot_model.FlotModel>> getFlotsByAgentId(int agentId) async {
     final allFlots = await getAllFlots();
-    return allFlots.where((f) => 
-      f.agentEnvoyeurId == agentId || f.agentRecepteurId == agentId
-    ).toList();
+    return allFlots
+        .where((f) =>
+            f.agentEnvoyeurId == agentId || f.agentRecepteurId == agentId)
+        .toList();
   }
 
   // === CRUD CLOTURE CAISSE ===
-  
+
   /// Sauvegarder une clôture de caisse
   Future<void> saveClotureCaisse(ClotureCaisseModel cloture) async {
     final prefs = await database;
     final clotureId = cloture.id ?? DateTime.now().millisecondsSinceEpoch;
     final updatedCloture = cloture.copyWith(id: clotureId);
     final key = 'cloture_caisse_$clotureId';
-    
+
     debugPrint('💾 Sauvegarde clôture caisse: $key');
     debugPrint('   Shop ID: ${updatedCloture.shopId}');
     debugPrint('   Date: ${updatedCloture.dateCloture}');
     debugPrint('   Solde Saisi: ${updatedCloture.soldeSaisiTotal} USD');
     debugPrint('   Solde Calculé: ${updatedCloture.soldeCalculeTotal} USD');
     debugPrint('   Écart: ${updatedCloture.ecartTotal} USD');
-    
+
     await prefs.setString(key, jsonEncode(updatedCloture.toJson()));
-    
+
     debugPrint('✅ Clôture caisse sauvegardée avec succès');
   }
 
@@ -1898,7 +1959,7 @@ class LocalDB {
   Future<List<ClotureCaisseModel>> getAllCloturesCaisse() async {
     final prefs = await database;
     final clotures = <ClotureCaisseModel>[];
-    
+
     final keys = prefs.getKeys();
     for (String key in keys) {
       if (key.startsWith('cloture_caisse_')) {
@@ -1908,7 +1969,7 @@ class LocalDB {
         }
       }
     }
-    
+
     // Trier par date de clôture (plus récent en premier)
     clotures.sort((a, b) => b.dateCloture.compareTo(a.dateCloture));
     return clotures;
@@ -1921,32 +1982,40 @@ class LocalDB {
   }
 
   /// Récupérer la clôture de caisse d'une date spécifique pour un shop
-  Future<ClotureCaisseModel?> getClotureCaisseByDate(int shopId, DateTime date) async {
-    debugPrint('🔍 [getClotureCaisseByDate] Recherche clôture pour shop $shopId, date: ${date.toIso8601String().split('T')[0]}');
-    
+  Future<ClotureCaisseModel?> getClotureCaisseByDate(
+      int shopId, DateTime date) async {
+    debugPrint(
+        '🔍 [getClotureCaisseByDate] Recherche clôture pour shop $shopId, date: ${date.toIso8601String().split('T')[0]}');
+
     final clotures = await getCloturesCaisseByShop(shopId);
-    debugPrint('📊 [getClotureCaisseByDate] ${clotures.length} clôtures trouvées pour le shop $shopId');
-    
+    debugPrint(
+        '📊 [getClotureCaisseByDate] ${clotures.length} clôtures trouvées pour le shop $shopId');
+
     // Chercher la clôture qui correspond à cette date exacte
     for (var cloture in clotures) {
-      debugPrint('🔎 [getClotureCaisseByDate] Comparaison avec clôture date: ${cloture.dateCloture.toIso8601String().split('T')[0]}');
+      debugPrint(
+          '🔎 [getClotureCaisseByDate] Comparaison avec clôture date: ${cloture.dateCloture.toIso8601String().split('T')[0]}');
       if (_isSameDay(cloture.dateCloture, date)) {
-        debugPrint('✅ Clôture trouvée pour le ${date.toIso8601String().split('T')[0]}');
+        debugPrint(
+            '✅ Clôture trouvée pour le ${date.toIso8601String().split('T')[0]}');
         debugPrint('   Solde Saisi: ${cloture.soldeSaisiTotal} USD');
         debugPrint('   Solde Calculé: ${cloture.soldeCalculeTotal} USD');
         debugPrint('   Écart: ${cloture.ecartTotal} USD');
         return cloture;
       }
     }
-    
-    debugPrint('⚠️ Aucune clôture trouvée pour le ${date.toIso8601String().split('T')[0]}');
+
+    debugPrint(
+        '⚠️ Aucune clôture trouvée pour le ${date.toIso8601String().split('T')[0]}');
     return null;
   }
 
   /// Récupérer la dernière clôture de caisse pour un shop
   Future<ClotureCaisseModel?> getLastClotureCaisse(int shopId) async {
     final clotures = await getCloturesCaisseByShop(shopId);
-    return clotures.isEmpty ? null : clotures.first; // Déjà trié par date décroissante
+    return clotures.isEmpty
+        ? null
+        : clotures.first; // Déjà trié par date décroissante
   }
 
   /// Vérifier si une clôture existe pour une date donnée
@@ -1965,12 +2034,12 @@ class LocalDB {
   /// Utilitaire: vérifier si deux dates sont le même jour
   bool _isSameDay(DateTime date1, DateTime date2) {
     return date1.year == date2.year &&
-           date1.month == date2.month &&
-           date1.day == date2.day;
+        date1.month == date2.month &&
+        date1.day == date2.day;
   }
 
   // === CRUD SIMS ===
-  
+
   /// Sauvegarder une SIM
   Future<SimModel> saveSim(SimModel sim) async {
     final prefs = await database;
@@ -1989,26 +2058,27 @@ class LocalDB {
     if (sim.id == null) throw Exception('SIM ID is required for update');
     await saveSim(sim);
   }
-  
+
   /// Mettre à jour uniquement le solde d'une SIM
   Future<void> updateSimSolde(String simNumero, double nouveauSolde) async {
     final sims = await getAllSims();
     final sim = sims.where((s) => s.numero == simNumero).firstOrNull;
-    
+
     if (sim == null) {
       throw Exception('SIM $simNumero non trouvée');
     }
-    
+
     final simUpdated = sim.copyWith(soldeActuel: nouveauSolde);
     await updateSim(simUpdated);
-    debugPrint('💰 Solde SIM mis à jour: $simNumero = \$${nouveauSolde.toStringAsFixed(2)}');
+    debugPrint(
+        '💰 Solde SIM mis à jour: $simNumero = \$${nouveauSolde.toStringAsFixed(2)}');
   }
 
   /// Récupérer toutes les SIMs
   Future<List<SimModel>> getAllSims({int? shopId}) async {
     final prefs = await database;
     final sims = <SimModel>[];
-    
+
     final keys = prefs.getKeys();
     for (String key in keys) {
       if (key.startsWith('sim_')) {
@@ -2026,7 +2096,7 @@ class LocalDB {
         }
       }
     }
-    
+
     return sims;
   }
 
@@ -2048,13 +2118,14 @@ class LocalDB {
   }
 
   // === CRUD SIM MOVEMENTS ===
-  
+
   /// Sauvegarder un mouvement de SIM
   Future<SimMovementModel> saveSimMovement(SimMovementModel movement) async {
     final prefs = await database;
     final movementId = movement.id ?? DateTime.now().millisecondsSinceEpoch;
     final updatedMovement = movement.copyWith(id: movementId);
-    await prefs.setString('sim_movement_$movementId', jsonEncode(updatedMovement.toJson()));
+    await prefs.setString(
+        'sim_movement_$movementId', jsonEncode(updatedMovement.toJson()));
     debugPrint('📝 Mouvement SIM sauvegardé: ID=$movementId');
     return updatedMovement;
   }
@@ -2063,14 +2134,15 @@ class LocalDB {
   Future<List<SimMovementModel>> getAllSimMovements({int? simId}) async {
     final prefs = await database;
     final movements = <SimMovementModel>[];
-    
+
     final keys = prefs.getKeys();
     for (String key in keys) {
       if (key.startsWith('sim_movement_')) {
         try {
           final movementData = prefs.getString(key);
           if (movementData != null) {
-            final movement = SimMovementModel.fromJson(jsonDecode(movementData));
+            final movement =
+                SimMovementModel.fromJson(jsonDecode(movementData));
             // Filtrer par simId si fourni
             if (simId == null || movement.simId == simId) {
               movements.add(movement);
@@ -2081,7 +2153,7 @@ class LocalDB {
         }
       }
     }
-    
+
     // Trier par date (plus récents en premier)
     movements.sort((a, b) => b.dateMovement.compareTo(a.dateMovement));
     return movements;
@@ -2095,31 +2167,41 @@ class LocalDB {
   }
 
   // === CRUD VIRTUAL TRANSACTIONS ===
-  
+
   /// Sauvegarder une transaction virtuelle
-  Future<VirtualTransactionModel> saveVirtualTransaction(VirtualTransactionModel transaction) async {
+  Future<VirtualTransactionModel> saveVirtualTransaction(
+      VirtualTransactionModel transaction) async {
     final prefs = await database;
-    
+
     // 🔍 PROTECTION ANTI-DOUBLON: Vérifier si une transaction avec cette référence existe déjà
-    final existingTransaction = await getVirtualTransactionByReference(transaction.reference);
-    
+    final existingTransaction =
+        await getVirtualTransactionByReference(transaction.reference);
+
     if (existingTransaction != null) {
       // Si c'est la même transaction (même ID), mettre à jour
       if (transaction.id != null && existingTransaction.id == transaction.id) {
-        debugPrint('🔄 Mise à jour transaction virtuelle: ID=${transaction.id}, REF=${transaction.reference}');
-        await prefs.setString('virtual_transaction_${transaction.id}', jsonEncode(transaction.toJson()));
+        debugPrint(
+            '🔄 Mise à jour transaction virtuelle: ID=${transaction.id}, REF=${transaction.reference}');
+        await prefs.setString('virtual_transaction_${transaction.id}',
+            jsonEncode(transaction.toJson()));
         return transaction;
       }
-      
+
       // Si c'est un doublon (référence identique mais ID différent)
-      debugPrint('⚠️ DOUBLON DÉTECTÉ: REF=${transaction.reference} existe déjà (ID=${existingTransaction.id})');
-      debugPrint('   Transaction existante: ID=${existingTransaction.id}, Statut=${existingTransaction.statut.name}');
-      debugPrint('   Nouvelle tentative: ID=${transaction.id}, Statut=${transaction.statut.name}');
-      
+      debugPrint(
+          '⚠️ DOUBLON DÉTECTÉ: REF=${transaction.reference} existe déjà (ID=${existingTransaction.id})');
+      debugPrint(
+          '   Transaction existante: ID=${existingTransaction.id}, Statut=${existingTransaction.statut.name}');
+      debugPrint(
+          '   Nouvelle tentative: ID=${transaction.id}, Statut=${transaction.statut.name}');
+
       // Si la transaction existante est plus récente ou validée, la garder
-      if (existingTransaction.statut == VirtualTransactionStatus.validee || 
-          (existingTransaction.lastModifiedAt?.isAfter(transaction.lastModifiedAt ?? DateTime.now()) ?? false)) {
-        debugPrint('   ✅ Conservation de la transaction existante (plus récente ou validée)');
+      if (existingTransaction.statut == VirtualTransactionStatus.validee ||
+          (existingTransaction.lastModifiedAt
+                  ?.isAfter(transaction.lastModifiedAt ?? DateTime.now()) ??
+              false)) {
+        debugPrint(
+            '   ✅ Conservation de la transaction existante (plus récente ou validée)');
         return existingTransaction;
       } else {
         // Sinon, remplacer par la nouvelle version
@@ -2129,22 +2211,27 @@ class LocalDB {
         // Continuer avec la sauvegarde de la nouvelle
       }
     }
-    
-    final transactionId = transaction.id ?? DateTime.now().millisecondsSinceEpoch;
-    final updatedTransaction = transaction.id == null 
+
+    final transactionId =
+        transaction.id ?? DateTime.now().millisecondsSinceEpoch;
+    final updatedTransaction = transaction.id == null
         ? transaction.copyWith(
             id: transactionId,
             lastModifiedAt: DateTime.now(),
           )
         : transaction; // Si la transaction a déjà un ID, ne pas modifier
-    await prefs.setString('virtual_transaction_$transactionId', jsonEncode(updatedTransaction.toJson()));
-    debugPrint('💰 Transaction virtuelle sauvegardée: ID=$transactionId, REF=${updatedTransaction.reference}');
+    await prefs.setString('virtual_transaction_$transactionId',
+        jsonEncode(updatedTransaction.toJson()));
+    debugPrint(
+        '💰 Transaction virtuelle sauvegardée: ID=$transactionId, REF=${updatedTransaction.reference}');
     return updatedTransaction;
   }
 
   /// Mettre à jour une transaction virtuelle
-  Future<void> updateVirtualTransaction(VirtualTransactionModel transaction) async {
-    if (transaction.id == null) throw Exception('Transaction ID is required for update');
+  Future<void> updateVirtualTransaction(
+      VirtualTransactionModel transaction) async {
+    if (transaction.id == null)
+      throw Exception('Transaction ID is required for update');
     await saveVirtualTransaction(transaction);
   }
 
@@ -2158,52 +2245,63 @@ class LocalDB {
   }) async {
     final prefs = await database;
     final transactions = <VirtualTransactionModel>[];
-    
+
     final keys = prefs.getKeys();
-    debugPrint('🔍 [LocalDB] getAllVirtualTransactions - Found ${keys.where((k) => k.startsWith('virtual_transaction_')).length} virtual transaction keys');
-    
+    debugPrint(
+        '🔍 [LocalDB] getAllVirtualTransactions - Found ${keys.where((k) => k.startsWith('virtual_transaction_')).length} virtual transaction keys');
+
     for (String key in keys) {
       if (key.startsWith('virtual_transaction_')) {
         try {
           final transactionData = prefs.getString(key);
           if (transactionData != null) {
-            final transaction = VirtualTransactionModel.fromJson(jsonDecode(transactionData));
-            
-            debugPrint('🔍 [LocalDB] Found transaction: ${transaction.reference} (shop: ${transaction.shopId} (${transaction.shopId.runtimeType}), status: ${transaction.statut.name})');
-            
+            final transaction =
+                VirtualTransactionModel.fromJson(jsonDecode(transactionData));
+
+            debugPrint(
+                '🔍 [LocalDB] Found transaction: ${transaction.reference} (shop: ${transaction.shopId} (${transaction.shopId.runtimeType}), status: ${transaction.statut.name})');
+
             // Appliquer les filtres
             bool matches = true;
-            
+
             if (shopId != null) {
-              debugPrint('🔍 [LocalDB] Checking shopId filter: expected $shopId (${shopId.runtimeType}), got ${transaction.shopId} (${transaction.shopId.runtimeType})');
+              debugPrint(
+                  '🔍 [LocalDB] Checking shopId filter: expected $shopId (${shopId.runtimeType}), got ${transaction.shopId} (${transaction.shopId.runtimeType})');
               if (transaction.shopId != shopId) {
-                debugPrint('  ❌ Filtered out - shopId mismatch: expected $shopId, got ${transaction.shopId}');
+                debugPrint(
+                    '  ❌ Filtered out - shopId mismatch: expected $shopId, got ${transaction.shopId}');
                 matches = false;
               } else {
                 debugPrint('  ✅ shopId matches: ${transaction.shopId}');
               }
             }
-            
+
             if (simNumero != null && transaction.simNumero != simNumero) {
-              debugPrint('  ❌ Filtered out - simNumero mismatch: expected $simNumero, got ${transaction.simNumero}');
+              debugPrint(
+                  '  ❌ Filtered out - simNumero mismatch: expected $simNumero, got ${transaction.simNumero}');
               matches = false;
             }
-            
+
             if (statut != null && transaction.statut != statut) {
-              debugPrint('  ❌ Filtered out - statut mismatch: expected ${statut.name}, got ${transaction.statut.name}');
+              debugPrint(
+                  '  ❌ Filtered out - statut mismatch: expected ${statut.name}, got ${transaction.statut.name}');
               matches = false;
             }
-            
-            if (dateDebut != null && transaction.dateEnregistrement.isBefore(dateDebut)) {
-              debugPrint('  ❌ Filtered out - dateDebut mismatch: ${transaction.dateEnregistrement} is before $dateDebut');
+
+            if (dateDebut != null &&
+                transaction.dateEnregistrement.isBefore(dateDebut)) {
+              debugPrint(
+                  '  ❌ Filtered out - dateDebut mismatch: ${transaction.dateEnregistrement} is before $dateDebut');
               matches = false;
             }
-            
-            if (dateFin != null && transaction.dateEnregistrement.isAfter(dateFin)) {
-              debugPrint('  ❌ Filtered out - dateFin mismatch: ${transaction.dateEnregistrement} is after $dateFin');
+
+            if (dateFin != null &&
+                transaction.dateEnregistrement.isAfter(dateFin)) {
+              debugPrint(
+                  '  ❌ Filtered out - dateFin mismatch: ${transaction.dateEnregistrement} is after $dateFin');
               matches = false;
             }
-            
+
             if (matches) {
               debugPrint('  ✅ Included transaction: ${transaction.reference}');
               transactions.add(transaction);
@@ -2216,18 +2314,22 @@ class LocalDB {
         }
       }
     }
-    
-    debugPrint('📊 [LocalDB] getAllVirtualTransactions returning ${transactions.length} transactions');
-    
+
+    debugPrint(
+        '📊 [LocalDB] getAllVirtualTransactions returning ${transactions.length} transactions');
+
     // Trier par date (plus récents en premier)
-    transactions.sort((a, b) => b.dateEnregistrement.compareTo(a.dateEnregistrement));
+    transactions
+        .sort((a, b) => b.dateEnregistrement.compareTo(a.dateEnregistrement));
     return transactions;
   }
 
   /// Récupérer une transaction virtuelle par ID
-  Future<VirtualTransactionModel?> getVirtualTransactionById(int transactionId) async {
+  Future<VirtualTransactionModel?> getVirtualTransactionById(
+      int transactionId) async {
     final prefs = await database;
-    final transactionData = prefs.getString('virtual_transaction_$transactionId');
+    final transactionData =
+        prefs.getString('virtual_transaction_$transactionId');
     if (transactionData != null) {
       return VirtualTransactionModel.fromJson(jsonDecode(transactionData));
     }
@@ -2235,21 +2337,24 @@ class LocalDB {
   }
 
   /// Récupérer une transaction virtuelle par référence (insensible à la casse et aux espaces)
-  Future<VirtualTransactionModel?> getVirtualTransactionByReference(String reference) async {
+  Future<VirtualTransactionModel?> getVirtualTransactionByReference(
+      String reference) async {
     final prefs = await database;
     final keys = prefs.getKeys();
-    
+
     // Normaliser la référence recherchée
     final normalizedReference = reference.trim().toLowerCase();
-    
+
     for (String key in keys) {
       if (key.startsWith('virtual_transaction_')) {
         try {
           final transactionData = prefs.getString(key);
           if (transactionData != null) {
-            final transaction = VirtualTransactionModel.fromJson(jsonDecode(transactionData));
+            final transaction =
+                VirtualTransactionModel.fromJson(jsonDecode(transactionData));
             // Comparaison insensible à la casse et aux espaces
-            if (transaction.reference.trim().toLowerCase() == normalizedReference) {
+            if (transaction.reference.trim().toLowerCase() ==
+                normalizedReference) {
               return transaction;
             }
           }
@@ -2282,27 +2387,28 @@ class LocalDB {
   /// Retourne le nombre de doublons supprimés
   Future<int> cleanDuplicateVirtualTransactions() async {
     debugPrint('🧹 NETTOYAGE DES DOUBLONS - Début...');
-    
+
     final prefs = await database;
     final keys = prefs.getKeys();
     final transactions = <VirtualTransactionModel>[];
-    
+
     // Charger toutes les transactions
     for (String key in keys) {
       if (key.startsWith('virtual_transaction_')) {
         try {
           final transactionData = prefs.getString(key);
           if (transactionData != null) {
-            transactions.add(VirtualTransactionModel.fromJson(jsonDecode(transactionData)));
+            transactions.add(
+                VirtualTransactionModel.fromJson(jsonDecode(transactionData)));
           }
         } catch (e) {
           debugPrint('⚠️ Erreur chargement $key: $e');
         }
       }
     }
-    
+
     debugPrint('📊 Total transactions chargées: ${transactions.length}');
-    
+
     // Grouper par référence (insensible à la casse)
     final groupedByReference = <String, List<VirtualTransactionModel>>{};
     for (var transaction in transactions) {
@@ -2310,69 +2416,78 @@ class LocalDB {
       groupedByReference[normalizedRef] ??= [];
       groupedByReference[normalizedRef]!.add(transaction);
     }
-    
+
     int duplicatesRemoved = 0;
-    
+
     // Nettoyer les doublons
     for (var entry in groupedByReference.entries) {
       final transactionsWithSameRef = entry.value;
-      
+
       if (transactionsWithSameRef.length > 1) {
-        debugPrint('⚠️ DOUBLON TROUVÉ: RÉF="${entry.key}" - ${transactionsWithSameRef.length} occurrences');
-        
+        debugPrint(
+            '⚠️ DOUBLON TROUVÉ: RÉF="${entry.key}" - ${transactionsWithSameRef.length} occurrences');
+
         // Trier: valider d'abord, puis par date de modification la plus récente
         transactionsWithSameRef.sort((a, b) {
           // Priorité 1: Transactions validées en premier
-          if (a.statut == VirtualTransactionStatus.validee && b.statut != VirtualTransactionStatus.validee) {
+          if (a.statut == VirtualTransactionStatus.validee &&
+              b.statut != VirtualTransactionStatus.validee) {
             return -1;
           }
-          if (b.statut == VirtualTransactionStatus.validee && a.statut != VirtualTransactionStatus.validee) {
+          if (b.statut == VirtualTransactionStatus.validee &&
+              a.statut != VirtualTransactionStatus.validee) {
             return 1;
           }
-          
+
           // Priorité 2: Date de modification la plus récente
           final aDate = a.lastModifiedAt ?? a.dateEnregistrement;
           final bDate = b.lastModifiedAt ?? b.dateEnregistrement;
           return bDate.compareTo(aDate);
         });
-        
+
         // Garder la première (meilleure), supprimer les autres
         final toKeep = transactionsWithSameRef.first;
-        debugPrint('   ✅ Conservation: ID=${toKeep.id}, Statut=${toKeep.statut.name}, Date=${toKeep.lastModifiedAt ?? toKeep.dateEnregistrement}');
-        
+        debugPrint(
+            '   ✅ Conservation: ID=${toKeep.id}, Statut=${toKeep.statut.name}, Date=${toKeep.lastModifiedAt ?? toKeep.dateEnregistrement}');
+
         for (int i = 1; i < transactionsWithSameRef.length; i++) {
           final toRemove = transactionsWithSameRef[i];
-          debugPrint('   🗑️ Suppression: ID=${toRemove.id}, Statut=${toRemove.statut.name}, Date=${toRemove.lastModifiedAt ?? toRemove.dateEnregistrement}');
+          debugPrint(
+              '   🗑️ Suppression: ID=${toRemove.id}, Statut=${toRemove.statut.name}, Date=${toRemove.lastModifiedAt ?? toRemove.dateEnregistrement}');
           await prefs.remove('virtual_transaction_${toRemove.id}');
           duplicatesRemoved++;
         }
       }
     }
-    
+
     debugPrint('✅ NETTOYAGE TERMINÉ: $duplicatesRemoved doublons supprimés');
     return duplicatesRemoved;
   }
 
   // === CRUD FLOTS ===
-  
+
   /// Sauvegarder un retrait virtuel
-  Future<RetraitVirtuelModel> saveRetraitVirtuel(RetraitVirtuelModel retrait) async {
+  Future<RetraitVirtuelModel> saveRetraitVirtuel(
+      RetraitVirtuelModel retrait) async {
     final prefs = await database;
     final retraitId = retrait.id ?? DateTime.now().millisecondsSinceEpoch;
-    final updatedRetrait = retrait.id == null 
+    final updatedRetrait = retrait.id == null
         ? retrait.copyWith(
             id: retraitId,
             lastModifiedAt: DateTime.now(),
           )
         : retrait;
-    await prefs.setString('retrait_virtuel_$retraitId', jsonEncode(updatedRetrait.toJson()));
-    debugPrint('Flot sauvegarde: ID=$retraitId, Montant=\$${updatedRetrait.montant}');
+    await prefs.setString(
+        'retrait_virtuel_$retraitId', jsonEncode(updatedRetrait.toJson()));
+    debugPrint(
+        'Flot sauvegarde: ID=$retraitId, Montant=\$${updatedRetrait.montant}');
     return updatedRetrait;
   }
 
   /// Mettre à jour un retrait virtuel
   Future<void> updateRetraitVirtuel(RetraitVirtuelModel retrait) async {
-    if (retrait.id == null) throw Exception('Retrait ID is required for update');
+    if (retrait.id == null)
+      throw Exception('Retrait ID is required for update');
     await saveRetraitVirtuel(retrait);
   }
 
@@ -2387,42 +2502,44 @@ class LocalDB {
   }) async {
     final prefs = await database;
     final retraits = <RetraitVirtuelModel>[];
-    
+
     final keys = prefs.getKeys();
     for (String key in keys) {
       if (key.startsWith('retrait_virtuel_')) {
         try {
           final retraitData = prefs.getString(key);
           if (retraitData != null) {
-            final retrait = RetraitVirtuelModel.fromJson(jsonDecode(retraitData));
-            
+            final retrait =
+                RetraitVirtuelModel.fromJson(jsonDecode(retraitData));
+
             // Appliquer les filtres
             bool matches = true;
-            
+
             if (shopSourceId != null && retrait.shopSourceId != shopSourceId) {
               matches = false;
             }
-            
-            if (shopDebiteurId != null && retrait.shopDebiteurId != shopDebiteurId) {
+
+            if (shopDebiteurId != null &&
+                retrait.shopDebiteurId != shopDebiteurId) {
               matches = false;
             }
-            
+
             if (simNumero != null && retrait.simNumero != simNumero) {
               matches = false;
             }
-            
+
             if (statut != null && retrait.statut != statut) {
               matches = false;
             }
-            
+
             if (dateDebut != null && retrait.dateRetrait.isBefore(dateDebut)) {
               matches = false;
             }
-            
+
             if (dateFin != null && retrait.dateRetrait.isAfter(dateFin)) {
               matches = false;
             }
-            
+
             if (matches) {
               retraits.add(retrait);
             }
@@ -2432,7 +2549,7 @@ class LocalDB {
         }
       }
     }
-    
+
     // Trier par date (plus récents en premier)
     retraits.sort((a, b) => b.dateRetrait.compareTo(a.dateRetrait));
     return retraits;
@@ -2446,19 +2563,22 @@ class LocalDB {
   }
 
   // === CRUD CLOTURES VIRTUELLES ===
-  
+
   /// Sauvegarder une clôture virtuelle
-  Future<ClotureVirtuelleModel> saveClotureVirtuelle(ClotureVirtuelleModel cloture) async {
+  Future<ClotureVirtuelleModel> saveClotureVirtuelle(
+      ClotureVirtuelleModel cloture) async {
     final prefs = await database;
     final clotureId = cloture.id ?? DateTime.now().millisecondsSinceEpoch;
-    final updatedCloture = cloture.id == null 
+    final updatedCloture = cloture.id == null
         ? cloture.copyWith(
             id: clotureId,
             lastModifiedAt: DateTime.now(),
           )
         : cloture;
-    await prefs.setString('cloture_virtuelle_$clotureId', jsonEncode(updatedCloture.toJson()));
-    debugPrint('Cloture virtuelle sauvegardee: ID=$clotureId, Date=${updatedCloture.dateCloture}');
+    await prefs.setString(
+        'cloture_virtuelle_$clotureId', jsonEncode(updatedCloture.toJson()));
+    debugPrint(
+        'Cloture virtuelle sauvegardee: ID=$clotureId, Date=${updatedCloture.dateCloture}');
     return updatedCloture;
   }
 
@@ -2470,30 +2590,31 @@ class LocalDB {
   }) async {
     final prefs = await database;
     final clotures = <ClotureVirtuelleModel>[];
-    
+
     final keys = prefs.getKeys();
     for (String key in keys) {
       if (key.startsWith('cloture_virtuelle_')) {
         try {
           final clotureData = prefs.getString(key);
           if (clotureData != null) {
-            final cloture = ClotureVirtuelleModel.fromJson(jsonDecode(clotureData));
-            
+            final cloture =
+                ClotureVirtuelleModel.fromJson(jsonDecode(clotureData));
+
             // Appliquer les filtres
             bool matches = true;
-            
+
             if (shopId != null && cloture.shopId != shopId) {
               matches = false;
             }
-            
+
             if (dateDebut != null && cloture.dateCloture.isBefore(dateDebut)) {
               matches = false;
             }
-            
+
             if (dateFin != null && cloture.dateCloture.isAfter(dateFin)) {
               matches = false;
             }
-            
+
             if (matches) {
               clotures.add(cloture);
             }
@@ -2503,22 +2624,24 @@ class LocalDB {
         }
       }
     }
-    
+
     // Trier par date (plus recents en premier)
     clotures.sort((a, b) => b.dateCloture.compareTo(a.dateCloture));
     return clotures;
   }
 
   /// Recuperer une cloture virtuelle par shop et date
-  Future<ClotureVirtuelleModel?> getClotureVirtuelleByDate(int shopId, DateTime date) async {
+  Future<ClotureVirtuelleModel?> getClotureVirtuelleByDate(
+      int shopId, DateTime date) async {
     final allClotures = await getAllCloturesVirtuelles(shopId: shopId);
-    
+
     final dateOnly = DateTime(date.year, date.month, date.day);
-    
+
     try {
       return allClotures.firstWhere(
         (c) {
-          final clotureDate = DateTime(c.dateCloture.year, c.dateCloture.month, c.dateCloture.day);
+          final clotureDate = DateTime(
+              c.dateCloture.year, c.dateCloture.month, c.dateCloture.day);
           return clotureDate.isAtSameMomentAs(dateOnly);
         },
       );
@@ -2541,7 +2664,7 @@ class LocalDB {
   }
 
   // === CRUD DÉPÔTS CLIENTS ===
-  
+
   /// Insérer un nouveau dépôt client
   Future<int> insertDepotClient(DepotClientModel depot) async {
     final prefs = await database;
@@ -2555,20 +2678,24 @@ class LocalDB {
       dateDepot: depot.dateDepot,
       userId: depot.userId,
     );
-    
-    await prefs.setString('depot_client_$depotId', jsonEncode(depotWithId.toMap()));
-    debugPrint('💰 Dépôt client enregistré: ID=$depotId, Montant=\$${depot.montant}');
+
+    await prefs.setString(
+        'depot_client_$depotId', jsonEncode(depotWithId.toMap()));
+    debugPrint(
+        '💰 Dépôt client enregistré: ID=$depotId, Montant=\$${depot.montant}');
     return depotId;
   }
-  
+
   /// Mettre à jour un dépôt client
   Future<void> updateDepotClient(DepotClientModel depot) async {
     if (depot.id == null) throw Exception('Depot ID is required for update');
     final prefs = await database;
-    await prefs.setString('depot_client_${depot.id}', jsonEncode(depot.toMap()));
-    debugPrint('💰 Dépôt client mis à jour: ID=${depot.id}, Montant=\$${depot.montant}');
+    await prefs.setString(
+        'depot_client_${depot.id}', jsonEncode(depot.toMap()));
+    debugPrint(
+        '💰 Dépôt client mis à jour: ID=${depot.id}, Montant=\$${depot.montant}');
   }
-  
+
   /// Récupérer tous les dépôts clients
   Future<List<DepotClientModel>> getAllDepotsClients({
     int? shopId,
@@ -2577,7 +2704,7 @@ class LocalDB {
   }) async {
     final prefs = await database;
     final depots = <DepotClientModel>[];
-    
+
     final keys = prefs.getKeys();
     for (String key in keys) {
       if (key.startsWith('depot_client_')) {
@@ -2585,22 +2712,22 @@ class LocalDB {
           final depotData = prefs.getString(key);
           if (depotData != null) {
             final depot = DepotClientModel.fromMap(jsonDecode(depotData));
-            
+
             // Filtres
             bool matches = true;
-            
+
             if (shopId != null && depot.shopId != shopId) {
               matches = false;
             }
-            
+
             if (dateDebut != null && depot.dateDepot.isBefore(dateDebut)) {
               matches = false;
             }
-            
+
             if (dateFin != null && depot.dateDepot.isAfter(dateFin)) {
               matches = false;
             }
-            
+
             if (matches) {
               depots.add(depot);
             }
@@ -2610,19 +2737,19 @@ class LocalDB {
         }
       }
     }
-    
+
     // Trier par date (plus récents en premier)
     depots.sort((a, b) => b.dateDepot.compareTo(a.dateDepot));
     return depots;
   }
-  
+
   /// Récupérer un dépôt client par ID
   Future<DepotClientModel?> getDepotClientById(int depotId) async {
     final prefs = await database;
     final depotData = prefs.getString('depot_client_$depotId');
-    
+
     if (depotData == null) return null;
-    
+
     try {
       return DepotClientModel.fromMap(jsonDecode(depotData));
     } catch (e) {
@@ -2630,7 +2757,7 @@ class LocalDB {
       return null;
     }
   }
-  
+
   /// Supprimer un dépôt client
   Future<void> deleteDepotClient(int depotId) async {
     final prefs = await database;
@@ -2645,24 +2772,28 @@ class LocalDB {
   /// Sauvegarder une clôture virtuelle par SIM
   Future<void> saveClotureVirtuelleParSim(dynamic cloture) async {
     final prefs = await database;
-    
+
     // Générer un ID si nécessaire
     final clotureId = cloture.id ?? await _generateSequentialId('cloture_sim_');
     final clotureWithId = cloture.copyWith(id: clotureId);
-    
+
     // Sauvegarder avec une clé unique: cloture_sim_{simNumero}_{date}
     final dateKey = clotureWithId.dateCloture.toIso8601String().split('T')[0];
     final key = 'cloture_sim_${clotureWithId.simNumero}_$dateKey';
-    
+
     final clotureMap = clotureWithId.toMap();
-    
-    debugPrint('💾 Sauvegarde clôture SIM: ${clotureWithId.simNumero} - $dateKey');
-    debugPrint('   Solde Antérieur: ${clotureMap['solde_anterieur']}, Solde Actuel: ${clotureMap['solde_actuel']}');
-    debugPrint('   Cash Disponible: ${clotureMap['cash_disponible']}, Frais Total: ${clotureMap['frais_total']}');
+
+    debugPrint(
+        '💾 Sauvegarde clôture SIM: ${clotureWithId.simNumero} - $dateKey');
+    debugPrint(
+        '   Solde Antérieur: ${clotureMap['solde_anterieur']}, Solde Actuel: ${clotureMap['solde_actuel']}');
+    debugPrint(
+        '   Cash Disponible: ${clotureMap['cash_disponible']}, Frais Total: ${clotureMap['frais_total']}');
     debugPrint('   Date clôture dans map: ${clotureMap['date_cloture']}');
-    
+
     await prefs.setString(key, jsonEncode(clotureMap));
-    debugPrint('✅ Clôture SIM sauvegardée: ${clotureWithId.simNumero} - $dateKey');
+    debugPrint(
+        '✅ Clôture SIM sauvegardée: ${clotureWithId.simNumero} - $dateKey');
   }
 
   /// Récupérer toutes les clôtures par SIM pour une date donnée
@@ -2673,7 +2804,7 @@ class LocalDB {
     final prefs = await database;
     final dateKey = date.toIso8601String().split('T')[0];
     final List<dynamic> clotures = [];
-    
+
     final allKeys = prefs.getKeys();
     for (var key in allKeys) {
       if (key.startsWith('cloture_sim_') && key.endsWith(dateKey)) {
@@ -2687,7 +2818,7 @@ class LocalDB {
         }
       }
     }
-    
+
     debugPrint('📊 ${clotures.length} clôture(s) trouvée(s) pour le $dateKey');
     return clotures;
   }
@@ -2699,13 +2830,14 @@ class LocalDB {
   }) async {
     final prefs = await database;
     final allKeys = prefs.getKeys();
-    
-    debugPrint('🔍 Recherche dernière clôture pour SIM $simNumero avant ${avant.toIso8601String()}');
-    
+
+    debugPrint(
+        '🔍 Recherche dernière clôture pour SIM $simNumero avant ${avant.toIso8601String()}');
+
     dynamic derniereCloture;
     DateTime? derniereDateCloture;
     int cloturesTrouvees = 0;
-    
+
     for (var key in allKeys) {
       if (key.startsWith('cloture_sim_$simNumero')) {
         final clotureData = prefs.getString(key);
@@ -2713,31 +2845,38 @@ class LocalDB {
           cloturesTrouvees++;
           final clotureMap = jsonDecode(clotureData);
           final dateCloture = DateTime.parse(clotureMap['date_cloture']);
-          
-          debugPrint('   📋 Clôture trouvée: ${clotureMap['date_cloture']} (Parsed: ${dateCloture.toIso8601String()})');
-          
+
+          debugPrint(
+              '   📋 Clôture trouvée: ${clotureMap['date_cloture']} (Parsed: ${dateCloture.toIso8601String()})');
+
           // Vérifier si cette clôture est avant la date demandée
           if (dateCloture.isBefore(avant)) {
             // Garder la plus récente
-            if (derniereDateCloture == null || dateCloture.isAfter(derniereDateCloture)) {
-              debugPrint('   ✅ Clôture retenue: ${dateCloture.toIso8601String()}');
+            if (derniereDateCloture == null ||
+                dateCloture.isAfter(derniereDateCloture)) {
+              debugPrint(
+                  '   ✅ Clôture retenue: ${dateCloture.toIso8601String()}');
               derniereDateCloture = dateCloture;
               derniereCloture = clotureMap;
             }
           } else {
-            debugPrint('   ⏭️ Clôture ignorée (pas avant ${avant.toIso8601String()})');
+            debugPrint(
+                '   ⏭️ Clôture ignorée (pas avant ${avant.toIso8601String()})');
           }
         }
       }
     }
-    
+
     if (derniereCloture != null) {
-      debugPrint('✅ Dernière clôture trouvée: ${derniereDateCloture!.toIso8601String()}');
-      debugPrint('   Solde: ${derniereCloture['solde_actuel']}, Cash: ${derniereCloture['cash_disponible']}, Frais: ${derniereCloture['frais_total']}');
+      debugPrint(
+          '✅ Dernière clôture trouvée: ${derniereDateCloture!.toIso8601String()}');
+      debugPrint(
+          '   Solde: ${derniereCloture['solde_actuel']}, Cash: ${derniereCloture['cash_disponible']}, Frais: ${derniereCloture['frais_total']}');
     } else {
-      debugPrint('⚠️ Aucune clôture trouvée parmi $cloturesTrouvees clôture(s) pour SIM $simNumero');
+      debugPrint(
+          '⚠️ Aucune clôture trouvée parmi $cloturesTrouvees clôture(s) pour SIM $simNumero');
     }
-    
+
     return derniereCloture;
   }
 
@@ -2750,14 +2889,14 @@ class LocalDB {
     final prefs = await database;
     final allKeys = prefs.getKeys();
     final List<dynamic> clotures = [];
-    
+
     for (var key in allKeys) {
       if (key.startsWith('cloture_sim_$simNumero')) {
         final clotureData = prefs.getString(key);
         if (clotureData != null) {
           final clotureMap = jsonDecode(clotureData);
           final dateCloture = DateTime.parse(clotureMap['date_cloture']);
-          
+
           // Filtrer par période si spécifiée
           bool inclure = true;
           if (depuis != null && dateCloture.isBefore(depuis)) {
@@ -2766,22 +2905,23 @@ class LocalDB {
           if (jusqua != null && dateCloture.isAfter(jusqua)) {
             inclure = false;
           }
-          
+
           if (inclure) {
             clotures.add(clotureMap);
           }
         }
       }
     }
-    
+
     // Trier par date décroissante (plus récente en premier)
     clotures.sort((a, b) {
       final dateA = DateTime.parse(a['date_cloture']);
       final dateB = DateTime.parse(b['date_cloture']);
       return dateB.compareTo(dateA);
     });
-    
-    debugPrint('📊 ${clotures.length} clôture(s) trouvée(s) pour SIM $simNumero');
+
+    debugPrint(
+        '📊 ${clotures.length} clôture(s) trouvée(s) pour SIM $simNumero');
     return clotures;
   }
 
@@ -2794,7 +2934,7 @@ class LocalDB {
     final dateKey = date.toIso8601String().split('T')[0];
     final allKeys = prefs.getKeys();
     int deletedCount = 0;
-    
+
     for (var key in allKeys) {
       if (key.startsWith('cloture_sim_') && key.endsWith('_$dateKey')) {
         final clotureData = prefs.getString(key);
@@ -2808,7 +2948,7 @@ class LocalDB {
         }
       }
     }
-    
+
     debugPrint('✅ $deletedCount clôture(s) supprimée(s) pour le $dateKey');
   }
 
@@ -2822,25 +2962,30 @@ class LocalDB {
   Future<void> saveTauxChange(double taux) async {
     final prefs = await database;
     await prefs.setDouble('taux_cdf_usd', taux);
-    debugPrint('💱 Taux de change sauvegardé: 1 USD = ${taux.toStringAsFixed(0)} CDF');
+    debugPrint(
+        '💱 Taux de change sauvegardé: 1 USD = ${taux.toStringAsFixed(0)} CDF');
   }
 
   // === CRUD CREDITS VIRTUELS ===
-  
+
   /// Sauvegarder un crédit virtuel
-  Future<CreditVirtuelModel?> insertCreditVirtuel(CreditVirtuelModel credit) async {
+  Future<CreditVirtuelModel?> insertCreditVirtuel(
+      CreditVirtuelModel credit) async {
     final prefs = await database;
-    final creditId = credit.id ?? await _generateSequentialId('credit_virtuel_');
+    final creditId =
+        credit.id ?? await _generateSequentialId('credit_virtuel_');
     final updatedCredit = credit.copyWith(id: creditId);
-    
+
     debugPrint('💾 Sauvegarde crédit virtuel: credit_virtuel_$creditId');
-    
-    await prefs.setString('credit_virtuel_$creditId', jsonEncode(updatedCredit.toJson()));
-    
+
+    await prefs.setString(
+        'credit_virtuel_$creditId', jsonEncode(updatedCredit.toJson()));
+
     // Vérifier que la sauvegarde a fonctionné
     final saved = prefs.getString('credit_virtuel_$creditId');
     if (saved != null) {
-      debugPrint('✅ Crédit virtuel sauvegardé: ${updatedCredit.reference} (ID: $creditId)');
+      debugPrint(
+          '✅ Crédit virtuel sauvegardé: ${updatedCredit.reference} (ID: $creditId)');
       return updatedCredit;
     } else {
       debugPrint('❌ Échec de la sauvegarde du crédit virtuel');
@@ -2851,14 +2996,14 @@ class LocalDB {
   /// Mettre à jour un crédit virtuel
   Future<bool> updateCreditVirtuel(CreditVirtuelModel credit) async {
     if (credit.id == null) throw Exception('Credit ID is required for update');
-    
+
     final prefs = await database;
     final key = 'credit_virtuel_${credit.id}';
-    
+
     debugPrint('🔄 Mise à jour crédit virtuel: $key');
-    
+
     await prefs.setString(key, jsonEncode(credit.toJson()));
-    
+
     // Vérifier que la mise à jour a fonctionné
     final updated = prefs.getString(key);
     if (updated != null) {
@@ -2881,44 +3026,48 @@ class LocalDB {
   }) async {
     final prefs = await database;
     final credits = <CreditVirtuelModel>[];
-    
+
     final keys = prefs.getKeys();
-    debugPrint('🔍 [LocalDB] getAllCreditsVirtuels - Found ${keys.where((k) => k.startsWith('credit_virtuel_')).length} credit keys');
-    
+    debugPrint(
+        '🔍 [LocalDB] getAllCreditsVirtuels - Found ${keys.where((k) => k.startsWith('credit_virtuel_')).length} credit keys');
+
     for (String key in keys) {
       if (key.startsWith('credit_virtuel_')) {
         try {
           final creditData = prefs.getString(key);
           if (creditData != null) {
             final credit = CreditVirtuelModel.fromJson(jsonDecode(creditData));
-            
+
             // Appliquer les filtres
             bool matches = true;
-            
+
             if (shopId != null && credit.shopId != shopId) {
               matches = false;
             }
-            
+
             if (simNumero != null && credit.simNumero != simNumero) {
               matches = false;
             }
-            
+
             if (statut != null && credit.statut != statut) {
               matches = false;
             }
-            
-            if (beneficiaire != null && !credit.beneficiaireNom.toLowerCase().contains(beneficiaire.toLowerCase())) {
+
+            if (beneficiaire != null &&
+                !credit.beneficiaireNom
+                    .toLowerCase()
+                    .contains(beneficiaire.toLowerCase())) {
               matches = false;
             }
-            
+
             if (dateDebut != null && credit.dateSortie.isBefore(dateDebut)) {
               matches = false;
             }
-            
+
             if (dateFin != null && credit.dateSortie.isAfter(dateFin)) {
               matches = false;
             }
-            
+
             if (matches) {
               credits.add(credit);
             }
@@ -2928,9 +3077,10 @@ class LocalDB {
         }
       }
     }
-    
-    debugPrint('📊 [LocalDB] getAllCreditsVirtuels returning ${credits.length} credits');
-    
+
+    debugPrint(
+        '📊 [LocalDB] getAllCreditsVirtuels returning ${credits.length} credits');
+
     // Trier par date (plus récents en premier)
     credits.sort((a, b) => b.dateSortie.compareTo(a.dateSortie));
     return credits;
@@ -2947,13 +3097,14 @@ class LocalDB {
   }
 
   /// Récupérer un crédit virtuel par référence
-  Future<CreditVirtuelModel?> getCreditVirtuelByReference(String reference) async {
+  Future<CreditVirtuelModel?> getCreditVirtuelByReference(
+      String reference) async {
     final prefs = await database;
     final keys = prefs.getKeys();
-    
+
     // Normaliser la référence recherchée
     final normalizedReference = reference.trim().toUpperCase();
-    
+
     for (String key in keys) {
       if (key.startsWith('credit_virtuel_')) {
         try {
@@ -2980,40 +3131,46 @@ class LocalDB {
   }
 
   // === CRUD RÈGLEMENTS TRIANGULAIRES ===
-  
+
   /// Sauvegarder un règlement triangulaire
-  Future<TriangularDebtSettlementModel> saveTriangularDebtSettlement(TriangularDebtSettlementModel settlement) async {
+  Future<TriangularDebtSettlementModel> saveTriangularDebtSettlement(
+      TriangularDebtSettlementModel settlement) async {
     final prefs = await database;
-    final settlementId = settlement.id ?? await _generateSequentialId('triangular_settlement_');
+    final settlementId =
+        settlement.id ?? await _generateSequentialId('triangular_settlement_');
     final updatedSettlement = settlement.copyWith(id: settlementId);
     final key = 'triangular_settlement_$settlementId';
-    
+
     debugPrint('💾 Sauvegarde règlement triangulaire: $key');
     await prefs.setString(key, jsonEncode(updatedSettlement.toJson()));
-    
+
     final saved = prefs.getString(key);
     if (saved != null) {
-      debugPrint('✅ Règlement triangulaire sauvegardé: ${updatedSettlement.reference}');
+      debugPrint(
+          '✅ Règlement triangulaire sauvegardé: ${updatedSettlement.reference}');
     } else {
       debugPrint('❌ Échec de la sauvegarde du règlement triangulaire');
     }
-    
+
     return updatedSettlement;
   }
 
   /// Mettre à jour un règlement triangulaire
-  Future<bool> updateTriangularDebtSettlement(TriangularDebtSettlementModel settlement) async {
-    if (settlement.id == null) throw Exception('Settlement ID is required for update');
-    
+  Future<bool> updateTriangularDebtSettlement(
+      TriangularDebtSettlementModel settlement) async {
+    if (settlement.id == null)
+      throw Exception('Settlement ID is required for update');
+
     final prefs = await database;
     final key = 'triangular_settlement_${settlement.id}';
-    
+
     debugPrint('🔄 Mise à jour règlement triangulaire: $key');
     await prefs.setString(key, jsonEncode(settlement.toJson()));
-    
+
     final updated = prefs.getString(key);
     if (updated != null) {
-      debugPrint('✅ Règlement triangulaire mis à jour: ${settlement.reference}');
+      debugPrint(
+          '✅ Règlement triangulaire mis à jour: ${settlement.reference}');
       return true;
     } else {
       debugPrint('❌ Échec de la mise à jour du règlement triangulaire');
@@ -3029,35 +3186,38 @@ class LocalDB {
   }) async {
     final prefs = await database;
     final settlements = <TriangularDebtSettlementModel>[];
-    
+
     final keys = prefs.getKeys();
-    debugPrint('🔍 [LocalDB] getAllTriangularDebtSettlements - Found ${keys.where((k) => k.startsWith('triangular_settlement_')).length} settlement keys');
-    
+    debugPrint(
+        '🔍 [LocalDB] getAllTriangularDebtSettlements - Found ${keys.where((k) => k.startsWith('triangular_settlement_')).length} settlement keys');
+
     for (String key in keys) {
       if (key.startsWith('triangular_settlement_')) {
         try {
           final settlementData = prefs.getString(key);
           if (settlementData != null) {
-            final settlement = TriangularDebtSettlementModel.fromJson(jsonDecode(settlementData));
-            
+            final settlement = TriangularDebtSettlementModel.fromJson(
+                jsonDecode(settlementData));
+
             // Appliquer les filtres
             bool matches = true;
-            
-            if (shopId != null && 
-                settlement.shopDebtorId != shopId && 
-                settlement.shopIntermediaryId != shopId && 
+
+            if (shopId != null &&
+                settlement.shopDebtorId != shopId &&
+                settlement.shopIntermediaryId != shopId &&
                 settlement.shopCreditorId != shopId) {
               matches = false;
             }
-            
-            if (dateDebut != null && settlement.dateReglement.isBefore(dateDebut)) {
+
+            if (dateDebut != null &&
+                settlement.dateReglement.isBefore(dateDebut)) {
               matches = false;
             }
-            
+
             if (dateFin != null && settlement.dateReglement.isAfter(dateFin)) {
               matches = false;
             }
-            
+
             if (matches) {
               settlements.add(settlement);
             }
@@ -3067,18 +3227,21 @@ class LocalDB {
         }
       }
     }
-    
-    debugPrint('📊 [LocalDB] getAllTriangularDebtSettlements returning ${settlements.length} settlements');
-    
+
+    debugPrint(
+        '📊 [LocalDB] getAllTriangularDebtSettlements returning ${settlements.length} settlements');
+
     // Trier par date (plus récents en premier)
     settlements.sort((a, b) => b.dateReglement.compareTo(a.dateReglement));
     return settlements;
   }
 
   /// Récupérer un règlement triangulaire par ID
-  Future<TriangularDebtSettlementModel?> getTriangularDebtSettlementById(int settlementId) async {
+  Future<TriangularDebtSettlementModel?> getTriangularDebtSettlementById(
+      int settlementId) async {
     final prefs = await database;
-    final settlementData = prefs.getString('triangular_settlement_$settlementId');
+    final settlementData =
+        prefs.getString('triangular_settlement_$settlementId');
     if (settlementData != null) {
       return TriangularDebtSettlementModel.fromJson(jsonDecode(settlementData));
     }
@@ -3086,18 +3249,20 @@ class LocalDB {
   }
 
   /// Récupérer un règlement triangulaire par référence
-  Future<TriangularDebtSettlementModel?> getTriangularDebtSettlementByReference(String reference) async {
+  Future<TriangularDebtSettlementModel?> getTriangularDebtSettlementByReference(
+      String reference) async {
     final prefs = await database;
     final keys = prefs.getKeys();
-    
+
     final normalizedReference = reference.trim().toUpperCase();
-    
+
     for (String key in keys) {
       if (key.startsWith('triangular_settlement_')) {
         try {
           final settlementData = prefs.getString(key);
           if (settlementData != null) {
-            final settlement = TriangularDebtSettlementModel.fromJson(jsonDecode(settlementData));
+            final settlement = TriangularDebtSettlementModel.fromJson(
+                jsonDecode(settlementData));
             if (settlement.reference == normalizedReference) {
               return settlement;
             }
@@ -3117,54 +3282,189 @@ class LocalDB {
     debugPrint('🗑️ Règlement triangulaire supprimé: $settlementId');
   }
 
-  // === CRUD PAIEMENTS MULTI-MOIS ===
-  
-  /// Sauvegarder un paiement multi-mois
-  Future<MultiMonthPaymentModel> saveMultiMonthPayment(MultiMonthPaymentModel payment) async {
+  // === CRUD CREDIT INTERSHOP TRACKING ===
+
+  /// Sauvegarder un crédit inter-shop tracking
+  Future<CreditIntershopTrackingModel> saveCreditIntershopTracking(
+      CreditIntershopTrackingModel tracking) async {
     final prefs = await database;
-    final paymentId = payment.id ?? await _generateSequentialId('multi_month_payment_');
+    final trackingId =
+        tracking.id ?? await _generateSequentialId('credit_intershop_');
+    final updatedTracking = tracking.copyWith(
+      id: trackingId,
+      lastModifiedAt: DateTime.now(),
+    );
+
+    final jsonData = updatedTracking.toJson();
+    final key = 'credit_intershop_$trackingId';
+
+    debugPrint('💾 Sauvegarde crédit inter-shop: $key');
+    debugPrint(
+        '📄 Normal: ${tracking.shopNormalDesignation} → Principal: ${tracking.shopPrincipalDesignation} → Service: ${tracking.shopServiceDesignation}');
+
+    await prefs.setString(key, jsonEncode(jsonData));
+
+    // Vérifier que la sauvegarde a fonctionné
+    final saved = prefs.getString(key);
+    if (saved != null) {
+      debugPrint('✅ Crédit inter-shop sauvegardé avec succès');
+    } else {
+      debugPrint('❌ Échec de la sauvegarde dans SharedPreferences');
+    }
+
+    return updatedTracking;
+  }
+
+  /// Mettre à jour un crédit inter-shop tracking
+  Future<void> updateCreditIntershopTracking(
+      CreditIntershopTrackingModel tracking) async {
+    if (tracking.id == null)
+      throw Exception('Credit Intershop Tracking ID is required for update');
+    await saveCreditIntershopTracking(tracking);
+  }
+
+  /// Récupérer tous les crédits inter-shop tracking
+  Future<List<CreditIntershopTrackingModel>> getAllCreditIntershopTracking({
+    int? shopPrincipalId,
+    int? shopNormalId,
+    int? shopServiceId,
+    DateTime? dateDebut,
+    DateTime? dateFin,
+  }) async {
+    final prefs = await database;
+    final trackings = <CreditIntershopTrackingModel>[];
+
+    debugPrint('🔍 [LocalDB] getAllCreditIntershopTracking - Starting...');
+
+    final keys = prefs.getKeys();
+    debugPrint(
+        '🔍 [LocalDB] getAllCreditIntershopTracking - Found ${keys.where((k) => k.startsWith('credit_intershop_')).length} tracking keys');
+
+    for (String key in keys) {
+      if (key.startsWith('credit_intershop_')) {
+        try {
+          final trackingData = prefs.getString(key);
+          if (trackingData != null) {
+            final trackingJson = jsonDecode(trackingData);
+            final tracking =
+                CreditIntershopTrackingModel.fromJson(trackingJson);
+
+            // Appliquer les filtres
+            bool includeTracking = true;
+
+            if (shopPrincipalId != null &&
+                tracking.shopPrincipalId != shopPrincipalId) {
+              includeTracking = false;
+            }
+
+            if (shopNormalId != null && tracking.shopNormalId != shopNormalId) {
+              includeTracking = false;
+            }
+
+            if (shopServiceId != null &&
+                tracking.shopServiceId != shopServiceId) {
+              includeTracking = false;
+            }
+
+            if (dateDebut != null &&
+                tracking.dateOperation.isBefore(dateDebut)) {
+              includeTracking = false;
+            }
+
+            if (dateFin != null && tracking.dateOperation.isAfter(dateFin)) {
+              includeTracking = false;
+            }
+
+            if (includeTracking) {
+              trackings.add(tracking);
+            }
+          }
+        } catch (e) {
+          debugPrint('⚠️ Erreur parsing crédit inter-shop $key: $e');
+        }
+      }
+    }
+
+    debugPrint(
+        '📊 [LocalDB] getAllCreditIntershopTracking returning ${trackings.length} trackings');
+
+    // Trier par date (plus récents en premier)
+    trackings.sort((a, b) => b.dateOperation.compareTo(a.dateOperation));
+    return trackings;
+  }
+
+  /// Récupérer un crédit inter-shop tracking par ID
+  Future<CreditIntershopTrackingModel?> getCreditIntershopTrackingById(
+      int trackingId) async {
+    final prefs = await database;
+    final trackingData = prefs.getString('credit_intershop_$trackingId');
+    if (trackingData != null) {
+      return CreditIntershopTrackingModel.fromJson(jsonDecode(trackingData));
+    }
+    return null;
+  }
+
+  /// Supprimer un crédit inter-shop tracking
+  Future<void> deleteCreditIntershopTracking(int trackingId) async {
+    final prefs = await database;
+    await prefs.remove('credit_intershop_$trackingId');
+    debugPrint('🗑️ Crédit inter-shop supprimé: $trackingId');
+  }
+
+  // === CRUD PAIEMENTS MULTI-MOIS ===
+
+  /// Sauvegarder un paiement multi-mois
+  Future<MultiMonthPaymentModel> saveMultiMonthPayment(
+      MultiMonthPaymentModel payment) async {
+    final prefs = await database;
+    final paymentId =
+        payment.id ?? await _generateSequentialId('multi_month_payment_');
     final updatedPayment = payment.copyWith(
       id: paymentId,
       lastModifiedAt: DateTime.now(),
     );
-    
+
     final jsonData = updatedPayment.toJson();
     final key = 'multi_month_payment_$paymentId';
-    
+
     debugPrint('💾 Sauvegarde paiement multi-mois: $key');
     debugPrint('📄 Données: ${jsonEncode(jsonData)}');
-    
+
     await prefs.setString(key, jsonEncode(jsonData));
-    
+
     // Vérifier que la sauvegarde a fonctionné
     final saved = prefs.getString(key);
     if (saved != null) {
-      debugPrint('✅ Paiement multi-mois sauvegardé avec succès dans SharedPreferences');
+      debugPrint(
+          '✅ Paiement multi-mois sauvegardé avec succès dans SharedPreferences');
     } else {
       debugPrint('❌ Échec de la sauvegarde dans SharedPreferences');
     }
-    
+
     return updatedPayment;
   }
 
   /// Mettre à jour un paiement multi-mois
   Future<void> updateMultiMonthPayment(MultiMonthPaymentModel payment) async {
-    if (payment.id == null) throw Exception('Payment ID is required for update');
-    
+    if (payment.id == null)
+      throw Exception('Payment ID is required for update');
+
     // Forcer la mise à jour en marquant lastModifiedAt
     final updatedPayment = payment.copyWith(
       lastModifiedAt: DateTime.now(),
     );
-    
-    debugPrint('🔄 [LocalDB] Mise à jour paiement multi-mois ID: ${payment.id}, Référence: ${payment.reference}');
+
+    debugPrint(
+        '🔄 [LocalDB] Mise à jour paiement multi-mois ID: ${payment.id}, Référence: ${payment.reference}');
     await saveMultiMonthPayment(updatedPayment);
-    
+
     // Vérifier immédiatement que la mise à jour a été faite
     final prefs = await database;
     final saved = prefs.getString('multi_month_payment_${payment.id}');
     if (saved != null) {
       final savedData = jsonDecode(saved);
-      debugPrint('✅ [LocalDB] Paiement multi-mois mis à jour - Référence: ${savedData['reference']}');
+      debugPrint(
+          '✅ [LocalDB] Paiement multi-mois mis à jour - Référence: ${savedData['reference']}');
     }
   }
 
@@ -3185,7 +3485,7 @@ class LocalDB {
   }) async {
     final prefs = await database;
     final payments = <MultiMonthPaymentModel>[];
-    
+
     final keys = prefs.getKeys();
     for (String key in keys) {
       if (key.startsWith('multi_month_payment_')) {
@@ -3193,35 +3493,35 @@ class LocalDB {
           final paymentData = prefs.getString(key);
           if (paymentData != null) {
             final paymentJson = jsonDecode(paymentData);
-            
+
             // Vérifier que les champs obligatoires sont présents
-            if (paymentJson['id'] != null && 
-                paymentJson['reference'] != null) {
+            if (paymentJson['id'] != null && paymentJson['reference'] != null) {
               final payment = MultiMonthPaymentModel.fromJson(paymentJson);
-              
+
               // Appliquer les filtres
               bool includePayment = true;
-              
+
               if (shopId != null && payment.shopId != shopId) {
                 includePayment = false;
               }
-              
+
               if (statut != null && payment.statut != statut) {
                 includePayment = false;
               }
-              
+
               if (serviceType != null && payment.serviceType != serviceType) {
                 includePayment = false;
               }
-              
-              if (dateDebut != null && payment.dateCreation.isBefore(dateDebut)) {
+
+              if (dateDebut != null &&
+                  payment.dateCreation.isBefore(dateDebut)) {
                 includePayment = false;
               }
-              
+
               if (dateFin != null && payment.dateCreation.isAfter(dateFin)) {
                 includePayment = false;
               }
-              
+
               if (includePayment) {
                 payments.add(payment);
               }
@@ -3237,18 +3537,19 @@ class LocalDB {
         }
       }
     }
-    
+
     // Trier par date de création (plus récent en premier)
     payments.sort((a, b) => b.dateCreation.compareTo(a.dateCreation));
-    
+
     return payments;
   }
 
   /// Récupérer un paiement multi-mois par ID
-  Future<MultiMonthPaymentModel?> getMultiMonthPaymentById(int paymentId) async {
+  Future<MultiMonthPaymentModel?> getMultiMonthPaymentById(
+      int paymentId) async {
     final prefs = await database;
     final paymentData = prefs.getString('multi_month_payment_$paymentId');
-    
+
     if (paymentData != null) {
       try {
         final paymentJson = jsonDecode(paymentData);
@@ -3258,15 +3559,17 @@ class LocalDB {
         return null;
       }
     }
-    
+
     return null;
   }
 
   /// Récupérer un paiement multi-mois par référence
-  Future<MultiMonthPaymentModel?> getMultiMonthPaymentByReference(String reference) async {
+  Future<MultiMonthPaymentModel?> getMultiMonthPaymentByReference(
+      String reference) async {
     final allPayments = await getAllMultiMonthPayments();
     try {
-      return allPayments.firstWhere((payment) => payment.reference == reference);
+      return allPayments
+          .firstWhere((payment) => payment.reference == reference);
     } catch (e) {
       return null;
     }
@@ -3275,18 +3578,20 @@ class LocalDB {
   // ===== GESTION DES ÉCHANGES VIRTUELS =====
 
   /// Sauvegarder un échange virtuel
-  Future<VirtualExchangeModel> saveVirtualExchange(VirtualExchangeModel exchange) async {
+  Future<VirtualExchangeModel> saveVirtualExchange(
+      VirtualExchangeModel exchange) async {
     final prefs = await database;
-    
+
     // Générer un ID si nécessaire
     final id = exchange.id ?? await _generateSequentialId('virtual_exchange_');
-    
+
     final exchangeWithId = exchange.copyWith(id: id);
     final exchangeJson = jsonEncode(exchangeWithId.toJson());
-    
+
     await prefs.setString('virtual_exchange_$id', exchangeJson);
-    
-    debugPrint('💾 Échange virtuel sauvegardé: ID $id, ${exchange.simSource} → ${exchange.simDestination}');
+
+    debugPrint(
+        '💾 Échange virtuel sauvegardé: ID $id, ${exchange.simSource} → ${exchange.simDestination}');
     return exchangeWithId;
   }
 
@@ -3295,11 +3600,11 @@ class LocalDB {
     if (exchange.id == null) {
       throw Exception('Impossible de mettre à jour un échange sans ID');
     }
-    
+
     final prefs = await database;
     final exchangeJson = jsonEncode(exchange.toJson());
     await prefs.setString('virtual_exchange_${exchange.id}', exchangeJson);
-    
+
     debugPrint('🔄 Échange virtuel mis à jour: ID ${exchange.id}');
   }
 
@@ -3320,10 +3625,13 @@ class LocalDB {
     VirtualExchangeStatus? statut,
   }) async {
     final prefs = await database;
-    final keys = prefs.getKeys().where((key) => key.startsWith('virtual_exchange_')).toList();
-    
+    final keys = prefs
+        .getKeys()
+        .where((key) => key.startsWith('virtual_exchange_'))
+        .toList();
+
     final List<VirtualExchangeModel> exchanges = [];
-    
+
     for (final key in keys) {
       final exchangeData = prefs.getString(key);
       if (exchangeData != null) {
@@ -3331,34 +3639,35 @@ class LocalDB {
           final exchangeJson = jsonDecode(exchangeData);
           if (exchangeJson is Map<String, dynamic>) {
             final exchange = VirtualExchangeModel.fromJson(exchangeJson);
-            
+
             // Appliquer les filtres
             bool includeExchange = true;
-            
+
             if (shopId != null && exchange.shopId != shopId) {
               includeExchange = false;
             }
-            
+
             if (simSource != null && exchange.simSource != simSource) {
               includeExchange = false;
             }
-            
-            if (simDestination != null && exchange.simDestination != simDestination) {
+
+            if (simDestination != null &&
+                exchange.simDestination != simDestination) {
               includeExchange = false;
             }
-            
+
             if (statut != null && exchange.statut != statut) {
               includeExchange = false;
             }
-            
+
             if (dateDebut != null && exchange.dateEchange.isBefore(dateDebut)) {
               includeExchange = false;
             }
-            
+
             if (dateFin != null && exchange.dateEchange.isAfter(dateFin)) {
               includeExchange = false;
             }
-            
+
             if (includeExchange) {
               exchanges.add(exchange);
             }
@@ -3373,10 +3682,10 @@ class LocalDB {
         }
       }
     }
-    
+
     // Trier par date d'échange (plus récent en premier)
     exchanges.sort((a, b) => b.dateEchange.compareTo(a.dateEchange));
-    
+
     return exchanges;
   }
 
@@ -3384,7 +3693,7 @@ class LocalDB {
   Future<VirtualExchangeModel?> getVirtualExchangeById(int exchangeId) async {
     final prefs = await database;
     final exchangeData = prefs.getString('virtual_exchange_$exchangeId');
-    
+
     if (exchangeData != null) {
       try {
         final exchangeJson = jsonDecode(exchangeData);
@@ -3394,15 +3703,17 @@ class LocalDB {
         return null;
       }
     }
-    
+
     return null;
   }
 
   /// Récupérer un échange virtuel par référence
-  Future<VirtualExchangeModel?> getVirtualExchangeByReference(String reference) async {
+  Future<VirtualExchangeModel?> getVirtualExchangeByReference(
+      String reference) async {
     final allExchanges = await getAllVirtualExchanges();
     try {
-      return allExchanges.firstWhere((exchange) => exchange.reference == reference);
+      return allExchanges
+          .firstWhere((exchange) => exchange.reference == reference);
     } catch (e) {
       return null;
     }
@@ -3411,11 +3722,14 @@ class LocalDB {
   /// Nettoyer les échanges virtuels en double
   Future<int> cleanDuplicateVirtualExchanges() async {
     final prefs = await database;
-    final keys = prefs.getKeys().where((key) => key.startsWith('virtual_exchange_')).toList();
-    
+    final keys = prefs
+        .getKeys()
+        .where((key) => key.startsWith('virtual_exchange_'))
+        .toList();
+
     final Map<String, List<String>> exchangesByReference = {};
     int duplicatesRemoved = 0;
-    
+
     // Grouper par référence
     for (final key in keys) {
       final exchangeData = prefs.getString(key);
@@ -3434,7 +3748,7 @@ class LocalDB {
         }
       }
     }
-    
+
     // Supprimer les doublons (garder le premier)
     for (final entry in exchangesByReference.entries) {
       if (entry.value.length > 1) {
@@ -3445,7 +3759,7 @@ class LocalDB {
         }
       }
     }
-    
+
     return duplicatesRemoved;
   }
 }

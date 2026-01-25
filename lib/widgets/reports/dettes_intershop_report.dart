@@ -37,19 +37,24 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
   bool _showFilters = false; // Filters hidden by default
   bool _showEvolutionQuotidienne = false; // Evolution section hidden by default
   bool _showDetailsMouvements = false; // Details section hidden by default
-  String _groupByOption = 'typeOps'; // Grouping option: 'typeOps', 'shopSource', 'shopDestination'
-  String? _expandedShopName; // Track which shop card is expanded for detailed view
+  String _groupByOption =
+      'typeOps'; // Grouping option: 'typeOps', 'shopSource', 'shopDestination'
+  String?
+      _expandedShopName; // Track which shop card is expanded for detailed view
   bool _localDatesModified = false; // Track if user modified dates locally
 
   @override
   void initState() {
     super.initState();
-    _startDate = widget.startDate ?? DateTime.now().subtract(const Duration(days: 30));
+    _startDate =
+        widget.startDate ?? DateTime.now().subtract(const Duration(days: 30));
     _endDate = widget.endDate ?? DateTime.now();
     _selectedShopId = widget.shopId;
     _showFilters = false; // Ensure filters are hidden by default
-    _showEvolutionQuotidienne = false; // Ensure evolution section is hidden by default
-    _showDetailsMouvements = false; // Ensure details section is hidden by default
+    _showEvolutionQuotidienne =
+        false; // Ensure evolution section is hidden by default
+    _showDetailsMouvements =
+        false; // Ensure details section is hidden by default
     _loadReport();
   }
 
@@ -80,7 +85,7 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
 
   Future<void> _loadReport() async {
     if (!mounted) return;
-    
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -93,7 +98,7 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
         startDate: _startDate,
         endDate: _endDate,
       );
-      
+
       if (mounted) {
         setState(() {
           _reportData = data;
@@ -182,7 +187,7 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
   Widget _buildHeader(bool isMobile) {
     final periode = _reportData!['periode'] as Map<String, dynamic>;
     final shopName = _reportData!['shopName'] as String?;
-    
+
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -193,8 +198,9 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
           children: [
             Row(
               children: [
-                Icon(Icons.account_balance_wallet, 
-                  color: const Color(0xFFDC2626), 
+                Icon(
+                  Icons.account_balance_wallet,
+                  color: const Color(0xFFDC2626),
                   size: isMobile ? 24 : 28,
                 ),
                 const SizedBox(width: 8),
@@ -214,7 +220,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
             if (shopName != null) ...[
               Row(
                 children: [
-                  Icon(Icons.store, size: isMobile ? 14 : 16, color: Colors.grey[600]),
+                  Icon(Icons.store,
+                      size: isMobile ? 14 : 16, color: Colors.grey[600]),
                   const SizedBox(width: 4),
                   Text(
                     'Shop: $shopName',
@@ -234,7 +241,7 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
             const SizedBox(height: 12),
             _buildPdfButtons(isMobile),
             // Sélecteurs de période (conditionnels)
-            if (_showFilters) ...[  
+            if (_showFilters) ...[
               const SizedBox(height: 12),
               _buildPeriodSelector(isMobile),
             ],
@@ -298,8 +305,9 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
   }
 
   Widget _buildPeriodSelector(bool isMobile) {
-    final isAdmin = widget.shopId == null; // Si shopId initial est null, c'est l'admin
-    
+    final isAdmin =
+        widget.shopId == null; // Si shopId initial est null, c'est l'admin
+
     return Container(
       padding: EdgeInsets.all(isMobile ? 12 : 14),
       decoration: BoxDecoration(
@@ -312,7 +320,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
         children: [
           Row(
             children: [
-              Icon(Icons.date_range, size: isMobile ? 16 : 18, color: Colors.blue[700]),
+              Icon(Icons.date_range,
+                  size: isMobile ? 16 : 18, color: Colors.blue[700]),
               const SizedBox(width: 8),
               Text(
                 'Sélection de la période',
@@ -341,7 +350,7 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
     return Consumer<ShopService>(
       builder: (context, shopService, child) {
         final shops = shopService.shops;
-        
+
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           decoration: BoxDecoration(
@@ -364,7 +373,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                   value: null,
                   child: Row(
                     children: [
-                      Icon(Icons.store, size: isMobile ? 16 : 18, color: Colors.blue[700]),
+                      Icon(Icons.store,
+                          size: isMobile ? 16 : 18, color: Colors.blue[700]),
                       const SizedBox(width: 8),
                       const Text('Tous les shops'),
                     ],
@@ -375,7 +385,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                     value: shop.id,
                     child: Row(
                       children: [
-                        Icon(Icons.store, size: isMobile ? 16 : 18, color: Colors.grey[600]),
+                        Icon(Icons.store,
+                            size: isMobile ? 16 : 18, color: Colors.grey[600]),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -583,11 +594,12 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
   Widget _buildSummaryCards(bool isMobile) {
     final summary = _reportData!['summary'] as Map<String, dynamic>;
     final shopName = _reportData!['shopName'] as String?;
-    
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        final crossAxisCount = isMobile ? 1 : (constraints.maxWidth > 900 ? 4 : 2);
-        
+        final crossAxisCount =
+            isMobile ? 1 : (constraints.maxWidth > 900 ? 4 : 2);
+
         return GridView.count(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -632,13 +644,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
   }
 
   Widget _buildSummaryCard(
-    String title, 
-    double value, 
-    IconData icon, 
-    Color color,
-    bool isMobile,
-    {bool isCount = false}
-  ) {
+      String title, double value, IconData icon, Color color, bool isMobile,
+      {bool isCount = false}) {
     return Card(
       elevation: 2,
       child: Padding(
@@ -666,9 +673,9 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
             ),
             const SizedBox(height: 8),
             Text(
-              isCount 
-                ? value.toInt().toString()
-                : '${value.toStringAsFixed(2)} USD',
+              isCount
+                  ? value.toInt().toString()
+                  : '${value.toStringAsFixed(2)} USD',
               style: TextStyle(
                 fontSize: isMobile ? 18 : 22,
                 fontWeight: FontWeight.bold,
@@ -682,10 +689,12 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
   }
 
   Widget _buildShopsBreakdown(bool isMobile) {
-    final shopsNousDoivent = _reportData!['shopsNousDoivent'] as List<Map<String, dynamic>>?;
-    final shopsNousDevons = _reportData!['shopsNousDevons'] as List<Map<String, dynamic>>?;
+    final shopsNousDoivent =
+        _reportData!['shopsNousDoivent'] as List<Map<String, dynamic>>?;
+    final shopsNousDevons =
+        _reportData!['shopsNousDevons'] as List<Map<String, dynamic>>?;
     final shopName = _reportData!['shopName'] as String?;
-    
+
     // N'afficher cette section que si un shop spécifique est sélectionné
     if (shopName == null || shopName == 'Tous les shops') {
       return const SizedBox.shrink();
@@ -699,7 +708,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
           child: Center(
             child: Column(
               children: [
-                Icon(Icons.check_circle_outline, size: 64, color: Colors.green[400]),
+                Icon(Icons.check_circle_outline,
+                    size: 64, color: Colors.green[400]),
                 const SizedBox(height: 16),
                 Text(
                   'Aucune dette inter-shop',
@@ -732,7 +742,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.trending_up, color: Colors.green[700], size: isMobile ? 20 : 24),
+                      Icon(Icons.trending_up,
+                          color: Colors.green[700], size: isMobile ? 20 : 24),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -745,7 +756,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
                           color: Colors.green[100],
                           borderRadius: BorderRadius.circular(12),
@@ -763,22 +775,24 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                   ),
                   const SizedBox(height: 16),
                   ...shopsNousDoivent.map((shop) => _buildShopCard(
-                    shop['shopName'] as String,
-                    shop['creances'] as double,
-                    shop['dettes'] as double,
-                    shop['solde'] as double,
-                    Colors.green,
-                    isMobile,
-                  )),
+                        shop['shopName'] as String,
+                        shop['creances'] as double,
+                        shop['dettes'] as double,
+                        shop['solde'] as double,
+                        Colors.green,
+                        isMobile,
+                      )),
                 ],
               ),
             ),
           ),
-        
-        if (shopsNousDoivent != null && shopsNousDoivent.isNotEmpty &&
-            shopsNousDevons != null && shopsNousDevons.isNotEmpty)
+
+        if (shopsNousDoivent != null &&
+            shopsNousDoivent.isNotEmpty &&
+            shopsNousDevons != null &&
+            shopsNousDevons.isNotEmpty)
           const SizedBox(height: 16),
-        
+
         // Shops que Nous que Devons (Dettes)
         if (shopsNousDevons != null && shopsNousDevons.isNotEmpty)
           Card(
@@ -790,7 +804,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.trending_down, color: Colors.red[700], size: isMobile ? 20 : 24),
+                      Icon(Icons.trending_down,
+                          color: Colors.red[700], size: isMobile ? 20 : 24),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -803,7 +818,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
                           color: Colors.red[100],
                           borderRadius: BorderRadius.circular(12),
@@ -821,13 +837,13 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                   ),
                   const SizedBox(height: 16),
                   ...shopsNousDevons.map((shop) => _buildShopCard(
-                    shop['shopName'] as String,
-                    shop['creances'] as double,
-                    shop['dettes'] as double,
-                    shop['solde'] as double,
-                    Colors.red,
-                    isMobile,
-                  )),
+                        shop['shopName'] as String,
+                        shop['creances'] as double,
+                        shop['dettes'] as double,
+                        shop['solde'] as double,
+                        Colors.red,
+                        isMobile,
+                      )),
                 ],
               ),
             ),
@@ -847,14 +863,14 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
     final soldeAbs = solde.abs();
     final isExpanded = _expandedShopName == shopName;
     final mouvements = _reportData!['mouvements'] as List<Map<String, dynamic>>;
-    
+
     // Filter movements for this specific shop
     final shopMouvements = mouvements.where((m) {
       final source = m['shopSource'] as String;
       final dest = m['shopDestination'] as String;
       return source == shopName || dest == shopName;
     }).toList();
-    
+
     // Categorize movements by type
     double flotRecu = 0.0;
     double flotEnvoye = 0.0;
@@ -864,13 +880,13 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
     int flotEnvoyeCount = 0;
     int transfertInitieCount = 0;
     int transfertServiCount = 0;
-    
+
     for (final m in shopMouvements) {
       final type = m['typeMouvement'] as String;
       final montant = m['montant'] as double;
       final source = m['shopSource'] as String;
       final dest = m['shopDestination'] as String;
-      
+
       switch (type) {
         case 'flot_recu':
           if (source == shopName) {
@@ -898,7 +914,7 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
           break;
       }
     }
-    
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -937,8 +953,10 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(11),
                   topRight: const Radius.circular(11),
-                  bottomLeft: isExpanded ? Radius.zero : const Radius.circular(11),
-                  bottomRight: isExpanded ? Radius.zero : const Radius.circular(11),
+                  bottomLeft:
+                      isExpanded ? Radius.zero : const Radius.circular(11),
+                  bottomRight:
+                      isExpanded ? Radius.zero : const Radius.circular(11),
                 ),
               ),
               child: Row(
@@ -949,7 +967,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                       color: color,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Icon(Icons.store, size: isMobile ? 16 : 18, color: Colors.white),
+                    child: Icon(Icons.store,
+                        size: isMobile ? 16 : 18, color: Colors.white),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -1100,8 +1119,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              solde >= 0 
-                                  ? '$shopName nous doit' 
+                              solde >= 0
+                                  ? '$shopName nous doit'
                                   : 'Nous devons à $shopName',
                               style: TextStyle(
                                 fontSize: isMobile ? 11 : 12,
@@ -1130,16 +1149,9 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
     );
   }
 
-  Widget _buildMovementTypeCard(
-    String title,
-    String subtitle,
-    double amount,
-    int count,
-    Color color,
-    IconData icon,
-    bool isMobile,
-    {bool isCredit = false}
-  ) {
+  Widget _buildMovementTypeCard(String title, String subtitle, double amount,
+      int count, Color color, IconData icon, bool isMobile,
+      {bool isCredit = false}) {
     return Container(
       width: isMobile ? double.infinity : 180,
       padding: EdgeInsets.all(isMobile ? 10 : 12),
@@ -1230,9 +1242,10 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
   }
 
   Widget _buildMouvementsParJour(bool isMobile) {
-    final mouvementsParJour = _reportData!['mouvementsParJour'] as List<Map<String, dynamic>>;
+    final mouvementsParJour =
+        _reportData!['mouvementsParJour'] as List<Map<String, dynamic>>;
     final mouvements = _reportData!['mouvements'] as List<Map<String, dynamic>>;
-    
+
     if (mouvementsParJour.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -1273,8 +1286,12 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                   borderRadius: BorderRadius.only(
                     topLeft: const Radius.circular(16),
                     topRight: const Radius.circular(16),
-                    bottomLeft: _showEvolutionQuotidienne ? Radius.zero : const Radius.circular(16),
-                    bottomRight: _showEvolutionQuotidienne ? Radius.zero : const Radius.circular(16),
+                    bottomLeft: _showEvolutionQuotidienne
+                        ? Radius.zero
+                        : const Radius.circular(16),
+                    bottomRight: _showEvolutionQuotidienne
+                        ? Radius.zero
+                        : const Radius.circular(16),
                   ),
                   boxShadow: [
                     BoxShadow(
@@ -1324,7 +1341,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(20),
@@ -1340,7 +1358,9 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                     ),
                     const SizedBox(width: 8),
                     Icon(
-                      _showEvolutionQuotidienne ? Icons.expand_less : Icons.expand_more,
+                      _showEvolutionQuotidienne
+                          ? Icons.expand_less
+                          : Icons.expand_more,
                       color: Colors.white,
                       size: isMobile ? 24 : 28,
                     ),
@@ -1353,7 +1373,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
               Padding(
                 padding: EdgeInsets.all(isMobile ? 12 : 16),
                 child: Column(
-                  children: _buildDaysWithCumulativeBalances(mouvementsParJour, mouvements, isMobile),
+                  children: _buildDaysWithCumulativeBalances(
+                      mouvementsParJour, mouvements, isMobile),
                 ),
               ),
           ],
@@ -1371,67 +1392,67 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
     // Sort days chronologically (oldest first)
     final sortedDays = List<Map<String, dynamic>>.from(mouvementsParJour)
       ..sort((a, b) => (a['date'] as String).compareTo(b['date'] as String));
-    
+
     // Track cumulative balance per shop across all days
     final Map<String, double> shopCumulativeBalances = {};
-    
+
     final List<Widget> dayWidgets = [];
-    
+
     for (final jour in sortedDays) {
       final date = jour['date'] as String;
-      
+
       // Filter movements for this day
       final dayMouvements = allMouvements.where((m) {
         final mDate = m['date'] as DateTime;
         return mDate.toIso8601String().split('T')[0] == date;
       }).toList();
-      
+
       // Get unique shops involved in this day's movements
       final Set<String> shopsInvolved = {};
       for (final m in dayMouvements) {
         shopsInvolved.add(m['shopSource'] as String);
         shopsInvolved.add(m['shopDestination'] as String);
       }
-      
+
       // Also include shops with existing cumulative balances (from previous days)
       shopsInvolved.addAll(shopCumulativeBalances.keys);
-      
+
       // Remove current shop from list
       final currentShopName = _reportData!['shopName'] as String?;
       if (currentShopName != null) {
         shopsInvolved.remove(currentShopName);
       }
-      
+
       // Calculate data per shop with cumulative balance
       final List<Map<String, dynamic>> shopsData = [];
-      
+
       for (final shopName in shopsInvolved) {
         // Get previous balance for this shop (from previous days)
         final soldeAnterieur = shopCumulativeBalances[shopName] ?? 0.0;
-        
+
         // Get movements for this shop
         final shopMovs = dayMouvements.where((m) {
           final source = m['shopSource'] as String;
           final dest = m['shopDestination'] as String;
           return source == shopName || dest == shopName;
         }).toList();
-        
+
         // Skip if no operations AND no previous balance
         if (shopMovs.isEmpty && soldeAnterieur == 0.0) continue;
-        
+
         double flotEnvoye = 0.0;
         double flotRecu = 0.0;
         double transfertInitie = 0.0;
         double servis = 0.0;
         double frais = 0.0;
-        
+
         for (final m in shopMovs) {
           final type = m['typeMouvement'] as String;
           final montant = m['montant'] as double;
           final source = m['shopSource'] as String;
           final dest = m['shopDestination'] as String;
           final commission = (m['commission'] as num?)?.toDouble() ?? 0.0;
-          
+
           switch (type) {
             case 'flot_envoye':
               if (dest == shopName) flotEnvoye += montant;
@@ -1449,13 +1470,13 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
           // Accumulate commissions/fees
           frais += commission;
         }
-        
+
         // Calculate new balance using the correct formula matching daily closure report:
         // The balance is now calculated correctly in the service, so we just use the cumulative balance
-        final soldeFin = shopCumulativeBalances[shopName] ?? 0.0;        
+        final soldeFin = shopCumulativeBalances[shopName] ?? 0.0;
         // Update cumulative balance for next day
         // The balance is already calculated in the service, so we just store it
-        shopCumulativeBalances[shopName] = soldeFin;        
+        shopCumulativeBalances[shopName] = soldeFin;
         shopsData.add({
           'shop': shopName,
           'soldeAnterieur': soldeAnterieur,
@@ -1468,14 +1489,17 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
           'count': shopMovs.length,
         });
       }
-      
+
       // Sort by absolute balance
-      shopsData.sort((a, b) => (b['soldeFin'] as double).abs().compareTo((a['soldeFin'] as double).abs()));
-      
+      shopsData.sort((a, b) => (b['soldeFin'] as double)
+          .abs()
+          .compareTo((a['soldeFin'] as double).abs()));
+
       // Build the day widget
-      dayWidgets.add(_buildDayCardWithCumulativeShops(jour, shopsData, isMobile));
+      dayWidgets
+          .add(_buildDayCardWithCumulativeShops(jour, shopsData, isMobile));
     }
-    
+
     // Return in reverse order (most recent first)
     return dayWidgets.reversed.toList();
   }
@@ -1493,7 +1517,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
     final nombreOps = jour['nombreOperations'] as int;
 
     final isPositive = soldeCumule >= 0;
-    final cardColor = isPositive ? const Color(0xFF10b981) : const Color(0xFFef4444);
+    final cardColor =
+        isPositive ? const Color(0xFF10b981) : const Color(0xFFef4444);
 
     return Container(
       margin: EdgeInsets.only(bottom: isMobile ? 16 : 20),
@@ -1524,7 +1549,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
             ),
             child: Row(
               children: [
-                Icon(Icons.calendar_today, color: Colors.white, size: isMobile ? 18 : 22),
+                Icon(Icons.calendar_today,
+                    color: Colors.white, size: isMobile ? 18 : 22),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -1539,11 +1565,11 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                         ),
                       ),
                       Text(
-                        nombreOps > 0 
-                          ? '$nombreOps opération${nombreOps > 1 ? 's' : ''} \u2022 ${shopsData.length} shop${shopsData.length > 1 ? 's' : ''}'
-                          : shopsData.isNotEmpty 
-                            ? 'Solde reporté \u2022 ${shopsData.length} shop${shopsData.length > 1 ? 's' : ''}'
-                            : 'Aucune opération',
+                        nombreOps > 0
+                            ? '$nombreOps opération${nombreOps > 1 ? 's' : ''} \u2022 ${shopsData.length} shop${shopsData.length > 1 ? 's' : ''}'
+                            : shopsData.isNotEmpty
+                                ? 'Solde reporté \u2022 ${shopsData.length} shop${shopsData.length > 1 ? 's' : ''}'
+                                : 'Aucune opération',
                         style: TextStyle(
                           fontSize: isMobile ? 11 : 12,
                           color: Colors.white.withOpacity(0.9),
@@ -1553,7 +1579,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
@@ -1586,17 +1613,17 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                 ),
                 const SizedBox(height: 10),
                 ...shopsData.map((data) => _buildShopCumulativeCard(
-                  data['shop'] as String,
-                  data['soldeAnterieur'] as double,
-                  data['flotEnvoye'] as double,
-                  data['flotRecu'] as double,
-                  data['transfertInitie'] as double,
-                  data['servis'] as double,
-                  data['frais'] as double,
-                  data['soldeFin'] as double,
-                  data['count'] as int,
-                  isMobile,
-                )),
+                      data['shop'] as String,
+                      data['soldeAnterieur'] as double,
+                      data['flotEnvoye'] as double,
+                      data['flotRecu'] as double,
+                      data['transfertInitie'] as double,
+                      data['servis'] as double,
+                      data['frais'] as double,
+                      data['soldeFin'] as double,
+                      data['count'] as int,
+                      isMobile,
+                    )),
               ],
             ),
           ),
@@ -1613,11 +1640,13 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildDayTotalItem('Créances', creances, Colors.green, isMobile),
+                _buildDayTotalItem(
+                    'Créances', creances, Colors.green, isMobile),
                 Container(width: 1, height: 30, color: Colors.grey[300]),
                 _buildDayTotalItem('Dettes', dettes, Colors.red, isMobile),
                 Container(width: 1, height: 30, color: Colors.grey[300]),
-                _buildDayTotalItem('Solde Jour', solde, solde >= 0 ? Colors.green : Colors.red, isMobile),
+                _buildDayTotalItem('Solde Jour', solde,
+                    solde >= 0 ? Colors.green : Colors.red, isMobile),
               ],
             ),
           ),
@@ -1640,7 +1669,7 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
   ) {
     final isPositive = soldeFin >= 0;
     final color = isPositive ? Colors.green : Colors.red;
-    
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
@@ -1659,7 +1688,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
         children: [
           // Shop header
           Container(
-            padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 12, vertical: isMobile ? 8 : 10),
+            padding: EdgeInsets.symmetric(
+                horizontal: isMobile ? 10 : 12, vertical: isMobile ? 8 : 10),
             decoration: BoxDecoration(
               color: color.withOpacity(0.08),
               borderRadius: const BorderRadius.only(
@@ -1704,24 +1734,37 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                   Colors.grey[700]!,
                   isMobile,
                   isBold: true,
-                ),                const Divider(height: 8),
+                ),
+                const Divider(height: 8),
                 // + Flot Reçu
                 if (flotRecu > 0)
-                  _buildFormulaRow('+ Flot Reçu', flotRecu, '+', Colors.purple, isMobile),
+                  _buildFormulaRow(
+                      '+ Flot Reçu', flotRecu, '+', Colors.purple, isMobile),
                 // - Flot Envoyé
                 if (flotEnvoye > 0)
-                  _buildFormulaRow('- Flot Envoyé', flotEnvoye, '-', Colors.blue, isMobile),                // + Transfert Initié (we initiate, they owe us)
+                  _buildFormulaRow(
+                      '- Flot Envoyé',
+                      flotEnvoye,
+                      '-',
+                      Colors.blue,
+                      isMobile), // + Transfert Initié (we initiate, they owe us)
                 if (transfertInitie > 0)
-                  _buildFormulaRow('+ Transfert Initié', transfertInitie, '+', Colors.orange, isMobile),
+                  _buildFormulaRow('+ Transfert Initié', transfertInitie, '+',
+                      Colors.orange, isMobile),
                 // - Servis (we serve for them, we owe them)
                 if (servis > 0)
-                  _buildFormulaRow('- Servis', servis, '-', Colors.teal, isMobile),
+                  _buildFormulaRow(
+                      '- Servis', servis, '-', Colors.teal, isMobile),
                 // + Frais
                 if (frais > 0)
-                  _buildFormulaRow('- Frais du Jour', frais, '-', Colors.amber[700]!, isMobile),                const Divider(height: 8),
+                  _buildFormulaRow('- Frais du Jour', frais, '-',
+                      Colors.amber[700]!, isMobile),
+                const Divider(height: 8),
                 // = Solde Fin
                 Container(
-                  padding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 10, vertical: isMobile ? 6 : 8),
+                  padding: EdgeInsets.symmetric(
+                      horizontal: isMobile ? 8 : 10,
+                      vertical: isMobile ? 6 : 8),
                   decoration: BoxDecoration(
                     color: color,
                     borderRadius: BorderRadius.circular(6),
@@ -1764,7 +1807,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                       fontStyle: FontStyle.italic,
                     ),
                   ),
-                ),              ],
+                ),
+              ],
             ),
           ),
         ],
@@ -1772,7 +1816,9 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
     );
   }
 
-  Widget _buildFormulaRow(String label, double value, String sign, Color color, bool isMobile, {bool isBold = false}) {
+  Widget _buildFormulaRow(
+      String label, double value, String sign, Color color, bool isMobile,
+      {bool isBold = false}) {
     return Padding(
       padding: EdgeInsets.symmetric(vertical: isMobile ? 2 : 3),
       child: Row(
@@ -1802,7 +1848,9 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
             style: TextStyle(
               fontSize: isMobile ? 11 : 12,
               fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
-              color: sign == '+' ? Colors.green[700] : (sign == '-' ? Colors.red[700] : Colors.grey[800]),
+              color: sign == '+'
+                  ? Colors.green[700]
+                  : (sign == '-' ? Colors.red[700] : Colors.grey[800]),
             ),
           ),
         ],
@@ -1811,7 +1859,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
   }
 
   /// Build day card with breakdown by shop
-  Widget _buildJourCardWithShopBreakdown(Map<String, dynamic> jour, List<Map<String, dynamic>> allMouvements, bool isMobile) {
+  Widget _buildJourCardWithShopBreakdown(Map<String, dynamic> jour,
+      List<Map<String, dynamic>> allMouvements, bool isMobile) {
     final date = jour['date'] as String;
     final creances = jour['creances'] as double;
     final dettes = jour['dettes'] as double;
@@ -1820,14 +1869,15 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
     final nombreOps = jour['nombreOperations'] as int;
 
     final isPositive = soldeCumule >= 0;
-    final cardColor = isPositive ? const Color(0xFF10b981) : const Color(0xFFef4444);
-    
+    final cardColor =
+        isPositive ? const Color(0xFF10b981) : const Color(0xFFef4444);
+
     // Filter movements for this day
     final dayMouvements = allMouvements.where((m) {
       final mDate = m['date'] as DateTime;
       return mDate.toIso8601String().split('T')[0] == date;
     }).toList();
-    
+
     // Get unique shops involved in this day's movements
     final Set<String> shopsInvolved = {};
     for (final m in dayMouvements) {
@@ -1839,7 +1889,7 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
     if (currentShopName != null) {
       shopsInvolved.remove(currentShopName);
     }
-    
+
     // Calculate data per shop
     final List<Map<String, dynamic>> shopsData = [];
     for (final shopName in shopsInvolved) {
@@ -1849,20 +1899,20 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
         final dest = m['shopDestination'] as String;
         return source == shopName || dest == shopName;
       }).toList();
-      
+
       if (shopMovs.isEmpty) continue;
-      
+
       double flotEnvoye = 0.0;
       double flotRecu = 0.0;
       double transfertInitie = 0.0;
       double servis = 0.0;
-      
+
       for (final m in shopMovs) {
         final type = m['typeMouvement'] as String;
         final montant = m['montant'] as double;
         final source = m['shopSource'] as String;
         final dest = m['shopDestination'] as String;
-        
+
         switch (type) {
           case 'flot_envoye':
             if (dest == shopName) flotEnvoye += montant;
@@ -1878,9 +1928,9 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
             break;
         }
       }
-      
+
       final shopSolde = flotEnvoye - flotRecu - transfertInitie + servis;
-      
+
       shopsData.add({
         'shop': shopName,
         'flotEnvoye': flotEnvoye,
@@ -1891,9 +1941,10 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
         'count': shopMovs.length,
       });
     }
-    
+
     // Sort by absolute solde
-    shopsData.sort((a, b) => (b['solde'] as double).abs().compareTo((a['solde'] as double).abs()));
+    shopsData.sort((a, b) =>
+        (b['solde'] as double).abs().compareTo((a['solde'] as double).abs()));
 
     return Container(
       margin: EdgeInsets.only(bottom: isMobile ? 16 : 20),
@@ -1924,7 +1975,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
             ),
             child: Row(
               children: [
-                Icon(Icons.calendar_today, color: Colors.white, size: isMobile ? 18 : 22),
+                Icon(Icons.calendar_today,
+                    color: Colors.white, size: isMobile ? 18 : 22),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -1939,11 +1991,11 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                         ),
                       ),
                       Text(
-                        nombreOps > 0 
-                          ? '$nombreOps opération${nombreOps > 1 ? 's' : ''} \u2022 ${shopsData.length} shop${shopsData.length > 1 ? 's' : ''}'
-                          : shopsData.isNotEmpty 
-                            ? 'Solde reporté \u2022 ${shopsData.length} shop${shopsData.length > 1 ? 's' : ''}'
-                            : 'Aucune opération',
+                        nombreOps > 0
+                            ? '$nombreOps opération${nombreOps > 1 ? 's' : ''} \u2022 ${shopsData.length} shop${shopsData.length > 1 ? 's' : ''}'
+                            : shopsData.isNotEmpty
+                                ? 'Solde reporté \u2022 ${shopsData.length} shop${shopsData.length > 1 ? 's' : ''}'
+                                : 'Aucune opération',
                         style: TextStyle(
                           fontSize: isMobile ? 11 : 12,
                           color: Colors.white.withOpacity(0.9),
@@ -1953,7 +2005,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
@@ -1986,15 +2039,15 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                 ),
                 const SizedBox(height: 10),
                 ...shopsData.map((data) => _buildShopDayDetailCard(
-                  data['shop'] as String,
-                  data['flotEnvoye'] as double,
-                  data['flotRecu'] as double,
-                  data['transfertInitie'] as double,
-                  data['servis'] as double,
-                  data['solde'] as double,
-                  data['count'] as int,
-                  isMobile,
-                )),
+                      data['shop'] as String,
+                      data['flotEnvoye'] as double,
+                      data['flotRecu'] as double,
+                      data['transfertInitie'] as double,
+                      data['servis'] as double,
+                      data['solde'] as double,
+                      data['count'] as int,
+                      isMobile,
+                    )),
               ],
             ),
           ),
@@ -2011,11 +2064,13 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildDayTotalItem('Créances', creances, Colors.green, isMobile),
+                _buildDayTotalItem(
+                    'Créances', creances, Colors.green, isMobile),
                 Container(width: 1, height: 30, color: Colors.grey[300]),
                 _buildDayTotalItem('Dettes', dettes, Colors.red, isMobile),
                 Container(width: 1, height: 30, color: Colors.grey[300]),
-                _buildDayTotalItem('Solde Jour', solde, solde >= 0 ? Colors.green : Colors.red, isMobile),
+                _buildDayTotalItem('Solde Jour', solde,
+                    solde >= 0 ? Colors.green : Colors.red, isMobile),
               ],
             ),
           ),
@@ -2036,7 +2091,7 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
   ) {
     final isPositive = solde >= 0;
     final color = isPositive ? Colors.green : Colors.red;
-    
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
@@ -2055,7 +2110,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
         children: [
           // Shop header
           Container(
-            padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 12, vertical: isMobile ? 8 : 10),
+            padding: EdgeInsets.symmetric(
+                horizontal: isMobile ? 10 : 12, vertical: isMobile ? 8 : 10),
             decoration: BoxDecoration(
               color: color.withOpacity(0.08),
               borderRadius: const BorderRadius.only(
@@ -2078,7 +2134,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: color,
                     borderRadius: BorderRadius.circular(6),
@@ -2101,13 +2158,17 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
             child: Column(
               children: [
                 if (flotEnvoye > 0)
-                  _buildDetailRow('+ Flot Envoyé', flotEnvoye, Colors.blue, '+', isMobile),
+                  _buildDetailRow(
+                      '+ Flot Envoyé', flotEnvoye, Colors.blue, '+', isMobile),
                 if (flotRecu > 0)
-                  _buildDetailRow('- Flot Reçu', flotRecu, Colors.purple, '-', isMobile),
+                  _buildDetailRow(
+                      '- Flot Reçu', flotRecu, Colors.purple, '-', isMobile),
                 if (transfertInitie > 0)
-                  _buildDetailRow('- Transfert Initié', transfertInitie, Colors.orange, '-', isMobile),
+                  _buildDetailRow('- Transfert Initié', transfertInitie,
+                      Colors.orange, '-', isMobile),
                 if (servis > 0)
-                  _buildDetailRow('+ Servis', servis, Colors.teal, '+', isMobile),
+                  _buildDetailRow(
+                      '+ Servis', servis, Colors.teal, '+', isMobile),
               ],
             ),
           ),
@@ -2116,7 +2177,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
     );
   }
 
-  Widget _buildDetailRow(String label, double value, Color iconColor, String sign, bool isMobile) {
+  Widget _buildDetailRow(
+      String label, double value, Color iconColor, String sign, bool isMobile) {
     return Padding(
       padding: EdgeInsets.symmetric(vertical: isMobile ? 2 : 3),
       child: Row(
@@ -2152,10 +2214,11 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
     );
   }
 
-  Widget _buildShopBreakdownRow(String shop, double creances, double dettes, int count, bool isMobile) {
+  Widget _buildShopBreakdownRow(
+      String shop, double creances, double dettes, int count, bool isMobile) {
     final solde = creances - dettes;
     final isPositive = solde >= 0;
-    
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: EdgeInsets.all(isMobile ? 10 : 12),
@@ -2163,7 +2226,9 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: isPositive ? Colors.green.withOpacity(0.3) : Colors.red.withOpacity(0.3),
+          color: isPositive
+              ? Colors.green.withOpacity(0.3)
+              : Colors.red.withOpacity(0.3),
           width: 1.5,
         ),
         boxShadow: [
@@ -2186,7 +2251,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                   color: isPositive ? Colors.green : Colors.red,
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: Icon(Icons.store, size: isMobile ? 14 : 16, color: Colors.white),
+                child: Icon(Icons.store,
+                    size: isMobile ? 14 : 16, color: Colors.white),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -2201,7 +2267,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: isPositive ? Colors.green : Colors.red,
                   borderRadius: BorderRadius.circular(8),
@@ -2273,9 +2340,9 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
 
     // Calculate each type
     double flotEnvoye = 0.0; // + Créance
-    double flotRecu = 0.0;   // - Dette
+    double flotRecu = 0.0; // - Dette
     double transfertInitie = 0.0; // - Dette
-    double servis = 0.0;     // + Créance
+    double servis = 0.0; // + Créance
     int flotEnvoyeCount = 0;
     int flotRecuCount = 0;
     int transfertInitieCount = 0;
@@ -2317,7 +2384,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
 
     // Calculate final balance
     // Solde = Antérieur + FlotEnvoyé - FlotReçu - TransfertInitié + Servis
-    final soldeFin = soldeAnterieur + flotEnvoye - flotRecu - transfertInitie + servis;
+    final soldeFin =
+        soldeAnterieur + flotEnvoye - flotRecu - transfertInitie + servis;
     final isPositive = soldeFin >= 0;
 
     return Container(
@@ -2326,7 +2394,9 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isPositive ? Colors.green.withOpacity(0.3) : Colors.red.withOpacity(0.3),
+          color: isPositive
+              ? Colors.green.withOpacity(0.3)
+              : Colors.red.withOpacity(0.3),
           width: 1.5,
         ),
         boxShadow: [
@@ -2343,7 +2413,9 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
           Container(
             padding: EdgeInsets.all(isMobile ? 10 : 12),
             decoration: BoxDecoration(
-              color: isPositive ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
+              color: isPositive
+                  ? Colors.green.withOpacity(0.1)
+                  : Colors.red.withOpacity(0.1),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(11),
                 topRight: Radius.circular(11),
@@ -2357,7 +2429,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                     color: isPositive ? Colors.green : Colors.red,
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Icon(Icons.store, size: isMobile ? 14 : 16, color: Colors.white),
+                  child: Icon(Icons.store,
+                      size: isMobile ? 14 : 16, color: Colors.white),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -2451,13 +2524,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
   }
 
   Widget _buildEvolutionLine(
-    String label,
-    double value,
-    String? sign,
-    Color color,
-    bool isMobile,
-    {bool isBold = false, bool isTotal = false}
-  ) {
+      String label, double value, String? sign, Color color, bool isMobile,
+      {bool isBold = false, bool isTotal = false}) {
     return Padding(
       padding: EdgeInsets.symmetric(vertical: isMobile ? 3 : 4),
       child: Row(
@@ -2477,16 +2545,22 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
               horizontal: isTotal ? 10 : 6,
               vertical: isTotal ? 4 : 2,
             ),
-            decoration: isTotal ? BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(6),
-            ) : null,
+            decoration: isTotal
+                ? BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(6),
+                  )
+                : null,
             child: Text(
               '${sign ?? ''}${value.toStringAsFixed(0)} USD',
               style: TextStyle(
                 fontSize: isMobile ? (isTotal ? 13 : 11) : (isTotal ? 14 : 12),
                 fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
-                color: isTotal ? Colors.white : (sign == '+' ? Colors.green[700] : (sign == '-' ? Colors.red[700] : color)),
+                color: isTotal
+                    ? Colors.white
+                    : (sign == '+'
+                        ? Colors.green[700]
+                        : (sign == '-' ? Colors.red[700] : color)),
               ),
             ),
           ),
@@ -2495,7 +2569,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
     );
   }
 
-  Widget _buildDayTotalItem(String label, double value, Color color, bool isMobile) {
+  Widget _buildDayTotalItem(
+      String label, double value, Color color, bool isMobile) {
     return Column(
       children: [
         Text(
@@ -2528,7 +2603,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
     final nombreOps = jour['nombreOperations'] as int;
 
     final isPositive = soldeCumule >= 0;
-    final cardColor = isPositive ? const Color(0xFF10b981) : const Color(0xFFef4444);
+    final cardColor =
+        isPositive ? const Color(0xFF10b981) : const Color(0xFFef4444);
 
     return Container(
       margin: EdgeInsets.only(bottom: isMobile ? 16 : 20),
@@ -2637,7 +2713,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                       ],
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
                         color: cardColor.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(20),
@@ -2650,7 +2727,9 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            isPositive ? Icons.trending_up : Icons.trending_down,
+                            isPositive
+                                ? Icons.trending_up
+                                : Icons.trending_down,
                             size: isMobile ? 14 : 16,
                             color: cardColor,
                           ),
@@ -2669,7 +2748,7 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                   ],
                 ),
               ),
-              
+
               Padding(
                 padding: EdgeInsets.all(isMobile ? 16 : 20),
                 child: Column(
@@ -2726,7 +2805,9 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                                   style: TextStyle(
                                     fontSize: isMobile ? 15 : 17,
                                     fontWeight: FontWeight.bold,
-                                    color: detteAnterieure >= 0 ? Colors.green[700] : Colors.red[700],
+                                    color: detteAnterieure >= 0
+                                        ? Colors.green[700]
+                                        : Colors.red[700],
                                   ),
                                 ),
                               ],
@@ -2736,7 +2817,7 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    
+
                     // Mouvements du jour - Cards modernes
                     Row(
                       children: [
@@ -2762,7 +2843,7 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    
+
                     // Solde du jour
                     Container(
                       padding: EdgeInsets.all(isMobile ? 12 : 14),
@@ -2800,14 +2881,16 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                             style: TextStyle(
                               fontSize: isMobile ? 14 : 16,
                               fontWeight: FontWeight.bold,
-                              color: solde >= 0 ? Colors.green[700] : Colors.red[700],
+                              color: solde >= 0
+                                  ? Colors.green[700]
+                                  : Colors.red[700],
                             ),
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 12),
-                    
+
                     // Solde cumulé - Hero card
                     Container(
                       padding: EdgeInsets.all(isMobile ? 16 : 18),
@@ -2839,7 +2922,9 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Icon(
-                                  isPositive ? Icons.trending_up : Icons.trending_down,
+                                  isPositive
+                                      ? Icons.trending_up
+                                      : Icons.trending_down,
                                   size: isMobile ? 20 : 24,
                                   color: Colors.white,
                                 ),
@@ -2967,7 +3052,7 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
 
   Widget _buildDetailsMouvements(bool isMobile) {
     final mouvements = _reportData!['mouvements'] as List<Map<String, dynamic>>;
-    
+
     if (mouvements.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -2988,8 +3073,12 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
             borderRadius: BorderRadius.only(
               topLeft: const Radius.circular(16),
               topRight: const Radius.circular(16),
-              bottomLeft: _showDetailsMouvements ? Radius.zero : const Radius.circular(16),
-              bottomRight: _showDetailsMouvements ? Radius.zero : const Radius.circular(16),
+              bottomLeft: _showDetailsMouvements
+                  ? Radius.zero
+                  : const Radius.circular(16),
+              bottomRight: _showDetailsMouvements
+                  ? Radius.zero
+                  : const Radius.circular(16),
             ),
             child: Container(
               padding: EdgeInsets.all(isMobile ? 14 : 18),
@@ -3002,8 +3091,12 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(16),
                   topRight: const Radius.circular(16),
-                  bottomLeft: _showDetailsMouvements ? Radius.zero : const Radius.circular(16),
-                  bottomRight: _showDetailsMouvements ? Radius.zero : const Radius.circular(16),
+                  bottomLeft: _showDetailsMouvements
+                      ? Radius.zero
+                      : const Radius.circular(16),
+                  bottomRight: _showDetailsMouvements
+                      ? Radius.zero
+                      : const Radius.circular(16),
                 ),
               ),
               child: Row(
@@ -3044,7 +3137,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(12),
@@ -3060,7 +3154,9 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                   ),
                   const SizedBox(width: 8),
                   Icon(
-                    _showDetailsMouvements ? Icons.expand_less : Icons.expand_more,
+                    _showDetailsMouvements
+                        ? Icons.expand_less
+                        : Icons.expand_more,
                     color: Colors.white,
                     size: isMobile ? 24 : 28,
                   ),
@@ -3082,16 +3178,21 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
 
   String _getGroupByLabel() {
     switch (_groupByOption) {
-      case 'typeOps': return 'Type d\'opération';
-      case 'shopSource': return 'Shop source';
-      case 'shopDestination': return 'Shop destination';
-      default: return 'Type';
+      case 'typeOps':
+        return 'Type d\'opération';
+      case 'shopSource':
+        return 'Shop source';
+      case 'shopDestination':
+        return 'Shop destination';
+      default:
+        return 'Type';
     }
   }
 
   Widget _buildGroupBySelector(bool isMobile) {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 16, vertical: isMobile ? 10 : 12),
+      padding: EdgeInsets.symmetric(
+          horizontal: isMobile ? 12 : 16, vertical: isMobile ? 10 : 12),
       decoration: BoxDecoration(
         color: Colors.grey[100],
         border: Border(bottom: BorderSide(color: Colors.grey[300]!)),
@@ -3112,11 +3213,14 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  _buildGroupByChip('typeOps', 'Type Opération', Icons.category, isMobile),
+                  _buildGroupByChip(
+                      'typeOps', 'Type Opération', Icons.category, isMobile),
                   const SizedBox(width: 8),
-                  _buildGroupByChip('shopSource', 'Shop Source', Icons.store, isMobile),
+                  _buildGroupByChip(
+                      'shopSource', 'Shop Source', Icons.store, isMobile),
                   const SizedBox(width: 8),
-                  _buildGroupByChip('shopDestination', 'Shop Destination', Icons.store_mall_directory, isMobile),
+                  _buildGroupByChip('shopDestination', 'Shop Destination',
+                      Icons.store_mall_directory, isMobile),
                 ],
               ),
             ),
@@ -3126,7 +3230,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
     );
   }
 
-  Widget _buildGroupByChip(String value, String label, IconData icon, bool isMobile) {
+  Widget _buildGroupByChip(
+      String value, String label, IconData icon, bool isMobile) {
     final isSelected = _groupByOption == value;
     return InkWell(
       onTap: () {
@@ -3136,7 +3241,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
       },
       borderRadius: BorderRadius.circular(20),
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 12, vertical: isMobile ? 6 : 8),
+        padding: EdgeInsets.symmetric(
+            horizontal: isMobile ? 10 : 12, vertical: isMobile ? 6 : 8),
         decoration: BoxDecoration(
           color: isSelected ? const Color(0xFF2563eb) : Colors.white,
           borderRadius: BorderRadius.circular(20),
@@ -3167,10 +3273,11 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
     );
   }
 
-  Widget _buildGroupedMovementsList(List<Map<String, dynamic>> mouvements, bool isMobile) {
+  Widget _buildGroupedMovementsList(
+      List<Map<String, dynamic>> mouvements, bool isMobile) {
     // Group movements based on selected option
     final Map<String, List<Map<String, dynamic>>> grouped = {};
-    
+
     for (final m in mouvements) {
       String key;
       switch (_groupByOption) {
@@ -3191,8 +3298,10 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
     // Sort groups by total amount
     final sortedKeys = grouped.keys.toList()
       ..sort((a, b) {
-        final totalA = grouped[a]!.fold<double>(0, (sum, m) => sum + (m['montant'] as double));
-        final totalB = grouped[b]!.fold<double>(0, (sum, m) => sum + (m['montant'] as double));
+        final totalA = grouped[a]!
+            .fold<double>(0, (sum, m) => sum + (m['montant'] as double));
+        final totalB = grouped[b]!
+            .fold<double>(0, (sum, m) => sum + (m['montant'] as double));
         return totalB.compareTo(totalA);
       });
 
@@ -3201,17 +3310,23 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
       child: Column(
         children: sortedKeys.map((key) {
           final items = grouped[key]!;
-          final total = items.fold<double>(0, (sum, m) => sum + (m['montant'] as double));
-          final creances = items.where((m) => m['isCreance'] == true).fold<double>(0, (sum, m) => sum + (m['montant'] as double));
-          final dettes = items.where((m) => m['isCreance'] != true).fold<double>(0, (sum, m) => sum + (m['montant'] as double));
-          
+          final total =
+              items.fold<double>(0, (sum, m) => sum + (m['montant'] as double));
+          final creances = items
+              .where((m) => m['isCreance'] == true)
+              .fold<double>(0, (sum, m) => sum + (m['montant'] as double));
+          final dettes = items
+              .where((m) => m['isCreance'] != true)
+              .fold<double>(0, (sum, m) => sum + (m['montant'] as double));
+
           return _buildGroupCard(key, items, total, creances, dettes, isMobile);
         }).toList(),
       ),
     );
   }
 
-  Widget _buildGroupCard(String groupName, List<Map<String, dynamic>> items, double total, double creances, double dettes, bool isMobile) {
+  Widget _buildGroupCard(String groupName, List<Map<String, dynamic>> items,
+      double total, double creances, double dettes, bool isMobile) {
     String displayName = groupName;
     Color groupColor = Colors.blue;
     IconData groupIcon = Icons.category;
@@ -3279,7 +3394,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                     color: groupColor,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(groupIcon, color: Colors.white, size: isMobile ? 16 : 18),
+                  child: Icon(groupIcon,
+                      color: Colors.white, size: isMobile ? 16 : 18),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -3331,7 +3447,9 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
             ),
           ),
           // Items list (show first 5)
-          ...items.take(isMobile ? 3 : 5).map((m) => _buildMouvementItem(m, isMobile)),
+          ...items
+              .take(isMobile ? 3 : 5)
+              .map((m) => _buildMouvementItem(m, isMobile)),
           if (items.length > (isMobile ? 3 : 5))
             Padding(
               padding: const EdgeInsets.all(8),
@@ -3352,7 +3470,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
   Widget _buildMouvementItem(Map<String, dynamic> m, bool isMobile) {
     final isCreance = m['isCreance'] == true;
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 14, vertical: isMobile ? 8 : 10),
+      padding: EdgeInsets.symmetric(
+          horizontal: isMobile ? 12 : 14, vertical: isMobile ? 8 : 10),
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
       ),
@@ -3389,7 +3508,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
     );
   }
 
-  List<Widget> _buildMobileMovementsList(List<Map<String, dynamic>> mouvements) {
+  List<Widget> _buildMobileMovementsList(
+      List<Map<String, dynamic>> mouvements) {
     return mouvements.take(20).map((mouvement) {
       return Container(
         margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -3418,23 +3538,40 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
             const Divider(height: 16),
             _buildInfoRow('De', mouvement['shopSource'] as String, Icons.store),
             const SizedBox(height: 4),
-            _buildInfoRow('Vers', mouvement['shopDestination'] as String, Icons.store_mall_directory),
+            _buildInfoRow('Vers', mouvement['shopDestination'] as String,
+                Icons.store_mall_directory),
             const SizedBox(height: 4),
             _buildInfoRow(
-              'Montant', 
+              'Montant',
               '${(mouvement['montant'] as double).toStringAsFixed(2)} USD',
               Icons.attach_money,
               isBold: true,
             ),
-            if (mouvement['description'] != null && (mouvement['description'] as String).isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                mouvement['description'] as String,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.grey[600],
-                  fontStyle: FontStyle.italic,
-                ),
+            if (mouvement['description'] != null &&
+                (mouvement['description'] as String).isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Status badge if available
+                  if (mouvement['statut'] != null) ...[
+                    _buildStatusBadge(
+                      mouvement['statut'] as String,
+                      mouvement['isServi'] as bool? ?? true,
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Expanded(
+                    child: Text(
+                      mouvement['description'] as String,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey[600],
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ],
@@ -3443,7 +3580,8 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
     }).toList();
   }
 
-  Widget _buildInfoRow(String label, String value, IconData icon, {bool isBold = false}) {
+  Widget _buildInfoRow(String label, String value, IconData icon,
+      {bool isBold = false}) {
     return Row(
       children: [
         Icon(icon, size: 14, color: Colors.grey[600]),
@@ -3476,29 +3614,88 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
         DataColumn(label: Text('Montant')),
         DataColumn(label: Text('Description')),
       ],
-      rows: mouvements.take(50).map((mouvement) => DataRow(
-        cells: [
-          DataCell(Text(_formatDateTime(mouvement['date'] as DateTime))),
-          DataCell(Text(mouvement['shopSource'] as String)),
-          DataCell(Text(mouvement['shopDestination'] as String)),
-          DataCell(_buildTypeChip(mouvement['typeMouvement'] as String, false)),
-          DataCell(Text(
-            '${(mouvement['montant'] as double).toStringAsFixed(2)} USD',
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          )),
-          DataCell(Text(
-            mouvement['description'] as String? ?? '',
-            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-          )),
+      rows: mouvements
+          .take(50)
+          .map((mouvement) => DataRow(
+                cells: [
+                  DataCell(
+                      Text(_formatDateTime(mouvement['date'] as DateTime))),
+                  DataCell(Text(mouvement['shopSource'] as String)),
+                  DataCell(Text(mouvement['shopDestination'] as String)),
+                  DataCell(_buildTypeChip(
+                      mouvement['typeMouvement'] as String, false)),
+                  DataCell(Text(
+                    '${(mouvement['montant'] as double).toStringAsFixed(2)} USD',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  )),
+                  DataCell(
+                    Row(
+                      children: [
+                        // Status badge for desktop
+                        if (mouvement['statut'] != null) ...[
+                          _buildStatusBadge(
+                            mouvement['statut'] as String,
+                            mouvement['isServi'] as bool? ?? true,
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        Expanded(
+                          child: Text(
+                            mouvement['description'] as String? ?? '',
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.grey[600]),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ))
+          .toList(),
+    );
+  }
+
+  /// Build a status badge to show transfer status (Servi/En Attente)
+  Widget _buildStatusBadge(String statut, bool isServi) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: isServi
+            ? Colors.green.withOpacity(0.15)
+            : Colors.orange.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(
+          color: isServi ? Colors.green : Colors.orange,
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isServi ? Icons.check_circle : Icons.schedule,
+            size: 10,
+            color: isServi ? Colors.green[800] : Colors.orange[800],
+          ),
+          const SizedBox(width: 4),
+          Text(
+            statut,
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.bold,
+              color: isServi ? Colors.green[800] : Colors.orange[800],
+            ),
+          ),
         ],
-      )).toList(),
+      ),
     );
   }
 
   Widget _buildTypeChip(String type, bool isMobile) {
     Color color;
     String label;
-    
+
     switch (type) {
       case 'transfert_servi':
         color = Colors.green;
@@ -3507,6 +3704,31 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
       case 'transfert_initie':
         color = Colors.orange;
         label = 'Transfert Initié';
+        break;
+      // NOUVEAUX TYPES - TRANSFERTS EN ATTENTE
+      case 'transfert_en_attente_a_servir':
+        color = Colors.amber;
+        label = 'En Attente à Servir';
+        break;
+      case 'transfert_initie_en_attente':
+        color = Colors.deepOrange;
+        label = 'Initié (En Attente)';
+        break;
+      case 'transfert_consolide_en_attente':
+        color = Colors.brown;
+        label = 'Consolidé (En Attente)';
+        break;
+      case 'transfert_consolide':
+        color = Colors.blueGrey;
+        label = 'Transfert Consolidé';
+        break;
+      case 'creance_interne':
+        color = Colors.lightGreen;
+        label = 'Créance Interne';
+        break;
+      case 'dette_externe':
+        color = Colors.redAccent;
+        label = 'Dette Externe';
         break;
       case 'flot_envoye':
         color = Colors.blue;
@@ -3557,7 +3779,7 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
 
     return Container(
       padding: EdgeInsets.symmetric(
-        horizontal: isMobile ? 6 : 8, 
+        horizontal: isMobile ? 6 : 8,
         vertical: isMobile ? 3 : 4,
       ),
       decoration: BoxDecoration(
@@ -3626,8 +3848,9 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
     try {
       final pdf = await _generatePdf();
       final pdfBytes = await pdf.save();
-      final fileName = 'dettes_intershop_${DateFormat('yyyy-MM-dd').format(DateTime.now())}.pdf';
-      
+      final fileName =
+          'dettes_intershop_${DateFormat('yyyy-MM-dd').format(DateTime.now())}.pdf';
+
       await Printing.sharePdf(bytes: pdfBytes, filename: fileName);
 
       if (mounted) {
@@ -3667,16 +3890,19 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
     final pdf = pw.Document();
     final summary = _reportData!['summary'] as Map<String, dynamic>;
     final shopName = _reportData!['shopName'] as String?;
-    final shopsNousDoivent = _reportData!['shopsNousDoivent'] as List<Map<String, dynamic>>? ?? [];
-    final shopsNousDevons = _reportData!['shopsNousDevons'] as List<Map<String, dynamic>>? ?? [];
+    final shopsNousDoivent =
+        _reportData!['shopsNousDoivent'] as List<Map<String, dynamic>>? ?? [];
+    final shopsNousDevons =
+        _reportData!['shopsNousDevons'] as List<Map<String, dynamic>>? ?? [];
     final mouvements = _reportData!['mouvements'] as List<Map<String, dynamic>>;
-    final mouvementsParJour = _reportData!['mouvementsParJour'] as List<Map<String, dynamic>>;
-    
+    final mouvementsParJour =
+        _reportData!['mouvementsParJour'] as List<Map<String, dynamic>>;
+
     // Load header from DocumentHeaderService
     final headerService = DocumentHeaderService();
     await headerService.initialize();
     final header = headerService.getHeaderOrDefault();
-    
+
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
@@ -3731,11 +3957,11 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                         if (header.email != null)
                           pw.Text(
                             'Email: ${header.email!}',
-                          style: const pw.TextStyle(
-                            color: PdfColors.white,
-                            fontSize: 10,
+                            style: const pw.TextStyle(
+                              color: PdfColors.white,
+                              fontSize: 10,
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ],
@@ -3777,9 +4003,9 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
               ],
             ),
           ),
-          
+
           pw.SizedBox(height: 20),
-          
+
           // Summary
           pw.Text(
             'RÉSUMÉ',
@@ -3880,7 +4106,7 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
               ),
             ],
           ),
-          
+
           // Shops breakdown
           if (shopsNousDoivent.isNotEmpty || shopsNousDevons.isNotEmpty) ...[
             pw.SizedBox(height: 20),
@@ -3893,7 +4119,6 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
               ),
             ),
             pw.SizedBox(height: 10),
-            
             if (shopsNousDoivent.isNotEmpty) ...[
               pw.Text(
                 'Shops qui nous doivent:',
@@ -3905,32 +4130,31 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
               ),
               pw.SizedBox(height: 5),
               ...shopsNousDoivent.map((shop) => pw.Container(
-                margin: const pw.EdgeInsets.only(bottom: 4),
-                padding: const pw.EdgeInsets.all(8),
-                decoration: pw.BoxDecoration(
-                  color: PdfColors.green50,
-                  borderRadius: pw.BorderRadius.circular(4),
-                ),
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text(
-                      shop['shopName'] as String,
-                      style: const pw.TextStyle(fontSize: 10),
+                    margin: const pw.EdgeInsets.only(bottom: 4),
+                    padding: const pw.EdgeInsets.all(8),
+                    decoration: pw.BoxDecoration(
+                      color: PdfColors.green50,
+                      borderRadius: pw.BorderRadius.circular(4),
                     ),
-                    pw.Text(
-                      '${(shop['solde'] as double).toStringAsFixed(2)} USD',
-                      style: pw.TextStyle(
-                        fontSize: 10,
-                        fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.green700,
-                      ),
+                    child: pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text(
+                          shop['shopName'] as String,
+                          style: const pw.TextStyle(fontSize: 10),
+                        ),
+                        pw.Text(
+                          '${(shop['solde'] as double).toStringAsFixed(2)} USD',
+                          style: pw.TextStyle(
+                            fontSize: 10,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.green700,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              )),
+                  )),
             ],
-            
             if (shopsNousDevons.isNotEmpty) ...[
               pw.SizedBox(height: 10),
               pw.Text(
@@ -3943,33 +4167,33 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
               ),
               pw.SizedBox(height: 5),
               ...shopsNousDevons.map((shop) => pw.Container(
-                margin: const pw.EdgeInsets.only(bottom: 4),
-                padding: const pw.EdgeInsets.all(8),
-                decoration: pw.BoxDecoration(
-                  color: PdfColors.red50,
-                  borderRadius: pw.BorderRadius.circular(4),
-                ),
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text(
-                      shop['shopName'] as String,
-                      style: const pw.TextStyle(fontSize: 10),
+                    margin: const pw.EdgeInsets.only(bottom: 4),
+                    padding: const pw.EdgeInsets.all(8),
+                    decoration: pw.BoxDecoration(
+                      color: PdfColors.red50,
+                      borderRadius: pw.BorderRadius.circular(4),
                     ),
-                    pw.Text(
-                      '${(shop['solde'] as double).abs().toStringAsFixed(2)} USD',
-                      style: pw.TextStyle(
-                        fontSize: 10,
-                        fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.red700,
-                      ),
+                    child: pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text(
+                          shop['shopName'] as String,
+                          style: const pw.TextStyle(fontSize: 10),
+                        ),
+                        pw.Text(
+                          '${(shop['solde'] as double).abs().toStringAsFixed(2)} USD',
+                          style: pw.TextStyle(
+                            fontSize: 10,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.red700,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              )),
+                  )),
             ],
           ],
-          
+
           // Daily movements
           if (mouvementsParJour.isNotEmpty) ...[
             pw.SizedBox(height: 20),
@@ -3990,54 +4214,72 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                   children: [
                     pw.Padding(
                       padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text('Date', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                      child: pw.Text('Date',
+                          style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold, fontSize: 8)),
                     ),
                     pw.Padding(
                       padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text('Créances', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                      child: pw.Text('Créances',
+                          style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold, fontSize: 8)),
                     ),
                     pw.Padding(
                       padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text('Dettes', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                      child: pw.Text('Dettes',
+                          style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold, fontSize: 8)),
                     ),
                     pw.Padding(
                       padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text('Solde', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                      child: pw.Text('Solde',
+                          style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold, fontSize: 8)),
                     ),
                     pw.Padding(
                       padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text('Nb Ops', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                      child: pw.Text('Nb Ops',
+                          style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold, fontSize: 8)),
                     ),
                   ],
                 ),
                 ...mouvementsParJour.take(30).map((jour) => pw.TableRow(
-                  children: [
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text(jour['date'] as String, style: const pw.TextStyle(fontSize: 7)),
-                    ),
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text('${(jour['creances'] as double).toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 7)),
-                    ),
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text('${(jour['dettes'] as double).toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 7)),
-                    ),
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text('${(jour['solde'] as double).toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 7)),
-                    ),
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text('${jour['nombreOperations']}', style: const pw.TextStyle(fontSize: 7)),
-                    ),
-                  ],
-                )),
+                      children: [
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(4),
+                          child: pw.Text(jour['date'] as String,
+                              style: const pw.TextStyle(fontSize: 7)),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(4),
+                          child: pw.Text(
+                              '${(jour['creances'] as double).toStringAsFixed(2)}',
+                              style: const pw.TextStyle(fontSize: 7)),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(4),
+                          child: pw.Text(
+                              '${(jour['dettes'] as double).toStringAsFixed(2)}',
+                              style: const pw.TextStyle(fontSize: 7)),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(4),
+                          child: pw.Text(
+                              '${(jour['solde'] as double).toStringAsFixed(2)}',
+                              style: const pw.TextStyle(fontSize: 7)),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(4),
+                          child: pw.Text('${jour['nombreOperations']}',
+                              style: const pw.TextStyle(fontSize: 7)),
+                        ),
+                      ],
+                    )),
               ],
             ),
           ],
-          
+
           // Movements details (limited to first 20)
           if (mouvements.isNotEmpty) ...[
             pw.SizedBox(height: 20),
@@ -4065,65 +4307,75 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                   children: [
                     pw.Padding(
                       padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text('Date', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7)),
+                      child: pw.Text('Date',
+                          style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold, fontSize: 7)),
                     ),
                     pw.Padding(
                       padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text('De', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7)),
+                      child: pw.Text('De',
+                          style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold, fontSize: 7)),
                     ),
                     pw.Padding(
                       padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text('Vers', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7)),
+                      child: pw.Text('Vers',
+                          style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold, fontSize: 7)),
                     ),
                     pw.Padding(
                       padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text('Type', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7)),
+                      child: pw.Text('Type',
+                          style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold, fontSize: 7)),
                     ),
                     pw.Padding(
                       padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text('Montant', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7)),
+                      child: pw.Text('Montant',
+                          style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold, fontSize: 7)),
                     ),
                   ],
                 ),
                 ...mouvements.take(20).map((mouvement) => pw.TableRow(
-                  children: [
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text(
-                        _formatDateTime(mouvement['date'] as DateTime),
-                        style: const pw.TextStyle(fontSize: 6),
-                      ),
-                    ),
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text(
-                        mouvement['shopSource'] as String,
-                        style: const pw.TextStyle(fontSize: 6),
-                      ),
-                    ),
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text(
-                        mouvement['shopDestination'] as String,
-                        style: const pw.TextStyle(fontSize: 6),
-                      ),
-                    ),
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text(
-                        _getTypeLabel(mouvement['typeMouvement'] as String),
-                        style: const pw.TextStyle(fontSize: 6),
-                      ),
-                    ),
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text(
-                        '${(mouvement['montant'] as double).toStringAsFixed(2)}',
-                        style: const pw.TextStyle(fontSize: 6),
-                      ),
-                    ),
-                  ],
-                )),
+                      children: [
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(4),
+                          child: pw.Text(
+                            _formatDateTime(mouvement['date'] as DateTime),
+                            style: const pw.TextStyle(fontSize: 6),
+                          ),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(4),
+                          child: pw.Text(
+                            mouvement['shopSource'] as String,
+                            style: const pw.TextStyle(fontSize: 6),
+                          ),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(4),
+                          child: pw.Text(
+                            mouvement['shopDestination'] as String,
+                            style: const pw.TextStyle(fontSize: 6),
+                          ),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(4),
+                          child: pw.Text(
+                            _getTypeLabel(mouvement['typeMouvement'] as String),
+                            style: const pw.TextStyle(fontSize: 6),
+                          ),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(4),
+                          child: pw.Text(
+                            '${(mouvement['montant'] as double).toStringAsFixed(2)}',
+                            style: const pw.TextStyle(fontSize: 6),
+                          ),
+                        ),
+                      ],
+                    )),
               ],
             ),
             if (mouvements.length > 20)
@@ -4139,7 +4391,7 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
                 ),
               ),
           ],
-          
+
           // Footer
           pw.SizedBox(height: 20),
           pw.Divider(),
@@ -4166,10 +4418,10 @@ class _DettesIntershopReportState extends State<DettesIntershopReport> {
         ],
       ),
     );
-    
+
     return pdf;
   }
-  
+
   String _getTypeLabel(String type) {
     switch (type) {
       case 'transfert_servi':

@@ -43,12 +43,12 @@ echo.
 
 echo %BLUE%6. Test API UPLOAD - Simulation upload depuis Flutter%RESET%
 echo.
-curl -X POST https://mahanaim.investee-group.com/server/api/sync/agents/upload.php -H "Content-Type: application/json" -d "{\"entities\":[{\"id\":999999999,\"username\":\"api_test\",\"password\":\"test123\",\"nom\":\"API Test Agent\",\"shop_id\":1,\"role\":\"AGENT\",\"is_active\":1,\"last_modified_at\":\"2025-12-11 10:00:00\",\"last_modified_by\":\"test\"}],\"user_id\":\"admin\"}"
+curl -X POST https://safdal.investee-group.com/server/api/sync/agents/upload.php -H "Content-Type: application/json" -d "{\"entities\":[{\"id\":999999999,\"username\":\"api_test\",\"password\":\"test123\",\"nom\":\"API Test Agent\",\"shop_id\":1,\"role\":\"AGENT\",\"is_active\":1,\"last_modified_at\":\"2025-12-11 10:00:00\",\"last_modified_by\":\"test\"}],\"user_id\":\"admin\"}"
 echo.
 
 echo %BLUE%7. Test API DOWNLOAD - Simulation download vers Flutter%RESET%
 echo.
-curl -X GET "https://mahanaim.investee-group.com/server/api/sync/agents/changes.php?user_role=admin&limit=5"
+curl -X GET "https://safdal.investee-group.com/server/api/sync/agents/changes.php?user_role=admin&limit=5"
 echo.
 
 echo.

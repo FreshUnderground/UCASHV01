@@ -43,7 +43,7 @@ server/
 ```env
 # Base de données
 DB_HOST=91.216.107.185
-DB_NAME=inves2504808_1n6a7b
+DB_NAME=inves2504808_18xpitt
 DB_USER=inves2504808
 DB_PASS=31nzzasdnh
 

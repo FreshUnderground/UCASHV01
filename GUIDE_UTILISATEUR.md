@@ -264,8 +264,8 @@ L'application fonctionne **même sans Internet** :
 
 1. Allez dans **"Configuration Synchronisation"**
 2. Modifiez l'**URL de l'API** si nécessaire
-   - Par défaut : `https://mahanaim.investee-group.com/server/api`
-   - Pour test local : `https://mahanaim.investee-group.com/server/api`
+   - Par défaut : `https://safdal.investee-group.com/server/api`
+   - Pour test local : `https://safdal.investee-group.com/server/api`
 3. Cliquez sur **"Sauvegarder"**
 4. Cliquez sur **"Réinitialiser"** pour revenir à l'URL par défaut
 

@@ -95,7 +95,7 @@ Script de test automatisé pour valider l'endpoint.
 **Usage:**
 ```bash
 # Via navigateur:
-https://mahanaim.investee-group.com/server/api/sync/shops/test_update.php
+https://safdal.investee-group.com/server/api/sync/shops/test_update.php
 
 # Via CLI:
 php server/api/sync/shops/test_update.php
@@ -426,7 +426,7 @@ L'URL de base est configurée dans `app_config.dart`:
 
 ```dart
 static Future<String> getSyncBaseUrl() async {
-  // Retourne: https://mahanaim.investee-group.com/server/api/sync
+  // Retourne: https://safdal.investee-group.com/server/api/sync
   // En production: https://votre-domaine.com/api/sync
 }
 ```

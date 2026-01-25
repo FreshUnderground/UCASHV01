@@ -43,7 +43,7 @@ SELECT
     DATA_TYPE,
     IS_NULLABLE
 FROM INFORMATION_SCHEMA.COLUMNS 
-WHERE TABLE_SCHEMA = 'inves2504808_1n6a7b' 
+WHERE TABLE_SCHEMA = 'inves2504808_18xpitt' 
 AND TABLE_NAME IN ('personnel', 'salaires', 'avances_personnel', 'retenues_personnel')
 AND COLUMN_NAME IN ('deleted_at', 'numero_inss', 'synced_at', 'is_synced')
 ORDER BY TABLE_NAME, COLUMN_NAME;

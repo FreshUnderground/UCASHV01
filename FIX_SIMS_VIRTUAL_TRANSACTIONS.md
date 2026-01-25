@@ -57,7 +57,7 @@ php server/init_sims_virtual_transactions.php
 
 Ou ouvrir le script dans un navigateur :
 ```
-https://mahanaim.investee-group.com/server/init_sims_virtual_transactions.php
+https://safdal.investee-group.com/server/init_sims_virtual_transactions.php
 ```
 
 **Vérifications attendues :**
@@ -80,8 +80,8 @@ flutter build web
 Après le déploiement :
 
 1. **Vérifier les endpoints API :**
-   - `https://mahanaim.investee-group.com/server/api/sync/sims/changes.php?since=2020-01-01T00:00:00.000`
-   - `https://mahanaim.investee-group.com/server/api/sync/virtual_transactions/changes.php?since=2020-01-01T00:00:00.000`
+   - `https://safdal.investee-group.com/server/api/sync/sims/changes.php?since=2020-01-01T00:00:00.000`
+   - `https://safdal.investee-group.com/server/api/sync/virtual_transactions/changes.php?since=2020-01-01T00:00:00.000`
 
 2. **Tester la synchronisation :**
    - Se connecter à l'application

@@ -35,7 +35,7 @@ echo json_encode($postData, JSON_PRETTY_PRINT) . "\n\n";
 
 // Simuler la requête POST vers upload.php
 $ch = curl_init();
-curl_setopt($ch, CURLOPT_URL, 'https://mahanaim.investee-group.com/server/api/sync/commissions/upload.php');
+curl_setopt($ch, CURLOPT_URL, 'https://safdal.investee-group.com/server/api/sync/commissions/upload.php');
 curl_setopt($ch, CURLOPT_POST, 1);
 curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($postData));
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);

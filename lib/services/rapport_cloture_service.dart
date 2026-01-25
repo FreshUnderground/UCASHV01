@@ -13,9 +13,10 @@ import 'compte_special_service.dart';
 
 /// Service pour générer le Rapport de Clôture Journalière
 class RapportClotureService {
-  static final RapportClotureService _instance = RapportClotureService._internal();
+  static final RapportClotureService _instance =
+      RapportClotureService._internal();
   static RapportClotureService get instance => _instance;
-  
+
   RapportClotureService._internal();
 
   /// Générer le rapport de clôture pour une date donnée
@@ -23,17 +24,19 @@ class RapportClotureService {
     required int shopId,
     DateTime? date,
     String? generePar,
-    List<OperationModel>? operations, // Optionnel: utiliser les opérations de "Mes Ops"
+    List<OperationModel>?
+        operations, // Optionnel: utiliser les opérations de "Mes Ops"
   }) async {
     try {
       final dateRapport = date ?? DateTime.now();
       final shop = await LocalDB.instance.getShopById(shopId);
-      
+
       if (shop == null) {
         throw Exception('Shop non trouvé: $shopId');
       }
 
-      debugPrint('📊 Génération rapport clôture pour ${shop.designation} - ${dateRapport.toIso8601String().split('T')[0]}');
+      debugPrint(
+          '📊 Génération rapport clôture pour ${shop.designation} - ${dateRapport.toIso8601String().split('T')[0]}');
 
       // 1. Récupérer le solde antérieur (clôture du jour précédent)
       final soldeAnterieur = await _getSoldeAnterieur(shopId, dateRapport);
@@ -43,33 +46,42 @@ class RapportClotureService {
       final flots = await _calculerFlots(shopId, dateRapport);
 
       // 3. Calculer les transferts
-      final transferts = await _calculerTransferts(shopId, dateRapport, operations);
+      final transferts =
+          await _calculerTransferts(shopId, dateRapport, operations);
 
       // 4. Calculer les opérations clients (dépôts/retraits)
-      final operationsClients = await _calculerOperationsClients(shopId, dateRapport, operations);
-      
+      final operationsClients =
+          await _calculerOperationsClients(shopId, dateRapport, operations);
+
       // 4.5. NOUVEAU: Calculer les opérations AUTRES SHOP (dépôts/retraits où nous sommes destinataires)
-      final autresShopOperations = await _calculerAutresShopOperations(shopId, dateRapport, operations);
-      
+      final autresShopOperations =
+          await _calculerAutresShopOperations(shopId, dateRapport, operations);
+
       // 4.6. NOUVEAU: Calculer le solde par partenaire (depot - retrait où nous sommes shop destination)
       debugPrint('🔟 AVANT APPEL _calculerSoldeParPartenaire');
-      final soldeParPartenaire = await _calculerSoldeParPartenaire(shopId, dateRapport, operations);
-      debugPrint('🔟 APRÈS APPEL _calculerSoldeParPartenaire - Résultat: ${soldeParPartenaire.length} entrées');
+      final soldeParPartenaire =
+          await _calculerSoldeParPartenaire(shopId, dateRapport, operations);
+      debugPrint(
+          '🔟 APRÈS APPEL _calculerSoldeParPartenaire - Résultat: ${soldeParPartenaire.length} entrées');
 
       // 5. Récupérer les transactions partenaires du jour
-      final comptesClients = await _getComptesClients(shopId, dateRapport, operations);
-      
+      final comptesClients =
+          await _getComptesClients(shopId, dateRapport, operations);
+
       // 6. Calculer les dettes/créances inter-shops
       final comptesShops = await _getComptesShops(shopId, dateRapport);
-      
+
       // 6.5. NOUVEAU: Calculer les règlements triangulaires de dettes impliquant ce shop
-      final triangularSettlements = await _getTriangularSettlements(shopId, dateRapport);
-      
+      final triangularSettlements =
+          await _getTriangularSettlements(shopId, dateRapport);
+
       // 6.5. Calculer les comptes spéciaux (FRAIS et DÉPENSE)
-      final comptesSpeciaux = await _calculerComptesSpeciaux(shopId, dateRapport, operations);
+      final comptesSpeciaux =
+          await _calculerComptesSpeciaux(shopId, dateRapport, operations);
 
       // 7. Calculer les transferts groupés par route
-      final transfertsGroupes = await _calculerTransfertsGroupes(shopId, dateRapport, operations);
+      final transfertsGroupes =
+          await _calculerTransfertsGroupes(shopId, dateRapport, operations);
 
       // 8. Calculer le cash disponible par mode de paiement
       final cashDisponible = _calculerCashDisponible(
@@ -87,7 +99,8 @@ class RapportClotureService {
           'depots': operationsClients['depots'] as double,
           'retraits': operationsClients['retraits'] as double,
         },
-        retraitsFrais: comptesSpeciaux['retraits_frais'] as double, // NOUVEAU: Soustraire retraits FRAIS
+        retraitsFrais: comptesSpeciaux['retraits_frais']
+            as double, // NOUVEAU: Soustraire retraits FRAIS
       );
 
       // Calculate capital net according to the formula:
@@ -101,98 +114,111 @@ class RapportClotureService {
           .fold(0.0, (sum, shop) => sum + shop.montant);
       final totalShopsNousDevons = comptesShops['nousDevons']!
           .fold(0.0, (sum, shop) => sum + shop.montant);
-      
+
       // Le cash disponible a déjà les retraits FRAIS soustraits, donc on ne les soustrait PAS ici
       // Formule modifiée pour la Situation Nette: Cash Disponible + Créances Inter-Shops - Dettes Inter-Shops - Frais du Jour - Transferts En Attente
       // EXCLUSION: totalClientsNousDoivent et totalClientsNousDevons ne sont plus inclus
-      final fraisDuJour = soldeFraisAnterieur + (comptesSpeciaux['commissions_frais'] as double) - (comptesSpeciaux['retraits_frais'] as double);
-      final capitalNet = cashDisponible['total']! 
-          + totalShopsNousDoivent 
-          - totalShopsNousDevons
-          - fraisDuJour
-          - transferts['enAttente']!;
+      final fraisDuJour = soldeFraisAnterieur +
+          (comptesSpeciaux['commissions_frais'] as double) -
+          (comptesSpeciaux['retraits_frais'] as double);
+      final capitalNet = cashDisponible['total']! +
+          totalShopsNousDoivent -
+          totalShopsNousDevons -
+          fraisDuJour -
+          transferts['enAttente']!;
 
       return RapportClotureModel(
         shopId: shopId,
         shopDesignation: shop.designation,
         dateRapport: dateRapport,
-        
+
         // Solde antérieur
         soldeAnterieurCash: soldeAnterieur['cash']!,
         soldeAnterieurAirtelMoney: soldeAnterieur['airtelMoney']!,
         soldeAnterieurMPesa: soldeAnterieur['mPesa']!,
         soldeAnterieurOrangeMoney: soldeAnterieur['orangeMoney']!,
-        
+
         // Flots
         flotRecu: flots['recu']!,
         flotEnvoye: flots['envoye']!,
-        
+
         // Transferts
         transfertsRecus: transferts['recus']!,
         transfertsServis: transferts['servis']!,
         transfertsEnAttente: transferts['enAttente']!,
-        transfertsRecusGroupes: transferts['transfertsRecusGroupes'] as Map<String, double>,
-        transfertsServisGroupes: transferts['transfertsServisGroupes'] as Map<String, double>,
-        transfertsEnAttenteGroupes: transferts['transfertsEnAttenteGroupes'] as Map<String, double>,
-        
+        transfertsRecusGroupes:
+            transferts['transfertsRecusGroupes'] as Map<String, double>,
+        transfertsServisGroupes:
+            transferts['transfertsServisGroupes'] as Map<String, double>,
+        transfertsEnAttenteGroupes:
+            transferts['transfertsEnAttenteGroupes'] as Map<String, double>,
+
         // Clients
         depotsClients: operationsClients['depots']!,
         retraitsClients: operationsClients['retraits']!,
-        
+
         // Comptes clients
         clientsNousDoivent: comptesClients['nousDoivent']!,
         clientsNousDevons: comptesClients['nousDevons']!,
-        
+
         // Comptes inter-shops
         shopsNousDoivent: comptesShops['nousDoivent']!,
         shopsNousDevons: comptesShops['nousDevons']!,
         triangularSettlements: triangularSettlements,
-        
+
         // NOUVEAU: Comptes spéciaux (FRAIS uniquement)
         soldeFraisAnterieur: soldeFraisAnterieur,
         retraitsFraisDuJour: comptesSpeciaux['retraits_frais'] as double,
         commissionsFraisDuJour: comptesSpeciaux['commissions_frais'] as double,
-        fraisGroupesParShop: comptesSpeciaux['frais_groupes_par_shop'] as Map<String, double>,
+        fraisGroupesParShop:
+            comptesSpeciaux['frais_groupes_par_shop'] as Map<String, double>,
         soldeFraisTotal: comptesSpeciaux['solde_frais_total'] as double,
-        sortiesDepenseDuJour: 0.0,  // Non utilisé
-        depotsDepenseDuJour: 0.0,   // Non utilisé
-        soldeDepenseTotal: 0.0,     // Non utilisé
-        
+        sortiesDepenseDuJour: 0.0, // Non utilisé
+        depotsDepenseDuJour: 0.0, // Non utilisé
+        soldeDepenseTotal: 0.0, // Non utilisé
+
         // NOUVEAU: Listes détaillées des FLOT
         flotsRecusDetails: flots['flotsRecusDetails'] as List<FlotResume>,
         flotsRecusGroupes: flots['flotsRecusGroupes'] as Map<String, double>,
         flotsEnvoyes: flots['flotsEnvoyesDetails'] as List<FlotResume>,
-        flotsEnvoyesGroupes: flots['flotsEnvoyesGroupes'] as Map<String, double>,
-        flotsEnAttenteGroupes: flots['flotsEnAttenteGroupes'] as Map<String, double>,        
+        flotsEnvoyesGroupes:
+            flots['flotsEnvoyesGroupes'] as Map<String, double>,
+        flotsEnAttenteGroupes:
+            flots['flotsEnAttenteGroupes'] as Map<String, double>,
         // NOUVEAU: Listes détaillées des opérations clients
-        depotsClientsDetails: operationsClients['depotsDetails'] as List<OperationResume>,
-        retraitsClientsDetails: operationsClients['retraitsDetails'] as List<OperationResume>,
-        
+        depotsClientsDetails:
+            operationsClients['depotsDetails'] as List<OperationResume>,
+        retraitsClientsDetails:
+            operationsClients['retraitsDetails'] as List<OperationResume>,
+
         // NOUVEAU: Opérations AUTRES SHOP (où nous sommes destinataires)
         autresShopServis: autresShopOperations['servis'] as double,
         autresShopDepots: autresShopOperations['depots'] as double,
-        autresShopServisGroupes: autresShopOperations['servisGroupesParClient'] as Map<String, double>,
-        autresShopDepotsGroupes: autresShopOperations['depotsGroupesParClient'] as Map<String, double>,
-        
+        autresShopServisGroupes: autresShopOperations['servisGroupesParClient']
+            as Map<String, double>,
+        autresShopDepotsGroupes: autresShopOperations['depotsGroupesParClient']
+            as Map<String, double>,
+
         // NOUVEAU: Solde par partenaire (depot - retrait où nous sommes shop destination)
         soldeParPartenaire: soldeParPartenaire,
-        
+
         // NOUVEAU: Liste détaillée des transferts en attente
-        transfertsEnAttenteDetails: transferts['enAttenteDetails'] as List<OperationResume>,
-        
+        transfertsEnAttenteDetails:
+            transferts['enAttenteDetails'] as List<OperationResume>,
+
         // NOUVEAU: Liste des transferts groupés par route
         transfertsGroupes: transfertsGroupes,
-        
+
         // Cash disponible
         cashDisponibleCash: cashDisponible['cash']!,
         cashDisponibleAirtelMoney: cashDisponible['airtelMoney']!,
         cashDisponibleMPesa: cashDisponible['mPesa']!,
         cashDisponibleOrangeMoney: cashDisponible['orangeMoney']!,
         cashDisponibleTotal: cashDisponible['total']!,
-        
+
         // Capital Net
         capitalNet: capitalNet,
-        
+
         generePar: generePar,
         dateGeneration: DateTime.now(),
       );
@@ -204,22 +230,26 @@ class RapportClotureService {
 
   /// Récupérer le solde antérieur (du jour précédent)
   /// NOUVEAU: Inclut automatiquement la somme des soldes des SIMs de la clôture virtuelle
-  Future<Map<String, double>> _getSoldeAnterieur(int shopId, DateTime dateRapport) async {
+  Future<Map<String, double>> _getSoldeAnterieur(
+      int shopId, DateTime dateRapport) async {
     // Récupérer la clôture CASH du jour précédent
     final jourPrecedent = dateRapport.subtract(const Duration(days: 1));
-    final cloturePrecedente = await LocalDB.instance.getClotureCaisseByDate(shopId, jourPrecedent);
-    
+    final cloturePrecedente =
+        await LocalDB.instance.getClotureCaisseByDate(shopId, jourPrecedent);
+
     // NOUVEAU: Récupérer les clôtures virtuelles PAR SIM du jour précédent
-    final cloturesSimsHierMaps = await LocalDB.instance.getCloturesVirtuellesParDate(
+    final cloturesSimsHierMaps =
+        await LocalDB.instance.getCloturesVirtuellesParDate(
       shopId: shopId,
       date: jourPrecedent,
     );
-    
+
     // Convertir en modèles
     final cloturesSimsHier = cloturesSimsHierMaps
-        .map((map) => ClotureVirtuelleParSimModel.fromMap(map as Map<String, dynamic>))
+        .map((map) =>
+            ClotureVirtuelleParSimModel.fromMap(map as Map<String, dynamic>))
         .toList();
-    
+
     // Calculer la SOMME des soldes des SIMs d'hier
     double soldeTotalSimsHier = 0.0;
     if (cloturesSimsHier.isNotEmpty) {
@@ -227,42 +257,50 @@ class RapportClotureService {
         0.0,
         (sum, clotureSim) => sum + (clotureSim.soldeActuel ?? 0.0),
       );
-      debugPrint('💰 Somme des soldes SIMs d\'hier: ${soldeTotalSimsHier.toStringAsFixed(2)} USD (${cloturesSimsHier.length} SIM(s))');
+      debugPrint(
+          '💰 Somme des soldes SIMs d\'hier: ${soldeTotalSimsHier.toStringAsFixed(2)} USD (${cloturesSimsHier.length} SIM(s))');
     } else {
       debugPrint('ℹ️ Aucune clôture virtuelle par SIM trouvée pour hier');
     }
-    
+
     if (cloturePrecedente != null) {
-      debugPrint('📋 Solde antérieur trouvé (clôture du ${jourPrecedent.toIso8601String().split('T')[0]}):');
-      debugPrint('   Cash SAISI: ${cloturePrecedente.soldeSaisiCash} USD (Calculé: ${cloturePrecedente.soldeCalculeCash})');
-     debugPrint('   TOTAL SAISI: ${cloturePrecedente.soldeSaisiTotal} USD (Calculé: ${cloturePrecedente.soldeCalculeTotal})');
+      debugPrint(
+          '📋 Solde antérieur trouvé (clôture du ${jourPrecedent.toIso8601String().split('T')[0]}):');
+      debugPrint(
+          '   Cash SAISI: ${cloturePrecedente.soldeSaisiCash} USD (Calculé: ${cloturePrecedente.soldeCalculeCash})');
+      debugPrint(
+          '   TOTAL SAISI: ${cloturePrecedente.soldeSaisiTotal} USD (Calculé: ${cloturePrecedente.soldeCalculeTotal})');
       debugPrint('   ÉCART TOTAL: ${cloturePrecedente.ecartTotal} USD');
-      debugPrint('   FRAIS ANTÉRIEUR: ${cloturePrecedente.soldeFraisAnterieur} USD');
-      debugPrint('   + SOLDE VIRTUEL (SIMs): ${soldeTotalSimsHier.toStringAsFixed(2)} USD');
-      
+      debugPrint(
+          '   FRAIS ANTÉRIEUR: ${cloturePrecedente.soldeFraisAnterieur} USD');
+      debugPrint(
+          '   + SOLDE VIRTUEL (SIMs): ${soldeTotalSimsHier.toStringAsFixed(2)} USD');
+
       // NOUVEAU: Utiliser les montants SAISIS + SOLDE VIRTUEL comme solde antérieur
       // Le solde virtuel est ajouté au Cash car c'est de l'argent mobile
       return {
-        'cash': cloturePrecedente.soldeSaisiCash + soldeTotalSimsHier,  // Cash + Virtuel
+        'cash': cloturePrecedente.soldeSaisiCash +
+            soldeTotalSimsHier, // Cash + Virtuel
         'airtelMoney': 0.0,
         'mPesa': 0.0,
         'orangeMoney': 0.0,
         'soldeFraisAnterieur': cloturePrecedente.soldeFraisAnterieur ?? 0.0,
       };
     }
-    
+
     // Si aucune clôture CASH précédente, mais il y a des clôtures virtuelles
     if (soldeTotalSimsHier > 0) {
-      debugPrint('ℹ️ Aucune clôture CASH, mais solde virtuel trouvé: ${soldeTotalSimsHier.toStringAsFixed(2)} USD');
+      debugPrint(
+          'ℹ️ Aucune clôture CASH, mais solde virtuel trouvé: ${soldeTotalSimsHier.toStringAsFixed(2)} USD');
       return {
-        'cash': soldeTotalSimsHier,  // Le virtuel devient le cash de départ
+        'cash': soldeTotalSimsHier, // Le virtuel devient le cash de départ
         'airtelMoney': 0.0,
         'mPesa': 0.0,
         'orangeMoney': 0.0,
         'soldeFraisAnterieur': 0.0,
       };
     }
-    
+
     // Si aucune clôture précédente (ni cash ni virtuelle), retourner 0 (premier jour d'utilisation)
     debugPrint('ℹ️ Aucun solde antérieur (pas de clôture du jour précédent)');
     return {
@@ -275,251 +313,305 @@ class RapportClotureService {
   }
 
   /// Calculer les flots (reçus, en cours, servis) + LISTES DÉTAILLÉES
-  Future<Map<String, dynamic>> _calculerFlots(int shopId, DateTime dateRapport) async {
+  Future<Map<String, dynamic>> _calculerFlots(
+      int shopId, DateTime dateRapport) async {
     // IMPORTANT: Charger les FLOTs depuis la table operations (type = flotShopToShop)
     // Au lieu de l'ancienne table flots
     final operations = await LocalDB.instance.getAllOperations();
-    
+
     // Charger tous les shops pour avoir leurs noms
     final shops = await LocalDB.instance.getAllShops();
     final shopsMap = {for (var shop in shops) shop.id: shop.designation};
 
     // FLOT REÇUS = FLOTs vers nous (reçus aujourd'hui - utilisent date_validation, fallback sur created_at si null)
     // EXCLUSION: Les flots administratifs (isAdministrative=true) ne sont PAS comptabilisés dans le cash
-    final flotsRecusServis = operations.where((f) =>
-        f.type == OperationType.flotShopToShop &&
-        f.shopDestinationId == shopId &&
-        f.statut == OperationStatus.validee &&
-        f.isAdministrative == false && // EXCLUSION CRITIQUE
-        _isSameDay(f.dateValidation ?? f.createdAt ?? f.dateOp, dateRapport)
-    ).toList();
-    
+    final flotsRecusServis = operations
+        .where((f) =>
+            f.type == OperationType.flotShopToShop &&
+            f.shopDestinationId == shopId &&
+            f.statut == OperationStatus.validee &&
+            f.isAdministrative == false && // EXCLUSION CRITIQUE
+            _isSameDay(
+                f.dateValidation ?? f.createdAt ?? f.dateOp, dateRapport))
+        .toList();
+
     // FLOT EN ATTENTE = FLOTs vers nous (en attente de réception) - utilisent created_at
     // EXCLUSION: Les flots administratifs (isAdministrative=true) ne sont PAS comptabilisés
-    final flotsEnAttente = operations.where((f) =>
-        f.type == OperationType.flotShopToShop &&
-        f.shopDestinationId == shopId &&
-        f.statut == OperationStatus.enAttente &&
-        f.isAdministrative == false && // EXCLUSION CRITIQUE
-        _isSameDay(f.createdAt ?? f.dateOp, dateRapport)
-    ).toList();
-    
+    final flotsEnAttente = operations
+        .where((f) =>
+            f.type == OperationType.flotShopToShop &&
+            f.shopDestinationId == shopId &&
+            f.statut == OperationStatus.enAttente &&
+            f.isAdministrative == false && // EXCLUSION CRITIQUE
+            _isSameDay(f.createdAt ?? f.dateOp, dateRapport))
+        .toList();
+
     final flotsRecus = [...flotsRecusServis, ...flotsEnAttente];
-    
-    debugPrint('📥 FLOTs REÇUS (shopDestinationId=$shopId): ${flotsRecus.length} FLOTs (${flotsRecusServis.length} servis, ${flotsEnAttente.length} en attente)');
-    
+
+    debugPrint(
+        '📥 FLOTs REÇUS (shopDestinationId=$shopId): ${flotsRecus.length} FLOTs (${flotsRecusServis.length} servis, ${flotsEnAttente.length} en attente)');
+
     // FLOT ENVOYÉS = FLOTs par nous (envoyés aujourd'hui - utilisent created_at)
     // EXCLUSION: Les flots administratifs (isAdministrative=true) ne sont PAS comptabilisés dans le cash
-    final flotsEnvoyes = operations.where((f) =>
-        f.type == OperationType.flotShopToShop &&
-        f.shopSourceId == shopId &&
-        f.isAdministrative == false && // EXCLUSION CRITIQUE
-        _isSameDay(f.createdAt ?? f.dateOp, dateRapport)
-    ).toList();
-    
-    debugPrint('📤 FLOTs ENVOYÉS (shopSourceId=$shopId): ${flotsEnvoyes.length} FLOTs');
-    
+    final flotsEnvoyes = operations
+        .where((f) =>
+            f.type == OperationType.flotShopToShop &&
+            f.shopSourceId == shopId &&
+            f.isAdministrative == false && // EXCLUSION CRITIQUE
+            _isSameDay(f.createdAt ?? f.dateOp, dateRapport))
+        .toList();
+
+    debugPrint(
+        '📤 FLOTs ENVOYÉS (shopSourceId=$shopId): ${flotsEnvoyes.length} FLOTs');
+
     // Créer les listes détaillées pour affichage dans le rapport
-    final flotsRecusDetails = flotsRecus.map((f) => FlotResume(
-      flotId: f.id!,
-      shopSourceDesignation: shopsMap[f.shopSourceId] ?? 'Shop inconnu',
-      shopDestinationDesignation: shopsMap[f.shopDestinationId] ?? 'Shop inconnu',
-      montant: f.montantNet,
-      devise: f.devise,
-      statut: f.statut.name,
-      dateEnvoi: f.dateOp,
-      dateReception: f.dateValidation,
-      modePaiement: f.modePaiement.name,
-    )).toList();
-    
+    final flotsRecusDetails = flotsRecus
+        .map((f) => FlotResume(
+              flotId: f.id!,
+              shopSourceDesignation: shopsMap[f.shopSourceId] ?? 'Shop inconnu',
+              shopDestinationDesignation:
+                  shopsMap[f.shopDestinationId] ?? 'Shop inconnu',
+              montant: f.montantNet,
+              devise: f.devise,
+              statut: f.statut.name,
+              dateEnvoi: f.dateOp,
+              dateReception: f.dateValidation,
+              modePaiement: f.modePaiement.name,
+            ))
+        .toList();
+
     // GROUPER LES FLOTS REÇUS PAR SHOP EXPÉDITEUR (SOURCE ID)
     final flotsRecusGroupes = <String, double>{};
     for (var flot in flotsRecus) {
       final shopSourceId = flot.shopSourceId;
-      final shopName = shopsMap[shopSourceId] ?? 'Shop inconnu (ID: $shopSourceId)';
-      flotsRecusGroupes[shopName] = (flotsRecusGroupes[shopName] ?? 0.0) + flot.montantNet;
+      final shopName =
+          shopsMap[shopSourceId] ?? 'Shop inconnu (ID: $shopSourceId)';
+      flotsRecusGroupes[shopName] =
+          (flotsRecusGroupes[shopName] ?? 0.0) + flot.montantNet;
     }
-    
+
     // GROUPER LES FLOTS EN ATTENTE PAR SHOP EXPÉDITEUR (SOURCE ID)
     final flotsEnAttenteGroupes = <String, double>{};
     for (var flot in flotsEnAttente) {
       final shopSourceId = flot.shopSourceId;
-      final shopName = shopsMap[shopSourceId] ?? 'Shop inconnu (ID: $shopSourceId)';
-      flotsEnAttenteGroupes[shopName] = (flotsEnAttenteGroupes[shopName] ?? 0.0) + flot.montantNet;
+      final shopName =
+          shopsMap[shopSourceId] ?? 'Shop inconnu (ID: $shopSourceId)';
+      flotsEnAttenteGroupes[shopName] =
+          (flotsEnAttenteGroupes[shopName] ?? 0.0) + flot.montantNet;
     }
-    
+
     debugPrint('📊 FLOTS REÇUS GROUPÉS PAR SHOP SOURCE:');
     flotsRecusGroupes.forEach((shop, montant) {
       debugPrint('   - $shop: ${montant.toStringAsFixed(2)} USD');
     });
-    
-    final flotsEnvoyesDetails = flotsEnvoyes.map((f) => FlotResume(
-      flotId: f.id!,
-      shopSourceDesignation: shopsMap[f.shopSourceId] ?? 'Shop inconnu',
-      shopDestinationDesignation: shopsMap[f.shopDestinationId] ?? 'Shop inconnu',
-      montant: f.montantNet,
-      devise: f.devise,
-      statut: f.statut.name,
-      dateEnvoi: f.dateOp,
-      dateReception: f.dateValidation,
-      modePaiement: f.modePaiement.name,
-    )).toList();
-    
+
+    final flotsEnvoyesDetails = flotsEnvoyes
+        .map((f) => FlotResume(
+              flotId: f.id!,
+              shopSourceDesignation: shopsMap[f.shopSourceId] ?? 'Shop inconnu',
+              shopDestinationDesignation:
+                  shopsMap[f.shopDestinationId] ?? 'Shop inconnu',
+              montant: f.montantNet,
+              devise: f.devise,
+              statut: f.statut.name,
+              dateEnvoi: f.dateOp,
+              dateReception: f.dateValidation,
+              modePaiement: f.modePaiement.name,
+            ))
+        .toList();
+
     // GROUPER LES FLOTS ENVOYÉS PAR SHOP DESTINATION (DESTINATION ID)
     final flotsEnvoyesGroupes = <String, double>{};
     for (var flot in flotsEnvoyes) {
       final shopDestinationId = flot.shopDestinationId;
-      final shopName = shopsMap[shopDestinationId] ?? 'Shop inconnu (ID: $shopDestinationId)';
-      flotsEnvoyesGroupes[shopName] = (flotsEnvoyesGroupes[shopName] ?? 0.0) + flot.montantNet;
+      final shopName = shopsMap[shopDestinationId] ??
+          'Shop inconnu (ID: $shopDestinationId)';
+      flotsEnvoyesGroupes[shopName] =
+          (flotsEnvoyesGroupes[shopName] ?? 0.0) + flot.montantNet;
     }
 
     return {
-      'recu': flotsRecus.fold(0.0, (sum, f) => sum + f.montantNet),     // ENTRÉE (+)
-      'envoye': flotsEnvoyes.fold(0.0, (sum, f) => sum + f.montantNet), // SORTIE (-)
+      'recu':
+          flotsRecus.fold(0.0, (sum, f) => sum + f.montantNet), // ENTRÉE (+)
+      'envoye':
+          flotsEnvoyes.fold(0.0, (sum, f) => sum + f.montantNet), // SORTIE (-)
       'flotsRecusDetails': flotsRecusDetails,
       'flotsRecusGroupes': flotsRecusGroupes, // GROUPÉ PAR SHOP EXPÉDITEUR
-      'flotsEnAttenteGroupes': flotsEnAttenteGroupes, // GROUPÉ PAR SHOP EXPÉDITEUR
+      'flotsEnAttenteGroupes':
+          flotsEnAttenteGroupes, // GROUPÉ PAR SHOP EXPÉDITEUR
       'flotsEnvoyesDetails': flotsEnvoyesDetails,
       'flotsEnvoyesGroupes': flotsEnvoyesGroupes, // GROUPÉ PAR SHOP DESTINATION
     };
   }
+
   /// Calculer les transferts (reçus, servis et en attente)
-  Future<Map<String, dynamic>> _calculerTransferts(int shopId, DateTime dateRapport, List<OperationModel>? providedOperations) async {
+  Future<Map<String, dynamic>> _calculerTransferts(int shopId,
+      DateTime dateRapport, List<OperationModel>? providedOperations) async {
     // Utiliser les opérations fournies (de "Mes Ops") ou charger depuis LocalDB
-    final operations = providedOperations ?? await LocalDB.instance.getAllOperations();
-    
+    final operations =
+        providedOperations ?? await LocalDB.instance.getAllOperations();
+
     // Charger tous les shops pour avoir leurs noms
     final shops = await LocalDB.instance.getAllShops();
     final shopsMap = {for (var shop in shops) shop.id: shop.designation};
-    
+
     // Transferts REÇUS = client nous paie (ENTRÉE d'argent) - utilisent created_at
-    final transfertsRecus = operations.where((op) =>
-        op.shopSourceId == shopId &&
-        (op.type == OperationType.transfertNational ||
-         op.type == OperationType.transfertInternationalSortant) &&
-        _isSameDay(op.createdAt ?? op.dateOp, dateRapport)
-    ).toList();
+    final transfertsRecus = operations
+        .where((op) =>
+            op.shopSourceId == shopId &&
+            (op.type == OperationType.transfertNational ||
+                op.type == OperationType.transfertInternationalSortant) &&
+            _isSameDay(op.createdAt ?? op.dateOp, dateRapport))
+        .toList();
 
     // Transferts SERVIS = nous servons le client (SORTIE d'argent) - utilisent uniquement created_at
-    final transfertsServis = operations.where((op) =>
-        op.shopDestinationId == shopId &&
-        (op.type == OperationType.transfertNational ||
-         op.type == OperationType.transfertInternationalEntrant) &&
-        op.statut == OperationStatus.validee &&
-        _isSameDay(op.createdAt ?? op.dateOp, dateRapport)  // CHANGEMENT: Utiliser uniquement createdAt ?? dateOp
-    ).toList();
-    
+    final transfertsServis = operations
+        .where((op) =>
+                op.shopDestinationId == shopId &&
+                (op.type == OperationType.transfertNational ||
+                    op.type == OperationType.transfertInternationalEntrant) &&
+                op.statut == OperationStatus.validee &&
+                _isSameDay(op.createdAt ?? op.dateOp,
+                    dateRapport) // CHANGEMENT: Utiliser uniquement createdAt ?? dateOp
+            )
+        .toList();
+
     // Transferts EN ATTENTE = transferts à servir (shop destination, statut enAttente)
     // OU transferts servis sans date_validation (affichés comme en attente)
-    final transfertsEnAttente = operations.where((op) =>
-        op.shopDestinationId == shopId &&
-        (op.type == OperationType.transfertNational ||
-         op.type == OperationType.transfertInternationalEntrant ||
-         op.type == OperationType.transfertInternationalSortant) &&
-        (op.statut == OperationStatus.enAttente )
-    ).toList();
-    
+    final transfertsEnAttente = operations
+        .where((op) =>
+            op.shopDestinationId == shopId &&
+            (op.type == OperationType.transfertNational ||
+                op.type == OperationType.transfertInternationalEntrant ||
+                op.type == OperationType.transfertInternationalSortant) &&
+            (op.statut == OperationStatus.enAttente))
+        .toList();
+
     // Créer la liste détaillée des transferts en attente
-    final transfertsEnAttenteDetails = transfertsEnAttente.map((op) => OperationResume(
-      operationId: op.id!,
-      type: 'transfert_en_attente',
-      montant: op.montantNet,
-      devise: op.devise,
-      date: op.dateOp,
-      destinataire: op.destinataire,
-      observation: op.observation,
-      notes: op.notes,
-      modePaiement: op.modePaiement.name,
-    )).toList();
-    
+    final transfertsEnAttenteDetails = transfertsEnAttente
+        .map((op) => OperationResume(
+              operationId: op.id!,
+              type: 'transfert_en_attente',
+              montant: op.montantNet,
+              devise: op.devise,
+              date: op.dateOp,
+              destinataire: op.destinataire,
+              observation: op.observation,
+              notes: op.notes,
+              modePaiement: op.modePaiement.name,
+            ))
+        .toList();
+
     // GROUPER LES TRANSFERTS REÇUS PAR SHOP DESTINATION ID (vers nous)
     final transfertsRecusGroupes = <String, double>{};
     for (var op in transfertsRecus) {
       final shopDestId = op.shopDestinationId;
       final shopName = shopsMap[shopDestId] ?? 'Shop inconnu (ID: $shopDestId)';
-      transfertsRecusGroupes[shopName] = (transfertsRecusGroupes[shopName] ?? 0.0) + op.montantBrut;
+      transfertsRecusGroupes[shopName] =
+          (transfertsRecusGroupes[shopName] ?? 0.0) + op.montantBrut;
     }
-    
+
     // GROUPER LES TRANSFERTS SERVIS PAR SHOP SOURCE ID (de nous)
     final transfertsServisGroupes = <String, double>{};
     for (var op in transfertsServis) {
       final shopSrcId = op.shopSourceId;
       final shopName = shopsMap[shopSrcId] ?? 'Shop inconnu (ID: $shopSrcId)';
-      transfertsServisGroupes[shopName] = (transfertsServisGroupes[shopName] ?? 0.0) + op.montantNet;
+      transfertsServisGroupes[shopName] =
+          (transfertsServisGroupes[shopName] ?? 0.0) + op.montantNet;
     }
-    
+
     // GROUPER LES TRANSFERTS EN ATTENTE PAR SHOP SOURCE ID (qui nous envoie)
     // Note: shopDestinationId = nous, shopSourceId = shop expéditeur
     final transfertsEnAttenteGroupes = <String, double>{};
     for (var op in transfertsEnAttente) {
       final shopSrcId = op.shopSourceId; // Le shop qui nous envoie
       final shopName = shopsMap[shopSrcId] ?? 'Shop inconnu (ID: $shopSrcId)';
-      transfertsEnAttenteGroupes[shopName] = (transfertsEnAttenteGroupes[shopName] ?? 0.0) + op.montantNet;
+      transfertsEnAttenteGroupes[shopName] =
+          (transfertsEnAttenteGroupes[shopName] ?? 0.0) + op.montantNet;
     }
-    
-    debugPrint('📊 TRANSFERTS EN ATTENTE (${transfertsEnAttente.length} transferts):');
+
+    debugPrint(
+        '📊 TRANSFERTS EN ATTENTE (${transfertsEnAttente.length} transferts):');
     transfertsEnAttenteGroupes.forEach((shop, montant) {
       debugPrint('   - $shop: ${montant.toStringAsFixed(2)} USD');
     });
 
     return {
-      'recus': transfertsRecus.fold(0.0, (sum, op) => sum + op.montantBrut), // ENTRÉE: Client nous paie
-      'servis': transfertsServis.fold(0.0, (sum, op) => sum + op.montantNet), // SORTIE: On sert le client
-      'enAttente': transfertsEnAttente.fold(0.0, (sum, op) => sum + op.montantNet), // À SERVIR: Transferts en attente
+      'recus': transfertsRecus.fold(
+          0.0, (sum, op) => sum + op.montantBrut), // ENTRÉE: Client nous paie
+      'servis': transfertsServis.fold(
+          0.0, (sum, op) => sum + op.montantNet), // SORTIE: On sert le client
+      'enAttente': transfertsEnAttente.fold(0.0,
+          (sum, op) => sum + op.montantNet), // À SERVIR: Transferts en attente
       'enAttenteDetails': transfertsEnAttenteDetails,
-      'transfertsRecusGroupes': transfertsRecusGroupes, // GROUPÉ PAR SHOP DESTINATION
-      'transfertsServisGroupes': transfertsServisGroupes, // GROUPÉ PAR SHOP SOURCE
-      'transfertsEnAttenteGroupes': transfertsEnAttenteGroupes, // GROUPÉ PAR SHOP SOURCE
+      'transfertsRecusGroupes':
+          transfertsRecusGroupes, // GROUPÉ PAR SHOP DESTINATION
+      'transfertsServisGroupes':
+          transfertsServisGroupes, // GROUPÉ PAR SHOP SOURCE
+      'transfertsEnAttenteGroupes':
+          transfertsEnAttenteGroupes, // GROUPÉ PAR SHOP SOURCE
     };
   }
 
   /// Calculer les dépôts et retraits clients
-  Future<Map<String, dynamic>> _calculerOperationsClients(int shopId, DateTime dateRapport, List<OperationModel>? providedOperations) async {
+  Future<Map<String, dynamic>> _calculerOperationsClients(int shopId,
+      DateTime dateRapport, List<OperationModel>? providedOperations) async {
     // Utiliser les opérations fournies (de "Mes Ops") ou charger depuis LocalDB
-    final operations = providedOperations ?? await LocalDB.instance.getAllOperations();
-    
-    final depotsAujourdhui = operations.where((op) =>
-        op.shopSourceId == shopId &&
-        op.type == OperationType.depot &&
-        !(op.isAdministrative) && // Exclure les opérations administratives du cash disponible
-        _isSameDay(op.dateOp, dateRapport)
-    ).toList();
+    final operations =
+        providedOperations ?? await LocalDB.instance.getAllOperations();
 
-    final retraitsAujourdhui = operations.where((op) =>
-        op.shopSourceId == shopId &&
-        (op.type == OperationType.retrait || op.type == OperationType.retraitMobileMoney) &&
-        !(op.isAdministrative) && // Exclure les opérations administratives du cash disponible
-        _isSameDay(op.dateOp, dateRapport)
-    ).toList();
-    
+    final depotsAujourdhui = operations
+        .where((op) =>
+            op.shopSourceId == shopId &&
+            op.type == OperationType.depot &&
+            !(op.isAdministrative) && // Exclure les opérations administratives du cash disponible
+            _isSameDay(op.dateOp, dateRapport))
+        .toList();
+
+    final retraitsAujourdhui = operations
+        .where((op) =>
+            op.shopSourceId == shopId &&
+            (op.type == OperationType.retrait ||
+                op.type == OperationType.retraitMobileMoney) &&
+            !(op.isAdministrative) && // Exclure les opérations administratives du cash disponible
+            _isSameDay(op.dateOp, dateRapport))
+        .toList();
+
     // Créer les listes détaillées avec observations
-    final depotsDetails = depotsAujourdhui.map((op) => OperationResume(
-      operationId: op.id!,
-      type: 'depot',
-      montant: op.montantNet,
-      devise: op.devise,
-      date: op.dateOp,
-      destinataire: op.destinataire,
-      observation: op.observation, // IMPORTANT: Observation saisie par l'agent
-      notes: op.notes,
-      modePaiement: op.modePaiement.name,
-    )).toList();
-    
-    final retraitsDetails = retraitsAujourdhui.map((op) => OperationResume(
-      operationId: op.id!,
-      type: 'retrait',
-      montant: op.montantNet,
-      devise: op.devise,
-      date: op.dateOp,
-      destinataire: op.destinataire,
-      observation: op.observation, // IMPORTANT: Observation saisie par l'agent
-      notes: op.notes,
-      modePaiement: op.modePaiement.name,
-    )).toList();
+    final depotsDetails = depotsAujourdhui
+        .map((op) => OperationResume(
+              operationId: op.id!,
+              type: 'depot',
+              montant: op.montantNet,
+              devise: op.devise,
+              date: op.dateOp,
+              destinataire: op.destinataire,
+              observation:
+                  op.observation, // IMPORTANT: Observation saisie par l'agent
+              notes: op.notes,
+              modePaiement: op.modePaiement.name,
+            ))
+        .toList();
+
+    final retraitsDetails = retraitsAujourdhui
+        .map((op) => OperationResume(
+              operationId: op.id!,
+              type: 'retrait',
+              montant: op.montantNet,
+              devise: op.devise,
+              date: op.dateOp,
+              destinataire: op.destinataire,
+              observation:
+                  op.observation, // IMPORTANT: Observation saisie par l'agent
+              notes: op.notes,
+              modePaiement: op.modePaiement.name,
+            ))
+        .toList();
 
     return {
       'depots': depotsAujourdhui.fold(0.0, (sum, op) => sum + op.montantNet),
-      'retraits': retraitsAujourdhui.fold(0.0, (sum, op) => sum + op.montantNet),
+      'retraits':
+          retraitsAujourdhui.fold(0.0, (sum, op) => sum + op.montantNet),
       'depotsDetails': depotsDetails,
       'retraitsDetails': retraitsDetails,
     };
@@ -528,11 +620,13 @@ class RapportClotureService {
   /// Récupérer les transactions partenaires du jour
   /// - "Clients Nous que Devons" = "Dépôts Partenaires" : Partenaires qui ont déposé dans leur compte durant le jour
   /// - "Clients Nous qui Doivent" = "Partenaires Servis" : Partenaires qui ont retiré de leur compte durant le jour
-  Future<Map<String, List<CompteClientResume>>> _getComptesClients(int shopId, DateTime dateRapport, List<OperationModel>? providedOperations) async {
+  Future<Map<String, List<CompteClientResume>>> _getComptesClients(int shopId,
+      DateTime dateRapport, List<OperationModel>? providedOperations) async {
     // Utiliser les opérations fournies (de "Mes Ops") ou charger depuis LocalDB
-    final operations = providedOperations ?? await LocalDB.instance.getAllOperations();
+    final operations =
+        providedOperations ?? await LocalDB.instance.getAllOperations();
     final clients = await LocalDB.instance.getAllClients();
-    
+
     final depotsPartenaires = <CompteClientResume>[];
     final partenairesServis = <CompteClientResume>[];
 
@@ -543,38 +637,40 @@ class RapportClotureService {
         op.type == OperationType.depot &&
         op.clientId != null && // Dépôt dans un compte client
         !(op.isAdministrative) && // EXCLURE les initialisations administratives
-        _isSameDay(op.dateOp, dateRapport)
-    );
+        _isSameDay(op.dateOp, dateRapport));
 
     // Récupérer les opérations de type RETRAIT avec clientId (partenaire retire de son compte)
     // EXCLURE les opérations administratives pour ne pas les compter dans "Partenaires Servis"
     final retraitsCompte = operations.where((op) =>
         op.shopSourceId == shopId &&
-        (op.type == OperationType.retrait || op.type == OperationType.retraitMobileMoney) &&
+        (op.type == OperationType.retrait ||
+            op.type == OperationType.retraitMobileMoney) &&
         op.clientId != null && // Retrait d'un compte client
         !(op.isAdministrative) && // EXCLURE les initialisations administratives
-        _isSameDay(op.dateOp, dateRapport)
-    );
-    
+        _isSameDay(op.dateOp, dateRapport));
+
     // Grouper les dépôts par client
     final depotsParClient = <int, double>{};
     for (var op in depotsCompte) {
       if (op.clientId != null) {
-        depotsParClient[op.clientId!] = (depotsParClient[op.clientId!] ?? 0) + op.montantNet;
+        depotsParClient[op.clientId!] =
+            (depotsParClient[op.clientId!] ?? 0) + op.montantNet;
       }
     }
-    
+
     // Grouper les retraits par client
     final retraitsParClient = <int, double>{};
     for (var op in retraitsCompte) {
       if (op.clientId != null) {
-        retraitsParClient[op.clientId!] = (retraitsParClient[op.clientId!] ?? 0) + op.montantNet;
+        retraitsParClient[op.clientId!] =
+            (retraitsParClient[op.clientId!] ?? 0) + op.montantNet;
       }
     }
-    
+
     // Créer les résumés pour les dépôts
     for (var entry in depotsParClient.entries) {
-      final client = clients.firstWhere((c) => c.id == entry.key, orElse: () => throw Exception('Client non trouvé'));
+      final client = clients.firstWhere((c) => c.id == entry.key,
+          orElse: () => throw Exception('Client non trouvé'));
       depotsPartenaires.add(CompteClientResume(
         clientId: client.id!,
         nom: client.nom,
@@ -583,10 +679,11 @@ class RapportClotureService {
         numeroCompte: client.numeroCompte ?? 'N/A',
       ));
     }
-    
+
     // Créer les résumés pour les retraits
     for (var entry in retraitsParClient.entries) {
-      final client = clients.firstWhere((c) => c.id == entry.key, orElse: () => throw Exception('Client non trouvé'));
+      final client = clients.firstWhere((c) => c.id == entry.key,
+          orElse: () => throw Exception('Client non trouvé'));
       partenairesServis.add(CompteClientResume(
         clientId: client.id!,
         nom: client.nom,
@@ -596,266 +693,325 @@ class RapportClotureService {
       ));
     }
 
-    debugPrint('📊 Dépôts Partenaires (compte): ${depotsPartenaires.length} partenaire(s), Total: ${depotsParClient.values.fold(0.0, (a, b) => a + b).toStringAsFixed(2)} USD');
-    debugPrint('📊 Partenaires Servis (compte): ${partenairesServis.length} partenaire(s), Total: ${retraitsParClient.values.fold(0.0, (a, b) => a + b).toStringAsFixed(2)} USD');
+    debugPrint(
+        '📊 Dépôts Partenaires (compte): ${depotsPartenaires.length} partenaire(s), Total: ${depotsParClient.values.fold(0.0, (a, b) => a + b).toStringAsFixed(2)} USD');
+    debugPrint(
+        '📊 Partenaires Servis (compte): ${partenairesServis.length} partenaire(s), Total: ${retraitsParClient.values.fold(0.0, (a, b) => a + b).toStringAsFixed(2)} USD');
 
     return {
-      'nousDoivent': partenairesServis, // Partenaires qui ont retiré (on leur a servi)
-      'nousDevons': depotsPartenaires,  // Partenaires qui ont déposé (on leur doit)
+      'nousDoivent':
+          partenairesServis, // Partenaires qui ont retiré (on leur a servi)
+      'nousDevons':
+          depotsPartenaires, // Partenaires qui ont déposé (on leur doit)
     };
   }
-  
+
   /// Calculer les dettes/créances inter-shops
-  /// NOUVELLE LOGIQUE BASÉE SUR LES TRANSFERTS ET FLOTS
-  /// - Transferts servis PAR nous → Ils Nous qui Doivent
-  /// - Transferts servis PAR eux → On leur doit
-  /// - FLOTs reçus DE eux → On leur doit rembourser
-  /// - FLOTs envoyés À eux → Ils Nous qui Doivent rembourser
-  /// Le solde final détermine si c'est une dette ou une créance
-  Future<Map<String, List<CompteShopResume>>> _getComptesShops(int shopId, DateTime dateRapport) async {
+  /// LOGIQUE DE CONSOLIDATION AVEC SHOP PRINCIPAL (DURBA)
+  ///
+  /// RÈGLES MÉTIER:
+  /// 1. Shop Principal (Durba) gère tous les flots
+  /// 2. Shop Service (Kampala) sert les transferts par défaut
+  /// 3. Shops Normaux (C, D, E, F) initient des transferts
+  ///
+  /// DETTES CRÉÉES:
+  /// - Transfert: Shop C → Kampala (service)
+  ///   * EXTERNE: Durba doit à Kampala (montant brut)
+  ///   * INTERNE: Shop C doit à Durba (montant brut)
+  ///
+  /// DETTES RÉDUITES (Remboursement):
+  /// - FLOT: Shop C → Durba : Dette de C diminue
+  /// - DÉPÔT: Client dépose à Durba, Shop C sert : Dette de C diminue
+  Future<Map<String, List<CompteShopResume>>> _getComptesShops(
+      int shopId, DateTime dateRapport) async {
     final shops = await LocalDB.instance.getAllShops();
     final operations = await LocalDB.instance.getAllOperations();
     final flotService = FlotService.instance;
     await flotService.loadFlots(shopId: shopId);
-    
+
+    // Identifier les shops clés
+    final mainShop = ShopModel.findMainShop(shops); // Durba (principal)
+    final serviceShop = ShopModel.findServiceShop(shops); // Kampala (service)
+
+    debugPrint('📊 === CALCUL DETTES/CRÉANCES INTER-SHOPS (CONSOLIDATION) ===');
+    debugPrint('Shop actuel ID: $shopId');
+    if (mainShop != null) {
+      debugPrint(
+          '🏢 Shop Principal: ${mainShop.designation} (ID: ${mainShop.id})');
+    }
+    if (serviceShop != null) {
+      debugPrint(
+          '🛠️ Shop Service: ${serviceShop.designation} (ID: ${serviceShop.id})');
+    }
+
     // Calculer le solde par shop
     final Map<int, double> soldesParShop = {};
     final Map<int, ShopModel> shopsMap = {};
-    
+
     // Créer un map des shops pour accès rapide
     for (final shop in shops) {
       if (shop.id != null && shop.id != shopId) {
         shopsMap[shop.id!] = shop;
       }
     }
-    
-    debugPrint('📊 === CALCUL DETTES/CRÉANCES INTER-SHOPS (NOUVELLE LOGIQUE) ===');
-    debugPrint('Shop actuel ID: $shopId');
-    
-    // 1. TRANSFERTS SERVIS PAR NOUS (shop source nous doit le montant BRUT)
+
+    // Récupérer les transferts (FLOTs sont maintenant des operations)
+    final allFlots = operations
+        .where((op) => op.type == OperationType.flotShopToShop)
+        .toList();
+
+    // CAS 1: TRANSFERTS INTER-SHOPS (LOGIQUE DIRECTE: SHOP SOURCE DOIT AU SHOP DESTINATION)
     for (final op in operations) {
-      if ((op.type == OperationType.transfertNational || op.type == OperationType.transfertInternationalEntrant) &&
-          op.shopDestinationId == shopId && // Nous servons le client
-          op.devise == 'USD') {
-        final autreShopId = op.shopSourceId; // Shop qui a reçu l'argent du client
-        if (autreShopId != null && autreShopId != shopId) {
-          // IMPORTANT: Le shop source nous doit le MONTANT BRUT (montantNet + commission)
-          // Car nous gardons la commission et servons le montantNet
-          soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + op.montantBrut;
-          debugPrint('   Transfert SERVI par nous: Shop $autreShopId nous doit +${op.montantBrut.toStringAsFixed(2)} USD (Brut = Net ${op.montantNet} + Commission ${op.commission})');
+      if ((op.type == OperationType.transfertNational ||
+              op.type == OperationType.transfertInternationalEntrant) &&
+          op.devise == 'USD' &&
+          (op.statut == OperationStatus.validee ||
+              op.statut == OperationStatus.enAttente)) {
+        final shopSourceId = op.shopSourceId;
+        final shopDestId = op.shopDestinationId;
+
+        if (shopSourceId == null || shopDestId == null) continue;
+        if (shopSourceId == shopDestId) continue; // Ignore transferts internes
+
+        final shopSource = shopsMap[shopSourceId];
+        final shopDest = shopsMap[shopDestId];
+
+        if (shopSource == null || shopDest == null) continue;
+
+        // LOGIQUE DIRECTE:
+        // - Le shop qui INITIE le transfert (SOURCE) DOIT au shop qui SERVIRA (DESTINATION) le MONTANT BRUT
+        // - Le shop qui SERVIT le transfert (DESTINATION) a une CRÉANCE sur le shop SOURCE du MONTANT BRUT
+        if (shopId == shopDestId) {
+          // Nous servons → Shop source nous doit (créance)
+          soldesParShop[shopSourceId] =
+              (soldesParShop[shopSourceId] ?? 0.0) + op.montantBrut;
+          debugPrint(
+              '   ✅ DIRECT: Transfert SERVI par nous: Shop ${shopSource.designation} nous doit +${op.montantBrut} USD');
+        } else if (shopId == shopSourceId) {
+          // Nous initions → Nous devons au shop destination (dette)
+          soldesParShop[shopDestId] =
+              (soldesParShop[shopDestId] ?? 0.0) - op.montantBrut;
+          debugPrint(
+              '   ✅ DIRECT: Transfert INITIÉ par nous: Nous devons à Shop ${shopDest.designation} -${op.montantBrut} USD');
         }
       }
     }
-    
-    // 2. TRANSFERTS REÇUS/INITIÉS PAR NOUS (on doit le montant BRUT à l'autre shop)
-    for (final op in operations) {
-      if ((op.type == OperationType.transfertNational || op.type == OperationType.transfertInternationalSortant) &&
-          op.shopSourceId == shopId && // Client nous a payé
-          op.devise == 'USD') {
-        final autreShopId = op.shopDestinationId; // Shop qui va servir
-        if (autreShopId != null && autreShopId != shopId) {
-          // IMPORTANT: On doit le MONTANT BRUT au shop destination
-          // Le shop destination garde la commission et sert le montantNet
-          soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - op.montantBrut;
-          debugPrint('   Transfert INITIÉ par nous: On doit à Shop $autreShopId -${op.montantBrut.toStringAsFixed(2)} USD (Brut = Net ${op.montantNet} + Commission ${op.commission})');
-        }
-      }
-    }
-    
-    // 3. FLOTS EN COURS - Deux sens selon qui a initié
-    // NOUVEAU: Utiliser operations avec type=flotShopToShop au lieu de flotService.flots
-    final allFlots = operations.where((op) => op.type == OperationType.flotShopToShop).toList();
-    
+
+    // CAS 2: FLOTS ENTRE SHOPS (RÈGLES DE DETTES DIRECTES)
+    // Quand un FLOT est ENVOYÉ, le shop qui envoie DOIT au shop qui reçoit
+    // Quand un FLOT est REÇU, le shop qui reçoit a une CRÉANCE sur le shop qui a envoyé
     for (final flot in allFlots) {
-      if (flot.statut == OperationStatus.enAttente && flot.devise == 'USD') {
-        if (flot.shopSourceId == shopId) {
-          // NOUS avons envoyé en cours → Ils Nous qui Doivent rembourser
-          final autreShopId = flot.shopDestinationId;
-          if (autreShopId != null && autreShopId != shopId) {
-            soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + flot.montantNet;
-            debugPrint('   FLOT EN COURS envoyé PAR nous à Shop $autreShopId: Ils Nous qui Doivent +${flot.montantNet} USD');
-          }
-        } else if (flot.shopDestinationId == shopId) {
-          // ILS ont envoyé en cours → On leur doit rembourser
-          final autreShopId = flot.shopSourceId;
-          if (autreShopId != null && autreShopId != shopId) {
-            soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - flot.montantNet;
-            debugPrint('   FLOT EN COURS reçu DE Shop $autreShopId: On leur doit -${flot.montantNet} USD');
-          }
+      if (flot.devise != 'USD') continue;
+
+      final flotSourceId = flot.shopSourceId;
+      final flotDestId = flot.shopDestinationId;
+
+      if (flotSourceId == null || flotDestId == null) continue;
+      if (flotSourceId == flotDestId) continue;
+
+      // FLOT standard (direct) avec logique simple source → destination
+      if (flot.statut == OperationStatus.enAttente ||
+          flot.statut == OperationStatus.validee) {
+        if (flotSourceId == shopId) {
+          // Nous envoyons un flot → Shop destination nous doit (créance)
+          soldesParShop[flotDestId] =
+              (soldesParShop[flotDestId] ?? 0.0) + flot.montantNet;
+          debugPrint(
+              '   💸 FLOT ENVOYÉ: Shop ${flotDestId} nous doit +${flot.montantNet} USD');
+        } else if (flotDestId == shopId) {
+          // Nous recevons un flot → Nous devons au shop source (dette)
+          soldesParShop[flotSourceId] =
+              (soldesParShop[flotSourceId] ?? 0.0) - flot.montantNet;
+          debugPrint(
+              '   💸 FLOT REÇU: Nous devons à Shop ${flotSourceId} -${flot.montantNet} USD');
         }
       }
     }
-    
-    // 4. FLOTS REÇUS ET SERVIS (shopDestinationId = nous) → On leur doit rembourser
-    for (final flot in allFlots) {
-      if (flot.shopDestinationId == shopId &&
-          flot.statut == OperationStatus.validee &&
-          flot.devise == 'USD') {
-        final autreShopId = flot.shopSourceId;
-        if (autreShopId != null && autreShopId != shopId) {
-          soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - flot.montantNet;
-          debugPrint('   FLOT SERVI reçu DE Shop $autreShopId: On leur doit -${flot.montantNet} USD');
-        }
-      }
-    }
-    
-    // 5. FLOTS ENVOYÉS ET SERVIS (shopSourceId = nous) → Ils Nous qui Doivent rembourser
-    for (final flot in allFlots) {
-      if (flot.shopSourceId == shopId &&
-          flot.statut == OperationStatus.validee &&
-          flot.devise == 'USD') {
-        final autreShopId = flot.shopDestinationId;
-        if (autreShopId != null && autreShopId != shopId) {
-          soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + flot.montantNet;
-          debugPrint('   FLOT SERVI envoyé À Shop $autreShopId: Ils Nous qui Doivent +${flot.montantNet} USD');
-        }
-      }
-    }
-    
-    // 6. NOUVEAU: AUTRES SHOP - RETRAITS où nous sommes destinataires (shopDestinationId = nous)
-    // Ces opérations créent une DETTE: l'autre shop nous doit car on a donné l'argent pour leur client
-    final retraitsAutresShop = operations.where((op) =>
-        op.type == OperationType.retrait &&
-        op.shopDestinationId == shopId &&
-        op.shopSourceId != shopId &&
-        op.devise == 'USD' &&
-        _isSameDay(op.dateOp, dateRapport)
-    ).toList();
-    
+
+    // CAS 3: DÉPÔTS/RETRAITS CROSS-SHOP - REMBOURSEMENT
+    // Quand Shop C sert argent déposé à Durba → Dette de C diminue
+
+    // RETRAITS où nous sommes destinataires
+    final retraitsAutresShop = operations
+        .where((op) =>
+            op.type == OperationType.retrait &&
+            op.shopDestinationId == shopId &&
+            op.shopSourceId != shopId &&
+            op.devise == 'USD' &&
+            _isSameDay(op.dateOp, dateRapport))
+        .toList();
+
     for (final retrait in retraitsAutresShop) {
       final autreShopId = retrait.shopSourceId;
-      if (autreShopId != null && autreShopId != shopId) {
-        soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + retrait.montantNet;
-        debugPrint('   RETRAIT AUTRES SHOP: Shop $autreShopId nous doit +${retrait.montantNet} USD (client: ${retrait.clientNom ?? retrait.destinataire})');
+      if (autreShopId == null || autreShopId == shopId) continue;
+
+      // REMBOURSEMENT: Shop normal sert retrait pour Durba
+      if (mainShop != null && retrait.shopDestinationId == mainShop.id) {
+        // Shop normal sert pour Durba → Dette diminue
+        if (shopId == mainShop.id) {
+          // Vue de Durba
+          soldesParShop[autreShopId] =
+              (soldesParShop[autreShopId] ?? 0.0) - retrait.montantNet;
+          debugPrint(
+              '   💵 REMBOURSEMENT RETRAIT: Shop $autreShopId sert pour DURBA: Dette diminue -${retrait.montantNet} USD');
+        } else if (shopId == autreShopId) {
+          // Vue du shop normal
+          soldesParShop[mainShop.id!] =
+              (soldesParShop[mainShop.id!] ?? 0.0) + retrait.montantNet;
+          debugPrint(
+              '   💵 REMBOURSEMENT RETRAIT: NOUS servons pour DURBA: Notre dette diminue +${retrait.montantNet} USD');
+        }
+      } else {
+        // Logique standard
+        soldesParShop[autreShopId] =
+            (soldesParShop[autreShopId] ?? 0.0) + retrait.montantNet;
+        debugPrint(
+            '   💸 RETRAIT CROSS-SHOP: Shop $autreShopId doit +${retrait.montantNet} USD');
       }
     }
-    
-    // 7. NOUVEAU: AUTRES SHOP - DÉPÔTS où nous sommes destinataires (shopDestinationId = nous)
-    // Ces opérations créent une CRÉANCE: on leur doit car ils ont fait un dépôt pour nous
-    final depotsAutresShop = operations.where((op) =>
-        op.type == OperationType.depot &&
-        op.shopDestinationId == shopId &&
-        op.shopSourceId != shopId &&
-        op.devise == 'USD' &&
-        _isSameDay(op.dateOp, dateRapport)
-    ).toList();
-    
+
+    // DÉPÔTS où nous sommes destinataires
+    final depotsAutresShop = operations
+        .where((op) =>
+            op.type == OperationType.depot &&
+            op.shopDestinationId == shopId &&
+            op.shopSourceId != shopId &&
+            op.devise == 'USD' &&
+            _isSameDay(op.dateOp, dateRapport))
+        .toList();
+
     for (final depot in depotsAutresShop) {
       final autreShopId = depot.shopSourceId;
-      if (autreShopId != null && autreShopId != shopId) {
-        soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - depot.montantNet;
-        debugPrint('   DEPOT AUTRES SHOP: On doit à Shop $autreShopId -${depot.montantNet} USD (client: ${depot.clientNom ?? depot.destinataire})');
-      }
+      if (autreShopId == null || autreShopId == shopId) continue;
+
+      soldesParShop[autreShopId] =
+          (soldesParShop[autreShopId] ?? 0.0) - depot.montantNet;
+      debugPrint(
+          '   💳 DÉPÔT CROSS-SHOP: On doit à Shop $autreShopId -${depot.montantNet} USD');
     }
-    
-    // 8. NOUVEAU: OPÉRATIONS où NOUS SOMMES LE SHOP SOURCE (côté opposé des dettes inter-shops)
-    // Ces opérations créent des dettes/créances du côté du shop source (nous)
-    
-    // RETRAITS où nous sommes le shop source (nous envoyons vers un autre shop)
-    // Cela crée une CRÉANCE: l'autre shop nous doit car on a payé pour leur client
-    final retraitsNousSource = operations.where((op) =>
-        op.type == OperationType.retrait &&
-        op.shopSourceId == shopId &&
-        op.shopDestinationId != shopId &&
-        op.devise == 'USD' &&
-        _isSameDay(op.dateOp, dateRapport)
-    ).toList();
-    
+
+    // RETRAITS où nous sommes source
+    final retraitsNousSource = operations
+        .where((op) =>
+            op.type == OperationType.retrait &&
+            op.shopSourceId == shopId &&
+            op.shopDestinationId != shopId &&
+            op.devise == 'USD' &&
+            _isSameDay(op.dateOp, dateRapport))
+        .toList();
+
     for (final retrait in retraitsNousSource) {
       final autreShopId = retrait.shopDestinationId;
-      if (autreShopId != null && autreShopId != shopId) {
-        soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) + retrait.montantNet;
-        debugPrint('   RETRAIT NOUS SOURCE: Shop $autreShopId nous doit +${retrait.montantNet} USD (on a payé pour leur client: ${retrait.clientNom ?? retrait.destinataire})');
-      }
+      if (autreShopId == null || autreShopId == shopId) continue;
+
+      soldesParShop[autreShopId] =
+          (soldesParShop[autreShopId] ?? 0.0) + retrait.montantNet;
+      debugPrint(
+          '   💸 RETRAIT NOUS SOURCE: Shop $autreShopId doit +${retrait.montantNet} USD');
     }
-    
-    // DÉPÔTS où nous sommes le shop source (nous recevons d'un autre shop)
-    // Cela crée une DETTE: on leur doit car ils ont payé pour notre client
-    final depotsNousSource = operations.where((op) =>
-        op.type == OperationType.depot &&
-        op.shopSourceId == shopId &&
-        op.shopDestinationId != shopId &&
-        op.devise == 'USD' &&
-        _isSameDay(op.dateOp, dateRapport)
-    ).toList();
-    
+
+    // DÉPÔTS où nous sommes source
+    final depotsNousSource = operations
+        .where((op) =>
+            op.type == OperationType.depot &&
+            op.shopSourceId == shopId &&
+            op.shopDestinationId != shopId &&
+            op.devise == 'USD' &&
+            _isSameDay(op.dateOp, dateRapport))
+        .toList();
+
     for (final depot in depotsNousSource) {
       final autreShopId = depot.shopDestinationId;
-      if (autreShopId != null && autreShopId != shopId) {
-        soldesParShop[autreShopId] = (soldesParShop[autreShopId] ?? 0.0) - depot.montantNet;
-        debugPrint('   DEPOT NOUS SOURCE: On doit à Shop $autreShopId -${depot.montantNet} USD (ils ont reçu pour notre client: ${depot.clientNom ?? depot.destinataire})');
-      }
+      if (autreShopId == null || autreShopId == shopId) continue;
+
+      soldesParShop[autreShopId] =
+          (soldesParShop[autreShopId] ?? 0.0) - depot.montantNet;
+      debugPrint(
+          '   💳 DÉPÔT NOUS SOURCE: On doit à Shop $autreShopId -${depot.montantNet} USD');
     }
-    
+
     // TRAITEMENT DES RÈGLEMENTS TRIANGULAIRES DE DETTES
     // Logique: Shop A doit à Shop C, Shop A paie Shop B pour le compte de Shop C
     // Impact: Dette de Shop A à Shop C diminue, Dette de Shop B à Shop C augmente
-    
+
     // IMPORTANT: Filtrer les règlements par date du rapport pour éviter les doublons
-    final dateDebut = DateTime(dateRapport.year, dateRapport.month, dateRapport.day);
+    final dateDebut =
+        DateTime(dateRapport.year, dateRapport.month, dateRapport.day);
     final dateFin = dateDebut.add(const Duration(days: 1));
-    
-    final allTriangularSettlements = await LocalDB.instance.getAllTriangularDebtSettlements();
+
+    final allTriangularSettlements =
+        await LocalDB.instance.getAllTriangularDebtSettlements();
     final triangularSettlements = allTriangularSettlements.where((settlement) {
-      return settlement.dateReglement.isAfter(dateDebut.subtract(const Duration(seconds: 1))) &&
-             settlement.dateReglement.isBefore(dateFin);
+      return settlement.dateReglement
+              .isAfter(dateDebut.subtract(const Duration(seconds: 1))) &&
+          settlement.dateReglement.isBefore(dateFin);
     }).toList();
-    
-    debugPrint('🔺 Règlements triangulaires du jour: ${triangularSettlements.length}');
-    
+
+    debugPrint(
+        '🔺 Règlements triangulaires du jour: ${triangularSettlements.length}');
+
     for (final settlement in triangularSettlements) {
       final debtorId = settlement.shopDebtorId;
       final intermediaryId = settlement.shopIntermediaryId;
       final creditorId = settlement.shopCreditorId;
       final amount = settlement.montant;
-      
+
       // Appliquer les impacts pour tous les rôles impliqués
       // Configuration pour votre cas spécifique:
       // - Shop A (debtor): KAMPALA (doit à DURBA)
-      // - Shop B (intermediary): DWEMBE (doit à KAMPALA) 
+      // - Shop B (intermediary): DWEMBE (doit à KAMPALA)
       // - Shop C (creditor): DURBA (est dû par KAMPALA)
       // - Montant: 20,000 USD (utiliser la dette de DWEMBE pour payer la dette de KAMPALA)
-      
+
       if (shopId == creditorId) {
-        // Pour le créancier (DURBA): 
+        // Pour le créancier (DURBA):
         // - La dette de KAMPALA envers DURBA diminue de 20,000
         // - La dette de DWEMBE envers DURBA augmente de 20,000
-        soldesParShop[debtorId] = (soldesParShop[debtorId] ?? 0.0) - amount; // Dette de KAMPALA diminue
-        soldesParShop[intermediaryId] = (soldesParShop[intermediaryId] ?? 0.0) + amount; // Dette de DWEMBE augmente
-        debugPrint('   RÈGLEMENT TRIANGULAIRE (CRÉANCIER): Dette KAMPALA -$amount, Dette DWEMBE +$amount');
+        soldesParShop[debtorId] = (soldesParShop[debtorId] ?? 0.0) -
+            amount; // Dette de KAMPALA diminue
+        soldesParShop[intermediaryId] = (soldesParShop[intermediaryId] ?? 0.0) +
+            amount; // Dette de DWEMBE augmente
+        debugPrint(
+            '   RÈGLEMENT TRIANGULAIRE (CRÉANCIER): Dette KAMPALA -$amount, Dette DWEMBE +$amount');
       } else if (shopId == debtorId) {
         // Pour le débiteur (KAMPALA):
         // - Sa dette envers le créancier (DURBA) diminue de 49,000 → solde AUGMENTE
         // - L'intermédiaire (DWEMBE) nous doit moins (a payé pour nous) → solde DIMINUE
         // IMPACT NET = 0 (échange dette contre créance)
-        soldesParShop[creditorId] = (soldesParShop[creditorId] ?? 0.0) + amount; // Dette envers DURBA diminue
-        soldesParShop[intermediaryId] = (soldesParShop[intermediaryId] ?? 0.0) - amount; // DWEMBE nous doit moins
-        debugPrint('   RÈGLEMENT TRIANGULAIRE (DÉBITEUR): Dette envers ${shopsMap[creditorId]?.designation ?? creditorId} diminue (+$amount), Créance sur ${shopsMap[intermediaryId]?.designation ?? intermediaryId} diminue (-$amount)');
+        soldesParShop[creditorId] = (soldesParShop[creditorId] ?? 0.0) +
+            amount; // Dette envers DURBA diminue
+        soldesParShop[intermediaryId] = (soldesParShop[intermediaryId] ?? 0.0) -
+            amount; // DWEMBE nous doit moins
+        debugPrint(
+            '   RÈGLEMENT TRIANGULAIRE (DÉBITEUR): Dette envers ${shopsMap[creditorId]?.designation ?? creditorId} diminue (+$amount), Créance sur ${shopsMap[intermediaryId]?.designation ?? intermediaryId} diminue (-$amount)');
       } else if (shopId == intermediaryId) {
         // Pour l'intermédiaire (DWEMBE):
         // - La dette envers KAMPALA diminue (DWEMBE devait à KAMPALA, maintenant moins)
         // - La dette envers DURBA augmente (DWEMBE doit maintenant à DURBA)
         // Logique: Pour diminuer une dette, on AUGMENTE le solde (moins négatif)
         //          Pour augmenter une dette, on DIMINUE le solde (plus négatif)
-        soldesParShop[debtorId] = (soldesParShop[debtorId] ?? 0.0) + amount; // Dette envers KAMPALA diminue (solde augmente)
-        soldesParShop[creditorId] = (soldesParShop[creditorId] ?? 0.0) - amount; // Dette envers DURBA augmente (solde diminue)
-        debugPrint('   RÈGLEMENT TRIANGULAIRE (INTERMÉDIAIRE): Dette envers ${shopsMap[debtorId]?.designation ?? debtorId} diminue (+$amount), Dette envers ${shopsMap[creditorId]?.designation ?? creditorId} augmente (-$amount)');
+        soldesParShop[debtorId] = (soldesParShop[debtorId] ?? 0.0) +
+            amount; // Dette envers KAMPALA diminue (solde augmente)
+        soldesParShop[creditorId] = (soldesParShop[creditorId] ?? 0.0) -
+            amount; // Dette envers DURBA augmente (solde diminue)
+        debugPrint(
+            '   RÈGLEMENT TRIANGULAIRE (INTERMÉDIAIRE): Dette envers ${shopsMap[debtorId]?.designation ?? debtorId} diminue (+$amount), Dette envers ${shopsMap[creditorId]?.designation ?? creditorId} augmente (-$amount)');
       }
     }
-    
+
     // Debug integration info masked
-    
+
     // Séparer en créances (solde > 0) et dettes (solde < 0)
     final shopsNousDoivent = <CompteShopResume>[];
     final shopsNousDevons = <CompteShopResume>[];
-    
+
     for (final entry in soldesParShop.entries) {
       final autreShopId = entry.key;
       final solde = entry.value;
       final shop = shopsMap[autreShopId];
-      
+
       if (shop == null) continue;
-      
+
       if (solde > 0) {
         // Ils Nous qui Doivent (créance)
         shopsNousDoivent.add(CompteShopResume(
@@ -864,7 +1020,8 @@ class RapportClotureService {
           localisation: shop.localisation,
           montant: solde,
         ));
-        debugPrint('   ✅ CRÉANCE: ${shop.designation} nous doit ${solde.toStringAsFixed(2)} USD');
+        debugPrint(
+            '   ✅ CRÉANCE: ${shop.designation} nous doit ${solde.toStringAsFixed(2)} USD');
       } else if (solde < 0) {
         // On leur doit (dette)
         shopsNousDevons.add(CompteShopResume(
@@ -873,55 +1030,67 @@ class RapportClotureService {
           localisation: shop.localisation,
           montant: solde.abs(),
         ));
-        debugPrint('   ❌ DETTE: On doit à ${shop.designation} ${solde.abs().toStringAsFixed(2)} USD');
+        debugPrint(
+            '   ❌ DETTE: On doit à ${shop.designation} ${solde.abs().toStringAsFixed(2)} USD');
       }
     }
-    
-    final totalCreances = shopsNousDoivent.fold(0.0, (sum, shop) => sum + shop.montant);
-    final totalDettes = shopsNousDevons.fold(0.0, (sum, shop) => sum + shop.montant);
-    
+
+    final totalCreances =
+        shopsNousDoivent.fold(0.0, (sum, shop) => sum + shop.montant);
+    final totalDettes =
+        shopsNousDevons.fold(0.0, (sum, shop) => sum + shop.montant);
+
     debugPrint('📊 RÉSUMÉ INTER-SHOPS:');
-    debugPrint('   Total créances (ils Nous qui Doivent): ${totalCreances.toStringAsFixed(2)} USD');
-    debugPrint('   Total dettes (on leur doit): ${totalDettes.toStringAsFixed(2)} USD');
-    debugPrint('   Solde net: ${(totalCreances - totalDettes).toStringAsFixed(2)} USD');
+    debugPrint(
+        '   Total créances (ils Nous qui Doivent): ${totalCreances.toStringAsFixed(2)} USD');
+    debugPrint(
+        '   Total dettes (on leur doit): ${totalDettes.toStringAsFixed(2)} USD');
+    debugPrint(
+        '   Solde net: ${(totalCreances - totalDettes).toStringAsFixed(2)} USD');
     debugPrint('📊 === FIN CALCUL DETTES/CRÉANCES ===');
-    
+
     return {
       'nousDoivent': shopsNousDoivent,
       'nousDevons': shopsNousDevons,
     };
   }
-    
+
   /// NOUVEAU: Récupérer les règlements triangulaires de dettes impliquant ce shop
   /// pour affichage dans le rapport de clôture
-  Future<List<TriangularSettlementResume>> _getTriangularSettlements(int shopId, DateTime dateRapport) async {
-    debugPrint('🔺 === RÉCUPÉRATION RÈGLEMENTS TRIANGULAIRES POUR SHOP $shopId ===');
-      
-    final allSettlements = await LocalDB.instance.getAllTriangularDebtSettlements();
+  Future<List<TriangularSettlementResume>> _getTriangularSettlements(
+      int shopId, DateTime dateRapport) async {
+    debugPrint(
+        '🔺 === RÉCUPÉRATION RÈGLEMENTS TRIANGULAIRES POUR SHOP $shopId ===');
+
+    final allSettlements =
+        await LocalDB.instance.getAllTriangularDebtSettlements();
     final shops = await LocalDB.instance.getAllShops();
     final shopsMap = {for (var shop in shops) shop.id!: shop};
-    
+
     // Filtrer par date (seulement les règlements de la journée du rapport)
-    final dateDebut = DateTime(dateRapport.year, dateRapport.month, dateRapport.day);
-    final dateFin = DateTime(dateRapport.year, dateRapport.month, dateRapport.day, 23, 59, 59);
-    
+    final dateDebut =
+        DateTime(dateRapport.year, dateRapport.month, dateRapport.day);
+    final dateFin = DateTime(
+        dateRapport.year, dateRapport.month, dateRapport.day, 23, 59, 59);
+
     final settlementsDuJour = allSettlements.where((settlement) {
-      return settlement.dateReglement.isAfter(dateDebut.subtract(const Duration(seconds: 1))) && 
-             settlement.dateReglement.isBefore(dateFin.add(const Duration(seconds: 1)));
+      return settlement.dateReglement
+              .isAfter(dateDebut.subtract(const Duration(seconds: 1))) &&
+          settlement.dateReglement
+              .isBefore(dateFin.add(const Duration(seconds: 1)));
     }).toList();
-      
+
     final List<TriangularSettlementResume> result = [];
-      
+
     for (final settlement in settlementsDuJour) {
       // Vérifier si le règlement concerne ce shop (débiteur, intermédiaire ou créancier)
-      if (settlement.shopDebtorId == shopId || 
-          settlement.shopIntermediaryId == shopId || 
+      if (settlement.shopDebtorId == shopId ||
+          settlement.shopIntermediaryId == shopId ||
           settlement.shopCreditorId == shopId) {
-          
         // Déterminer le rôle du shop courant
         String role;
         String impact;
-          
+
         if (settlement.shopDebtorId == shopId) {
           role = 'debtor'; // Débiteur
           impact = 'diminue'; // Sa dette diminue
@@ -932,7 +1101,7 @@ class RapportClotureService {
           role = 'creditor'; // Créancier
           impact = 'aucun'; // Pas d'impact direct sur sa dette
         }
-          
+
         result.add(TriangularSettlementResume(
           settlementId: settlement.id!,
           reference: settlement.reference,
@@ -946,176 +1115,222 @@ class RapportClotureService {
           impactSurDette: impact,
           notes: settlement.notes,
         ));
-          
-        debugPrint('   🔺 Règlement trouvé: ${settlement.reference} - Rôle: $role - Impact: $impact');
+
+        debugPrint(
+            '   🔺 Règlement trouvé: ${settlement.reference} - Rôle: $role - Impact: $impact');
       }
     }
-      
-    debugPrint('   🔺 Nombre de règlements triangulaires trouvés: ${result.length}');
+
+    debugPrint(
+        '   🔺 Nombre de règlements triangulaires trouvés: ${result.length}');
     debugPrint('🔺 === FIN RÉCUPÉRATION RÈGLEMENTS TRIANGULAIRES ===');
-      
+
     return result;
   }
-    
+
   /// Calculer les comptes spéciaux (FRAIS et DÉPENSE)
   /// IMPORTANT: Les frais affichés sont UNIQUEMENT les frais encaissés sur les transferts que nous avons servis
-  Future<Map<String, dynamic>> _calculerComptesSpeciaux(int shopId, DateTime dateRapport, List<OperationModel>? providedOperations) async {
+  Future<Map<String, dynamic>> _calculerComptesSpeciaux(int shopId,
+      DateTime dateRapport, List<OperationModel>? providedOperations) async {
     final service = CompteSpecialService.instance;
     await service.loadTransactions(shopId: shopId);
-    
+
     // Début de la journée
-    final startOfDay = DateTime(dateRapport.year, dateRapport.month, dateRapport.day);
+    final startOfDay =
+        DateTime(dateRapport.year, dateRapport.month, dateRapport.day);
     final endOfDay = startOfDay.add(const Duration(days: 1));
-    
+
     // Récupérer les transactions du jour
     final fraisDuJour = service.getFrais(
       shopId: shopId,
       startDate: startOfDay,
       endDate: endOfDay,
     );
-    
+
     final depensesDuJour = service.getDepenses(
       shopId: shopId,
       startDate: startOfDay,
       endDate: endOfDay,
     );
-    
+
     // Calculer les RETRAITS FRAIS du jour (montants négatifs)
     final retraitsFraisList = fraisDuJour
         .where((t) => t.typeTransaction == TypeTransactionCompte.RETRAIT)
         .toList();
-    final retraitsFrais = retraitsFraisList.fold(0.0, (sum, t) => sum + t.montant.abs());
-    
+    final retraitsFrais =
+        retraitsFraisList.fold(0.0, (sum, t) => sum + t.montant.abs());
+
     // NOUVEAU: Calculer les FRAIS MANUELS du jour (commissions ajoutées manuellement)
     // Exemple: Frais de flots administratifs
     final fraisManuels = fraisDuJour
-        .where((t) => t.typeTransaction == TypeTransactionCompte.COMMISSION_AUTO)
+        .where(
+            (t) => t.typeTransaction == TypeTransactionCompte.COMMISSION_AUTO)
         .fold(0.0, (sum, t) => sum + t.montant);
-    
+
     // NOUVELLE LOGIQUE: Calculer les FRAIS ENCAISSÉS sur TOUS les transferts qui passent par le shop
     // Les frais peuvent appartenir au shop selon deux cas:
     // 1. Le shop est la DESTINATION (il sert le transfert) - frais gagnés
     // 2. Le shop est la SOURCE (il initie le transfert) - frais payés mais comptabilisés
-    final operations = providedOperations ?? await LocalDB.instance.getAllOperations();
-    
+    final operations =
+        providedOperations ?? await LocalDB.instance.getAllOperations();
+
     // Récupérer tous les shops pour afficher leurs noms dans les logs
     final shops = await LocalDB.instance.getAllShops();
     final shopsMap = {for (var shop in shops) shop.id: shop.designation};
-    
+
     // Transferts SERVIS par le shop (où le shop est DESTINATION) - frais gagnés
     // MODIFICATION: Utiliser uniquement createdAt pour tous les transferts où le shop est destination
-    final transfertsServis = operations.where((op) =>
-        op.shopDestinationId == shopId && // Nous sommes le shop destination
-        (op.type == OperationType.transfertNational ||
-         op.type == OperationType.transfertInternationalEntrant ||
-         op.type == OperationType.transfertInternationalSortant) &&
-        op.statut == OperationStatus.validee &&
-        _isSameDay(op.createdAt ?? op.dateOp, dateRapport)  // CHANGEMENT: Utiliser uniquement createdAt ?? dateOp
-    ).toList();
-    
+    final transfertsServis = operations
+        .where((op) =>
+                op.shopDestinationId ==
+                    shopId && // Nous sommes le shop destination
+                (op.type == OperationType.transfertNational ||
+                    op.type == OperationType.transfertInternationalEntrant ||
+                    op.type == OperationType.transfertInternationalSortant) &&
+                op.statut == OperationStatus.validee &&
+                _isSameDay(op.createdAt ?? op.dateOp,
+                    dateRapport) // CHANGEMENT: Utiliser uniquement createdAt ?? dateOp
+            )
+        .toList();
+
     // Transferts EN ATTENTE pour le shop (où le shop est DESTINATION) - frais potentiels
-    final transfertsEnAttente = operations.where((op) =>
-        op.shopDestinationId == shopId && // Nous sommes le shop destination
-        (op.type == OperationType.transfertNational ||
-         op.type == OperationType.transfertInternationalEntrant ||
-         op.type == OperationType.transfertInternationalSortant) &&
-        op.statut == OperationStatus.enAttente &&
-        _isSameDay(op.createdAt ?? op.dateOp, dateRapport)  // CHANGEMENT: Utiliser uniquement createdAt ?? dateOp
-    ).toList();
-    
+    final transfertsEnAttente = operations
+        .where((op) =>
+                op.shopDestinationId ==
+                    shopId && // Nous sommes le shop destination
+                (op.type == OperationType.transfertNational ||
+                    op.type == OperationType.transfertInternationalEntrant ||
+                    op.type == OperationType.transfertInternationalSortant) &&
+                op.statut == OperationStatus.enAttente &&
+                _isSameDay(op.createdAt ?? op.dateOp,
+                    dateRapport) // CHANGEMENT: Utiliser uniquement createdAt ?? dateOp
+            )
+        .toList();
+
     // Transferts INITIÉS par le shop (où le shop est SOURCE) - frais payés mais comptabilisés
-    final transfertsInities = operations.where((op) =>
-        op.shopSourceId == shopId && // Nous sommes le shop source
-        (op.type == OperationType.transfertNational ||
-         op.type == OperationType.transfertInternationalSortant) &&
-        op.statut == OperationStatus.validee &&
-        _isSameDay(op.createdAt ?? op.dateOp, dateRapport)  // CHANGEMENT: Utiliser uniquement createdAt ?? dateOp
-    ).toList();
-    
-    // Total des frais encaissés = somme des commissions sur les transferts SERVIS et EN ATTENTE + frais manuels
-    final fraisEncaissesServis = transfertsServis.fold(0.0, (sum, op) => sum + op.commission);
-    final fraisEncaissesEnAttente = transfertsEnAttente.fold(0.0, (sum, op) => sum + op.commission);
-    final fraisEncaissesInities = transfertsInities.fold(0.0, (sum, op) => sum + op.commission);
-    final fraisEncaisses = fraisEncaissesServis + fraisEncaissesEnAttente + fraisManuels; // MODIFIÉ: Ajouter frais manuels
-    
+    final transfertsInities = operations
+        .where((op) =>
+                op.shopSourceId == shopId && // Nous sommes le shop source
+                (op.type == OperationType.transfertNational ||
+                    op.type == OperationType.transfertInternationalSortant) &&
+                op.statut == OperationStatus.validee &&
+                _isSameDay(op.createdAt ?? op.dateOp,
+                    dateRapport) // CHANGEMENT: Utiliser uniquement createdAt ?? dateOp
+            )
+        .toList();
+
+    // Total des frais encaissés = somme des commissions sur les transferts SERVIS UNIQUEMENT + frais manuels
+    // ⚠️ Les transferts en attente ne sont PAS comptabilisés (frais potentiels seulement)
+    final fraisEncaissesServis =
+        transfertsServis.fold(0.0, (sum, op) => sum + op.commission);
+    final fraisEncaissesEnAttente =
+        transfertsEnAttente.fold(0.0, (sum, op) => sum + op.commission);
+    final fraisEncaissesInities =
+        transfertsInities.fold(0.0, (sum, op) => sum + op.commission);
+    final fraisEncaisses = fraisEncaissesServis +
+        fraisManuels; // CORRECTION: Ne PAS ajouter fraisEncaissesEnAttente (potentiels uniquement)
+
     // Grouper les frais par shop source (qui a envoyé le transfert)
     // Selon la règle métier, seuls les transferts SERVIS sont comptabilisés
     final Map<String, double> fraisGroupesParShop = {};
-    
+
     // Ajouter les frais des transferts servis (commission gagnée par ce shop)
     for (final op in transfertsServis) {
       final shopSource = shopsMap[op.shopSourceId] ?? 'Shop ${op.shopSourceId}';
-      fraisGroupesParShop[shopSource] = (fraisGroupesParShop[shopSource] ?? 0.0) + op.commission;
+      fraisGroupesParShop[shopSource] =
+          (fraisGroupesParShop[shopSource] ?? 0.0) + op.commission;
     }
-    
+
     // Ne pas ajouter les frais des transferts initiés (selon règle métier)
     // Les frais initiés par ce shop sont comptabilisés dans le rapport du shop destination
-    
-    debugPrint('📊 FRAIS ENCAISSÉS SUR LES TRANSFERTS (Servis et en attente):');
-    debugPrint('   Nombre de transferts servis: ${transfertsServis.length} (frais gagnés: ${fraisEncaissesServis.toStringAsFixed(2)} USD)');
-    debugPrint('   Nombre de transferts en attente: ${transfertsEnAttente.length} (frais potentiels: ${fraisEncaissesEnAttente.toStringAsFixed(2)} USD)');
-    debugPrint('   Nombre de transferts initiés: ${transfertsInities.length} (frais payés: ${fraisEncaissesInities.toStringAsFixed(2)} USD) - NON COMPTABILISÉS');
-    debugPrint('   Frais manuels du jour: ${fraisManuels.toStringAsFixed(2)} USD (ex: flots administratifs)');
-    debugPrint('   Total frais encaissés: ${fraisEncaisses.toStringAsFixed(2)} USD (transferts + manuels)');
+
+    debugPrint('📊 FRAIS ENCAISSÉS SUR LES TRANSFERTS (Servis uniquement):');
+    debugPrint(
+        '   Nombre de transferts servis: ${transfertsServis.length} (frais gagnés: ${fraisEncaissesServis.toStringAsFixed(2)} USD)');
+    debugPrint(
+        '   Nombre de transferts en attente: ${transfertsEnAttente.length} (frais potentiels: ${fraisEncaissesEnAttente.toStringAsFixed(2)} USD) - NON COMPTABILISÉS');
+    debugPrint(
+        '   Nombre de transferts initiés: ${transfertsInities.length} (frais payés: ${fraisEncaissesInities.toStringAsFixed(2)} USD) - NON COMPTABILISÉS');
+    debugPrint(
+        '   Frais manuels du jour: ${fraisManuels.toStringAsFixed(2)} USD (ex: flots administratifs)');
+    debugPrint(
+        '   Total frais encaissés: ${fraisEncaisses.toStringAsFixed(2)} USD (transferts SERVIS + manuels UNIQUEMENT)');
     debugPrint('   Frais groupés par shop:');
     fraisGroupesParShop.forEach((shop, montant) {
       debugPrint('     - $shop : ${montant.toStringAsFixed(2)} USD');
     });
-    
+
     transfertsServis.forEach((op) {
       final shopSource = shopsMap[op.shopSourceId] ?? 'Shop ${op.shopSourceId}';
-      final shopDest = shopsMap[op.shopDestinationId] ?? 'Shop ${op.shopDestinationId}';
+      final shopDest =
+          shopsMap[op.shopDestinationId] ?? 'Shop ${op.shopDestinationId}';
       final destinataire = op.destinataire ?? 'N/A';
-      debugPrint('     - SERVI: $shopSource → $shopDest, $destinataire : ${op.montantNet.toStringAsFixed(2)} USD (Frais GAGNÉS: ${op.commission.toStringAsFixed(2)} USD)');
+      debugPrint(
+          '     - SERVI: $shopSource → $shopDest, $destinataire : ${op.montantNet.toStringAsFixed(2)} USD (Frais GAGNÉS: ${op.commission.toStringAsFixed(2)} USD)');
     });
-    
+
     // Ajouter les transferts en attente
     transfertsEnAttente.forEach((op) {
       final shopSource = shopsMap[op.shopSourceId] ?? 'Shop ${op.shopSourceId}';
-      final shopDest = shopsMap[op.shopDestinationId] ?? 'Shop ${op.shopDestinationId}';
+      final shopDest =
+          shopsMap[op.shopDestinationId] ?? 'Shop ${op.shopDestinationId}';
       final destinataire = op.destinataire ?? 'N/A';
-      debugPrint('     - EN ATTENTE: $shopSource → $shopDest, $destinataire : ${op.montantNet.toStringAsFixed(2)} USD (Frais POTENTIELS: ${op.commission.toStringAsFixed(2)} USD)');
+      debugPrint(
+          '     - EN ATTENTE: $shopSource → $shopDest, $destinataire : ${op.montantNet.toStringAsFixed(2)} USD (Frais POTENTIELS: ${op.commission.toStringAsFixed(2)} USD)');
     });
-    
+
     // Selon la règle métier, les transferts initiés ne sont pas comptabilisés dans ce rapport
     transfertsInities.forEach((op) {
       final shopSource = shopsMap[op.shopSourceId] ?? 'Shop ${op.shopSourceId}';
-      final shopDest = shopsMap[op.shopDestinationId] ?? 'Shop ${op.shopDestinationId}';
+      final shopDest =
+          shopsMap[op.shopDestinationId] ?? 'Shop ${op.shopDestinationId}';
       final destinataire = op.destinataire ?? 'N/A';
-      debugPrint('     - INITIÉ: $shopSource → $shopDest, $destinataire : ${op.montantNet.toStringAsFixed(2)} USD (Frais PAYÉS: ${op.commission.toStringAsFixed(2)} USD) - NON COMPTABILISÉ');
-    });    
+      debugPrint(
+          '     - INITIÉ: $shopSource → $shopDest, $destinataire : ${op.montantNet.toStringAsFixed(2)} USD (Frais PAYÉS: ${op.commission.toStringAsFixed(2)} USD) - NON COMPTABILISÉ');
+    });
     debugPrint('📊 RETRAITS SUR FRAIS DU JOUR:');
     debugPrint('   Nombre de retraits: ${retraitsFraisList.length}');
     debugPrint('   Total retraits: ${retraitsFrais.toStringAsFixed(2)} USD');
     retraitsFraisList.forEach((r) {
-      debugPrint('     - ${r.description} : ${r.montant.abs().toStringAsFixed(2)} USD');
+      debugPrint(
+          '     - ${r.description} : ${r.montant.abs().toStringAsFixed(2)} USD');
     });
-    
+
     // Calculer les SORTIES DÉPENSE du jour (montants négatifs)
     final sortiesDepense = depensesDuJour
         .where((t) => t.typeTransaction == TypeTransactionCompte.SORTIE)
         .fold(0.0, (sum, t) => sum + t.montant.abs());
-    
+
     // Calculer les DÉPÔTS DÉPENSE du jour (montants positifs)
     final depotsDepense = depensesDuJour
         .where((t) => t.typeTransaction == TypeTransactionCompte.DEPOT)
         .fold(0.0, (sum, t) => sum + t.montant);
-    
+
     // Soldes globaux (tout l'historique)
     final soldeFraisTotal = service.getSoldeFrais(shopId: shopId);
     final soldeDepenseTotal = service.getSoldeDepense(shopId: shopId);
-    
-    debugPrint('📊 COMPTES SPÉCIAUX - ${dateRapport.toIso8601String().split('T')[0]}:');
-    debugPrint('   FRAIS: Frais encaissés (transferts SERVIS et EN ATTENTE) = ${fraisEncaisses.toStringAsFixed(2)} USD');
-    debugPrint('   FRAIS: Retraits du jour = ${retraitsFrais.toStringAsFixed(2)} USD');
-    debugPrint('   FRAIS: Solde total = ${soldeFraisTotal.toStringAsFixed(2)} USD');    debugPrint('   DÉPENSE: Dépôts du jour = ${depotsDepense.toStringAsFixed(2)} USD');
-    debugPrint('   DÉPENSE: Sorties du jour = ${sortiesDepense.toStringAsFixed(2)} USD');
-    debugPrint('   DÉPENSE: Solde total = ${soldeDepenseTotal.toStringAsFixed(2)} USD');
-    
+
+    debugPrint(
+        '📊 COMPTES SPÉCIAUX - ${dateRapport.toIso8601String().split('T')[0]}:');
+    debugPrint(
+        '   FRAIS: Frais encaissés (transferts SERVIS UNIQUEMENT) = ${fraisEncaisses.toStringAsFixed(2)} USD');
+    debugPrint(
+        '   FRAIS: Retraits du jour = ${retraitsFrais.toStringAsFixed(2)} USD');
+    debugPrint(
+        '   FRAIS: Solde total = ${soldeFraisTotal.toStringAsFixed(2)} USD');
+    debugPrint(
+        '   DÉPENSE: Dépôts du jour = ${depotsDepense.toStringAsFixed(2)} USD');
+    debugPrint(
+        '   DÉPENSE: Sorties du jour = ${sortiesDepense.toStringAsFixed(2)} USD');
+    debugPrint(
+        '   DÉPENSE: Solde total = ${soldeDepenseTotal.toStringAsFixed(2)} USD');
+
     return {
       'retraits_frais': retraitsFrais,
-      'commissions_frais': fraisEncaisses, // MODIFIÉ: Inclure les frais encaissés des transferts servis et en attente
-      'frais_groupes_par_shop': fraisGroupesParShop, // NOUVEAU: Frais groupés par shop
+      'commissions_frais':
+          fraisEncaisses, // CORRECTION: Inclure UNIQUEMENT les frais encaissés des transferts SERVIS (pas en attente)
+      'frais_groupes_par_shop':
+          fraisGroupesParShop, // NOUVEAU: Frais groupés par shop
       'solde_frais_total': soldeFraisTotal,
       'sorties_depense': sortiesDepense,
       'depots_depense': depotsDepense,
@@ -1124,52 +1339,65 @@ class RapportClotureService {
   }
 
   /// Calculer les transferts groupés par route
-  Future<List<TransfertRouteResume>> _calculerTransfertsGroupes(int shopId, DateTime dateRapport, List<OperationModel>? providedOperations) async {
+  Future<List<TransfertRouteResume>> _calculerTransfertsGroupes(int shopId,
+      DateTime dateRapport, List<OperationModel>? providedOperations) async {
     // Utiliser les opérations fournies (de "Mes Ops") ou charger depuis LocalDB
-    final operations = providedOperations ?? await LocalDB.instance.getAllOperations();
-    
+    final operations =
+        providedOperations ?? await LocalDB.instance.getAllOperations();
+
     // Récupérer tous les shops pour obtenir leurs désignations
     final allShops = await LocalDB.instance.getAllShops();
-    
+
     // Filtrer les transferts reçus (validees) pour le shop courant - utilise uniquement createdAt
-    final transfertsRecus = operations.where((op) =>
-        op.shopDestinationId == shopId &&
-        (op.type == OperationType.transfertNational ||
-         op.type == OperationType.transfertInternationalEntrant ||
-         op.type == OperationType.transfertInternationalSortant) &&
-        op.statut == OperationStatus.validee &&
-        _isSameDay(op.createdAt ?? op.dateOp, dateRapport)  // CHANGEMENT: Utiliser uniquement createdAt ?? dateOp
-    ).toList();
+    final transfertsRecus = operations
+        .where((op) =>
+                op.shopDestinationId == shopId &&
+                (op.type == OperationType.transfertNational ||
+                    op.type == OperationType.transfertInternationalEntrant ||
+                    op.type == OperationType.transfertInternationalSortant) &&
+                op.statut == OperationStatus.validee &&
+                _isSameDay(op.createdAt ?? op.dateOp,
+                    dateRapport) // CHANGEMENT: Utiliser uniquement createdAt ?? dateOp
+            )
+        .toList();
 
     // Filtrer les transferts servis (validees) par le shop courant - utilise uniquement createdAt
-    final transfertsServis = operations.where((op) =>
-        op.shopSourceId == shopId &&
-        (op.type == OperationType.transfertNational ||
-         op.type == OperationType.transfertInternationalSortant ||
-         op.type == OperationType.transfertInternationalEntrant) &&
-        op.statut == OperationStatus.validee &&
-        _isSameDay(op.createdAt ?? op.dateOp, dateRapport)  // CHANGEMENT: Utiliser uniquement createdAt ?? dateOp
-    ).toList();
+    final transfertsServis = operations
+        .where((op) =>
+                op.shopSourceId == shopId &&
+                (op.type == OperationType.transfertNational ||
+                    op.type == OperationType.transfertInternationalSortant ||
+                    op.type == OperationType.transfertInternationalEntrant) &&
+                op.statut == OperationStatus.validee &&
+                _isSameDay(op.createdAt ?? op.dateOp,
+                    dateRapport) // CHANGEMENT: Utiliser uniquement createdAt ?? dateOp
+            )
+        .toList();
 
     // Filtrer les transferts en attente pour le shop courant
-    final transfertsEnAttente = operations.where((op) =>
-        (op.shopDestinationId == shopId || op.shopSourceId == shopId) &&
-        (op.type == OperationType.transfertNational ||
-         op.type == OperationType.transfertInternationalEntrant ||
-         op.type == OperationType.transfertInternationalSortant) &&
-        op.statut == OperationStatus.enAttente
-    ).toList();
+    final transfertsEnAttente = operations
+        .where((op) =>
+            (op.shopDestinationId == shopId || op.shopSourceId == shopId) &&
+            (op.type == OperationType.transfertNational ||
+                op.type == OperationType.transfertInternationalEntrant ||
+                op.type == OperationType.transfertInternationalSortant) &&
+            op.statut == OperationStatus.enAttente)
+        .toList();
 
     // Grouper par route (source -> destination)
     final Map<String, List<OperationModel>> transfertsParRoute = {};
-    
+
     // Regrouper toutes les opérations par route
-    final allTransferts = [...transfertsRecus, ...transfertsServis, ...transfertsEnAttente];
+    final allTransferts = [
+      ...transfertsRecus,
+      ...transfertsServis,
+      ...transfertsEnAttente
+    ];
     for (final op in allTransferts) {
       final sourceId = op.shopSourceId ?? 0;
       final destId = op.shopDestinationId ?? 0;
       final routeKey = '$sourceId->$destId';
-      
+
       if (!transfertsParRoute.containsKey(routeKey)) {
         transfertsParRoute[routeKey] = [];
       }
@@ -1178,15 +1406,19 @@ class RapportClotureService {
 
     // Créer les résumés par route
     final List<TransfertRouteResume> result = [];
-    
+
     for (final entry in transfertsParRoute.entries) {
       final routeParts = entry.key.split('->');
       final sourceId = int.tryParse(routeParts[0]) ?? 0;
       final destId = int.tryParse(routeParts[1]) ?? 0;
-      
-      final sourceShop = allShops.firstWhere((s) => s.id == sourceId, orElse: () => ShopModel(id: sourceId, designation: 'Shop $sourceId', localisation: ''));
-      final destShop = allShops.firstWhere((s) => s.id == destId, orElse: () => ShopModel(id: destId, designation: 'Shop $destId', localisation: ''));
-      
+
+      final sourceShop = allShops.firstWhere((s) => s.id == sourceId,
+          orElse: () => ShopModel(
+              id: sourceId, designation: 'Shop $sourceId', localisation: ''));
+      final destShop = allShops.firstWhere((s) => s.id == destId,
+          orElse: () => ShopModel(
+              id: destId, designation: 'Shop $destId', localisation: ''));
+
       // Compter et totaliser par type
       int transfertsCount = 0;
       int servisCount = 0;
@@ -1194,7 +1426,7 @@ class RapportClotureService {
       double transfertsTotal = 0.0;
       double servisTotal = 0.0;
       double enAttenteTotal = 0.0;
-      
+
       for (final op in entry.value) {
         if (op.statut == OperationStatus.enAttente) {
           enAttenteCount++;
@@ -1209,7 +1441,7 @@ class RapportClotureService {
           }
         }
       }
-      
+
       result.add(TransfertRouteResume(
         shopSourceDesignation: sourceShop.designation,
         shopDestinationDesignation: destShop.designation,
@@ -1221,7 +1453,7 @@ class RapportClotureService {
         enAttenteTotal: enAttenteTotal,
       ));
     }
-    
+
     return result;
   }
 
@@ -1237,39 +1469,49 @@ class RapportClotureService {
   }) {
     // CALCUL RÉEL avec la formule exacte:
     // Cash Disponible = (Solde Antérieur + Dépôts + FLOT Reçu + Transfert Reçu) - (Retraits + FLOT Envoyé + Transfert Servi + Retraits FRAIS)
-    
+
     // ATTENTION: Pour le moment, nous ne pouvons pas séparer par mode de paiement car les flots et transferts
     // ne sont pas détaillés par mode de paiement. Nous calculons donc le TOTAL uniquement.
-    
-    final soldeAnterieurTotal = soldeAnterieur['cash']! + 
-                                 soldeAnterieur['airtelMoney']! + 
-                                 soldeAnterieur['mPesa']! + 
-                                 soldeAnterieur['orangeMoney']!;
-    
+
+    final soldeAnterieurTotal = soldeAnterieur['cash']! +
+        soldeAnterieur['airtelMoney']! +
+        soldeAnterieur['mPesa']! +
+        soldeAnterieur['orangeMoney']!;
+
     final depots = operationsClients['depots']!;
     final retraits = operationsClients['retraits']!;
-    final flotRecu = flots['recu']!;      // FLOTs vers nous (ENTRÉE)
-    final flotEnvoye = flots['envoye']!;  // FLOTs par nous (SORTIE)
-    final transfertRecu = transferts['recus']!;   // Client nous paie (ENTRÉE)
+    final flotRecu = flots['recu']!; // FLOTs vers nous (ENTRÉE)
+    final flotEnvoye = flots['envoye']!; // FLOTs par nous (SORTIE)
+    final transfertRecu = transferts['recus']!; // Client nous paie (ENTRÉE)
     final transfertServi = transferts['servis']!; // On sert le client (SORTIE)
-    
+
     // Appliquer la formule AVEC retraits FRAIS
-    final totalDisponible = (soldeAnterieurTotal + depots + flotRecu + transfertRecu) 
-                          - (retraits + flotEnvoye + transfertServi + retraitsFrais); // NOUVEAU: - retraitsFrais
-    
+    final totalDisponible =
+        (soldeAnterieurTotal + depots + flotRecu + transfertRecu) -
+            (retraits +
+                flotEnvoye +
+                transfertServi +
+                retraitsFrais); // NOUVEAU: - retraitsFrais
+
     // Répartition proportionnelle du total calculé selon les capitaux actuels du shop
     // Cela nous permet d'avoir une estimation par mode de paiement
-    final totalCapital = shop.capitalCash + shop.capitalAirtelMoney + shop.capitalMPesa + shop.capitalOrangeMoney;
-    
-    double cashDisponible, airtelMoneyDisponible, mPesaDisponible, orangeMoneyDisponible;
-    
+    final totalCapital = shop.capitalCash +
+        shop.capitalAirtelMoney +
+        shop.capitalMPesa +
+        shop.capitalOrangeMoney;
+
+    double cashDisponible,
+        airtelMoneyDisponible,
+        mPesaDisponible,
+        orangeMoneyDisponible;
+
     if (totalCapital > 0) {
       // Répartition proportionnelle
       final ratioCash = shop.capitalCash / totalCapital;
       final ratioAirtel = shop.capitalAirtelMoney / totalCapital;
       final ratioMPesa = shop.capitalMPesa / totalCapital;
       final ratioOrange = shop.capitalOrangeMoney / totalCapital;
-      
+
       cashDisponible = totalDisponible * ratioCash;
       airtelMoneyDisponible = totalDisponible * ratioAirtel;
       mPesaDisponible = totalDisponible * ratioMPesa;
@@ -1283,19 +1525,23 @@ class RapportClotureService {
     }
 
     debugPrint('💰 CASH DISPONIBLE - CALCUL AVEC FORMULE:');
-    debugPrint('   Solde Antérieur: ${soldeAnterieurTotal.toStringAsFixed(2)} USD');
+    debugPrint(
+        '   Solde Antérieur: ${soldeAnterieurTotal.toStringAsFixed(2)} USD');
     debugPrint('   + Dépôts: ${depots.toStringAsFixed(2)} USD');
     debugPrint('   + FLOT Reçu: ${flotRecu.toStringAsFixed(2)} USD');
     debugPrint('   + Transferts: ${transfertRecu.toStringAsFixed(2)} USD');
     debugPrint('   - Retraits: ${retraits.toStringAsFixed(2)} USD');
     debugPrint('   - FLOT Envoyé: ${flotEnvoye.toStringAsFixed(2)} USD');
-    debugPrint('   - Transfert Servi: ${transfertServi.toStringAsFixed(2)} USD');
-    debugPrint('   - Retraits FRAIS: ${retraitsFrais.toStringAsFixed(2)} USD');  // NOUVEAU
+    debugPrint(
+        '   - Transfert Servi: ${transfertServi.toStringAsFixed(2)} USD');
+    debugPrint(
+        '   - Retraits FRAIS: ${retraitsFrais.toStringAsFixed(2)} USD'); // NOUVEAU
     debugPrint('   = TOTAL CALCULÉ: ${totalDisponible.toStringAsFixed(2)} USD');
     debugPrint('   ');
     debugPrint('   Répartition par mode (proportionnelle):');
     debugPrint('   Cash: ${cashDisponible.toStringAsFixed(2)} USD');
-    debugPrint('   TOTAL: ${(cashDisponible + airtelMoneyDisponible + mPesaDisponible + orangeMoneyDisponible).toStringAsFixed(2)} USD');
+    debugPrint(
+        '   TOTAL: ${(cashDisponible + airtelMoneyDisponible + mPesaDisponible + orangeMoneyDisponible).toStringAsFixed(2)} USD');
 
     return {
       'cash': cashDisponible,
@@ -1308,8 +1554,8 @@ class RapportClotureService {
 
   bool _isSameDay(DateTime date1, DateTime date2) {
     return date1.year == date2.year &&
-           date1.month == date2.month &&
-           date1.day == date2.day;
+        date1.month == date2.month &&
+        date1.day == date2.day;
   }
 
   /// Enregistrer la clôture de caisse pour la journée
@@ -1326,10 +1572,12 @@ class RapportClotureService {
   }) async {
     try {
       // Vérifier si une clôture existe déjà pour cette date
-      final clotureExistante = await LocalDB.instance.getClotureCaisseByDate(shopId, dateCloture);
-      
+      final clotureExistante =
+          await LocalDB.instance.getClotureCaisseByDate(shopId, dateCloture);
+
       if (clotureExistante != null) {
-        debugPrint('⚠️ Une clôture existe déjà pour le ${dateCloture.toIso8601String().split('T')[0]}');
+        debugPrint(
+            '⚠️ Une clôture existe déjà pour le ${dateCloture.toIso8601String().split('T')[0]}');
         throw Exception('Une clôture existe déjà pour cette date');
       }
 
@@ -1346,56 +1594,65 @@ class RapportClotureService {
       final soldeCalculeMPesa = rapport.cashDisponibleMPesa;
       final soldeCalculeOrangeMoney = rapport.cashDisponibleOrangeMoney;
       final soldeCalculeTotal = rapport.cashDisponibleTotal;
-      
+
       // Montants SAISIS par l'agent
-      final soldeSaisiTotal = soldeSaisiCash + soldeSaisiAirtelMoney + soldeSaisiMPesa + soldeSaisiOrangeMoney;
-      
+      final soldeSaisiTotal = soldeSaisiCash +
+          soldeSaisiAirtelMoney +
+          soldeSaisiMPesa +
+          soldeSaisiOrangeMoney;
+
       // Calcul des ÉCARTS (Saisi - Calculé)
       final ecartCash = soldeSaisiCash - soldeCalculeCash;
       final ecartAirtelMoney = soldeSaisiAirtelMoney - soldeCalculeAirtelMoney;
       final ecartMPesa = soldeSaisiMPesa - soldeCalculeMPesa;
       final ecartOrangeMoney = soldeSaisiOrangeMoney - soldeCalculeOrangeMoney;
       final ecartTotal = soldeSaisiTotal - soldeCalculeTotal;
-      
+
       // NOUVEAU: Calculer le Solde FRAIS du jour selon la formule:
       // Solde Frais = Frais Antérieur + Frais encaissés du jour - Sortie Frais du jour
       final soldeFraisAnterieur = rapport.soldeFraisAnterieur;
       final fraisEncaisses = rapport.commissionsFraisDuJour;
       final sortieFrais = rapport.retraitsFraisDuJour;
-      final soldeFraisDuJour = soldeFraisAnterieur + fraisEncaisses - sortieFrais;
-      
+      final soldeFraisDuJour =
+          soldeFraisAnterieur + fraisEncaisses - sortieFrais;
+
       debugPrint('💰 Calcul Solde FRAIS du jour:');
-      debugPrint('   Frais Antérieur: ${soldeFraisAnterieur.toStringAsFixed(2)} USD');
-      debugPrint('   + Frais encaissés: ${fraisEncaisses.toStringAsFixed(2)} USD');
+      debugPrint(
+          '   Frais Antérieur: ${soldeFraisAnterieur.toStringAsFixed(2)} USD');
+      debugPrint(
+          '   + Frais encaissés: ${fraisEncaisses.toStringAsFixed(2)} USD');
       debugPrint('   - Sortie Frais: ${sortieFrais.toStringAsFixed(2)} USD');
-      debugPrint('   = Solde Frais du jour: ${soldeFraisDuJour.toStringAsFixed(2)} USD');
-      
+      debugPrint(
+          '   = Solde Frais du jour: ${soldeFraisDuJour.toStringAsFixed(2)} USD');
+
       final cloture = ClotureCaisseModel(
         shopId: shopId,
-        dateCloture: DateTime(dateCloture.year, dateCloture.month, dateCloture.day), // Normaliser à minuit
-        soldeFraisAnterieur: soldeFraisDuJour, // ENREGISTRER le Solde Frais calculé du jour
-        
+        dateCloture: DateTime(dateCloture.year, dateCloture.month,
+            dateCloture.day), // Normaliser à minuit
+        soldeFraisAnterieur:
+            soldeFraisDuJour, // ENREGISTRER le Solde Frais calculé du jour
+
         // Montants saisis
         soldeSaisiCash: soldeSaisiCash,
         soldeSaisiAirtelMoney: soldeSaisiAirtelMoney,
         soldeSaisiMPesa: soldeSaisiMPesa,
         soldeSaisiOrangeMoney: soldeSaisiOrangeMoney,
         soldeSaisiTotal: soldeSaisiTotal,
-        
+
         // Montants calculés
         soldeCalculeCash: soldeCalculeCash,
         soldeCalculeAirtelMoney: soldeCalculeAirtelMoney,
         soldeCalculeMPesa: soldeCalculeMPesa,
         soldeCalculeOrangeMoney: soldeCalculeOrangeMoney,
         soldeCalculeTotal: soldeCalculeTotal,
-        
+
         // Écarts
         ecartCash: ecartCash,
         ecartAirtelMoney: ecartAirtelMoney,
         ecartMPesa: ecartMPesa,
         ecartOrangeMoney: ecartOrangeMoney,
         ecartTotal: ecartTotal,
-        
+
         cloturePar: cloturePar,
         dateEnregistrement: DateTime.now(),
         notes: notes,
@@ -1403,12 +1660,15 @@ class RapportClotureService {
 
       // Sauvegarder la clôture
       await LocalDB.instance.saveClotureCaisse(cloture);
-      
-      debugPrint('✅ Journée clôturée avec succès pour le ${dateCloture.toIso8601String().split('T')[0]}');
+
+      debugPrint(
+          '✅ Journée clôturée avec succès pour le ${dateCloture.toIso8601String().split('T')[0]}');
       debugPrint('   Solde Saisi: ${soldeSaisiTotal.toStringAsFixed(2)} USD');
-      debugPrint('   Solde Calculé: ${soldeCalculeTotal.toStringAsFixed(2)} USD');
+      debugPrint(
+          '   Solde Calculé: ${soldeCalculeTotal.toStringAsFixed(2)} USD');
       debugPrint('   Écart: ${ecartTotal.toStringAsFixed(2)} USD');
-      debugPrint('   Solde FRAIS enregistré: ${soldeFraisDuJour.toStringAsFixed(2)} USD');
+      debugPrint(
+          '   Solde FRAIS enregistré: ${soldeFraisDuJour.toStringAsFixed(2)} USD');
     } catch (e) {
       debugPrint('❌ Erreur lors de la clôture de journée: $e');
       rethrow;
@@ -1418,9 +1678,11 @@ class RapportClotureService {
   /// Vérifier si la journée a déjà été clôturée
   Future<bool> journeeEstCloturee(int shopId, DateTime date) async {
     try {
-      final cloture = await LocalDB.instance.getClotureCaisseByDate(shopId, date);
+      final cloture =
+          await LocalDB.instance.getClotureCaisseByDate(shopId, date);
       final estCloturee = cloture != null;
-      debugPrint('🔎 Journée ${date.toIso8601String().split('T')[0]} pour shop $shopId: ${estCloturee ? "CLÔTURÉE ✅" : "NON CLÔTURÉE ⚠️"}');
+      debugPrint(
+          '🔎 Journée ${date.toIso8601String().split('T')[0]} pour shop $shopId: ${estCloturee ? "CLÔTURÉE ✅" : "NON CLÔTURÉE ⚠️"}');
       return estCloturee;
     } catch (e) {
       debugPrint('❌ Erreur vérification clôture journée: $e');
@@ -1432,37 +1694,42 @@ class RapportClotureService {
   /// Si la date est un dimanche, retourne le samedi précédent
   DateTime getDernierJourOuvrable(DateTime date) {
     DateTime jourOuvrable = date;
-    
+
     // Si c'est un dimanche (weekday = 7), reculer d'un jour
     while (jourOuvrable.weekday == DateTime.sunday) {
       jourOuvrable = jourOuvrable.subtract(const Duration(days: 1));
-      debugPrint('⏪ Dimanche détecté, recul au ${jourOuvrable.toIso8601String().split('T')[0]}');
+      debugPrint(
+          '⏪ Dimanche détecté, recul au ${jourOuvrable.toIso8601String().split('T')[0]}');
     }
-    
+
     return jourOuvrable;
   }
 
   /// Vérifier si la journée précédente nécessite une clôture
   /// Retourne la date qui doit être clôturée, ou null si tout est à jour
-  Future<DateTime?> verifierCloturePrecedente(int shopId, DateTime dateActuelle) async {
+  Future<DateTime?> verifierCloturePrecedente(
+      int shopId, DateTime dateActuelle) async {
     try {
       // Obtenir la date d'hier (ou le dernier jour ouvrable si on est lundi)
       DateTime dateHier = dateActuelle.subtract(const Duration(days: 1));
       DateTime dernierJourOuvrable = getDernierJourOuvrable(dateHier);
-      
+
       debugPrint('🔍 Vérification clôture pour Shop $shopId');
-      debugPrint('   Date actuelle: ${dateActuelle.toIso8601String().split('T')[0]}');
-      debugPrint('   Dernier jour ouvrable: ${dernierJourOuvrable.toIso8601String().split('T')[0]}');
-      
+      debugPrint(
+          '   Date actuelle: ${dateActuelle.toIso8601String().split('T')[0]}');
+      debugPrint(
+          '   Dernier jour ouvrable: ${dernierJourOuvrable.toIso8601String().split('T')[0]}');
+
       // Vérifier si le dernier jour ouvrable est clôturé
       final estCloturee = await journeeEstCloturee(shopId, dernierJourOuvrable);
-      
+
       if (!estCloturee) {
-        debugPrint('⚠️ Journée non clôturée détectée: ${dernierJourOuvrable.toIso8601String().split('T')[0]}');
+        debugPrint(
+            '⚠️ Journée non clôturée détectée: ${dernierJourOuvrable.toIso8601String().split('T')[0]}');
         debugPrint('🔒 CLÔTURE OBLIGATOIRE REQUISE');
         return dernierJourOuvrable;
       }
-      
+
       debugPrint('✅ Toutes les journées précédentes sont clôturées');
       return null;
     } catch (e, stackTrace) {
@@ -1471,7 +1738,8 @@ class RapportClotureService {
       // En cas d'erreur, retourner la date précédente pour forcer une vérification manuelle
       DateTime dateHier = dateActuelle.subtract(const Duration(days: 1));
       DateTime dernierJourOuvrable = getDernierJourOuvrable(dateHier);
-      debugPrint('⚠️ En cas d\'erreur, demande de clôture pour: ${dernierJourOuvrable.toIso8601String().split('T')[0]}');
+      debugPrint(
+          '⚠️ En cas d\'erreur, demande de clôture pour: ${dernierJourOuvrable.toIso8601String().split('T')[0]}');
       return dernierJourOuvrable;
     }
   }
@@ -1486,7 +1754,8 @@ class RapportClotureService {
       }
       // La liste est déjà triée par date décroissante
       final derniereCloture = clotures.first;
-      debugPrint('📋 Dernière clôture trouvée: ${derniereCloture.dateCloture.toIso8601String().split('T')[0]}');
+      debugPrint(
+          '📋 Dernière clôture trouvée: ${derniereCloture.dateCloture.toIso8601String().split('T')[0]}');
       return derniereCloture;
     } catch (e) {
       debugPrint('❌ Erreur récupération dernière clôture: $e');
@@ -1497,37 +1766,42 @@ class RapportClotureService {
   /// Trouver TOUS les jours non clôturés depuis la dernière clôture jusqu'à hier
   /// Retourne une liste de dates qui doivent être clôturées (ordre chronologique)
   /// Si aucune clôture n'existe, retourne une liste vide (premier jour d'utilisation)
-  Future<List<DateTime>> getJoursNonClotures(int shopId, {int maxJours = 30}) async {
+  Future<List<DateTime>> getJoursNonClotures(int shopId,
+      {int maxJours = 30}) async {
     try {
       final List<DateTime> joursNonClotures = [];
       final aujourdhui = DateTime.now();
-      final dateAujourdhui = DateTime(aujourdhui.year, aujourdhui.month, aujourdhui.day);
+      final dateAujourdhui =
+          DateTime(aujourdhui.year, aujourdhui.month, aujourdhui.day);
       final dateHier = dateAujourdhui.subtract(const Duration(days: 1));
-      
+
       // Récupérer la dernière clôture
       final derniereCloture = await getDerniereCloture(shopId);
-      
+
       // Si aucune clôture n'existe, c'est le premier jour - pas besoin de clôturer
       if (derniereCloture == null) {
-        debugPrint('ℹ️ Aucune clôture précédente - premier jour d\'utilisation');
+        debugPrint(
+            'ℹ️ Aucune clôture précédente - premier jour d\'utilisation');
         return [];
       }
-      
+
       // Date de début de recherche = lendemain de la dernière clôture
       DateTime dateDebut = DateTime(
         derniereCloture.dateCloture.year,
         derniereCloture.dateCloture.month,
         derniereCloture.dateCloture.day,
       ).add(const Duration(days: 1));
-      
+
       debugPrint('🔍 Recherche jours non clôturés pour Shop $shopId');
-      debugPrint('   Dernière clôture: ${derniereCloture.dateCloture.toIso8601String().split('T')[0]}');
-      debugPrint('   Recherche du: ${dateDebut.toIso8601String().split('T')[0]} au ${dateHier.toIso8601String().split('T')[0]}');
-      
+      debugPrint(
+          '   Dernière clôture: ${derniereCloture.dateCloture.toIso8601String().split('T')[0]}');
+      debugPrint(
+          '   Recherche du: ${dateDebut.toIso8601String().split('T')[0]} au ${dateHier.toIso8601String().split('T')[0]}');
+
       // Parcourir chaque jour depuis le lendemain de la dernière clôture jusqu'à hier
       DateTime dateCourante = dateDebut;
       int compteur = 0;
-      
+
       while (!dateCourante.isAfter(dateHier) && compteur < maxJours) {
         // Ignorer les dimanches (jour de repos)
         if (dateCourante.weekday != DateTime.sunday) {
@@ -1535,17 +1809,20 @@ class RapportClotureService {
           final estCloturee = await journeeEstCloturee(shopId, dateCourante);
           if (!estCloturee) {
             joursNonClotures.add(dateCourante);
-            debugPrint('   ❌ Jour non clôturé: ${dateCourante.toIso8601String().split('T')[0]}');
+            debugPrint(
+                '   ❌ Jour non clôturé: ${dateCourante.toIso8601String().split('T')[0]}');
           }
         } else {
-          debugPrint('   ⏭️ Dimanche ignoré: ${dateCourante.toIso8601String().split('T')[0]}');
+          debugPrint(
+              '   ⏭️ Dimanche ignoré: ${dateCourante.toIso8601String().split('T')[0]}');
         }
-        
+
         dateCourante = dateCourante.add(const Duration(days: 1));
         compteur++;
       }
-      
-      debugPrint('📊 ${joursNonClotures.length} jour(s) non clôturé(s) trouvé(s)');
+
+      debugPrint(
+          '📊 ${joursNonClotures.length} jour(s) non clôturé(s) trouvé(s)');
       return joursNonClotures;
     } catch (e) {
       debugPrint('❌ Erreur recherche jours non clôturés: $e');
@@ -1565,15 +1842,17 @@ class RapportClotureService {
     required String cloturePar,
   }) async {
     try {
-      debugPrint('🔒 Clôture en masse de ${dates.length} jour(s) pour Shop $shopId');
-      
+      debugPrint(
+          '🔒 Clôture en masse de ${dates.length} jour(s) pour Shop $shopId');
+
       // Trier les dates par ordre chronologique
       final datesTriees = List<DateTime>.from(dates);
       datesTriees.sort((a, b) => a.compareTo(b));
-      
+
       for (final date in datesTriees) {
-        debugPrint('   📅 Clôture du ${date.toIso8601String().split('T')[0]}...');
-        
+        debugPrint(
+            '   📅 Clôture du ${date.toIso8601String().split('T')[0]}...');
+
         await cloturerJournee(
           shopId: shopId,
           dateCloture: date,
@@ -1584,10 +1863,11 @@ class RapportClotureService {
           soldeSaisiOrangeMoney: soldeSaisiOrangeMoney,
           notes: 'Clôture groupée - Rattrapage de jours non clôturés',
         );
-        
-        debugPrint('   ✅ Jour clôturé: ${date.toIso8601String().split('T')[0]}');
+
+        debugPrint(
+            '   ✅ Jour clôturé: ${date.toIso8601String().split('T')[0]}');
       }
-      
+
       debugPrint('✅ Clôture en masse terminée avec succès');
       return true;
     } catch (e) {
@@ -1602,38 +1882,46 @@ class RapportClotureService {
   Future<List<DateTime>?> verifierAccesMenusAgent(int shopId) async {
     try {
       final aujourdhui = DateTime.now();
-      final dateAujourdhui = DateTime(aujourdhui.year, aujourdhui.month, aujourdhui.day);
-      
+      final dateAujourdhui =
+          DateTime(aujourdhui.year, aujourdhui.month, aujourdhui.day);
+
       // Trouver le dernier jour ouvrable (hier, ou samedi si on est lundi)
       DateTime dateHier = dateAujourdhui.subtract(const Duration(days: 1));
       DateTime dernierJourOuvrable = getDernierJourOuvrable(dateHier);
-      
+
       debugPrint('🔍 Vérification accès menus pour Shop $shopId');
-      debugPrint('   Aujourd\'hui: ${dateAujourdhui.toIso8601String().split('T')[0]}');
-      debugPrint('   Dernier jour ouvrable à vérifier: ${dernierJourOuvrable.toIso8601String().split('T')[0]}');
-      
+      debugPrint(
+          '   Aujourd\'hui: ${dateAujourdhui.toIso8601String().split('T')[0]}');
+      debugPrint(
+          '   Dernier jour ouvrable à vérifier: ${dernierJourOuvrable.toIso8601String().split('T')[0]}');
+
       // Vérifier directement si le dernier jour ouvrable est clôturé
-      final clotureHier = await LocalDB.instance.getClotureCaisseByDate(shopId, dernierJourOuvrable);
-      
+      final clotureHier = await LocalDB.instance
+          .getClotureCaisseByDate(shopId, dernierJourOuvrable);
+
       if (clotureHier != null) {
-        debugPrint('✅ Clôture trouvée pour ${dernierJourOuvrable.toIso8601String().split('T')[0]} - accès autorisé');
+        debugPrint(
+            '✅ Clôture trouvée pour ${dernierJourOuvrable.toIso8601String().split('T')[0]} - accès autorisé');
         debugPrint('   ID Clôture: ${clotureHier.id}');
-        debugPrint('   Date clôture: ${clotureHier.dateCloture.toIso8601String()}');
+        debugPrint(
+            '   Date clôture: ${clotureHier.dateCloture.toIso8601String()}');
         return null; // Accès autorisé
       }
-      
+
       // Le dernier jour ouvrable n'est pas clôturé - rechercher tous les jours non clôturés
-      debugPrint('⚠️ Pas de clôture pour ${dernierJourOuvrable.toIso8601String().split('T')[0]}');
-      
+      debugPrint(
+          '⚠️ Pas de clôture pour ${dernierJourOuvrable.toIso8601String().split('T')[0]}');
+
       final joursNonClotures = await getJoursNonClotures(shopId);
-      
+
       if (joursNonClotures.isEmpty) {
         // Aucune clôture précédente - premier jour d'utilisation, autoriser
         debugPrint('✅ Premier jour d\'utilisation - accès autorisé');
         return null;
       }
-      
-      debugPrint('⚠️ Accès menus bloqué - ${joursNonClotures.length} jour(s) à clôturer');
+
+      debugPrint(
+          '⚠️ Accès menus bloqué - ${joursNonClotures.length} jour(s) à clôturer');
       return joursNonClotures;
     } catch (e) {
       debugPrint('❌ Erreur vérification accès menus: $e');
@@ -1641,72 +1929,86 @@ class RapportClotureService {
       return null;
     }
   }
-  
+
   /// NOUVEAU: Calculer les opérations AUTRES SHOP (dépôts/retraits où nous sommes destinataires)
   /// SERVIS = Retraits où nous sommes destinataires (nous donnons l'argent)
   /// DEPOT = Dépôts où nous sommes destinataires (nous recevons l'impact)
-  Future<Map<String, dynamic>> _calculerAutresShopOperations(int shopId, DateTime dateRapport, List<OperationModel>? providedOperations) async {
+  Future<Map<String, dynamic>> _calculerAutresShopOperations(int shopId,
+      DateTime dateRapport, List<OperationModel>? providedOperations) async {
     // Utiliser les opérations fournies (de "Mes Ops") ou charger depuis LocalDB
-    final operations = providedOperations ?? await LocalDB.instance.getAllOperations();
-    
+    final operations =
+        providedOperations ?? await LocalDB.instance.getAllOperations();
+
     // Charger tous les shops pour avoir leurs noms
     final shops = await LocalDB.instance.getAllShops();
     final shopsMap = {for (var shop in shops) shop.id: shop.designation};
-    
+
     // SERVIS = Retraits où nous sommes destinataires ET venant d'autres shops (inter-shop uniquement)
     // Exclut les opérations internes pour se concentrer sur les dettes entre shops différents
-    final retraitsServis = operations.where((op) =>
-        op.type == OperationType.retrait &&
-        op.shopDestinationId == shopId &&
-        op.shopSourceId != shopId && // INTER-SHOP: shop source différent du shop destination
-        _isSameDay(op.dateOp, dateRapport)
-    ).toList();
-    
+    final retraitsServis = operations
+        .where((op) =>
+            op.type == OperationType.retrait &&
+            op.shopDestinationId == shopId &&
+            op.shopSourceId !=
+                shopId && // INTER-SHOP: shop source différent du shop destination
+            _isSameDay(op.dateOp, dateRapport))
+        .toList();
+
     // DEPOT = Dépôts où nous sommes destinataires ET venant d'autres shops (inter-shop uniquement)
     // Exclut les opérations internes pour se concentrer sur les dettes entre shops différents
-    final depotsRecus = operations.where((op) =>
-        op.type == OperationType.depot &&
-        op.shopDestinationId == shopId &&
-        op.shopSourceId != shopId && // INTER-SHOP: shop source différent du shop destination
-        _isSameDay(op.dateOp, dateRapport)
-    ).toList();
-    
+    final depotsRecus = operations
+        .where((op) =>
+            op.type == OperationType.depot &&
+            op.shopDestinationId == shopId &&
+            op.shopSourceId !=
+                shopId && // INTER-SHOP: shop source différent du shop destination
+            _isSameDay(op.dateOp, dateRapport))
+        .toList();
+
     // Debug section masked
-    
+
     // Debug des opérations depot/retrait avec destination
-    final allDepotRetrait = operations.where((op) => 
-        (op.type == OperationType.depot || op.type == OperationType.retrait) &&
-        op.shopDestinationId != null &&
-        _isSameDay(op.dateOp, dateRapport)
-    ).toList();
-    
+    final allDepotRetrait = operations
+        .where((op) =>
+            (op.type == OperationType.depot ||
+                op.type == OperationType.retrait) &&
+            op.shopDestinationId != null &&
+            _isSameDay(op.dateOp, dateRapport))
+        .toList();
+
     // All debug information masked for cleaner logs
-    
+
     // Créer les listes détaillées pour affichage dans le rapport
-    final servisDetails = retraitsServis.map((op) => OperationResume(
-      operationId: op.id!,
-      type: 'retrait_servi',
-      montant: op.montantNet,
-      devise: op.devise,
-      date: op.dateOp,
-      destinataire: '${op.clientNom ?? op.destinataire ?? "Client"} (via ${shopsMap[op.shopSourceId] ?? "Shop ${op.shopSourceId}"})',
-      observation: op.observation,
-      notes: op.notes,
-      modePaiement: op.modePaiement.name,
-    )).toList();
-    
-    final depotsDetails = depotsRecus.map((op) => OperationResume(
-      operationId: op.id!,
-      type: 'depot_recu',
-      montant: op.montantNet,
-      devise: op.devise,
-      date: op.dateOp,
-      destinataire: '${op.clientNom ?? op.destinataire ?? "Client"} (via ${shopsMap[op.shopSourceId] ?? "Shop ${op.shopSourceId}"})',
-      observation: op.observation,
-      notes: op.notes,
-      modePaiement: op.modePaiement.name,
-    )).toList();
-    
+    final servisDetails = retraitsServis
+        .map((op) => OperationResume(
+              operationId: op.id!,
+              type: 'retrait_servi',
+              montant: op.montantNet,
+              devise: op.devise,
+              date: op.dateOp,
+              destinataire:
+                  '${op.clientNom ?? op.destinataire ?? "Client"} (via ${shopsMap[op.shopSourceId] ?? "Shop ${op.shopSourceId}"})',
+              observation: op.observation,
+              notes: op.notes,
+              modePaiement: op.modePaiement.name,
+            ))
+        .toList();
+
+    final depotsDetails = depotsRecus
+        .map((op) => OperationResume(
+              operationId: op.id!,
+              type: 'depot_recu',
+              montant: op.montantNet,
+              devise: op.devise,
+              date: op.dateOp,
+              destinataire:
+                  '${op.clientNom ?? op.destinataire ?? "Client"} (via ${shopsMap[op.shopSourceId] ?? "Shop ${op.shopSourceId}"})',
+              observation: op.observation,
+              notes: op.notes,
+              modePaiement: op.modePaiement.name,
+            ))
+        .toList();
+
     // GROUPER LES RETRAITS SERVIS PAR CLIENT/PARTENAIRE
     final servisGroupesParClient = <String, double>{};
     for (var op in retraitsServis) {
@@ -1714,9 +2016,10 @@ class RapportClotureService {
       final shopName = shopsMap[shopSrcId] ?? 'Shop inconnu (ID: $shopSrcId)';
       final clientName = op.clientNom ?? op.destinataire ?? 'Client inconnu';
       final clientKey = '$clientName (via $shopName)';
-      servisGroupesParClient[clientKey] = (servisGroupesParClient[clientKey] ?? 0.0) + op.montantNet;
+      servisGroupesParClient[clientKey] =
+          (servisGroupesParClient[clientKey] ?? 0.0) + op.montantNet;
     }
-    
+
     // GROUPER LES DÉPÔTS REÇUS PAR CLIENT/PARTENAIRE
     final depotsGroupesParClient = <String, double>{};
     for (var op in depotsRecus) {
@@ -1724,16 +2027,18 @@ class RapportClotureService {
       final shopName = shopsMap[shopSrcId] ?? 'Shop inconnu (ID: $shopSrcId)';
       final clientName = op.clientNom ?? op.destinataire ?? 'Client inconnu';
       final clientKey = '$clientName (via $shopName)';
-      depotsGroupesParClient[clientKey] = (depotsGroupesParClient[clientKey] ?? 0.0) + op.montantNet;
+      depotsGroupesParClient[clientKey] =
+          (depotsGroupesParClient[clientKey] ?? 0.0) + op.montantNet;
     }
-    
-    final totalServis = retraitsServis.fold(0.0, (sum, op) => sum + op.montantNet);
+
+    final totalServis =
+        retraitsServis.fold(0.0, (sum, op) => sum + op.montantNet);
     final totalDepots = depotsRecus.fold(0.0, (sum, op) => sum + op.montantNet);
-    
+
     // Debug totals masked
-    
+
     // Debug grouping information masked for cleaner logs
-    
+
     return {
       'servis': totalServis,
       'depots': totalDepots,
@@ -1748,45 +2053,58 @@ class RapportClotureService {
   /// Retourne le solde net par partenaire: depot - retrait
   /// Positif = nous devons au partenaire, Négatif = le partenaire nous doit
   /// IMPORTANT: Calcule le SOLDE CUMULATIF jusqu'à la date du rapport (pas seulement le jour)
-  Future<Map<String, double>> _calculerSoldeParPartenaire(int shopId, DateTime dateRapport, List<OperationModel>? providedOperations) async {
+  Future<Map<String, double>> _calculerSoldeParPartenaire(int shopId,
+      DateTime dateRapport, List<OperationModel>? providedOperations) async {
     debugPrint('🔟 === DÉBUT CALCUL SOLDE PAR PARTENAIRE ===');
-    debugPrint('   Shop ID: $shopId, Date: ${dateRapport.toIso8601String().split('T')[0]}');
-    debugPrint('   CALCUL: Solde cumulatif jusqu\'à cette date (pas seulement le jour)');
-    
+    debugPrint(
+        '   Shop ID: $shopId, Date: ${dateRapport.toIso8601String().split('T')[0]}');
+    debugPrint(
+        '   CALCUL: Solde cumulatif jusqu\'à cette date (pas seulement le jour)');
+
     // Utiliser les opérations fournies (de "Mes Ops") ou charger depuis LocalDB
-    final operations = providedOperations ?? await LocalDB.instance.getAllOperations();
-    
+    final operations =
+        providedOperations ?? await LocalDB.instance.getAllOperations();
+
     // Charger tous les shops pour avoir leurs noms
     final shops = await LocalDB.instance.getAllShops();
     final shopsMap = {for (var shop in shops) shop.id: shop.designation};
-    
+
     // DEPOT = TOUS les dépôts où nous sommes destinataires (shopDestination)
     // + INCLURE les opérations administratives (initialisations) où nous sommes source
     // CHANGEMENT: Inclut TOUTES les opérations jusqu'à la date du rapport (solde cumulatif)
-    final depotsRecus = operations.where((op) =>
-        op.type == OperationType.depot &&
-        ((op.shopDestinationId == shopId) || 
-         (op.shopSourceId == shopId && op.isAdministrative)) && // INCLURE les initialisations
-        op.dateOp.isBefore(dateRapport.add(const Duration(days: 1))) // Jusqu'à la fin du jour du rapport
-    ).toList();
-    
+    final depotsRecus = operations
+        .where((op) =>
+                op.type == OperationType.depot &&
+                ((op.shopDestinationId == shopId) ||
+                    (op.shopSourceId == shopId &&
+                        op.isAdministrative)) && // INCLURE les initialisations
+                op.dateOp.isBefore(dateRapport.add(const Duration(
+                    days: 1))) // Jusqu'à la fin du jour du rapport
+            )
+        .toList();
+
     // RETRAIT = TOUS les retraits où nous sommes destinataires (shopDestination)
     // + INCLURE les retraits administratifs (dettes initialisées) où nous sommes source
     // CHANGEMENT: Inclut TOUTES les opérations jusqu'à la date du rapport (solde cumulatif)
-    final retraitsServis = operations.where((op) =>
-        op.type == OperationType.retrait &&
-        ((op.shopDestinationId == shopId) || 
-         (op.shopSourceId == shopId && op.isAdministrative)) && // INCLURE les dettes initialisées
-        op.dateOp.isBefore(dateRapport.add(const Duration(days: 1))) // Jusqu'à la fin du jour du rapport
-    ).toList();
-    
+    final retraitsServis = operations
+        .where((op) =>
+                op.type == OperationType.retrait &&
+                ((op.shopDestinationId == shopId) ||
+                    (op.shopSourceId == shopId &&
+                        op
+                            .isAdministrative)) && // INCLURE les dettes initialisées
+                op.dateOp.isBefore(dateRapport.add(const Duration(
+                    days: 1))) // Jusqu'à la fin du jour du rapport
+            )
+        .toList();
+
     // Calculer le solde net par partenaire
     final Map<String, double> soldeParPartenaire = {};
-    
+
     // Ajouter les dépôts (positif - nous devons au partenaire)
     for (var op in depotsRecus) {
       String partenaireKey;
-      
+
       if (op.isAdministrative) {
         // Pour les initialisations administratives, utiliser le nom du client directement
         final clientName = op.clientNom ?? op.destinataire ?? 'Client inconnu';
@@ -1796,14 +2114,15 @@ class RapportClotureService {
         final clientName = op.clientNom ?? op.destinataire ?? 'Client inconnu';
         partenaireKey = '$clientName';
       }
-      
-      soldeParPartenaire[partenaireKey] = (soldeParPartenaire[partenaireKey] ?? 0.0) + op.montantNet;
+
+      soldeParPartenaire[partenaireKey] =
+          (soldeParPartenaire[partenaireKey] ?? 0.0) + op.montantNet;
     }
-    
+
     // Soustraire les retraits (négatif - le partenaire nous doit)
     for (var op in retraitsServis) {
       String partenaireKey;
-      
+
       if (op.isAdministrative) {
         // Pour les dettes initialisées administratives, utiliser le nom du client directement
         final clientName = op.clientNom ?? op.destinataire ?? 'Client inconnu';
@@ -1813,31 +2132,36 @@ class RapportClotureService {
         final clientName = op.clientNom ?? op.destinataire ?? 'Client inconnu';
         partenaireKey = '$clientName';
       }
-      
-      soldeParPartenaire[partenaireKey] = (soldeParPartenaire[partenaireKey] ?? 0.0) - op.montantNet;
+
+      soldeParPartenaire[partenaireKey] =
+          (soldeParPartenaire[partenaireKey] ?? 0.0) - op.montantNet;
     }
-    
+
     try {
       debugPrint('🔟 📊 SOLDE PAR PARTENAIRE - Calcul terminé');
       debugPrint('🔟    Dépôts reçus: ${depotsRecus.length}');
       debugPrint('🔟    Retraits servis: ${retraitsServis.length}');
-      debugPrint('🔟    Solde calculé par partenaire: ${soldeParPartenaire.length} entrées');
-      
+      debugPrint(
+          '🔟    Solde calculé par partenaire: ${soldeParPartenaire.length} entrées');
+
       // Debug simplifié pour éviter les crashes
       if (soldeParPartenaire.isNotEmpty) {
         debugPrint('🔟    Premiers partenaires:');
         int count = 0;
         for (var entry in soldeParPartenaire.entries) {
           if (count >= 3) break; // Limiter à 3 pour éviter trop de logs
-          final status = entry.value > 0 ? 'NOUS DEVONS' : (entry.value < 0 ? 'NOUS DOIT' : 'ÉQUILIBRÉ');
-          debugPrint('🔟      ${entry.key}: ${entry.value.toStringAsFixed(2)} USD ($status)');
+          final status = entry.value > 0
+              ? 'NOUS DEVONS'
+              : (entry.value < 0 ? 'NOUS DOIT' : 'ÉQUILIBRÉ');
+          debugPrint(
+              '🔟      ${entry.key}: ${entry.value.toStringAsFixed(2)} USD ($status)');
           count++;
         }
       }
     } catch (e) {
       debugPrint('🔟 ❌ Erreur dans debug SOLDE PAR PARTENAIRE: $e');
     }
-    
+
     return soldeParPartenaire;
   }
 }

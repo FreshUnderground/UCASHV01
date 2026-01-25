@@ -47,6 +47,6 @@ $context = stream_context_create([
     ]
 ]);
 
-$response = file_get_contents('https://mahanaim.investee-group.com/server/api/sync/shops/upload.php', false, $context);
+$response = file_get_contents('https://safdal.investee-group.com/server/api/sync/shops/upload.php', false, $context);
 echo $response;
 ?>

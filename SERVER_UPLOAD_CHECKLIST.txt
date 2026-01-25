@@ -1,0 +1,120 @@
+========================================
+UCASH - SERVER UPLOAD CHECKLIST
+safdal.investee-group.com
+========================================
+
+ERROR: flutter.js returns 500 Internal Server Error
+
+BUILD STATUS (Local):
+✓ flutter.js exists locally (9,412 bytes)
+✓ Build completed: January 7, 2026
+✓ All files ready in: build\web\
+
+UPLOAD REQUIREMENTS:
+====================
+
+CRITICAL FILES TO UPLOAD:
+-------------------------
+[ ] .htaccess              (MUST be uploaded - often hidden!)
+[ ] flutter.js             (9 KB - The file causing 500 error)
+[ ] flutter_bootstrap.js
+[ ] index.html
+[ ] main.dart.js
+[ ] manifest.json
+[ ] favicon.png
+[ ] version.json
+
+FOLDERS TO UPLOAD:
+-----------------
+[ ] assets\        (Complete folder with all subfolders)
+[ ] canvaskit\     (Complete folder - Flutter renderer)
+[ ] icons\         (All PNG icon files)
+
+FTP UPLOAD SETTINGS:
+===================
+Server: Your LWS FTP server
+Remote Path: /www/ or /public_html/
+Transfer Mode: BINARY (not ASCII!)
+Show Hidden Files: YES (to see .htaccess)
+
+CRITICAL STEPS:
+==============
+
+1. DELETE OLD FILES ON SERVER FIRST
+   - Remove all old files from server
+   - Ensure clean deployment
+
+2. UPLOAD ALL FILES
+   - Use BINARY mode (critical for .js files!)
+   - Upload .htaccess (enable "show hidden files")
+   - Verify flutter.js uploads completely (9,412 bytes)
+
+3. SET FILE PERMISSIONS (via FTP or cPanel)
+   Directories: 755
+   Files: 644
+   
+   Specifically for flutter.js:
+   chmod 644 flutter.js
+
+4. VERIFY UPLOAD
+   Check file size on server matches local:
+   flutter.js should be 9,412 bytes
+
+TEST URLS AFTER UPLOAD:
+=======================
+These should ALL work without 500 errors:
+
+✓ https://safdal.investee-group.com/
+✓ https://safdal.investee-group.com/flutter.js
+✓ https://safdal.investee-group.com/flutter_bootstrap.js
+✓ https://safdal.investee-group.com/manifest.json
+✓ https://safdal.investee-group.com/icons/Icon-192.png
+
+COMMON UPLOAD MISTAKES:
+======================
+✗ Uploading in ASCII mode instead of BINARY
+✗ Not uploading .htaccess (hidden file)
+✗ Wrong permissions (file not readable)
+✗ Uploading to wrong directory
+✗ Incomplete upload (file corrupted)
+✗ Server cache (clear browser cache after upload)
+
+IF 500 ERROR PERSISTS:
+=====================
+
+1. Check server error logs:
+   - Contact LWS support
+   - Ask for Apache error.log for flutter.js
+   
+2. Verify .htaccess uploaded:
+   - Check it exists on server
+   - Verify MIME type configuration
+
+3. Test with simple file:
+   - Create test.js with: console.log('test');
+   - Upload and test: https://safdal.investee-group.com/test.js
+   - If this also fails, server config issue
+
+4. Disable .htaccess temporarily:
+   - Rename .htaccess to .htaccess.backup
+   - Test if flutter.js loads
+   - If works, issue is in .htaccess rules
+
+5. Contact LWS Support:
+   Ask them:
+   - "Why does flutter.js return 500 error?"
+   - "Is mod_mime enabled for JavaScript files?"
+   - "Can you check Apache error logs?"
+   - "Are there any restrictions on .js files?"
+
+NEXT STEPS:
+==========
+1. Connect to FTP
+2. Delete all files in web directory
+3. Upload everything from build\web\
+4. Set permissions
+5. Test URLs above
+6. If still 500, contact LWS with this checklist
+
+Local build directory: build\web\
+Files last built: January 7, 2026 13:20

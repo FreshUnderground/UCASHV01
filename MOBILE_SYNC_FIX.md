@@ -169,7 +169,7 @@ tail -f /path/to/php/error.log
 dart bin/test_sync.dart
 
 # Test direct HTTP
-curl -X POST https://mahanaim.investee-group.com/server/api/sync/operations/upload.php \
+curl -X POST https://safdal.investee-group.com/server/api/sync/operations/upload.php \
   -H "Content-Type: application/json; charset=utf-8" \
   -d '{"entities":[...],"user_id":"test"}'
 ```

@@ -19,7 +19,7 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
   final _currentPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  
+
   bool _isLoadingApi = true;
   bool _isChangingPassword = false;
 
@@ -78,7 +78,8 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
     }
 
     if (newPass.length < 4) {
-      _showSnackBar('❌ Le mot de passe doit contenir au moins 4 caractères', Colors.red);
+      _showSnackBar(
+          '❌ Le mot de passe doit contenir au moins 4 caractères', Colors.red);
       return;
     }
 
@@ -87,7 +88,7 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
       final success = await authService.changePassword(current, newPass);
-      
+
       if (success) {
         _currentPasswordController.clear();
         _newPasswordController.clear();
@@ -319,7 +320,6 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
                 ],
               ),
               const SizedBox(height: 20),
-              
               if (_isLoadingApi)
                 const Center(child: CircularProgressIndicator())
               else ...[
@@ -327,22 +327,21 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
                   controller: _apiUrlController,
                   decoration: InputDecoration(
                     labelText: 'URL de l\'API',
-                    hintText: 'https://mahanaim.investee-group.com/server/api',
+                    hintText: 'https://safdal.investee-group.com/server/api',
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                     prefixIcon: const Icon(Icons.link),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
                   ),
                 ),
                 const SizedBox(height: 12),
-                
                 Text(
                   'Intervalle de sync: ${AppConfig.autoSyncInterval.inSeconds}s (automatique)',
                   style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                 ),
                 const SizedBox(height: 16),
-                
                 LayoutBuilder(
                   builder: (context, constraints) {
                     if (constraints.maxWidth < 400) {
@@ -358,7 +357,8 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF388E3C),
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
@@ -373,7 +373,8 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
                               icon: const Icon(Icons.refresh, size: 18),
                               label: const Text('Réinitialiser'),
                               style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
@@ -394,7 +395,8 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF388E3C),
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
@@ -408,7 +410,8 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
                               icon: const Icon(Icons.refresh, size: 18),
                               label: const Text('Réinitialiser'),
                               style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
@@ -452,7 +455,8 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.currency_exchange, color: Color(0xFF10B981), size: 24),
+                  const Icon(Icons.currency_exchange,
+                      color: Color(0xFF10B981), size: 24),
                   const SizedBox(width: 12),
                   const Expanded(
                     child: Text(
@@ -472,7 +476,6 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
                 style: TextStyle(fontSize: 14, color: Colors.grey[600]),
               ),
               const SizedBox(height: 16),
-              
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -544,7 +547,6 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
                 ],
               ),
               const SizedBox(height: 20),
-              
               TextFormField(
                 controller: _currentPasswordController,
                 obscureText: true,
@@ -554,11 +556,11 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   prefixIcon: const Icon(Icons.lock_outline),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
               ),
               const SizedBox(height: 12),
-              
               TextFormField(
                 controller: _newPasswordController,
                 obscureText: true,
@@ -569,11 +571,11 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   prefixIcon: const Icon(Icons.lock),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
               ),
               const SizedBox(height: 12),
-              
               TextFormField(
                 controller: _confirmPasswordController,
                 obscureText: true,
@@ -583,11 +585,11 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   prefixIcon: const Icon(Icons.lock),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
               ),
               const SizedBox(height: 16),
-              
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -598,11 +600,14 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
                           height: 18,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
                         )
                       : const Icon(Icons.check, size: 18),
-                  label: Text(_isChangingPassword ? 'Modification...' : 'Modifier le Mot de Passe'),
+                  label: Text(_isChangingPassword
+                      ? 'Modification...'
+                      : 'Modifier le Mot de Passe'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFE65100),
                     foregroundColor: Colors.white,
@@ -644,7 +649,8 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.receipt_long, color: Color(0xFF1976D2), size: 24),
+                  const Icon(Icons.receipt_long,
+                      color: Color(0xFF1976D2), size: 24),
                   const SizedBox(width: 12),
                   const Expanded(
                     child: Text(
@@ -664,7 +670,6 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
                 style: TextStyle(fontSize: 14, color: Colors.grey[600]),
               ),
               const SizedBox(height: 16),
-              
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -716,7 +721,7 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
               ),
             ),
             const SizedBox(height: 20),
-            
+
             // Sélection de date
             Row(
               children: [
@@ -748,7 +753,7 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
               ],
             ),
             const SizedBox(height: 20),
-            
+
             // Types de rapports
             _buildReportButton(
               'Rapport Complet PDF',
@@ -758,7 +763,7 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
               () {},
             ),
             const SizedBox(height: 12),
-            
+
             _buildReportButton(
               'Rapport Transferts CSV',
               'Export des transactions en CSV',
@@ -767,7 +772,7 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
               () {},
             ),
             const SizedBox(height: 12),
-            
+
             _buildReportButton(
               'Rapport Commissions PDF',
               'Détail des commissions encaissées',
@@ -776,7 +781,7 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
               () {},
             ),
             const SizedBox(height: 12),
-            
+
             _buildReportButton(
               'Rapport Soldes CSV',
               'État des soldes par shop et caisse',
@@ -784,9 +789,9 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
               const Color(0xFF1976D2),
               () {},
             ),
-            
+
             const SizedBox(height: 20),
-            
+
             // Statistiques rapides
             Container(
               padding: const EdgeInsets.all(16),
@@ -817,7 +822,8 @@ class _ConfigReportsWidgetState extends State<ConfigReportsWidget> {
     );
   }
 
-  Widget _buildReportButton(String title, String subtitle, IconData icon, Color color, VoidCallback onPressed) {
+  Widget _buildReportButton(String title, String subtitle, IconData icon,
+      Color color, VoidCallback onPressed) {
     return Container(
       width: double.infinity,
       child: ElevatedButton(

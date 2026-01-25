@@ -5,7 +5,7 @@ echo ========================================
 echo.
 
 REM Configuration
-set BASE_URL=https://mahanaim.investee-group.com/server/api/sync
+set BASE_URL=https://safdal.investee-group.com/server/api/sync
 set AGENTS_URL=%BASE_URL%/agents/check_deleted.php
 set SHOPS_URL=%BASE_URL%/shops/check_deleted.php
 

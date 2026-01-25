@@ -58,6 +58,8 @@ try {
             'id' => (int)$shop['id'],
             'designation' => $shop['designation'],
             'localisation' => $shop['localisation'],
+            'is_principal' => (int)($shop['is_principal'] ?? 0),
+            'is_transfer_shop' => (int)($shop['is_transfer_shop'] ?? 0),
             'devise_principale' => $shop['devise_principale'] ?? 'USD',
             'devise_secondaire' => $shop['devise_secondaire'] ?? null,
             'capital_initial' => (float)$shop['capital_initial'],

@@ -2,11 +2,17 @@ class ShopModel {
   final int? id;
   final String designation;
   final String localisation;
-  
+
+  // Shop principal (siège/central) ou secondaire
+  final bool isPrincipal;
+
+  // Shop de transfert/service (sert les transferts par défaut)
+  final bool isTransferShop;
+
   // Devises supportées par le shop (2 devises max)
   final String devisePrincipale; // USD par défaut
   final String? deviseSecondaire; // CDF, UGX, ou null
-  
+
   // Capitaux en devise principale (USD)
   final double capitalInitial;
   final double capitalActuel;
@@ -14,7 +20,7 @@ class ShopModel {
   final double capitalAirtelMoney;
   final double capitalMPesa;
   final double capitalOrangeMoney;
-  
+
   // Capitaux en devise secondaire (CDF ou UGX)
   final double? capitalInitialDevise2;
   final double? capitalActuelDevise2;
@@ -22,10 +28,10 @@ class ShopModel {
   final double? capitalAirtelMoneyDevise2;
   final double? capitalMPesaDevise2;
   final double? capitalOrangeMoneyDevise2;
-  
+
   final double creances;
   final double dettes;
-  
+
   // Champs de synchronisation
   final String? uuid;
   final DateTime? lastModifiedAt;
@@ -38,6 +44,8 @@ class ShopModel {
     this.id,
     required this.designation,
     required this.localisation,
+    this.isPrincipal = false,
+    this.isTransferShop = false,
     this.devisePrincipale = 'USD',
     this.deviseSecondaire, // CDF, UGX, ou null
     // Capitaux devise principale
@@ -70,6 +78,8 @@ class ShopModel {
       id: _parseIntSafe(json['id']),
       designation: json['designation']?.toString() ?? '',
       localisation: json['localisation']?.toString() ?? '',
+      isPrincipal: _parseBoolSafe(json['is_principal']) ?? false,
+      isTransferShop: _parseBoolSafe(json['is_transfer_shop']) ?? false,
       devisePrincipale: json['devise_principale']?.toString() ?? 'USD',
       deviseSecondaire: json['devise_secondaire']?.toString(),
       // Capitaux devise principale
@@ -80,26 +90,30 @@ class ShopModel {
       capitalMPesa: _parseDoubleSafe(json['capital_mpesa']),
       capitalOrangeMoney: _parseDoubleSafe(json['capital_orange_money']),
       // Capitaux devise secondaire
-      capitalInitialDevise2: _parseDoubleNullable(json['capital_initial_devise2']),
-      capitalActuelDevise2: _parseDoubleNullable(json['capital_actuel_devise2']),
+      capitalInitialDevise2:
+          _parseDoubleNullable(json['capital_initial_devise2']),
+      capitalActuelDevise2:
+          _parseDoubleNullable(json['capital_actuel_devise2']),
       capitalCashDevise2: _parseDoubleNullable(json['capital_cash_devise2']),
-      capitalAirtelMoneyDevise2: _parseDoubleNullable(json['capital_airtel_money_devise2']),
+      capitalAirtelMoneyDevise2:
+          _parseDoubleNullable(json['capital_airtel_money_devise2']),
       capitalMPesaDevise2: _parseDoubleNullable(json['capital_mpesa_devise2']),
-      capitalOrangeMoneyDevise2: _parseDoubleNullable(json['capital_orange_money_devise2']),
+      capitalOrangeMoneyDevise2:
+          _parseDoubleNullable(json['capital_orange_money_devise2']),
       creances: _parseDoubleSafe(json['creances']),
       dettes: _parseDoubleSafe(json['dettes']),
       // Champs de synchronisation
       uuid: json['uuid']?.toString(),
-      lastModifiedAt: json['last_modified_at'] != null 
-          ? DateTime.tryParse(json['last_modified_at'].toString()) 
+      lastModifiedAt: json['last_modified_at'] != null
+          ? DateTime.tryParse(json['last_modified_at'].toString())
           : null,
       lastModifiedBy: json['last_modified_by']?.toString(),
-      createdAt: json['created_at'] != null 
-          ? DateTime.tryParse(json['created_at'].toString()) 
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString())
           : null,
       isSynced: _parseBoolSafe(json['is_synced']),
-      syncedAt: json['synced_at'] != null 
-          ? DateTime.tryParse(json['synced_at'].toString()) 
+      syncedAt: json['synced_at'] != null
+          ? DateTime.tryParse(json['synced_at'].toString())
           : null,
     );
   }
@@ -114,7 +128,7 @@ class ShopModel {
     }
     return 0.0;
   }
-  
+
   static double? _parseDoubleNullable(dynamic value) {
     if (value == null) return null;
     if (value is double) return value;
@@ -146,11 +160,12 @@ class ShopModel {
   }
 
   Map<String, dynamic> toJson() {
-    
     return {
       'id': id,
       'designation': designation,
       'localisation': localisation,
+      'is_principal': isPrincipal ? 1 : 0,
+      'is_transfer_shop': isTransferShop ? 1 : 0,
       'devise_principale': devisePrincipale,
       'devise_secondaire': deviseSecondaire,
       // Capitaux devise principale
@@ -171,7 +186,8 @@ class ShopModel {
       'dettes': dettes,
       // Champs de synchronisation
       'uuid': uuid,
-      'last_modified_at': lastModifiedAt?.toString().split('.')[0].replaceFirst('T', ' '),
+      'last_modified_at':
+          lastModifiedAt?.toString().split('.')[0].replaceFirst('T', ' '),
       'last_modified_by': lastModifiedBy,
       'created_at': createdAt?.toString().split('.')[0].replaceFirst('T', ' '),
       'is_synced': isSynced ?? false,
@@ -183,6 +199,8 @@ class ShopModel {
     int? id,
     String? designation,
     String? localisation,
+    bool? isPrincipal,
+    bool? isTransferShop,
     String? devisePrincipale,
     String? deviseSecondaire,
     // Capitaux devise principale
@@ -212,6 +230,8 @@ class ShopModel {
       id: id ?? this.id,
       designation: designation ?? this.designation,
       localisation: localisation ?? this.localisation,
+      isPrincipal: isPrincipal ?? this.isPrincipal,
+      isTransferShop: isTransferShop ?? this.isTransferShop,
       devisePrincipale: devisePrincipale ?? this.devisePrincipale,
       deviseSecondaire: deviseSecondaire ?? this.deviseSecondaire,
       // Capitaux devise principale
@@ -222,12 +242,15 @@ class ShopModel {
       capitalMPesa: capitalMPesa ?? this.capitalMPesa,
       capitalOrangeMoney: capitalOrangeMoney ?? this.capitalOrangeMoney,
       // Capitaux devise secondaire
-      capitalInitialDevise2: capitalInitialDevise2 ?? this.capitalInitialDevise2,
+      capitalInitialDevise2:
+          capitalInitialDevise2 ?? this.capitalInitialDevise2,
       capitalActuelDevise2: capitalActuelDevise2 ?? this.capitalActuelDevise2,
       capitalCashDevise2: capitalCashDevise2 ?? this.capitalCashDevise2,
-      capitalAirtelMoneyDevise2: capitalAirtelMoneyDevise2 ?? this.capitalAirtelMoneyDevise2,
+      capitalAirtelMoneyDevise2:
+          capitalAirtelMoneyDevise2 ?? this.capitalAirtelMoneyDevise2,
       capitalMPesaDevise2: capitalMPesaDevise2 ?? this.capitalMPesaDevise2,
-      capitalOrangeMoneyDevise2: capitalOrangeMoneyDevise2 ?? this.capitalOrangeMoneyDevise2,
+      capitalOrangeMoneyDevise2:
+          capitalOrangeMoneyDevise2 ?? this.capitalOrangeMoneyDevise2,
       creances: creances ?? this.creances,
       dettes: dettes ?? this.dettes,
       // Champs de synchronisation
@@ -239,10 +262,11 @@ class ShopModel {
       syncedAt: syncedAt ?? this.syncedAt,
     );
   }
-  
+
   /// Vérifie si le shop utilise une devise secondaire
-  bool get hasDeviseSecondaire => deviseSecondaire != null && deviseSecondaire!.isNotEmpty;
-  
+  bool get hasDeviseSecondaire =>
+      deviseSecondaire != null && deviseSecondaire!.isNotEmpty;
+
   /// Obtient le capital total dans la devise spécifiée
   double getCapitalActuel(String devise) {
     if (devise == devisePrincipale) {
@@ -252,7 +276,7 @@ class ShopModel {
     }
     return 0.0;
   }
-  
+
   /// Obtient le capital cash dans la devise spécifiée
   double getCapitalCash(String devise) {
     if (devise == devisePrincipale) {
@@ -262,7 +286,7 @@ class ShopModel {
     }
     return 0.0;
   }
-  
+
   /// Obtient le capital mobile money dans la devise spécifiée
   double getCapitalMobileMoney(String devise, String type) {
     if (devise == devisePrincipale) {
@@ -296,7 +320,7 @@ class ShopModel {
     }
     return 0.0;
   }
-  
+
   /// Liste des devises supportees par ce shop
   List<String> get devisesSupportees {
     final devises = [devisePrincipale];
@@ -305,7 +329,7 @@ class ShopModel {
     }
     return devises;
   }
-  
+
   /// Résout la désignation d'un shop depuis son ID
   /// Utilise la désignation fournie si disponible, sinon cherche dans la liste des shops
   /// Retourne "Shop #ID" en dernier recours
@@ -318,12 +342,12 @@ class ShopModel {
     if (designation != null && designation.isNotEmpty) {
       return designation;
     }
-    
+
     // Si pas d'ID, impossible de résoudre
     if (shopId == null) {
       return 'Shop inconnu';
     }
-    
+
     // Essayer de résoudre depuis la liste des shops
     if (shops != null && shops.isNotEmpty) {
       try {
@@ -338,8 +362,42 @@ class ShopModel {
         // Ignorer l'erreur et utiliser le fallback
       }
     }
-    
+
     // Fallback: afficher l'ID
     return 'Shop #$shopId';
   }
+
+  /// Trouver le shop principal dans une liste de shops
+  /// Retourne null si aucun shop principal n'est trouvé
+  static ShopModel? findMainShop(List<ShopModel> shops) {
+    try {
+      return shops.firstWhere((shop) => shop.isPrincipal);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Trouver le shop de service par défaut dans une liste de shops
+  /// Utilise UNIQUEMENT le champ is_transfer_shop (pas de fallback sur nom)
+  /// Retourne null si aucun shop de service n'est trouvé
+  static ShopModel? findServiceShop(List<ShopModel> shops) {
+    try {
+      // Chercher par champ is_transfer_shop
+      return shops.firstWhere(
+        (shop) => shop.isTransferShop,
+      );
+    } catch (e) {
+      return null; // Aucun shop de transfert configuré
+    }
+  }
+
+  /// Vérifier si ce shop est le shop principal
+  bool get isMainShop => isPrincipal;
+
+  /// Vérifier si ce shop est le shop de service (transfer shop)
+  /// Utilise UNIQUEMENT le champ is_transfer_shop
+  bool get isServiceShop => isTransferShop;
+
+  /// Vérifier si ce shop est un shop normal (ni principal ni service)
+  bool get isNormalShop => !isPrincipal && !isTransferShop;
 }
